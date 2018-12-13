@@ -37,4 +37,5 @@
 *.png
 
 # Test files
-PDSTest*
+PDSTest.cpp
+PDSTest.exe
