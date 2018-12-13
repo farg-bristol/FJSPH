@@ -35,3 +35,6 @@
 *.plt
 *.lay
 *.png
+
+# Test files
+PDSTest*
