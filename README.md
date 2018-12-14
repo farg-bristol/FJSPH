@@ -37,15 +37,15 @@ A word of warning that the code will not build on Visual Studio 13, due to an in
 
 # References 
 Colagrossi, A. & Landrini, M.
-*Numerical simulation of interfacial flows by smoothed particle hydrodynamics *
+*Numerical simulation of interfacial flows by smoothed particle hydrodynamics*
 Journal of Computational Physics, Elsevier BV, 2003 , 191 , 448-475
 
 Gingold, R. A. & Monaghan, J. J.
-*Smoothed particle hydrodynamics: theory and application to non-spherical stars *
+*Smoothed particle hydrodynamics: theory and application to non-spherical stars* 
 Monthly Notices of the Royal Astronomical Society, Oxford University Press (OUP), 1977 , 181 , 375-389
 
 Huber, M.; Reinhardt, S.; Weiskopf, D. & Eberhardt, B.
-*Evaluation of Surface Tension Models for SPH-Based Fluid Animations Using a Benchmark Test *
+*Evaluation of Surface Tension Models for SPH-Based Fluid Animations Using a Benchmark Test* 
 Workshop on Virtual Reality Interaction and Physical Simulation, The Eurographics Association, 2015
 
 Lucy, L. B.
@@ -65,5 +65,5 @@ Morris, J. P.; Fox, P. J. & Zhu, Y.
 Journal of Computational Physics, Elsevier BV, 1997 , 136 , 214-226
 
 Nair, P. & Pöschel, T.
-*Dynamic capillary phenomena using Incompressible SPH *
+*Dynamic capillary phenomena using Incompressible SPH*
 Chemical Engineering Science, Elsevier BV, 2018 , 176 , 192-204
