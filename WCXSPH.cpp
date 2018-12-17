@@ -305,15 +305,17 @@ void AddPoints(void)
 	svar.nrefresh=0;
 	for( double x = jetS; x<jetE/2; x+=svar.Pstep) 
 	{
-		Vector2d xi(x,0.0);		
+		Vector2d xi(x,-svar.Box[1]);		
 		pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,true));
 		pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,true));
 		++svar.SimPts;
 		++svar.nrefresh;
 	}
-	for( double x = jetE/2; x<=jetE; x+=svar.Pstep) 
+	double start2 = pn.back().xi[0]+svar.Pstep;
+
+	for( double x = start2; x<=jetE; x+=svar.Pstep) 
 	{
-		Vector2d xi(x,0.0);		
+		Vector2d xi(x,-svar.Box[1]);		
 		pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,false));
 		pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,false));
 		++svar.SimPts;
@@ -453,10 +455,10 @@ void Forces(void)
 				/*drho/dt*/
 				Rrhocontr -= pj.m*(Vij.dot(Grad));	
 			}
-			Vector2d Fd;
 
+			Vector2d Fd= Vector2d::Zero();
 			/*Crossflow force*/
-			if (svar.Bcase == 3 && pi.left == true)
+			if (svar.Bcase == 3 && pi.left == true && pi.xi[1] > svar.Pstep*2)
 			{
 				Vector2d Vdiff = fvar.vInf - pi.V;
 				double Re = Vdiff.norm()*2*svar.Pstep/fvar.mu;
@@ -470,13 +472,14 @@ void Forces(void)
 				// cout << "Reynolds: " << Re << " Cd: " << Cd << endl;
 
 				Fd = Vdiff.normalized()*Cd*(2*svar.Pstep)*1.225*Vdiff.squaredNorm();
+				Fd[1] = 0.0;
 			}
 			
 
 			pi.Rrho = Rrhocontr; /*drho/dt*/
 			pi.f= contrib - SurfC*fvar.sig/pi.m + Fd/pi.m;
 
-			pi.Sf = SurfC;
+			pi.Sf = Fd;
 			pi.f(1) -= 9.81; /*Add gravity*/
 
 			pnp1[i]=pi; //Update the actual structure
@@ -612,7 +615,7 @@ double Newmark_Beta(KD_Tree &mat_index)
 				int refresh = 1;
 				for (size_t i = svar.npts-svar.nrefresh; i<svar.npts; ++i)
 				{	/*Check that the starting area is clear first...*/
-					if(pn[i].xi(1)<svar.Pstep)
+					if(pn[i].xi[1]<svar.Pstep-svar.Box[1])
 						refresh = 0;
 				}
 
@@ -657,7 +660,17 @@ double Newmark_Beta(KD_Tree &mat_index)
 
 void InitSPH()
 {
-	cout << "Initialising simulation with " << svar.SimPts << " particles" << endl;
+	switch (svar.Bcase)
+	{
+		default:
+			cout << "Initialising simulation with " << svar.SimPts << " particles" << endl;
+			break;
+
+		case 3:
+			cout << "Initialising simulation..." << endl;
+			break;
+	}
+	
 	
 	//Structure input initialiser
 	//Particle(Vector2d x, Vector2d v, Vector2d vh, Vector2d f, float rho, float Rrho, bool bound) :
@@ -730,6 +743,19 @@ void InitSPH()
 				Vector2d xi(x,0.0);
 				pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,true,false));
 			}
+
+			for (double y = -stepb; y >= -svar.Box[1]; y-=stepb)
+			{
+				Vector2d xi(pn.back().xi[0],y);
+				pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,true,false));
+			}
+
+			for (double y = -svar.Box[1]; y < 0.0 ; y+=stepb)
+			{
+				Vector2d xi(holeS+holeD,y);
+				pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,true,false));
+			}
+
 
 			for(double x = holeS+holeD; x<=svar.Box(0); x+=stepb)
 			{

@@ -10,7 +10,7 @@
 0.30        #Jet diameter x-direction
 3           #Boundary case (0 = none, 1= Rectangle, 2 = Bowl, 3= jet)
 1.0         #Boundary end (from origin)
-0.5         #Rectangle Boundary y-dimension (Not used for jet)
+0.1         #Jet y-dimension (in negative dir)
 0.01        #Initial Particle spacing
 0.5         #Boundary particle spacing factor (of part spacing)
 2.0         #Smoothing length factor
