@@ -1,4 +1,4 @@
-0.008      #Frame output timestep
+0.002      #Frame output timestep
 500        #number of frames
 10          #Max Sub-iterations
 2000        #Max particle count
@@ -9,8 +9,8 @@
 0.03        #Jet starting x-position
 0.30        #Jet diameter x-direction
 3           #Boundary case (0 = none, 1= Rectangle, 2 = Bowl, 3= jet)
-1.0         #Boundary end (from origin)
-0.5         #Rectangle Boundary y-dimension (Not used for jet)
+3.0         #Boundary end (from origin)
+0.1         #Jet y-dimension (in negative dir)
 0.01        #Initial Particle spacing
 0.5         #Boundary particle spacing factor (of part spacing)
 2.0         #Smoothing length factor
@@ -22,4 +22,5 @@
 1.0   		#Dynamic Viscosity
 0.0728      #Surface Tension
 3.5         #Jet Velocity
-0.5         #Freestream Velocity
+30          #Freestream Velocity
+1           #Crossflow force case (0 = none, 1 = left half, 2 = left surface?, 3 = surface, 4 = surf prop )

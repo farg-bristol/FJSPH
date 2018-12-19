@@ -55,6 +55,7 @@ typedef struct SIM {
 	double beta,gamma;						/*Newmark-Beta Parameters*/
 	int Bcase, Bclosed;						/*What boundary shape to take*/
 	double H,HSQ, sr; 						/*Support Radius + Search radius*/
+	int acase;								/*Aerodynamic force case*/
 } SIM;
 
 typedef struct FLUID {
@@ -217,6 +218,7 @@ void GetInput(int i,char* InFile/*, SIM *svar, FLUID *fvar */)
 	  		fvar.sig = getDouble(in);
 	  		fvar.vJet(0) = 0.0; fvar.vJet(1) = getDouble(in); 
 	  		fvar.vInf(0) = getDouble(in); fvar.vInf(1) = 0.0;
+	  		svar.acase = getInt(in);
 
 			in.close();
 
@@ -301,19 +303,22 @@ void AddPoints(void)
 	double rho=fvar.rho0; 
 	double jetS = svar.Start(0)+2*svar.H;
 	double jetE = svar.Start(0)+svar.Start(1) - 2*svar.H;
-	/*Create the simulation particles*/
 	svar.nrefresh=0;
+
+	/*Create the simulation particles*/
 	for( double x = jetS; x<jetE/2; x+=svar.Pstep) 
-	{
-		Vector2d xi(x,0.0);		
+	{ /*Do the left set of points*/
+		Vector2d xi(x,-svar.Box[1]);		
 		pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,true));
 		pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,true));
 		++svar.SimPts;
 		++svar.nrefresh;
 	}
-	for( double x = jetE/2; x<=jetE; x+=svar.Pstep) 
-	{
-		Vector2d xi(x,0.0);		
+
+	double start2 = pn.back().xi[0]+svar.Pstep;
+	for( double x = start2; x<=jetE; x+=svar.Pstep) 
+	{	/*Do the right set of points*/
+		Vector2d xi(x,-svar.Box[1]);		
 		pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,false));
 		pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,false));
 		++svar.SimPts;
@@ -323,7 +328,6 @@ void AddPoints(void)
 	svar.npts += svar.nrefresh;
 	// cout << "New points: " << svar.nrefresh << "  npts: " << 
 		// svar.npts << " SimPts: "<< svar.SimPts <<  endl;
-
 }
 
 void CloseBoundary(void) 
@@ -339,21 +343,23 @@ void CloseBoundary(void)
 	int Nb = ceil((holeD)/stepb);
 	stepb = holeD/(1.0*Nb);
 	State temp;
+
 	for(double x = holeS; x<holeS+holeD; x+=stepb)
 	{
 		Vector2d xi(x,0.0);
 		temp.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,true,false));
 	}
+	/*Insert particles at the end of boundary particles*/
 	pn.insert(pn.begin()+svar.bound_parts,temp.begin(),temp.end());
 	pnp1.insert(pnp1.begin()+svar.bound_parts,temp.begin(),temp.end());
-	svar.bound_parts+=temp.size();
+	svar.bound_parts+=temp.size(); /*Adjust counter values*/
 	svar.npts +=temp.size();
 }
 
 ///**************** RESID calculation **************
 void Forces(void)
 {
-	maxmu=0; 				/* CFL Parameter */
+	maxmu=0; 					/* CFL Parameter */
 	double alpha = fvar.alpha; 	/* Artificial Viscosity Parameter*/
 	double eps = fvar.eps; 		/* XSPH Influence Parameter*/
 	double numpartdens = 0.0;
@@ -453,30 +459,65 @@ void Forces(void)
 				/*drho/dt*/
 				Rrhocontr -= pj.m*(Vij.dot(Grad));	
 			}
-			Vector2d Fd;
 
+			Vector2d Fd= Vector2d::Zero();
 			/*Crossflow force*/
-			if (svar.Bcase == 3 && pi.left == true)
+			if (svar.Bcase == 3 && pi.xi[1] > svar.Pstep)
 			{
-				Vector2d Vdiff = fvar.vInf - pi.V;
-				double Re = Vdiff.norm()*2*svar.Pstep/fvar.mu;
-				double Cd;
+				switch(svar.acase)
+				{
+					default:
+						break;
+					
+					case 0: /*No aero force*/
+						break;
+
+					case 1:
+					{  /*All upstream particles at start*/
+						if( pi.left == true)
+						{
+							Vector2d Vdiff = fvar.vInf - pi.V;
+							double Re = Vdiff.norm()*2*svar.Pstep/fvar.mu;
+							double Cd;
+							
+							if (Re < 3500)
+							 	Cd = 0.01*(1+0.197*pow(Re,0.63)+2.6*pow(Re,1.38))*(24.0/Re);
+							else 
+								Cd = 0.01*(1+0.197*pow(Re,0.63)+2.6e-4*pow(Re,1.38))*(24.0/Re);
+
+							// cout << "Reynolds: " << Re << " Cd: " << Cd << endl;
+
+							Fd = Vdiff.normalized()*Cd*(2*svar.Pstep)*1.225*Vdiff.squaredNorm();
+							Fd[1] = 0.0;
+						}
+						
+						break;
+					}
+
+					case 2:
+					{	/* Surface particles*/
+						break;
+					}
+
+					case 3:
+					{	/* Left Surface particles*/
+						break;
+					}
+
+					case 4:
+					{	/* Surface particles proportional to ST*/
+						break;
+					}
+
+				}
 				
-				if (Re < 3500)
-				 	Cd = (1+0.197*pow(Re,0.63)+2.6*pow(Re,1.38))*(24.0/Re);
-				else 
-					Cd = (1+0.197*pow(Re,0.63)+2.6e-4*pow(Re,1.38))*(24.0/Re);
-
-				// cout << "Reynolds: " << Re << " Cd: " << Cd << endl;
-
-				Fd = Vdiff.normalized()*Cd*(2*svar.Pstep)*1.225*Vdiff.squaredNorm();
 			}
 			
 
 			pi.Rrho = Rrhocontr; /*drho/dt*/
 			pi.f= contrib - SurfC*fvar.sig/pi.m + Fd/pi.m;
 
-			pi.Sf = SurfC;
+			pi.Sf = Fd;
 			pi.f(1) -= 9.81; /*Add gravity*/
 
 			pnp1[i]=pi; //Update the actual structure
@@ -612,7 +653,7 @@ double Newmark_Beta(KD_Tree &mat_index)
 				int refresh = 1;
 				for (size_t i = svar.npts-svar.nrefresh; i<svar.npts; ++i)
 				{	/*Check that the starting area is clear first...*/
-					if(pn[i].xi(1)<svar.Pstep)
+					if(pn[i].xi[1]<svar.Pstep-svar.Box[1])
 						refresh = 0;
 				}
 
@@ -657,7 +698,17 @@ double Newmark_Beta(KD_Tree &mat_index)
 
 void InitSPH()
 {
-	cout << "Initialising simulation with " << svar.SimPts << " particles" << endl;
+	switch (svar.Bcase)
+	{
+		default:
+			cout << "Initialising simulation with " << svar.SimPts << " particles" << endl;
+			break;
+
+		case 3:
+			cout << "Initialising simulation..." << endl;
+			break;
+	}
+	
 	
 	//Structure input initialiser
 	//Particle(Vector2d x, Vector2d v, Vector2d vh, Vector2d f, float rho, float Rrho, bool bound) :
@@ -731,6 +782,19 @@ void InitSPH()
 				pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,true,false));
 			}
 
+			for (double y = -stepb; y >= -svar.Box[1]-0.1*stepb; y-=stepb)
+			{
+				Vector2d xi(pn.back().xi[0],y);
+				pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,true,false));
+			}
+
+			for (double y = -svar.Box[1]; y < 0.0 ; y+=stepb)
+			{
+				Vector2d xi(holeS+holeD,y);
+				pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,true,false));
+			}
+
+
 			for(double x = holeS+holeD; x<=svar.Box(0); x+=stepb)
 			{
 				Vector2d xi(x,0.0);
@@ -753,7 +817,7 @@ void InitSPH()
 	switch(svar.Bcase)
 	{
 		case 3: 
-		{
+		{	/*Crossflow case*/
 			svar.SimPts = 0;
 			/*Update n+1 before adding sim particles*/
 			for (auto p: pn)
