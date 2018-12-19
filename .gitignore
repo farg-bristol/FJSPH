@@ -34,8 +34,12 @@ PDSTest.exe
 PDSTest.cpp
 
 # Output files
+Test_Settings.txt
 *.plt
+*.lpk
+*.sty
 *.lay
+*.avi
 *.png
 *.info
 *.stackdump
