@@ -3,7 +3,8 @@ Latest update: 14/12/18
 
 # What is this repository about?
 WCSPH, or Weakly Compressible Smoothed Particle Hydrodynamics, is a great method for the modelling of fluid flows - particularly liquid motion. Typical applications are scenarios such as tank sloshing, wave breaking and many others. The aim for this specific repository is to apply this to situations with a high Weber number, like jets in a crossflow or coflow, typically found in fuel injection or jettison. 
-The specific scenario of the PhD associated with this repository is aircraft fuel jettison. For the initial breakup of the fuel where it's acting very much like a liquid, the current plan is to use SPH for the model.
+
+The specific scenario of the PhD associated with this repository is aircraft fuel jettison. For the initial breakup of the fuel where it's acting very much like a liquid, the current plan is to use SPH for the model. After the initial breakup the SPH will transition to using a particle tracking method, that is far more efficient, until the particles are out of the simulation space. 
 
 # What is WCSPH?
 Weakly Compressible Smoothed Particle Hydrodynamics (WCSPH) is one formulation of the SPH equations, which were first introduced by Gingold and Monaghan (1977), and independently by Lucy (1977), for astrophyiscal simulations. It was realised a few years later that this formulation is also applicable to fluid dynamics with reasonable accuracy. Most notable is the ease with which liquid motion can be modelled. Unlike many other methods, SPH doesn't require any special treatment of the boundary between liquid and gas phases. The equations handle this implicitly. For a good summary on SPH equations, right from the base equations to all the additions made through the years, Monaghan (2005) has the most notable contributions, excepting surface tension models. For a review of surface tension models, Huber et al. (2015) provides a review of three primary models. 
@@ -37,14 +38,16 @@ A word of warning that the code requires C++11 standard support, and so will not
 # Plans
 The plan for the future is to continue developing code for the crossflow case and try to evaluate which way is best to apply the force to the fluid. At present the methods wishing to be tested are:
 
-..* Force on all upstream particles.
-..* Force on all particles defined as a surface.
-..* Force on all particles defined as a surface, proportional to the surface tension.
-..* Force on upstream particles defined as a surface.
-..* Force on upstream particles defined as a surface, proportional to the surface tension.
-..* Enact force and surface tension on particles using generated 'ghost' particles.
+* Force on all upstream particles.
+* Force on all particles defined as a surface.
+* Force on all particles defined as a surface, proportional to the surface tension.
+* Force on upstream particles defined as a surface.
+* Force on upstream particles defined as a surface, proportional to the surface tension.
+* Enact force and surface tension on particles using generated 'ghost' particles.
 
-Natually a lot of work needs to be done in order to successfully test these, and evaluate each of their traits. At 
+Natually a lot of work needs to be done in order to successfully test these, and evaluate each of their traits. At present, some testing of the first method has been done, with reassuring success. Work is afoot to incorporate the other options into a code to allow easy comparison. The list is generally arranged in what I anticipate being low to high accuracy. What I am unsure about is which is the highest computation, particularly for a given accuracy. Using ghost particles is likely to be the most computationally heavy, however could well achieve the highest accuracy for the least tuning work. Finding the relationship between surface tension and aerodynamic force is likely to require lots of tuning, which may never even finish. Therefore part of me leans to that to save the uncertainty. 
+
+Another point of attraction for the use of ghost particles is that there appears to be a scarcity in research in this direction of SPH, at least a second phase other than the boundary (see Schechter & Brison, 2012). If implementation is effective, then there is possibility for it to be used in several other applications where surface tension is critical to the scenario, but only a single phase is of interest. 
 
 # References 
 Colagrossi, A. & Landrini, M.
@@ -78,3 +81,7 @@ Journal of Computational Physics, Elsevier BV, 1997 , 136 , 214-226
 Nair, P. & Pöschel, T.
 *Dynamic capillary phenomena using Incompressible SPH*,
 Chemical Engineering Science, Elsevier BV, 2018 , 176 , 192-204
+
+Schechter, H. & Bridson, R.
+*Ghost SPH for animating water*, 
+ACM Transactions on Graphics, Association for Computing Machinery (ACM), 2012 , 31 , 1-8
