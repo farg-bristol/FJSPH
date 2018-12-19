@@ -22,18 +22,29 @@ Density Reinitialisation: Colagrossi & Landrini (2003).
 # Dependencies 
 The code only has two dependent libraries at present:
 
-[Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page). 
+[Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page) 
 
 [NanoFLANN](https://github.com/jlblancoc/nanoflann) - Jose Luis Blanco-Claraco (University of Almería).
 
-The code has been built such that these need to be in local subfolders "Eigen" and "NanoFLANN" respectively. The bare minimum of Eigen and NanoFLANN have been provided in the repository, so download from other sources shouldn't be necessary. 
+The code has been built such that these need to be in local subfolders "Eigen" and "NanoFLANN" respectively. The bare minimum of Eigen and NanoFLANN have been provided in the repository, so download from other sources shouldn't be necessary. For exactly what needs to be in these folders (particularly for NanoFLANN), see the include headers in the source. 
 
 # Building
 A makefile is provided to ease compliation. There are several options in the build file, but because there are so few dependencies and files associated at present, it is still a single compile line. To build, all the user needs to write is `make build` and the code should then compile. To run, only one input file has been provided as a sample, and it is `make cross` in order to run the program (on windows) with that input. 
 
 ## VC++ 13
-A word of warning that the code will not build on Visual Studio 13, due to an incomplete support of the C++11 standard that is required for the NanoFLANN library. If you are on windows and don't have access to VS15, then MinGW is the next best bet (unless you are on windows 10, and have WSL enabled).
+A word of warning that the code requires C++11 standard support, and so will not build on Visual Studio 13, due to an incomplete support of the C++11 standard. If you are on windows and don't have access to VS15, then MinGW is the next best bet (unless you are on windows 10, and have WSL enabled).
 
+# Plans
+The plan for the future is to continue developing code for the crossflow case and try to evaluate which way is best to apply the force to the fluid. At present the methods wishing to be tested are:
+
+..* Force on all upstream particles.
+..* Force on all particles defined as a surface.
+..* Force on all particles defined as a surface, proportional to the surface tension.
+..* Force on upstream particles defined as a surface.
+..* Force on upstream particles defined as a surface, proportional to the surface tension.
+..* Enact force and surface tension on particles using generated 'ghost' particles.
+
+Natually a lot of work needs to be done in order to successfully test these, and evaluate each of their traits. At 
 
 # References 
 Colagrossi, A. & Landrini, M.
