@@ -30,6 +30,8 @@
 #*.exe
 *.out
 *.app
+
+# Test files
 PDSTest.exe
 PDSTest.cpp
 
@@ -43,5 +45,4 @@ Test_Settings.txt
 *.png
 *.info
 *.stackdump
-PDSTest.exe
-PDSTest.cpp
+
