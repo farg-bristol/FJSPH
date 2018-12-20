@@ -31,12 +31,20 @@ The code only has two dependent libraries at present:
 The code has been built such that these need to be in local subfolders "Eigen" and "NanoFLANN" respectively. The bare minimum of Eigen and NanoFLANN have been provided in the repository, so download from other sources shouldn't be necessary. For exactly what needs to be in these folders (particularly for NanoFLANN), see the include headers in the source. 
 
 # Building
-A makefile is provided to ease compliation. There are several options in the build file, but because there are so few dependencies and files associated at present, it is still a single compile line. To build, all the user needs to write is `make build` and the code should then compile. To run, only one input file has been provided as a sample, and it is `make cross` in order to run the program (on windows) with that input. 
+A makefile is provided to ease compliation. There are several options in the build file, but because there are so few dependencies and files associated at present, it is still a single compile line, so even if you can't use make, it's easy to see what command is needed. To build, all the user needs to write is `make build` and the code should then compile. To run, only one input file has been provided as a sample, and it is `make cross` in order to run the program (on windows) with that input. 
 
 ## VC++ 13
 A word of warning that the code requires C++11 standard support, and so will not build on Visual Studio 13, due to an incomplete support of the C++11 standard. If you are on windows and don't have access to VS15, then MinGW is the next best bet (unless you are on windows 10, and have WSL enabled).
 
-# Plans
+# Input
+On the command line, either zero, one, or two arguments can be provided. If no inputs are provided, the program assumes a standard set of settings for a simulation. The first argument is the input file for settings, that will then overwrite the defaults (aore detail on the options later). Comments are provided in the input file that should be self-explanatory as to their function. The second argument is the output file name. If not provided it defaults to 'Test.plt'. More than two arguments simply states a warning that they will be ignored. 
+
+# Output
+The code outputs a tecplot360 file, "Test.plt". This has strands in it, so should automatically load ready to animate when brought into tecplot. Unfortunately I haven't figured out how to get tecplot to open straight into scatter, so some steps are needed to get the data to be visible. 
+
+When first loaded into tecplot, it'll show as a 'XY Line' plot in the top left. Change this to a '2D Cartesian'. Then tick 'scatter', and the data should then become visible. To make it more pretty and presentable, you can change the particle properties in 'Zone Style'. The boundary and simulation particles are separate zones, so each can be modified appropriately. To play the simulation, simply press the play button on the left. 
+
+# Future Plans
 The plan for the future is to continue developing code for the crossflow case and try to evaluate which way is best to apply the force to the fluid. At present the methods wishing to be tested are:
 
 * Force on all upstream particles.
