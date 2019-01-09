@@ -1,7 +1,8 @@
-0.002      #Frame output timestep
-500        #number of frames
+0.002       #Frame output timestep
+500         #number of frames
+10         #Output Frame Interval (if 0, suppresses framewise output)
 10          #Max Sub-iterations
-200        #Max Add particle rounds
+200         #Max Add particle rounds
 0.25        #Beta in newmark-Beta
 0.5         #Gamma in NB
 50          #No particles in x-dir (Not used)
@@ -11,7 +12,7 @@
 3           #Boundary case (0 = none, 1= Rectangle, 2 = Bowl, 3= jet)
 3.0         #Boundary x-dimension end (from origin)
 0.1         #Jet y-dimension (in negative dir)
-0.005        #Initial Particle spacing
+0.01        #Initial Particle spacing
 0.6         #Boundary particle spacing factor (of part spacing)
 2.0         #Smoothing length factor
 0.1         #Aritificial Viscosity factor
@@ -21,6 +22,6 @@
 100         #Speed of Sound C_s
 1.0   		#Dynamic Viscosity
 0.0728      #Surface Tension
-3.5         #Jet Velocity
+7           #Jet Velocity
 10.0        #Freestream Velocity
-3           #Crossflow force case (0 = none, 1 = left half, 2 = surface, 3 = left surface, 4 = surf prop )
+5           #Crossflow force case (0 = none, 1 = left half, 2 = surface, 3 = left surface, 4 = surf prop, 5 = ghost particles )

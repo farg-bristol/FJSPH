@@ -27,13 +27,19 @@
 *.lib
 
 # Executables
-#*.exe
+*.exe
 *.out
 *.app
 
 # Test files
 PDSTest.exe
 PDSTest.cpp
+XSPH_Submission.sh
+SPH_Array.sh
+
+# Folders
+Inputs/*
+Outputs/*
 
 # Output files
 Test_Settings.txt
@@ -45,4 +51,5 @@ Test_Settings.txt
 *.png
 *.info
 *.stackdump
+
 

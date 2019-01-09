@@ -24,16 +24,12 @@
 #include "NanoFLANN/nanoflann.hpp"
 #include "NanoFLANN/utils.h"
 #include "NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
+#include "PDS/poisson_disk_sampling.h"
 
-//#include "PDS/poisson_disk_sampling.h"
-/*#include "TECIO.h" 
-#include "MASTER.h"*/ /* for defintion of NULL */
 
 #ifndef M_PI
 #define M_PI (4.0*atan(1.0))
 #endif
-
-
 
 using namespace std;
 using namespace std::chrono;
@@ -45,8 +41,8 @@ double maxmu = 0.0;			/*CFL Parameter*/
 typedef struct SIM {
 	Vector2i xyPART; 						/*Starting sim particles in x and y box*/
 	unsigned int SimPts,bound_parts,npts;	/*Number of particles*/
-	unsigned int nrefresh,nmax;	 			/*Crossflow Particles*/
-	unsigned int addcount;					/*Number of add particle calls*/
+	unsigned int nrefresh, nmax, outframe;	/*Crossflow Particles*/
+	unsigned int addcount, aircount;		/*Number of add particle calls*/
 	double Pstep,Bstep;						/*Initial spacings*/
 	Vector2d Box;							/*Box dimensions*/
 	Vector2d Start; 				/*Starting sim box dimensions*/
@@ -112,9 +108,47 @@ State pnp1; 	/*Particles at n+1*/
 typedef std::vector<std::vector<size_t>> outl;
 outl outlist;
 typedef KDTreeVectorOfVectorsAdaptor<State, double> KD_Tree;
+typedef KDTreeVectorOfVectorsAdaptor<vector<Vector2d>, double> Temp_Tree;
 nanoflann::SearchParams params;
 
+struct EVecTraits
+{
+	typedef double ValueType;
 
+	static constexpr auto kSize = 2;
+
+	static ValueType Get(const Eigen::Vector2d& v, const std::size_t i)
+	{
+		return *(&v[0] + i);
+	}
+
+	static void Set(Eigen::Vector2d* const v, const std::size_t i, const ValueType val)
+	{
+		*(&v[0][0] + i) = val;
+	} 
+};
+
+namespace thinks {
+	namespace poisson_disk_sampling {
+		template<>
+		struct VecTraits<Eigen::Vector2d>
+		{
+			typedef double ValueType;
+
+			static constexpr auto kSize = 2;
+
+			static ValueType Get(const Eigen::Vector2d& v, const std::size_t i)
+			{
+				return *(&v[0] + i);
+			}
+
+			static void Set(Eigen::Vector2d* const v, const std::size_t i, const ValueType val)
+			{
+				*(&v[0][0] + i) = val;
+			} 
+		};
+	}
+}
 
 void write_header() 
 {
@@ -156,6 +190,7 @@ void DefaultInput(void)
 	//Timestep Parameters
 		svar.framet = 0.1;		/*Frame timestep*/
 		svar.Nframe = 2500;		/*Number of output frames*/
+		svar.outframe = 50;		/*Terminal output frame interval*/
 		svar.subits = 10;			/*Newmark-Beta iterations*/
 		svar.nmax = 2000;			/*Max No particles (if dynamically allocating)*/	
 		svar.beta = 0.25;			/*Newmark-Beta parameters*/
@@ -189,6 +224,7 @@ void DefaultInput(void)
 		svar.sr = 4*svar.HSQ; 	/*KDtree search radius*/
 		svar.Bclosed = 0; 		/*Boundary begins open*/
 	  	svar.SimPts = svar.xyPART(0)*svar.xyPART(1); /*total sim particles*/
+	  	svar.aircount = 0;
 
 	  	Vector2d Finish(svar.Start(0)+1.0*svar.Pstep*svar.xyPART(0),
 						svar.Start(1)+1.0*svar.Pstep*svar.xyPART(1));
@@ -212,6 +248,7 @@ void GetInput(char* InFile)
   		cout << "Input file opened. Reading settings..." << endl;
   		svar.framet = getDouble(in);
   		svar.Nframe = getInt(in);
+  		svar.outframe = getInt(in);
   		svar.subits = getInt(in);
   		svar.nmax = getInt(in);	
   		svar.beta = getDouble(in);
@@ -255,6 +292,7 @@ void GetInput(char* InFile)
 	svar.sr = 4*svar.HSQ; 	/*KDtree search radius*/
 	svar.Bclosed = 0; 		/*Boundary begins open*/
   	svar.SimPts = svar.xyPART(0)*svar.xyPART(1); /*total sim particles*/
+  	svar.aircount = 0;
 
   	Vector2d Finish(svar.Start(0)+1.0*svar.Pstep*svar.xyPART(0),
 					svar.Start(1)+1.0*svar.Pstep*svar.xyPART(1));
@@ -298,7 +336,7 @@ void FindNeighbours(KD_Tree &mat_index)
 	outlist.erase(outlist.begin(),outlist.end());
 	double search_radius = svar.sr;
 	/*Find neighbour list*/
-	for(size_t i=0; i<svar.npts; ++i)
+	for(size_t i=0; i<pnp1.size(); ++i)
 	{		
 		std::vector<std::pair<size_t,double>> matches; /* Nearest Neighbour Search*/
 		
@@ -324,24 +362,51 @@ void AddPoints(void)
 	svar.nrefresh = 0;
 	
 
-	/*Create the simulation particles*/
-	for( double x = jetS; x<jetE - (jetE-jetS)/2; x+=svar.Pstep) 
-	{ /*Do the left set of points*/
-		Vector2d xi(x,-svar.Box[1]);		
-		pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,true));
-		pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,true));
-		++svar.SimPts;
-		++svar.nrefresh;
-	}
+	if (svar.acase == 5)
+	{
+		/*Create the simulation particles*/
+		for( double x = jetS; x<jetE - (jetE-jetS)/2; x+=svar.Pstep) 
+		{ /*Do the left set of points*/
+			Vector2d xi(x,-svar.Box[1]);
+			int pos = svar.npts+svar.nrefresh;		
+			pn.insert(pn.begin()+pos,Particle(xi,v,f,rho,fvar.Simmass,false,true));
+			pnp1.insert(pnp1.begin()+pos,Particle(xi,v,f,rho,fvar.Simmass,false,true));
+			++svar.SimPts;
+			++svar.nrefresh;
+		}
 
-	double start2 = pn.back().xi[0]+svar.Pstep;
-	for( double x = start2; x<=jetE; x+=svar.Pstep) 
-	{	/*Do the right set of points*/
-		Vector2d xi(x,-svar.Box[1]);		
-		pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,false));
-		pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,false));
-		++svar.SimPts;
-		++svar.nrefresh;
+		double start2 = pn.back().xi[0]+svar.Pstep;
+		for( double x = start2; x<=jetE; x+=svar.Pstep) 
+		{	/*Do the right set of points*/
+			Vector2d xi(x,-svar.Box[1]);
+			int pos = svar.npts+svar.nrefresh;		
+			pn.insert(pn.begin()+pos,Particle(xi,v,f,rho,fvar.Simmass,false,false));
+			pnp1.insert(pnp1.begin()+pos,Particle(xi,v,f,rho,fvar.Simmass,false,false));
+			++svar.SimPts;
+			++svar.nrefresh;
+		}
+	}
+	else
+	{
+		/*Create the simulation particles*/
+		for( double x = jetS; x<jetE - (jetE-jetS)/2; x+=svar.Pstep) 
+		{ /*Do the left set of points*/
+			Vector2d xi(x,-svar.Box[1]);
+			pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,true));
+			pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,true));
+			++svar.SimPts;
+			++svar.nrefresh;
+		}
+
+		double start2 = pn.back().xi[0]+svar.Pstep;
+		for( double x = start2; x<=jetE; x+=svar.Pstep) 
+		{	/*Do the right set of points*/
+			Vector2d xi(x,-svar.Box[1]);		
+			pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,false));
+			pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,false,false));
+			++svar.SimPts;
+			++svar.nrefresh;
+		}
 	}
 
 	svar.npts += svar.nrefresh;
@@ -377,7 +442,7 @@ void CloseBoundary(void)
 }
 
 ///**************** RESID calculation **************
-void Forces(void)
+void Forces(KD_Tree &mat_index)
 {
 	maxmu=0; 					/* CFL Parameter */
 	double alpha = fvar.alpha; 	/* Artificial Viscosity Parameter*/
@@ -387,8 +452,9 @@ void Forces(void)
 	const static double lam = (6.0/81.0*pow((2.0*svar.H),4.0)/pow(M_PI,4.0)*
 							(9.0/4.0*pow(M_PI,3.0)-6.0*M_PI-4.0)); 
 
+	/********* LOOP 1 - all points: Calculate numpartdens ************/
 	for (size_t i=0; i< svar.npts; ++i) 
-	{
+	{	
 		Vector2d pi = pnp1[i].xi;
 		for (size_t j=0; j<outlist[i].size(); ++j) 
 		{ /* Surface Tension calcs */
@@ -403,6 +469,7 @@ void Forces(void)
 	{
 		// #pragma omp for
 		
+	/******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
 		for (size_t i=0; i< svar.bound_parts; ++i) 
 		{	/*Find variation in density for the boundary (but don't bother with force)*/
 			double Rrhocontr = 0.0;
@@ -420,8 +487,156 @@ void Forces(void)
 			pnp1[i].Rrho = Rrhocontr; /*drho/dt*/
 		}
 
+		
+	
+	/******* LOOP 3 - only for ghost particle case: Find surface points. *********/
+		if(svar.Bcase == 3 && svar.acase == 5)
+		{
+			/*Delete previous air particles*/
+			//for (index p=std::next(pnp1.begin(),svar.bound_parts+svar.SimPts); p!=pnp1.end(); ++p)
+			while (pnp1.size()!=svar.npts)
+			{
+				pnp1.pop_back();
+				pn.pop_back();
+			}
 
-		for (size_t i=svar.bound_parts; i< svar.npts; ++i) 
+			std::vector<Vector2d> temp; /*Temporary storage for air particles*/
+			for (size_t i=svar.bound_parts; i< svar.npts; ++i) 
+			{	/*Find the surface of fluid particles.*/
+				Particle pi = pnp1[i];
+				Vector2d SurfC= Vector2d::Zero(); 
+				pi.left = false;
+
+				for (size_t j=0; j < outlist[i].size(); ++j) 
+				{
+					Particle pj = pnp1[outlist[i][j]];
+					/*Check if the position is the same, and skip the particle if yes*/
+					if(pi.xi == pj.xi)
+						continue;
+
+					Vector2d Rij = pj.xi-pi.xi;
+					double r = Rij.norm();
+
+					/*Surface Tension as described by Nair & Poeschel (2017)*/
+					double fac=1.0;
+					if(pj.b==true) 
+			            fac=(1+0.5*cos(M_PI*(fvar.contangb/180)));
+			        //cout << lam(svar.H) << endl;
+					double sij = 0.5*pow(numpartdens,-2.0)*(fvar.sig/lam)*fac;
+					SurfC -= (Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*svar.H))/pj.m;
+				}
+
+				if (SurfC.norm()>0.05)
+				{
+					/*Create particles... */
+					namespace pds = thinks::poisson_disk_sampling;
+					double radius = svar.Pstep;
+					std::array<double,2> xmin = {pn[i].xi[0]-2.0*svar.H, pn[i].xi[1]-2.0*svar.H};
+					std::array<double,2> xmax = {pn[i].xi[0]+2.0*svar.H,pn[i].xi[1]+2.0*svar.H};
+					// cout << "Centre Coord: " << pn[i].xi[0] << " " << pn[i].xi[1] << endl;
+					// cout << "Min Coords: " << xmin[0] << "  " << xmin[1] << endl;
+					// cout << "Max Coords: " << xmax[0] << "  " << xmax[1] << endl;
+
+					std::vector<Vector2d> samples = 
+					pds::PoissonDiskSampling<double,2,Vector2d,EVecTraits>(radius,xmin,xmax);
+					
+					// cout << samples.size() << endl;
+					for (auto j:samples)
+					{
+						Vector2d xi(j[0],j[1]); 
+						temp.emplace_back(xi);
+					}
+				}
+
+			}
+
+			if(temp.size()!=0)
+			{
+				Temp_Tree temp_index(2,temp,10);
+				temp_index.index->buildIndex();
+				double search_radius = svar.Pstep*svar.Pstep;
+				//std::vector<size_t> delete_list;
+				//cout << temp.size() << endl;
+
+				for (auto i=temp.begin(); i!=temp.end(); )
+				{	/*Check for duplicate particles and delete them when too close.*/
+					Vector2d xi = *i;
+					std::vector<std::pair<size_t,double>> matches;
+					temp_index.index->radiusSearch(&xi[0],search_radius,matches,params);
+					//cout << matches.size() << endl;
+					if (matches.size()!=1)
+					{
+
+						for (auto j:matches)
+						{
+							if (j.second == 0.0)
+								continue;
+
+							temp[j.first] = temp.back();
+							temp.pop_back();
+						}
+						temp_index.index->buildIndex();
+					}
+					else
+						++i;
+				}
+
+				for (size_t i=svar.bound_parts; i < svar.npts; ++i)
+				{	/*Check for particles inside the fluid*/
+					std::vector<std::pair<size_t,double>> matches;
+					temp_index.index->radiusSearch(&pn[i].xi[0],search_radius,matches,params);
+					//cout << matches.size()<< endl;
+					if (matches.size()!=0)
+					{
+						for (auto j:matches)
+						{
+							temp[j.first] = temp.back();
+							temp.pop_back();
+						}
+						temp_index.index->buildIndex();
+					}
+				}
+
+				// search_radius = 2*svar.Pstep*svar.Pstep;
+				// for (size_t i=0; i< svar.bound_parts; ++i)
+				// {	/*Check for particles next to the boudnary*/
+				// 	std::vector<std::pair<size_t,double>> matches;
+				// 	temp_index.index->radiusSearch(&pn[i].xi[0],search_radius,matches,params);
+				// 	//cout << matches.size()<< endl;
+				// 	if (matches.size()!=0)
+				// 	{
+				// 		for (auto j:matches)
+				// 		{
+				// 			temp[j.first] = temp.back();
+				// 			temp.pop_back();
+				// 		}
+				// 		temp_index.index->buildIndex();
+				// 	}
+				// }
+
+				/*Place particles in the simulation vector*/
+				svar.aircount = temp.size();
+
+				double rho = 1.225;
+				Vector2d f = Vector2d::Zero();
+				double airmass = fvar.Simmass*rho/fvar.rho0;
+				for (auto i:temp)
+				{
+					pnp1.emplace_back(Particle(i,fvar.vInf,f,rho,airmass,false,false));
+					pn.emplace_back(Particle(i,fvar.vInf,f,rho,airmass,false,false));
+				}
+
+				mat_index.index->buildIndex();
+				FindNeighbours(mat_index);
+			}
+		}
+		
+		// cout << "Npts: " << svar.npts << " Air Count: " << svar.aircount << endl;
+		// cout << "Bound Parts: " << svar.bound_parts << " Sim Points: " << svar.SimPts << endl; 
+		// cout << "Pn size: " << pn.size() << " PnP1 Size: " << pnp1.size() << endl;
+		// cout << "Outlist Size: " << outlist.size() << endl;
+
+		for (size_t i=svar.bound_parts; i< svar.npts + svar.aircount; ++i) 
 		{	/*Do force calculation for fluid particles.*/
 			Particle pi = pnp1[i];
 			pi.V = pi.v;
@@ -435,7 +650,7 @@ void Forces(void)
 
 			vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
 			mu.emplace_back(0);	/*Avoid dereference of empty vector*/
-			
+
 			for (size_t j=0; j < outlist[i].size(); ++j) 
 			{	/*Find force and density variation for particles*/
 				Particle pj = pnp1[outlist[i][j]];
@@ -649,7 +864,7 @@ double Newmark_Beta(KD_Tree &mat_index)
 	while (log10(sqrt(errsum/(1.0*svar.npts))) - logbase > -7.0)
 	{	
 		// cout << "K: " << k << endl;
-		Forces(); /*Guess force at time n+1*/
+		Forces(mat_index); /*Guess force at time n+1*/
 
 		/*Previous State for error calc*/
 		for (size_t  i=0; i< svar.npts; ++i)
@@ -884,6 +1099,7 @@ void InitSPH()
 		case 3: 
 		{	/*Crossflow case*/
 			svar.SimPts = 0;
+			svar.npts = pn.size();
 			/*Update n+1 before adding sim particles*/
 			for (auto p: pn)
 				pnp1.emplace_back(p);
@@ -998,7 +1214,7 @@ void write_frame_data(std::ofstream& fp)
     fp <<  "ZONE T=\"Particle Data\"" <<", I=" << svar.SimPts << ", F=POINT" <<
     ", STRANDID=2, SOLUTIONTIME=" << svar.t  << std::endl;
     unsigned int i=0;
-  	for (auto p=std::next(pnp1.begin(),svar.bound_parts); p!=pnp1.end(); ++p)
+  	for (auto p=std::next(pnp1.begin(),svar.bound_parts); p!=std::next(pnp1.begin(),svar.bound_parts+svar.SimPts); ++p)
 	{
 		/*if (p->xi!=p->xi || p->v!=p->v || p->f!=p->f) {
 			cerr << endl << "Simulation is broken. A value is nan." << endl;
@@ -1016,6 +1232,21 @@ void write_frame_data(std::ofstream& fp)
         fp << p->rho << " "  << p->p 
         << " " << p->Sf.norm() << std::endl; 
         ++i;
+  	}
+
+  	if (svar.Bcase ==3 && svar.acase == 5 && svar.aircount !=0)
+  	{
+		fp <<  "ZONE T=\"Ghost Air\"" <<", I=" << svar.aircount << ", F=POINT" <<
+	    ", STRANDID=3, SOLUTIONTIME=" << svar.t  << std::endl;
+	  	for (auto p=std::next(pnp1.begin(),svar.npts); p!=pnp1.end(); ++p)
+		{
+	        fp << p->xi(0) << " " << p->xi(1) << " ";
+	        fp << p->v.norm() << " ";
+	        fp << p->f.norm() << " ";
+	        fp << p->rho << " "  << p->p 
+	        << " " << p->Sf.norm() << std::endl; 
+	        ++i;
+	  	}
   	}
 }
 
@@ -1061,8 +1292,6 @@ int main(int argc, char *argv[])
 		f1.open("Test.plt", std::ios::out);
 	}
     
-    
-
 	InitSPH();
 		
 	///********* Tree algorithm stuff ************/
@@ -1072,14 +1301,11 @@ int main(int argc, char *argv[])
 	FindNeighbours(mat_index);
 
 	///*** Perform an iteration to populate the vectors *****/
-	Forces(); 
+	Forces(mat_index); 
 
 	write_settings();
 
 	///*************** Open simulation files ***************/
-
-	
-	
 	std::ofstream f2("frame.info", std::ios::out);
 	
 	if (f1.is_open() && f2.is_open())
@@ -1104,7 +1330,7 @@ int main(int argc, char *argv[])
 			" Its: " << 0 << endl; 
 
 		///************************* MAIN LOOP ********************/
-		unsigned int outframe = 20;
+		
 		for (unsigned int frame = 1; frame<= svar.Nframe; ++frame) 
 		{	
 			int stepits=0;	
@@ -1120,16 +1346,20 @@ int main(int argc, char *argv[])
 			
 			t2= high_resolution_clock::now();
 			duration = duration_cast<microseconds>(t2-t1).count()/1e6;
+
 			/*Write each frame info to file (Useful to debug for example)*/
 			f2 << "Frame: " << frame << "  S-Time: " << svar.t << "  C-Time: " 
 			<< duration <<"  Error: " << error << 
 			" Its: " << stepits << endl;  
-
-			if (frame % outframe == 0 )
-			{	/*Output to console every 20 or so steps*/
-			  	cout << "Frame: " << frame << "  Sim Time: " << svar.t-svar.dt << "  Compute Time: " 
-			  	<< duration <<"  Error: " << error << endl;
+			if(svar.outframe !=0)
+			{
+				if (frame % svar.outframe == 0 )
+				{	/*Output to console every 20 or so steps*/
+				  	cout << "Frame: " << frame << "  Sim Time: " << svar.t-svar.dt << "  Compute Time: " 
+				  	<< duration <<"  Error: " << error << endl;
+				}
 			}
+			
 
 			DensityReinit();
 			write_frame_data(f1);
