@@ -46,3 +46,19 @@ Test_Settings.txt
 *.info
 *.stackdump
 
+Inputs/31.dat
+Inputs/32.dat
+Inputs/33.dat
+Inputs/41.dat
+Inputs/42.dat
+Inputs/43.dat
+Inputs/51.dat
+Inputs/52.dat
+Inputs/53.dat
+Inputs/61.dat
+Inputs/62.dat
+Inputs/63.dat
+Inputs/Script.sh
+SPH_Array.sh
+XSPH_Submission.sh
+WCXSPH
