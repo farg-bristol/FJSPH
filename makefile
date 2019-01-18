@@ -29,7 +29,7 @@ linux:
 clean:
 	$(RM) $(TARGET).exe
 
-new:
+new: WCXSPH.cpp
 	$(RM) $(TARGET)
 	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $< 
 
