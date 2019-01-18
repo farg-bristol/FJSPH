@@ -20,7 +20,7 @@ win:
 
 #Crossflow run with different input file
 cross:
-	./$(TARGET).exe Cross.dat
+	./$(TARGET).exe Cross.dat SurfaceLeft.plt
 
 # Linux run without .exe
 linux: 
