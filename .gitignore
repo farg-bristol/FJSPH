@@ -27,13 +27,19 @@
 *.lib
 
 # Executables
-#*.exe
+*.exe
 *.out
 *.app
 
 # Test files
 PDSTest.exe
 PDSTest.cpp
+XSPH_Submission.sh
+SPH_Array.sh
+
+# Folders
+Inputs/*
+Outputs/*
 
 # Output files
 Test_Settings.txt
@@ -45,20 +51,3 @@ Test_Settings.txt
 *.png
 *.info
 *.stackdump
-
-Inputs/31.dat
-Inputs/32.dat
-Inputs/33.dat
-Inputs/41.dat
-Inputs/42.dat
-Inputs/43.dat
-Inputs/51.dat
-Inputs/52.dat
-Inputs/53.dat
-Inputs/61.dat
-Inputs/62.dat
-Inputs/63.dat
-Inputs/Script.sh
-SPH_Array.sh
-XSPH_Submission.sh
-WCXSPH
