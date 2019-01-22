@@ -17,6 +17,7 @@
 #include <fstream>
 #include <string.h>
 #include <sstream>
+#include <iterator>
 #include <chrono>
 #include "Eigen/Core"
 #include "Eigen/StdVector"
@@ -177,6 +178,28 @@ std::string getString(ifstream& In)
 	return line; 
 }
 
+Eigen::Vector2i getIVector(ifstream& In)
+{
+	string line;
+	getline(In,line);
+	std::stringstream sline(line);
+
+	Eigen::Vector2i x;
+	sline >> x[0]; sline >> x[1]; 
+	return x;
+}
+
+Eigen::Vector2d getDVector(ifstream& In)
+{
+	string line;
+	getline(In,line);
+	std::istringstream sline(line);
+	
+	Eigen::Vector2d x;
+	sline >> x[0]; sline >> x[1];  
+	return x;
+}
+
 void DefaultInput(void) 
 {
 	//Timestep Parameters
@@ -245,13 +268,10 @@ void GetInput(char* InFile)
   		svar.nmax = getInt(in);	
   		svar.beta = getDouble(in);
   		svar.gamma = getDouble(in);
-  		svar.xyPART(0) = getInt(in); 
-  		svar.xyPART(1) = getInt(in);
-  		svar.Start(0) = getDouble(in);
-  		svar.Start(1) = getDouble(in);
+  		svar.xyPART = getIVector(in);
+  		svar.Start = getDVector(in);
   		svar.Bcase = getInt(in);
-  		svar.Box(0) = getDouble(in);
-  		svar.Box(1) = getDouble(in);
+  		svar.Box = getDVector(in);
   		svar.Pstep = getDouble(in);
   		svar.Bstep = getDouble(in);
   		double Hfac = getDouble(in); /*End of state read*/
@@ -265,8 +285,8 @@ void GetInput(char* InFile)
   		fvar.Cs = getDouble(in);
   		fvar.mu = getDouble(in);
   		fvar.sig = getDouble(in);
-  		fvar.vJet(0) = 0.0; fvar.vJet(1) = getDouble(in); 
-  		fvar.vInf(0) = getDouble(in); fvar.vInf(1) = 0.0;
+  		fvar.vJet = getDVector(in); 
+  		fvar.vInf = getDVector(in);
   		svar.acase = getInt(in);
 
 		in.close();
@@ -1277,14 +1297,15 @@ int main(int argc, char *argv[])
     	GetInput(argv[1]);
     }
 
-    /*Check for output file name*/
+    
 	std::ofstream f1;
+	/*Check for output file name*/
 	if(argc == 3)
 	{	/*Open that file if it has*/
 		f1.open(argv[2], std::ios::out);
 	} 
 	else
-	{
+	{	/*Otherwise, open a standard file name*/
 		cout << "WARNING: output file not provided.\nWill write to Test.plt" << endl;
 		f1.open("Test.plt", std::ios::out);
 	}

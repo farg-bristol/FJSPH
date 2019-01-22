@@ -5,14 +5,17 @@ CXX=g++
 INC= 
 
 # Compiler flags. If desired add -g for debugging info.
-CFLAGS= -g -std=c++11 -Wall -Wextra -fopenmp -lm -ffast-math -funroll-loops -O3
+CFLAGS=-g -std=c++11 -Wall -Wextra -fopenmp -lm -ffast-math -funroll-loops -O3
 
 # Target executable
-TARGET = WCXSPH
+TARGET=WCXSPH
+SOURCE=WCXSPH.cpp
+3DTARGET=WCXSPH3D
+3DSOURCE=WCXSPH3D.cpp
 
 # Compile and Build
 build: WCXSPH.cpp
-	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $< 
+	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE) 
 
 # Windows run .exe
 win:
@@ -31,13 +34,13 @@ clean:
 
 new: WCXSPH.cpp
 	$(RM) $(TARGET)
-	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $< 
+	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE) 
 
-3D	: WCXSPH3D.cpp
-	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $< 
+3D: 
+	$(CXX) $(INC) $(CFLAGS) -o $(3DTARGET) $(3DSOURCE)
 
 3Drun:
-	./$(TARGET).exe 3DInput.dat
+	./$(3DTARGET).exe 3DInput.dat
 
 
 
