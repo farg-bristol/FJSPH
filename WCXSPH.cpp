@@ -47,14 +47,14 @@ typedef struct SIM {
 	unsigned int addcount, aircount;		/*Number of add particle calls*/
 	double Pstep,Bstep;						/*Initial spacings*/
 	Vector2d Box;							/*Box dimensions*/
-	Vector2d Start; 				/*Starting sim box dimensions*/
+	Vector2d Start; 						/*Starting sim box dimensions*/
 	unsigned int subits,Nframe; 			/*Timestep values*/
 	double dt, t, framet;					/*Simulation + frame times*/
-	double tNorm;
+	double tNorm, dtfac;						/*Timestep factor*/
 	double beta,gamma;						/*Newmark-Beta Parameters*/
 	int Bcase, Bclosed;						/*What boundary shape to take*/
 	double H,HSQ, sr; 						/*Support Radius + Search radius*/
-	int acase;								/*Aerodynamic force case*/
+	int acase, outform;						/*Aerodynamic force case*/
 } SIM;
 
 typedef struct FLUID {
@@ -80,7 +80,7 @@ typedef class Particle {
 			double Rhoi, double Mi, int bound)	
 		{
 			xi = X;	v = Vi; f = Fi;
-			V(0.0,0.0);	Sf(0.0,0.0);
+			V(0.0,0.0);	Sf(0.0,0.0); Af(0.0,0.0);
 			rho = Rhoi;
 			Rrho = 0;
 			m = Mi;
@@ -98,7 +98,7 @@ typedef class Particle {
 			return(xi[a]);
 		}
 	
-		Vector2d xi, v, V, f, Sf;
+		Vector2d xi, v, V, f, Sf, Af;
 		double rho, p, Rrho, m;
 		int b; //What state is a particle. Boundary, forced particle or unforced
 }Particle;
@@ -205,98 +205,110 @@ Eigen::Vector2d getDVector(ifstream& In)
 void DefaultInput(void) 
 {
 	//Timestep Parameters
-		svar.framet = 0.1;		/*Frame timestep*/
-		svar.Nframe = 2500;		/*Number of output frames*/
-		svar.outframe = 50;		/*Terminal output frame interval*/
-		svar.subits = 10;			/*Newmark-Beta iterations*/
-		svar.nmax = 2000;			/*Max No particles (if dynamically allocating)*/	
-		svar.beta = 0.25;			/*Newmark-Beta parameters*/
-		svar.gamma = 0.5;	
-		
-		//Simulation window parameters
-		svar.xyPART(40,40); /*Number of particles in (x,y) directions*/
-		svar.Start(0.2,0.2); /*Simulation particles start + end coords*/
-		svar.Bcase = 1; 		/*Boundary case*/
-		svar.Box(3,2); 		/*Boundary dimensions*/
-		svar.Pstep = 0.01;	/*Initial particle spacing*/
-		svar.Bstep = 0.6; 	/*Boundary factor of particle spacing (dx = Pstep*Bstep)*/
-		
-		// SPH Parameters
-		svar.H =  3.0*svar.Pstep; /*Support Radius*/
-		
-		//Fluid Properties
-		fvar.alpha = 0.025;			/*Artificial viscosity factor*/
-  		fvar.eps = 0.25;			/*XSPH Correction factor*/
-		fvar.contangb = 150.0;		/*Boundary contact angle*/
-		fvar.rho0 = 1000.0;  		/*Rest density*/
-		fvar.Cs = 50; 	 			/*Speed of sound*/
-		fvar.mu = 0.0001002;		/*Viscosity*/
-		fvar.sig = 0.0728;			/*Surface tension*/
-		fvar.vJet(1) = 10.0;
-
-		/*Universal parameters based on input values*/
-	  	svar.dt = 0.0000002; 		/*Initial timestep*/
-	  	svar.t = 0.0;				/*Total simulation time*/
-	  	svar.HSQ = svar.H*svar.H; 
-		svar.sr = 4*svar.HSQ; 	/*KDtree search radius*/
-		svar.Bclosed = 0; 		/*Boundary begins open*/
-	  	svar.SimPts = svar.xyPART[0]*svar.xyPART[1]; /*total sim particles*/
-	  	svar.aircount = 0;
-
-	  	/*Mass from spacing and density*/
-		fvar.Simmass = double(fvar.rho0*svar.Pstep*svar.Pstep); 
-		fvar.Boundmass = fvar.Simmass*svar.Bcase;
-		
-		fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
-		fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
-
+	svar.framet = 0.1;		/*Frame timestep*/
+	svar.Nframe = 2500;		/*Number of output frames*/
+	svar.outframe = 50;		/*Terminal output frame interval*/
+	svar.outform = 1;		/*Output format*/
+	svar.subits = 10;		/*Newmark-Beta iterations*/
+	svar.dtfac = 0.3;
+	svar.nmax = 2000;		/*Max No particles (if dynamically allocating)*/	
+	
+	//Simulation window parameters
+	svar.xyPART(40,40); 	/*Number of particles in (x,y) directions*/
+	svar.Start(0.2,0.2); 	/*Simulation particles start + end coords*/
+	svar.Bcase = 1; 		/*Boundary case*/
+	svar.Box(3,2); 			/*Boundary dimensions*/
+	svar.Pstep = 0.01;		/*Initial particle spacing*/
+	svar.Bstep = 0.6; 		/*Boundary factor of particle spacing (dx = Pstep*Bstep)*/
+	
+	// SPH Parameters
+	svar.H =  3.0*svar.Pstep; /*Support Radius*/
+	
 }
 
-void GetInput(char* InFile)
+void GetInput(int argc, char **argv)
 {
+	if (argc > 3) 
+	{	/*Check number of input arguments*/
+		cout << "WARNING: only two input arguments accepted,\n";
+		cout << "1: Input file   2: Output file.\n";
+		cout << "Other inputs will be ignored." << endl;
+	}
 
-	std::ifstream in(InFile);
-  	if(in.is_open()) 
-  	{	/*Simulation parameters*/
-  		cout << "Input file opened. Reading settings..." << endl;
-  		svar.framet = getDouble(in);
-  		svar.Nframe = getInt(in);
-  		svar.outframe = getInt(in);
-  		svar.subits = getInt(in);
-  		svar.nmax = getInt(in);	
-  		svar.beta = getDouble(in);
-  		svar.gamma = getDouble(in);
-  		svar.xyPART = getIVector(in);
-  		svar.Start = getDVector(in);
-  		svar.Bcase = getInt(in);
-  		svar.Box = getDVector(in);
-  		svar.Pstep = getDouble(in);
-  		svar.Bstep = getDouble(in);
-  		double Hfac = getDouble(in); /*End of state read*/
-  		svar.H= Hfac*svar.Pstep;
+	if (argc == 1)
+    {	/*Check if input has been provided*/
+    	cout << "WARNING: No inputs provided.\n";
+    	cout << "Program will assume a default set of parameters.";
+    	cout << "Output file is \'Test.plt\'" << endl;
+    	DefaultInput();
+    }
+    else if (argc > 1)
+    {	/*Get parameters if it has been provided*/
+    	// cout << argv[1] << endl;
+    	std::ifstream in(argv[1]);
+	  	if(in.is_open()) 
+	  	{	/*Simulation parameters*/
+	  		cout << "Input file opened. Reading settings..." << endl;
+	  		svar.framet = getDouble(in);
+	  		svar.Nframe = getInt(in);
+	  		svar.outframe = getInt(in);
+	  		svar.outform = getInt(in);
+	  		svar.subits = getInt(in);
+	  		svar.dtfac = getDouble(in);
+	  		svar.nmax = getInt(in);	
+	  		svar.xyPART = getIVector(in);
+	  		svar.Start = getDVector(in);
+	  		svar.Box = getDVector(in);
+	  		svar.Pstep = getDouble(in);
+	  		svar.Bstep = getDouble(in);
+	  		svar.Bcase = getInt(in);
+	  		svar.acase = getInt(in);
+	  		fvar.vJet = getDVector(in); 
+	  		fvar.vInf = getDVector(in);
+	  		fvar.Acorrect = getDouble(in);
 
-		/*Fluid parameters read*/
-  		fvar.alpha = getDouble(in);
-  		fvar.eps = getDouble(in);
-  		fvar.contangb = getDouble(in);
-  		fvar.rho0 = getDouble(in);
-  		fvar.Cs = getDouble(in);
-  		fvar.mu = getDouble(in);
-  		fvar.sig = getDouble(in);
-  		fvar.vJet = getDVector(in); 
-  		fvar.vInf = getDVector(in);
-  		svar.acase = getInt(in);
+			in.close();
+	  	}
+	  	else {
+		    cerr << "Error opening the input file." << endl;
+		    exit(-1);
+	  	}
+	}
 
-		in.close();
+	/*Get fluid properties from fluid.dat*/
+	std::ifstream fluid("fluid.dat");
+	if (fluid.is_open())
+	{	/*Fluid parameters read*/
+		Vector2d nb = getDVector(fluid);
+		svar.beta = nb[0];	svar.gamma = nb[1];
+		double Hfac = getDouble(fluid); /*End of state read*/
+	  	svar.H= Hfac*svar.Pstep;
+	  	fvar.alpha = getDouble(fluid);
+  		fvar.eps = getDouble(fluid);
+  		fvar.contangb = getDouble(fluid);
+  		fvar.rho0 = getDouble(fluid);
+  		fvar.Cs = getDouble(fluid);
+  		fvar.mu = getDouble(fluid);
+  		fvar.sig = getDouble(fluid);
 
-  	}
-  	else {
-	    cerr << "Error opening the input file." << endl;
-	    exit(-1);
-  	}
-  	
+  		fluid.close();
+	}
+	else 
+	{
+		cerr << "fluid.dat not found. Assuming standard set of parameters (water)." << endl;
+		svar.beta = 0.25;	svar.gamma = 0.5;
+		svar.H= 2.0*svar.Pstep;
+	  	fvar.alpha = 0.1;
+  		fvar.eps = 0.05;
+  		fvar.contangb = 150.0;
+  		fvar.rho0 = 1000.0;
+  		fvar.Cs = 100.0;
+  		fvar.mu = 1.0;
+  		fvar.sig = 0.0728;
+	}
+
   	/*Universal parameters based on input values*/
-  	svar.dt = 0.00000002; 		/*Initial timestep*/
+  	svar.dt = 2E-07; 		/*Initial timestep*/
   	svar.t = 0.0;				/*Total simulation time*/
   	svar.HSQ = svar.H*svar.H; 
 	svar.sr = 4*svar.HSQ; 	/*KDtree search radius*/
@@ -447,31 +459,12 @@ void CloseBoundary(void)
 	svar.npts +=temp.size();
 }
 
-Vector2d AeroForce(Vector2d &Vdiff)
-{
-	Vector2d Fd = Vector2d::Zero();
-	double Re = Vdiff.norm()*2*svar.Pstep/fvar.mu;
-	double Cd = 0.0;
 
-	if (Re < 3500)
-	 	Cd = (1.0+0.197*pow(Re,0.63)+2.6*pow(Re,1.38))*(24.0/(Re+0.0001));
-	else 
-		Cd = (1+0.197*pow(Re,0.63)+2.6e-4*pow(Re,1.38))*(24.0/(Re+0.0001));
-
-	// cout << "Reynolds: " << Re << " Cd: " << Cd << endl;
-	
-	Fd = fvar.Acorrect*(2*svar.Pstep)*Cd*svar.Pstep*1.225*Vdiff.normalized()*Vdiff.squaredNorm();
-	//Fd[1] = 0.0;
-	//cout << "Cd: " << Cd << " Fd: " << Fd[0] << " " << Fd[1] << endl ;
-	return Fd;
-}
 
 void Ghost_Particles(Sim_Tree &NP1_INDEX, double lam, double numpartdens)
 {
-	
-	
-
 /***** Find particles outside of the influence of the Liquid *******/
+	
 	/*Default to an air particle that is outside the influence of the simulation*/
 	for (size_t i=svar.npts; i< svar.npts+svar.aircount; ++i)
 		pnp1[i].b = 4; 
@@ -520,7 +513,7 @@ void Ghost_Particles(Sim_Tree &NP1_INDEX, double lam, double numpartdens)
 	            fac=(1+0.5*cos(M_PI*(fvar.contangb/180)));
 	        //cout << lam(svar.H) << endl;
 			double sij = 0.5*pow(numpartdens,-2.0)*(fvar.sig/lam)*fac;
-			SurfC -= (Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*svar.H))/pj.m;
+			SurfC -= (Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*svar.H));
 		}
 
 		if (SurfC.norm()>0.05)
@@ -624,6 +617,25 @@ void Ghost_Particles(Sim_Tree &NP1_INDEX, double lam, double numpartdens)
 	}
 }
 
+Vector2d AeroForce(Vector2d &Vdiff)
+{
+	Vector2d Fd = Vector2d::Zero();
+	double Re = Vdiff.norm()*2*svar.Pstep/fvar.mu;
+	double Cd = 0.0;
+
+	if (Re < 3500)
+	 	Cd = (1.0+0.197*pow(Re,0.63)+2.6*pow(Re,1.38))*(24.0/(Re+0.000001));
+	else 
+		Cd = (1+0.197*pow(Re,0.63)+2.6e-4*pow(Re,1.38))*(24.0/(Re+0.0001));
+
+	// cout << "Reynolds: " << Re << " Cd: " << Cd << endl;
+	//cout << fvar.Acorrect << endl;
+	Fd = fvar.Acorrect*(2*svar.Pstep)*Cd*1.225*Vdiff.normalized()*Vdiff.squaredNorm()*svar.Pstep;
+	//Fd[1] = 0.0;
+	// cout << "Reynolds: " << Re  << " Cd: " << Cd << " Fd: " << Fd[0] << " " << Fd[1] << endl ;
+	return Fd;
+}
+
 ///**************** RESID calculation **************
 void Forces(Sim_Tree &NP1_INDEX)
 {
@@ -693,6 +705,7 @@ void Forces(Sim_Tree &NP1_INDEX)
 			Vector2d contrib= Vector2d::Zero();
 			Vector2d visc = Vector2d::Zero();
 			Vector2d SurfC= Vector2d::Zero(); 
+			Vector2d surfNorm = Vector2d::Zero();
 
 			vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
 			mu.emplace_back(0);	/*Avoid dereference of empty vector*/
@@ -731,9 +744,8 @@ void Forces(Sim_Tree &NP1_INDEX)
 				if(pj.b==true) fac=(1+0.5*cos(M_PI*(fvar.contangb/180)));
 				double sij = 0.5*pow(numpartdens,-2.0)*(fvar.sig/lam)*fac;
 				SurfC -= (Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*svar.H));
-				
-				//SurfC += (pj.m/pj.rho)*Rij*Kern; 
 
+				surfNorm += (Rij/r)*sij*sin((3.0*M_PI*r)/(4.0*svar.H));
 				/* XSPH Influence*/
 				pi.V+=eps*(pj.m/rhoij)*Kern*Vij; 
 
@@ -807,6 +819,7 @@ void Forces(Sim_Tree &NP1_INDEX)
 			pi.f= contrib - SurfC*fvar.sig/pi.m + Fd/pi.m;
 
 			pi.Sf = SurfC*fvar.sig/pi.m;
+			pi.Af = Fd/pi.m;
 			pi.f[1] -= 9.81; /*Add gravity*/
 
 			pnp1[i]=pi; //Update the actual structure
@@ -935,7 +948,7 @@ double Newmark_Beta(Sim_Tree &NP1_INDEX)
 /***********************************************************************************/
 /**************CODE IS NOW VERY SENSITIVE TO DT. MODIFY WITH CAUTION****************/
 /***********************************************************************************/
-	svar.dt = 0.3*min(dtf,dtcv); 
+	svar.dt = svar.dtfac*min(dtf,dtcv); 
 /***********************************************************************************/
 /***********************************************************************************/
 /***********************************************************************************/
@@ -1187,9 +1200,6 @@ void InitSPH()
 		exit(-1);
 	}
 	cout << "Total Particles: " << svar.npts << endl;
-
-	
-
 }
 
 void write_settings()
@@ -1217,7 +1227,47 @@ void write_settings()
   }
 }
 
-void write_frame_data(std::ofstream& fp)
+void write_research_data(std::ofstream& fp)
+{	
+	if (svar.Bcase >0)
+	{
+		fp <<  "ZONE T=\"Boundary Data\"" << ", I=" << svar.bound_parts << ", F=POINT" <<
+	    ", STRANDID=1, SOLUTIONTIME=" << svar.t << std::endl;
+	  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bound_parts); ++b)
+		{
+	        fp << b->xi(0) << " " << b->xi(1) << " ";
+	        fp << b->f.norm() << " ";
+	        fp << b->Af[0] << " " << b->Af[1] << " "; 
+	        fp << b->Sf[0] << " " << b->Sf[1] << endl; 
+	  	}
+	}
+    
+    fp <<  "ZONE T=\"Particle Data\"" <<", I=" << svar.SimPts << ", F=POINT" <<
+    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << std::endl;
+  	for (auto p=std::next(pnp1.begin(),svar.bound_parts); p!=std::next(pnp1.begin(),svar.bound_parts+svar.SimPts); ++p)
+	{
+        fp << p->xi(0) << " " << p->xi(1) << " ";
+        fp << p->f.norm() << " ";
+        fp << p->Af.norm() <<  " "; 
+        fp << p->Sf[0] << " " << p->Sf[1] << " ";
+        fp << p->b << endl; 
+  	}
+
+  	if (svar.Bcase ==3 && svar.acase == 5 && svar.aircount !=0)
+  	{
+		fp <<  "ZONE T=\"Ghost Air\"" <<", I=" << svar.aircount << ", F=POINT" <<
+	    ", STRANDID=3, SOLUTIONTIME=" << svar.t  << std::endl;
+	  	for (auto p=std::next(pnp1.begin(),svar.npts); p!=pnp1.end(); ++p)
+		{
+	        fp << p->xi(0) << " " << p->xi(1) << " ";
+	        fp << p->f.norm() << " ";
+	        fp << p->Af[0] << " " << p->Af[1] << " "; 
+	        fp << p->Sf[0] << " " << p->Sf[1] << "\n";  
+	  	}
+  	}
+}
+
+void write_fluid_data(std::ofstream& fp)
 {	
 	if (svar.Bcase >0)
 	{
@@ -1228,7 +1278,7 @@ void write_frame_data(std::ofstream& fp)
 		        fp << b->xi(0) << " " << b->xi(1) << " ";
 		        fp << b->v.norm() << " ";
 		        fp << b->f.norm() << " ";
-		        fp << b->rho << " "  << b->p  << " " << b->Sf.norm() << std::endl;
+		        fp << b->rho << " "  << b->p  << " " << b->Sf << std::endl;
 		  	}
 	}
     
@@ -1251,7 +1301,7 @@ void write_frame_data(std::ofstream& fp)
         fp << p->v.norm() << " ";
         fp << p->f.norm() << " ";
         fp << p->rho << " "  << p->p 
-        << " " << p->Sf.norm() << std::endl; 
+        << " " << p->Sf << std::endl; 
         ++i;
   	}
 
@@ -1265,7 +1315,7 @@ void write_frame_data(std::ofstream& fp)
 	        fp << p->v.norm() << " ";
 	        fp << p->f.norm() << " ";
 	        fp << p->rho << " "  << p->p 
-	        << " " << p->Sf.norm() << std::endl; 
+	        << " " << p->Sf << std::endl; 
 	        ++i;
 	  	}
   	}
@@ -1282,25 +1332,9 @@ int main(int argc, char *argv[])
     write_header();
 
     /******* Define the global simulation parameters ******/
-    if (argc > 3) 
-	{	/*Check number of input arguments*/
-		cout << "WARNING: only two input arguments accepted,\n";
-		cout << "1: Input file   2: Output file.\n";
-		cout << "Other inputs will be ignored." << endl;
 
-	}
-
-	if (argc == 1)
-    {	/*Check if input has been provided*/
-    	cout << "WARNING: No inputs provided.\n";
-    	cout << "Program will assume a default set of parameters.";
-    	cout << "Output file is \'Test.plt\'" << endl;
-    	DefaultInput();
-    }
-    else if (argc > 1)
-    {	/*Get parameters if it has been provided*/
-    	GetInput(argv[1]);
-    }
+    GetInput(argc,argv);
+    
 
     
 	std::ofstream f1;
@@ -1340,9 +1374,21 @@ int main(int argc, char *argv[])
 		
 		/* Write file header defining variable names */
 		f1 << "TITLE = \"WCXSPH Output\"" << std::endl;
-		f1 << "VARIABLES = \"x (m)\", \"y (m)\", \"v (m/s)\", \"a (m/s<sup>-1</sup>)\", " << 
+		
+		switch (svar.outform)
+		{	
+			case 1:
+				f1 << "VARIABLES = \"x (m)\", \"y (m)\", \"v (m/s)\", \"a (m/s<sup>-1</sup>)\", " << 
 			"\"<greek>r</greek> (kg/m<sup>-3</sup>)\", \"P (Pa)\", \"Aero Force\"" << std::endl;
-		write_frame_data(f1);
+				write_fluid_data(f1);
+				break;
+			case 2:
+				f1 << "VARIABLES = \"x (m)\", \"y (m)\", \"a (m/s<sup>-1</sup>)\", " << 
+			"\"A<sub>f</sub>\", \"S<sub>fx</sub>\", \"S<sub>fy</sub>\", \"B\""<< std::endl;
+				write_research_data(f1);
+				break;
+		}
+		
 		
 		/*Timing calculation + error sum output*/
 		t2 = high_resolution_clock::now();
@@ -1386,7 +1432,16 @@ int main(int argc, char *argv[])
 			
 
 			DensityReinit();
-			write_frame_data(f1);
+			switch (svar.outform)
+			{	
+				case 1:
+					write_fluid_data(f1);
+					break;
+				case 2:
+					write_research_data(f1);
+					break;
+			}
+		
 		}
 		f1.close();
 		f2.close();
