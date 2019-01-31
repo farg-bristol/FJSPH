@@ -38,6 +38,9 @@ using namespace std::chrono;
 using namespace Eigen;
 using namespace nanoflann;
 
+constexpr int simDim = 3;
+typedef Eigen::Matrix<long double, simDim,1> StateVec;
+
 double maxmu = 0.0;			/*CFL Parameter*/
 
 typedef struct SIM {
@@ -54,6 +57,7 @@ typedef struct SIM {
 	double beta,gamma;						/*Newmark-Beta Parameters*/
 	int Bcase, Bclosed;						/*What boundary shape to take*/
 	double H,HSQ, sr; 						/*Support Radius + Search radius*/
+	double correc;
 	int acase, outform;						/*Aerodynamic force case*/
 } SIM;
 
@@ -85,7 +89,7 @@ typedef class Particle {
 			Rrho = 0;
 			m = Mi;
 			b = bound;
-			
+			theta = 0.0;
 		}
 
 		int size() const 
@@ -99,7 +103,7 @@ typedef class Particle {
 		}
 	
 		Vector2d xi, v, V, f, Sf, Af;
-		double rho, p, Rrho, m;
+		double rho, p, Rrho, m, theta;
 		int b; //What state is a particle. Boundary, forced particle or unforced
 }Particle;
 typedef std::vector<Particle> State;
@@ -311,6 +315,7 @@ void GetInput(int argc, char **argv)
   	svar.dt = 2E-07; 		/*Initial timestep*/
   	svar.t = 0.0;				/*Total simulation time*/
   	svar.HSQ = svar.H*svar.H; 
+  	svar.correc = (7/(4*M_PI*svar.H*svar.H));
 	svar.sr = 4*svar.HSQ; 	/*KDtree search radius*/
 	svar.Bclosed = 0; 		/*Boundary begins open*/
   	svar.SimPts = svar.xyPART[0]*svar.xyPART[1]; /*total sim particles*/
@@ -325,26 +330,23 @@ void GetInput(int argc, char **argv)
 }
 
 ///******Wendland's C2 Quintic Kernel*******
-double W2Kernel(double dist,double H) 
+double W2Kernel(double dist,double H, double correc) 
 {
 	double q = dist/H;
-	double correc = (7/(4*M_PI*H*H));
 	return (pow(1-0.5*q,4))*(2*q+1)*correc;
 }
 
 /*Gradient*/
-Vector2d W2GradK(Vector2d Rij, double dist,double H)
+Vector2d W2GradK(Vector2d Rij, double dist,double H, double correc)
 {
 	double q = dist/H;
-	double correc = (7/(4*M_PI*H*H));
 	return 5.0*(Rij/(H*H))*pow(1-0.5*q,3)*correc;
 }
 
 /*2nd Gradient*/
-double W2Grad2(Vector2d Rij, double dist,double H) 
+double W2Grad2(Vector2d Rij, double dist,double H, double correc) 
 {
 	double q = dist/H;
-	double correc = (7/(4*M_PI*H*H));
 	return Rij.dot(Rij)*(5.0*correc/(H*H))*(2*q-1)*pow(1-0.5*q,2);
 }
 
@@ -655,7 +657,7 @@ void Forces(Sim_Tree &NP1_INDEX)
 		{ /* Surface Tension calcs */
 			Vector2d pj = pnp1[outlist[i][j]].xi;
 			double r = (pj-pi).norm();
-			numpartdens += W2Kernel(r,svar.H);
+			numpartdens += W2Kernel(r,svar.H,svar.correc);
 		}	
 	}
 	numpartdens=numpartdens/(1.0*svar.npts);
@@ -676,7 +678,7 @@ void Forces(Sim_Tree &NP1_INDEX)
 				Vector2d Rij = pj.xi-pi.xi;
 				Vector2d Vij = pj.v-pi.v;
 				double r = Rij.norm();
-				Vector2d Grad = W2GradK(Rij, r,svar.H);
+				Vector2d Grad = W2GradK(Rij, r,svar.H,svar.correc);
 				Rrhocontr -= pj.m*(Vij.dot(Grad));  
 			}
 			pnp1[i].Rrho = Rrhocontr; /*drho/dt*/
@@ -705,7 +707,6 @@ void Forces(Sim_Tree &NP1_INDEX)
 			Vector2d contrib= Vector2d::Zero();
 			Vector2d visc = Vector2d::Zero();
 			Vector2d SurfC= Vector2d::Zero(); 
-			Vector2d surfNorm = Vector2d::Zero();
 
 			vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
 			mu.emplace_back(0);	/*Avoid dereference of empty vector*/
@@ -721,8 +722,8 @@ void Forces(Sim_Tree &NP1_INDEX)
 				Vector2d Rij = pj.xi-pi.xi;
 				Vector2d Vij = pj.v-pi.v;
 				double r = Rij.norm();
-				double Kern = W2Kernel(r,svar.H);
-				Vector2d Grad = W2GradK(Rij, r,svar.H);
+				double Kern = W2Kernel(r,svar.H, svar.correc);
+				Vector2d Grad = W2GradK(Rij, r,svar.H, svar.correc);
 				
 				/*Pressure and artificial viscosity - Monaghan (1994) p.400*/
 				double rhoij = 0.5*(pi.rho+pj.rho);
@@ -745,14 +746,13 @@ void Forces(Sim_Tree &NP1_INDEX)
 				double sij = 0.5*pow(numpartdens,-2.0)*(fvar.sig/lam)*fac;
 				SurfC -= (Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*svar.H));
 
-				surfNorm += (Rij/r)*sij*sin((3.0*M_PI*r)/(4.0*svar.H));
 				/* XSPH Influence*/
 				pi.V+=eps*(pj.m/rhoij)*Kern*Vij; 
 
 				/*drho/dt*/
 				Rrhocontr -= pj.m*(Vij.dot(Grad));	
 
-				if (svar.Bcase == 3 && svar.acase == 3)
+				if (svar.Bcase == 3 && (svar.acase == 3 || svar.acase ==5))
 				{
 					double num = -Rij.dot(fvar.vInf);
 					double denom = Rij.norm()*fvar.vInf.norm();
@@ -764,7 +764,7 @@ void Forces(Sim_Tree &NP1_INDEX)
 			
 			/*Crossflow force*/
 			Vector2d Fd= Vector2d::Zero();
-			if (svar.Bcase == 3 && pi.xi[1] > svar.Pstep)
+			if (svar.Bcase == 3 && pi.xi[1] > 2*svar.Pstep)
 			{
 				switch(svar.acase)
 				{
@@ -789,7 +789,7 @@ void Forces(Sim_Tree &NP1_INDEX)
 						break;
 					}
 					case 3: {	/* All upstream particles */
-						if(pi.b == 2 /*&& SurfC.norm()*pow(svar.Pstep*100,3.7622)/pi.m > 2.5*/)
+						if(pi.b == 2 /*&& */)
 						{
 							Vector2d Vdiff = fvar.vInf - pi.V;
 							Fd = AeroForce(Vdiff);
@@ -798,6 +798,33 @@ void Forces(Sim_Tree &NP1_INDEX)
 					}
 					case 4:	{	/* Surface particles proportional to ST*/
 						/*Work in progress...*/
+						break;
+					}
+					case 6: { /*Surface particles, with correction based on surface normal*/
+						if (SurfC.norm()*fvar.sig*pow(svar.H,2)/(pi.m*2.6E-06) > 0.8)
+						{
+							Vector2d Vdiff = fvar.vInf-pi.V;
+							Fd = AeroForce(Vdiff);
+							/*Correction based on surface normal*/
+							Vector2d surfNorm(SurfC[0],-SurfC[1]);
+							double num = surfNorm.dot(fvar.vInf);
+							double denom = surfNorm.norm()*fvar.vInf.norm();
+							double theta = acos(num/denom)/M_PI;
+							pi.theta = theta;
+							double correc = 0.0;
+							//double correc = cos(0.55*theta);
+							if (theta <= 1.0 )
+							{
+								double fac1 = 3;
+								double h1 = 0.83;
+								double fac2 = -2;
+								double h2 = 0.78;
+								correc = fac1*W2Kernel(2*theta,h1,1)+fac2*W2Kernel(2*theta,h2,1);
+								//cout << correc << endl;
+							}
+							
+							Fd = correc*Fd;
+						}
 						break;
 					}
 				}
@@ -810,17 +837,15 @@ void Forces(Sim_Tree &NP1_INDEX)
 
 				Fd = Vdiff.normalized()*Cd*(2*svar.Pstep)*fvar.rho0*Vdiff.squaredNorm();
 				Fd[1] += 9.81*pi.m;
-				//cout << Re << endl;
-				//cout << Fd[0] << "  " << Fd[1] << endl;
 			}
 			
 
 			pi.Rrho = Rrhocontr; /*drho/dt*/
-			pi.f= contrib - SurfC*fvar.sig/pi.m + Fd/pi.m;
+			pi.f= contrib + SurfC*fvar.sig/pi.m + Fd/pi.m;
 
 			pi.Sf = SurfC*fvar.sig/pi.m;
 			pi.Af = Fd/pi.m;
-			pi.f[1] -= 9.81; /*Add gravity*/
+			//pi.f[1] -= 9.81; /*Add gravity*/
 
 			pnp1[i]=pi; //Update the actual structure
 
@@ -850,7 +875,7 @@ void DensityReinit()
 				    Rij(0) , Rij(0)*Rij(0) , Rij(1)*Rij(0) ,
 				    Rij(1) , Rij(1)*Rij(0) , Rij(1)*Rij(1) ;
 
-			A+= W2Kernel(Rij.norm(),svar.H)*Abar*pj.m/pj.rho;
+			A+= W2Kernel(Rij.norm(),svar.H,svar.correc)*Abar*pj.m/pj.rho;
 		}
 				
 		Vector3d Beta;
@@ -866,7 +891,7 @@ void DensityReinit()
 		for (size_t j=0; j< outlist[i].size(); ++j) 
 		{
 			Vector2d Rij = pi.xi-pnp1[outlist[i][j]].xi;
-			rho += pnp1[outlist[i][j]].m*W2Kernel(Rij.norm(),svar.H)*
+			rho += pnp1[outlist[i][j]].m*W2Kernel(Rij.norm(),svar.H,svar.correc)*
 			(Beta(0)+Beta(1)*Rij(0)+Beta(2)*Rij(1));
 		}
 
@@ -882,6 +907,38 @@ double Newmark_Beta(Sim_Tree &NP1_INDEX)
 	double errsum = 1.0;
 	double logbase = 0.0;
 	unsigned int k = 0;
+	double error1 = 0.0;
+	double error2 = 0.0;
+
+	/*Find maximum safe timestep*/
+	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin(),pnp1.end(),
+		[](Particle p1, Particle p2){return p1.f.norm()< p2.f.norm();});
+	double maxf = maxfi->f.norm();
+	double dtf = sqrt(svar.H/maxf);
+	double dtcv = svar.H/(fvar.Cs+maxmu);
+	 
+	
+	if (std::isinf(maxf))
+	{
+		cerr << "Forces are quasi-infinite. Stopping..." << endl;
+		exit(-1);
+	}
+
+/***********************************************************************************/
+/**************CODE IS NOW VERY SENSITIVE TO DT. MODIFY WITH CAUTION****************/
+/***********************************************************************************/
+	svar.dt = svar.dtfac*min(dtf,dtcv); 
+/***********************************************************************************/
+/***********************************************************************************/
+/***********************************************************************************/
+
+	if (svar.dt > svar.framet)
+		svar.dt = svar.framet;
+
+	/*Save pnp1 state in case of instability.*/
+	State backup = pnp1;
+
+
 	while (log10(sqrt(errsum/(double(svar.npts)))) - logbase > -7.0)
 	{	
 		// cout << "K: " << k << endl;
@@ -926,32 +983,24 @@ double Newmark_Beta(Sim_Tree &NP1_INDEX)
 		if(k > svar.subits)
 			break;
 
-		// cout << k << "  " << log10(sqrt(errsum/(double(svar.npts)))) - logbase << endl;
+		error1 = log10(sqrt(errsum/(double(svar.npts)))) - logbase;
+		// cout << k << "  " << error1  << endl;
+
+		if (error1-error2 > 0.0)
+		{	/*If simulation starts diverging, then reduce the timestep and try again.*/
+			// cout << "Unstable timestep. Reducing timestep..." << endl;
+			pnp1 = backup;
+			svar.dt = 0.5*svar.dt;
+			k = 0;
+			error1 = 0.0;
+		}
+		error2 = error1;
 		++k;
 	}
 
+	/*Add time to global*/
+	svar.t+=svar.dt;
 	
-	/*Find maximum safe timestep*/
-	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin(),pnp1.end(),
-		[](Particle p1, Particle p2){return p1.f.norm()< p2.f.norm();});
-	double maxf = maxfi->f.norm();
-	double dtf = sqrt(svar.H/maxf);
-	double dtcv = svar.H/(fvar.Cs+maxmu);
-	 
-	
-	if (std::isinf(maxf))
-	{
-		cerr << "Forces are quasi-infinite. Stopping..." << endl;
-		exit(-1);
-	}
-
-/***********************************************************************************/
-/**************CODE IS NOW VERY SENSITIVE TO DT. MODIFY WITH CAUTION****************/
-/***********************************************************************************/
-	svar.dt = svar.dtfac*min(dtf,dtcv); 
-/***********************************************************************************/
-/***********************************************************************************/
-/***********************************************************************************/
 // cout << "Timestep Params: " << maxf << " " << fvar.Cs + maxmu << " " << dtf << " " << dtcv << endl;
 // cout << "New Timestep: " << svar.dt << endl;
 
@@ -1237,8 +1286,9 @@ void write_research_data(std::ofstream& fp)
 		{
 	        fp << b->xi(0) << " " << b->xi(1) << " ";
 	        fp << b->f.norm() << " ";
-	        fp << b->Af[0] << " " << b->Af[1] << " "; 
-	        fp << b->Sf[0] << " " << b->Sf[1] << endl; 
+	        fp << b->Af.norm() << " " << b->Sf.norm() << " "; 
+	        fp << b->Sf[0] << " " << b->Sf[1] << " ";
+	        fp << b->b << " " << b->theta << endl; 
 	  	}
 	}
     
@@ -1248,9 +1298,9 @@ void write_research_data(std::ofstream& fp)
 	{
         fp << p->xi(0) << " " << p->xi(1) << " ";
         fp << p->f.norm() << " ";
-        fp << p->Af.norm() <<  " "; 
+        fp << p->Af[0] << " " << p->Sf.norm() << " "; 
         fp << p->Sf[0] << " " << p->Sf[1] << " ";
-        fp << p->b << endl; 
+        fp << p->b << " " << p->theta  << endl; 
   	}
 
   	if (svar.Bcase ==3 && svar.acase == 5 && svar.aircount !=0)
@@ -1261,8 +1311,9 @@ void write_research_data(std::ofstream& fp)
 		{
 	        fp << p->xi(0) << " " << p->xi(1) << " ";
 	        fp << p->f.norm() << " ";
-	        fp << p->Af[0] << " " << p->Af[1] << " "; 
-	        fp << p->Sf[0] << " " << p->Sf[1] << "\n";  
+	        fp << p->Af.norm() << " " << p->Sf.norm() << " "; 
+	        fp << p->Sf[0] << " " << p->Sf[1] << " ";
+	        fp << p->b << endl; 
 	  	}
   	}
 }
@@ -1327,7 +1378,7 @@ int main(int argc, char *argv[])
 	high_resolution_clock::time_point t2;
     double duration;
     double error = 0;
-    cout << std::scientific << setw(6);
+    cout << setw(5);
 
     write_header();
 
@@ -1384,7 +1435,7 @@ int main(int argc, char *argv[])
 				break;
 			case 2:
 				f1 << "VARIABLES = \"x (m)\", \"y (m)\", \"a (m/s<sup>-1</sup>)\", " << 
-			"\"A<sub>f</sub>\", \"S<sub>fx</sub>\", \"S<sub>fy</sub>\", \"B\""<< std::endl;
+			"\"A<sub>f</sub>\", \"S<sub>f</sub>\", \"S<sub>fx</sub>\", \"S<sub>fy</sub>\", \"B\", \"Theta\""<< std::endl;
 				write_research_data(f1);
 				break;
 		}
@@ -1408,7 +1459,6 @@ int main(int argc, char *argv[])
 			while (stept<svar.framet) 
 			{
 			    error = Newmark_Beta(NP1_INDEX);
-			    svar.t+=svar.dt;
 			    stept+=svar.dt;
 			    ++stepits;
 			    //cout << svar.t << "  " << svar.dt << endl;

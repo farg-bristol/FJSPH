@@ -1,7 +1,7 @@
 0.25 0.5      #Beta & Gamma in Newmark-Beta
 2.0           #Smoothing length factor
-0.1           #Aritificial Viscosity factor
-0.05          #XSPH-Correction factor
+0.2           #Aritificial Viscosity factor
+0.1           #XSPH-Correction factor
 150.0         #Boundary contact angle
 1000.0        #Rho_inf
 100           #Speed of Sound C_s
