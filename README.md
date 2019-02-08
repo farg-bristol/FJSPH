@@ -48,15 +48,15 @@ When first loaded into tecplot, it'll show as a 'XY Line' plot in the top left. 
 The plan for the future is to continue developing code for the crossflow case and try to evaluate which way is best to apply the force to the fluid. At present the methods wishing to be tested are:
 
 * Force on all upstream particles.
-* Force on all particles defined as a surface.
-* Force on all particles defined as a surface, proportional to the surface tension.
+* Force on all particles defined as a surface, with correction factor.
 * Force on upstream particles defined as a surface.
-* Force on upstream particles defined as a surface, proportional to the surface tension.
 * Enact force and surface tension on particles using generated 'ghost' particles.
 
-Natually a lot of work needs to be done in order to successfully test these, and evaluate each of their traits. At present, some testing of the first method has been done, with reassuring success. Work is afoot to incorporate the other options into a code to allow easy comparison. The list is generally arranged in what I anticipate being low to high accuracy. What I am unsure about is which is the highest computation, particularly for a given accuracy. Using ghost particles is likely to be the most computationally heavy, however could well achieve the highest accuracy for the least tuning work. Finding the relationship between surface tension and aerodynamic force is likely to require lots of tuning, which may never even finish. Therefore part of me leans to that to save the uncertainty. 
-
+Natually a lot of work needs to be done in order to successfully test these, and evaluate each of their traits. At present, some testing of the first method has been done, with reassuring success. Work is afoot to incorporate the other options into a code to allow easy comparison. The list is generally arranged in what I anticipate being low to high accuracy. What I am unsure about is which is the highest computation, particularly for a given accuracy. Using ghost particles is likely to be the most computationally heavy, however could well achieve the highest accuracy for the least tuning work. Finding the relationship between surface tension and aerodynamic force is likely to require lots of tuning, which may never even finish. Therefore part of me leans to ghost particles to save the uncertainty. 
 Another point of attraction for the use of ghost particles is that there appears to be a scarcity in research in this direction of SPH, at least a second phase other than the boundary (see Schechter & Brison, 2012). If implementation is effective, then there is possibility for it to be used in several other applications where surface tension is critical to the scenario, but only a single phase is of interest. 
+
+** Update:
+Having since tested a correction factor based upon the angle formed between the surface tension vector, and the aerodynamic vector, I've switched sides away from ghost particles. The computation required and coding is too much of a headache to deal with in the short term, compared to the simple correction factor. Another great benefit of the CF is that I can (admittedly arbirarily at present) add a negative force on the wake particles, which I know will not be possible in ghost particle cases. Once I've had opportunity to test a few different correction profiles, I'll add some data about them. For now, I'm still toying and trying to find a good solution!
 
 # References 
 Colagrossi, A. & Landrini, M.
