@@ -1,3 +1,6 @@
+/*********   WCSPH (Weakly Compressible Smoothed Particle Hydrodynamics) Code   *************/
+/*********        Created by Jamie MacLeod, University of Bristol               *************/
+
 #ifndef NEIGHBOURS_H
 #define NEIGHBOURS_H
 

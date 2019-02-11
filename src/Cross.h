@@ -1,11 +1,11 @@
+/*********   WCSPH (Weakly Compressible Smoothed Particle Hydrodynamics) Code   *************/
+/*********        Created by Jamie MacLeod, University of Bristol               *************/
+
 #ifndef CROSS_H
 #define CROSS_H
 
 #include "Var.h"
 #include "Neighbours.h"
-// #include "NanoFLANN/nanoflann.hpp"
-// #include "NanoFLANN/utils.h"
-// #include "NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 
 using namespace std;
 
@@ -98,25 +98,5 @@ void CloseBoundary(SIM &svar, FLUID &fvar, State &pn, State &pnp1)
 	svar.bndPts+=temp.size(); /*Adjust counter values*/
 	svar.totPts +=temp.size();
 }
-
-StateVecD AeroForce(StateVecD &Vdiff, SIM &svar, FLUID &fvar, CROSS &cvar)
-{
-	StateVecD Fd = StateVecD::Zero();
-	ldouble Re = Vdiff.norm()*2*svar.Pstep/fvar.mu;
-	ldouble Cd = 0.0;
-
-	if (Re < 3500)
-	 	Cd = (1.0+0.197*pow(Re,0.63)+2.6*pow(Re,1.38))*(24.0/(Re+0.000001));
-	else
-		Cd = (1+0.197*pow(Re,0.63)+2.6e-4*pow(Re,1.38))*(24.0/(Re+0.0001));
-
-	// cout << "Reynolds: " << Re << " Cd: " << Cd << endl;
-	//cout << fvar.Acorrect << endl;
-	Fd = cvar.Acorrect*(2*svar.Pstep)*Cd*1.225*Vdiff.normalized()*Vdiff.squaredNorm()*svar.Pstep;
-	Fd[1] = 0.05*Fd[1];
-	// cout << "Reynolds: " << Re  << " Cd: " << Cd << " Fd: " << Fd[0] << " " << Fd[1] << endl ;
-	return Fd;
-}
-
 
 #endif

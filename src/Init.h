@@ -1,3 +1,6 @@
+/*********   WCSPH (Weakly Compressible Smoothed Particle Hydrodynamics) Code   *************/
+/*********        Created by Jamie MacLeod, University of Bristol               *************/
+
 #ifndef INIT_H
 #define INIT_H
 
