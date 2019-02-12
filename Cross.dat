@@ -11,7 +11,7 @@
 0.00004         #Initial Particle spacing
 0.7           #Boundary particle spacing factor (of part spacing)
 3             #Boundary case (0 = none, 1= Rectangle, 2 = Bowl, 3= transverse jet)
-0             #Crossflow force case (0 = none, 1 = left half, 2 = surface, 3 = left surface, 4 = surf prop, 5 = ghost particles, 6 = prop to ST-Aero angle )
+6             #Crossflow force case (0 = none, 1 = left half, 2 = surface, 3 = left surface, 4 = surf prop, 5 = ghost particles, 6 = prop to ST-Aero angle )
 0 20           #Jet Velocity
-0 0        #Freestream Velocity
+25 0         #Freestream Velocity
 20.0          #Aerodynamic correction factor

@@ -1,3 +1,6 @@
+/*********   WCSPH (Weakly Compressible Smoothed Particle Hydrodynamics) Code   *************/
+/*********        Created by Jamie MacLeod, University of Bristol               *************/
+
 #ifndef IO_H
 #define IO_H
 
@@ -16,7 +19,8 @@
 #define M_PI (4.0*atan(1.0))
 #endif
 
-using namespace std;
+namespace std 
+{
 
 void write_header() 
 {
@@ -24,7 +28,7 @@ void write_header()
 	cout << "                              WCXSPH                              " << endl << endl;
 	cout << "        Weakly Compressible Smoothed Particle Hydrodynamics       " << endl;
 	cout << "                       with XSPH correction                       " << endl;
-	cout << "                      for tide-breaking case                      " << endl << endl;
+	cout << "                    for Jet in Crossflow case                     " << endl << endl;
 	cout << "                         James O. MacLeod                         " << endl;
 	cout << "                    University of Bristol, U.K.                   " << endl << endl;
 	cout << "******************************************************************" << endl << endl;
@@ -335,5 +339,5 @@ void write_file_header(std::ofstream& fp, SIM &svar, CROSS &cvar, State &pnp1)
 				break;
 		}
 }
-
+}
 #endif

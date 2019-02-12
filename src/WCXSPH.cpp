@@ -9,21 +9,7 @@
 /*** Integrator: Newmark-Beta ****/
 /*** Variable Timestep Criteria: CFL + Monaghan, J.J. (1989) conditions ***/
 
-#include <iostream>
-#include <iomanip>
-#include <cmath>
-#include <cfloat>
-#include <vector>
-#include <fstream>
-#include <string.h>
-#include <sstream>
-#include <iterator>
 #include <chrono>
-#include "Eigen/Core"
-#include "Eigen/StdVector"
-#include "Eigen/LU"
-#include "PDS/poisson_disk_sampling.h"
-
 
 #include "Var.h"
 #include "IO.h"
@@ -33,11 +19,7 @@
 #include "Neighbours.h"
 #include "Resid.h"
 
-#ifndef M_PI
-#define M_PI (4.0*atan(1.0))
-#endif
-
-using namespace std;
+// using namespace std;
 using namespace std::chrono;
 using namespace Eigen;
 using namespace nanoflann;
@@ -65,7 +47,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 
 	if (std::isinf(maxf))
 	{
-		cerr << "Forces are quasi-infinite. Stopping..." << endl;
+		std::cerr << "Forces are quasi-infinite. Stopping..." << std::endl;
 		exit(-1);
 	}
 
@@ -236,11 +218,10 @@ int main(int argc, char *argv[])
 	}
 
 	InitSPH(svar,fvar,cvar, pn, pnp1);
-
+		
 	///********* Tree algorithm stuff ************/
 	Sim_Tree NP1_INDEX(simDim,pnp1,10);
 	NP1_INDEX.index->buildIndex();
-	outlist.reserve(svar.totPts);
 	FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
 
 	///*** Perform an iteration to populate the vectors *****/

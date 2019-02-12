@@ -4,7 +4,7 @@
 #include "Var.h"
 #include "Neighbours.h"
 
-void Ghost_Particles(Sim_Tree &NP1_INDEX, ldouble lam, ldouble numpartdens,
+void Ghost_Particles(Sim_Tree &NP1_INDEX, ldouble numpartdens,
 	SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1, outl &outlist)
 {
 /***** Find particles outside of the influence of the Liquid *******/
@@ -41,6 +41,9 @@ void Ghost_Particles(Sim_Tree &NP1_INDEX, ldouble lam, ldouble numpartdens,
 		StateVecD SurfC= StateVecD::Zero();
 		pi.b = 1;
 
+		/*Surface tension factor*/
+		const static ldouble lam = (6.0/81.0*pow((2.0*fvar.H),4.0)/pow(M_PI,4.0)*
+							(9.0/4.0*pow(M_PI,3.0)-6.0*M_PI-4.0));
 		for (size_t j=0; j < outlist[i].size(); ++j)
 		{
 			Particle pj = pnp1[outlist[i][j]];

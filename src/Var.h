@@ -1,3 +1,6 @@
+/*********   WCSPH (Weakly Compressible Smoothed Particle Hydrodynamics) Code   *************/
+/*********        Created by Jamie MacLeod, University of Bristol               *************/
+
 #ifndef VAR_H
 #define VAR_H
 
@@ -9,20 +12,27 @@
 #include "NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 #include "PDS/poisson_disk_sampling.h"
 
+// Define pi
+#ifndef M_PI
+#define M_PI (4.0*atan(1.0))
+#endif
+
+/* Define Simulation dimension, and data type. */
+/* Want to have long double at some point,     */
+/* but neighbour search won't have it...       */
 constexpr int simDim = 2;
 typedef double ldouble;
 
 /****** Eigen vector definitions ************/
 typedef Eigen::Matrix<ldouble,simDim,1> StateVecD;
-//typedef Eigen::Vector2d StateVecD;
 typedef Eigen::Matrix<int,simDim,1> StateVecI;
+//typedef Eigen::Vector2d StateVecD;
 
 /*Vector definitions for Density reinitialisation*/
 typedef Eigen::Matrix<ldouble, simDim+1,1> DensVecD;
 typedef Eigen::Matrix<ldouble, simDim+1, simDim+1> DensMatD;
 
-
-
+/*Simulation parameters*/
 typedef struct SIM {
 	StateVecI xyPART; 						/*Starting sim particles in x and y box*/
 	unsigned int simPts,bndPts,totPts;	    /*Simulation particles, Boundary particles, total particles*/
@@ -44,6 +54,7 @@ typedef struct SIM {
 	int frameout;                           /**/
 } SIM;
 
+/*Fluid and smoothing parameters*/
 typedef struct FLUID {
 	ldouble H, HSQ, sr; 					/*Support Radius, SR squared, Search radius*/
 	ldouble rho0; 						/*Resting density*/
@@ -58,6 +69,7 @@ typedef struct FLUID {
 
 }FLUID;
 
+/*Crossflow parameters*/
 typedef struct CROSS
 {
 	int acase;	                        /*Aerodynamic force case*/
