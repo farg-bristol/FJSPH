@@ -5,7 +5,7 @@ CXX=g++
 INC=
 
 # Compiler flags. If desired add -g for debugging info.
-CFLAGS=-g -std=c++11 -Wall -Wextra -lm -ffast-math -funroll-loops -O3
+CFLAGS=-g -std=c++11 -Wall -Wextra -ffast-math -funroll-loops -O3
 
 # Find the OS to execute correctly
 UNAME := $(shell uname)
@@ -22,9 +22,8 @@ SOURCE=src/WCXSPH.cpp
 3DSOURCE=src/WCXSPH3D.cpp
 
 
-
 # Compile and Build
-build: $(SOURCE)
+build:
 	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE)
 
 #Crossflow run with different input file
@@ -38,7 +37,7 @@ linux:
 clean:
 	$(RM) $(TARGET)
 
-new: WCXSPH.cpp
+new: 
 	$(RM) $(TARGET)
 	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE)
 

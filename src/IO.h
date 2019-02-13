@@ -142,7 +142,14 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	  		cvar.vJet = getDVector(in); 
 	  		cvar.vInf = getDVector(in);
 	  		cvar.Acorrect = getDouble(in);
-
+	  		if(cvar.acase == 6)
+	  		{
+	  			cvar.a = getDouble(in);
+	  			cvar.h1 = getDouble(in);
+	  			cvar.b = getDouble(in);
+	  			cvar.h2 = getDouble(in);
+	  		}
+	  		
 			in.close();
 	  	}
 	  	else {
@@ -184,6 +191,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	}
 
   	/*Universal parameters based on input values*/
+  	svar.addcount = 0;
   	svar.dt = 2E-07; 		/*Initial timestep*/
   	svar.t = 0.0;				/*Total simulation time*/
   	fvar.HSQ = fvar.H*fvar.H; 

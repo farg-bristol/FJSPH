@@ -75,6 +75,10 @@ typedef struct CROSS
 	int acase;	                        /*Aerodynamic force case*/
 	StateVecD vJet, vInf;               /*Crossflow Parameters: Jet + Freestream velocity*/
 	ldouble Acorrect;					/*Correction factor for aero force*/
+	ldouble a;                          /*Tuning parameters*/
+	ldouble b;                          /*Tuning parameters*/
+	ldouble h1;                          /*Tuning parameters*/
+	ldouble h2;                          /*Tuning parameters*/
 }CROSS;
 
 /*Particle data class*/
