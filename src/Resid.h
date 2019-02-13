@@ -145,15 +145,9 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 					ldouble theta = acos(num/denom)/M_PI;
 					pi.theta = theta;
 					ldouble correc = 0.0;
-					//double correc = cos(0.55*theta);
 					if (theta <= 1.0 )
 					{
-						ldouble fac1 = 3;
-						ldouble h1 = 0.83;
-						ldouble fac2 = -2;
-						ldouble h2 = 0.78;
-						correc = fac1*W2Kernel(2*theta,h1,1)+fac2*W2Kernel(2*theta,h2,1);
-						//cout << correc << endl;
+						correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
 					}
 
 					Fd = correc*Fd;

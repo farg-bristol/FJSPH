@@ -8,10 +8,14 @@
 50 50         #No particles in x-dir, y-dir, z-dir (optional) (Not used)
 0.003 0.001   #Jet starting x-position,  Jet diameter x-direction, diameter y-direction
 0.01 0.001    #Boundary x-dim end (from origin), Jet y-dim (in negative dir), Jet z-dim
-0.00004         #Initial Particle spacing
+0.00004       #Initial Particle spacing
 0.7           #Boundary particle spacing factor (of part spacing)
 3             #Boundary case (0 = none, 1= Rectangle, 2 = Bowl, 3= transverse jet)
-6             #Crossflow force case (0 = none, 1 = left half, 2 = surface, 3 = left surface, 4 = surf prop, 5 = ghost particles, 6 = prop to ST-Aero angle )
-0 20           #Jet Velocity
-25 0         #Freestream Velocity
+6             #Crossflow force case (0 = none, 1 = left half, 2 = surface, 3 = left surface, 5 = ghost particles, 6 = prop to ST-Aero angle )
+0 20          #Jet Velocity
+25 0          #Freestream Velocity
 20.0          #Aerodynamic correction factor
+3             #CF Case 6 parameters. 
+0.8           #
+-2            #
+0.75          #

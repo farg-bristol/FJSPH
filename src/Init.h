@@ -9,8 +9,56 @@
 #include "Cross.h"
 
 using namespace std;
+
+/*Make a guess on how big the array is going to be (doesn't need to be totally exact)*/
+int ParticleCount(SIM &svar, FLUID &fvar)
+{
+	int partCount = 0;
+	ldouble stepx = svar.Pstep*svar.Bstep;
+	ldouble stepy = svar.Pstep*svar.Bstep;
+	int Ny = ceil(svar.Box(1)/stepy);
+	int Nx = ceil(svar.Box(0)/stepx);
+	switch(svar.Bcase)
+	{
+		case 0:
+			break;
+		case 1:
+			partCount = 2*Ny + Nx; /*Boundary particles*/
+			partCount += svar.simPts; /*Simulation particles*/
+			break;
+		case 3:
+		{	/*Boundary Points*/
+			ldouble holeS = svar.Start(0); /*Distance from Box start to hole*/
+			ldouble holeD = svar.Start(1)+4*svar.Pstep; /*Diameter of hole (or width)*/
+			ldouble stepb = (svar.Pstep*svar.Bstep);
+			int Nb = ceil((holeS)/stepb);
+			stepb = holeS/(1.0*Nb);
+			/*Actual values*/			
+			int preHole = Nb+1 + ceil(svar.Box[1]/stepb);
+			int postHole = ceil(svar.Box[1]/stepb) + ceil((svar.Box[0]-holeS-holeD)/stepb)+1;
+
+			/*Simulation Points*/
+			ldouble jetS = svar.Start(0)+2*fvar.H;
+			ldouble jetE = svar.Start(0)+svar.Start(1);
+			int addRound = floor((jetE-jetS)/svar.Pstep);
+			/*Need to add the particles already present*/
+			int simPts = addRound*svar.nmax + addRound*ceil(svar.Box[1]/svar.Pstep);
+
+			partCount = preHole + postHole + simPts;
+			
+			break;
+		}
+
+			
+	}
+	
+	return partCount;
+}
+
 void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 {
+
+
 	switch (svar.Bcase)
 	{
 		default:
@@ -38,6 +86,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 	
 	int Nx = ceil(svar.Box(0)/stepx);
 	stepx = svar.Box(0)/Nx;
+
+	
 	switch (svar.Bcase) 
 	{
 		case 0:
@@ -59,11 +109,11 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 			pn.emplace_back(Particle(x,v,f,rho,fvar.Boundmass,true));
 			x(0) = svar.Box(0) -stepx;
 			pn.emplace_back(Particle(x,v,f,rho,fvar.Boundmass,true));
-
+*/
 			for(int i= Ny; i>0; --i) {
 				StateVecD xi(svar.Box(0)-svar.Start(0),i*stepy-svar.Start(1));
 				pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,true));	
-			}*/
+			}
 			for(int i = Nx; i > 0; --i) {
 				StateVecD xi(i*stepx-svar.Start(0),-svar.Start(1));
 				pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
@@ -127,7 +177,7 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 	
 /***********  Create the simulation particles  **************/
 
-	svar.addcount = 0;
+	
 	switch(svar.Bcase)
 	{
 		case 3: 
@@ -202,5 +252,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 		exit(-1);
 	}
 	cout << "Total Particles: " << svar.totPts << endl;
+	// cout << "Boundary Particles: " << svar.bndPts << endl;
+	// cout << "Sim Particles:" << svar.simPts << endl;
+	// cout << "Refresh round Particles: " << svar.nrefresh << endl;
 }
 #endif

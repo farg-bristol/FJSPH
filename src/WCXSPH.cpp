@@ -199,11 +199,16 @@ int main(int argc, char *argv[])
 	CROSS cvar;
 	outl outlist;
 
+	GetInput(argc,argv,svar,fvar,cvar);
+
+	/*Make a guess of how many there will be...*/
+	int partCount = ParticleCount(svar,fvar); 
     ///****** Initialise the particles memory *********/
 	State pn;	    /*Particles at n   */
 	State pnp1; 	/*Particles at n+1 */
-
-    GetInput(argc,argv,svar,fvar,cvar);
+	pn.reserve(partCount);
+    pnp1.reserve(partCount);
+    
 
 	std::ofstream f1;
 	/*Check for output file name*/
