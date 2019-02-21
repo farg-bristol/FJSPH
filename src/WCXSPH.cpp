@@ -29,8 +29,7 @@ using namespace nanoflann;
 ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 	 State &pn, State &pnp1, outl &outlist)
 {
-	vector<StateVecD> xih;
-	xih.reserve(svar.totPts);
+
 	double errsum = 1.0;
 	double logbase = 0.0;
 	unsigned int k = 0;
@@ -64,7 +63,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 
 	/*Save pnp1 state in case of instability.*/
 	State backup = pnp1;
-
+	vector<StateVecD> xih(svar.totPts);
 
 	while (log10(sqrt(errsum/(double(svar.totPts)))) - logbase > -7.0)
 	{
@@ -72,9 +71,8 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 		Forces(NP1_INDEX,svar,fvar,cvar,pn,pnp1,outlist); /*Guess force at time n+1*/
 
 		/*Previous State for error calc*/
-		xih.erase(xih.begin(),xih.end());
 		for (size_t  i=0; i< svar.totPts; ++i)
-			xih.emplace_back(pnp1[i].xi);
+			xih[i] = pnp1[i].xi;
 
 		/*Update the state at time n+1*/
 		for (size_t i=0; i <svar.bndPts; ++i)
@@ -202,13 +200,13 @@ int main(int argc, char *argv[])
 	GetInput(argc,argv,svar,fvar,cvar);
 
 	/*Make a guess of how many there will be...*/
-	int partCount = ParticleCount(svar,fvar); 
+	int partCount = ParticleCount(svar,fvar);
     ///****** Initialise the particles memory *********/
 	State pn;	    /*Particles at n   */
 	State pnp1; 	/*Particles at n+1 */
 	pn.reserve(partCount);
-    pnp1.reserve(partCount);
-    
+  pnp1.reserve(partCount);
+
 
 	std::ofstream f1;
 	/*Check for output file name*/
@@ -218,12 +216,12 @@ int main(int argc, char *argv[])
 	}
 	else
 	{	/*Otherwise, open a standard file name*/
-		cout << "WARNING: output file not provided.\nWill write to Test.plt" << endl;
+		cout << "\tWARNING: output file not provided.\nWill write to Test.plt" << endl;
 		f1.open("Test.plt", std::ios::out);
 	}
 
 	InitSPH(svar,fvar,cvar, pn, pnp1);
-		
+
 	///********* Tree algorithm stuff ************/
 	Sim_Tree NP1_INDEX(simDim,pnp1,10);
 	NP1_INDEX.index->buildIndex();
@@ -242,7 +240,7 @@ int main(int argc, char *argv[])
 		f3.open("Crossflow.txt", std::ios::out);
 
 
-	if (f1.is_open() && f2.is_open() && f3.is_open())
+	if (f1.is_open())
 	{
 		f1 << std::scientific << setprecision(5);
 		f2 << std::scientific<< setw(10);
