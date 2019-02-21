@@ -267,6 +267,7 @@ void Forces(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, State &pn,
 			}
 
 			/*Crossflow force*/
+			
 			StateVecD Fd = ApplyAero(svar,fvar,cvar,pi,SurfC);
 
 

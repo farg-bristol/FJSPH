@@ -79,26 +79,24 @@ StateVecD getDVector(ifstream& In)
 	return x;
 }
 
-void DefaultInput(SIM &svar, FLUID &fvar) 
+void DefaultInput(SIM &svar) 
 {
 	//Timestep Parameters
 	svar.framet = 0.1;		/*Frame timestep*/
 	svar.Nframe = 2500;		/*Number of output frames*/
 	svar.outframe = 50;		/*Terminal output frame interval*/
 	svar.outform = 1;		/*Output format*/
+	svar.frameout = 1;		/*Output frame info*/
 	svar.subits = 10;		/*Newmark-Beta iterations*/
 	svar.nmax = 2000;		/*Max No particles (if dynamically allocating)*/	
 	
 	//Simulation window parameters
-	svar.xyPART(40,40); 	/*Number of particles in (x,y) directions*/
-	svar.Start(0.2,0.2); 	/*Simulation particles start + end coords*/
-	svar.Bcase = 1; 		/*Boundary case*/
-	svar.Box(3,2); 			/*Boundary dimensions*/
+	svar.xyPART[0] = 40; svar.xyPART[1]= 40; 	/*Number of particles in (x,y) directions*/
+	svar.Start[0] = 0.2; svar.Start[1]= 0.2; 	/*Simulation particles start + end coords*/
+	svar.Box[0] = 3; svar.Box[1]= 2; 			/*Boundary dimensions*/
 	svar.Pstep = 0.01;		/*Initial particle spacing*/
 	svar.Bstep = 0.6; 		/*Boundary factor of particle spacing (dx = Pstep*Bstep)*/
-	
-	// SPH Parameters
-	fvar.H =  3.0*svar.Pstep; /*Support Radius*/
+	svar.Bcase = 1; 		/*Boundary case - Rectangle */
 	
 }
 
@@ -106,17 +104,17 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 {
 	if (argc > 3) 
 	{	/*Check number of input arguments*/
-		cout << "WARNING: only two input arguments accepted,\n";
+		cout << "\tWARNING: only two input arguments accepted,\n";
 		cout << "1: Input file   2: Output file.\n";
 		cout << "Other inputs will be ignored." << endl;
 	}
 
 	if (argc == 1)
     {	/*Check if input has been provided*/
-    	cout << "WARNING: No inputs provided.\n";
+    	cout << "\tWARNING: No inputs provided.\n";
     	cout << "Program will assume a default set of parameters.";
     	cout << "Output file is \'Test.plt\'" << endl;
-    	DefaultInput(svar,fvar);
+    	DefaultInput(svar);
     }
     else if (argc > 1)
     {	/*Get parameters if it has been provided*/
@@ -138,17 +136,21 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	  		svar.Pstep = getDouble(in);
 	  		svar.Bstep = getDouble(in);
 	  		svar.Bcase = getInt(in);
-	  		cvar.acase = getInt(in);
-	  		cvar.vJet = getDVector(in); 
-	  		cvar.vInf = getDVector(in);
-	  		cvar.Acorrect = getDouble(in);
-	  		if(cvar.acase == 6)
+	  		if(svar.Bcase == 3)
 	  		{
-	  			cvar.a = getDouble(in);
-	  			cvar.h1 = getDouble(in);
-	  			cvar.b = getDouble(in);
-	  			cvar.h2 = getDouble(in);
+	  			cvar.acase = getInt(in);
+		  		cvar.vJet = getDVector(in); 
+		  		cvar.vInf = getDVector(in);
+		  		cvar.Acorrect = getDouble(in);
+		  		if(cvar.acase == 6)
+		  		{
+		  			cvar.a = getDouble(in);
+		  			cvar.h1 = getDouble(in);
+		  			cvar.b = getDouble(in);
+		  			cvar.h2 = getDouble(in);
+		  		}
 	  		}
+	  		
 	  		
 			in.close();
 	  	}
@@ -285,34 +287,21 @@ void write_fluid_data(std::ofstream& fp, SIM &svar, CROSS &cvar, State &pnp1)
 		    ", STRANDID=1, SOLUTIONTIME=" << svar.t << std::endl;
 		  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
 			{
-		        fp << b->xi(0) << " " << b->xi(1) << " ";
+		        fp << b->xi[0] << " " << b->xi[1] << " ";
 		        fp << b->v.norm() << " ";
 		        fp << b->f.norm() << " ";
-		        fp << b->rho << " "  << b->p  << " " << b->Sf << std::endl;
+		        fp << b->rho << " "  << b->p << std::endl;
 		  	}
 	}
     
     fp <<  "ZONE T=\"Particle Data\"" <<", I=" << svar.simPts << ", F=POINT" <<
     ", STRANDID=2, SOLUTIONTIME=" << svar.t  << std::endl;
-    unsigned int i=0;
   	for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
 	{
-		/*if (p->xi!=p->xi || p->v!=p->v || p->f!=p->f) {
-			cerr << endl << "Simulation is broken. A value is nan." << endl;
-			cerr << "Broken line..." << endl;
-			cerr << p->xi(0) << " " << p->xi(1) << " ";
-	        cerr << p->v.norm() << " ";
-	        cerr << p->f.norm() << " ";
-	        cerr << p->rho << " " << p->p << std::endl; 
-	        fp.close();
-			exit(-1);
-		}*/
         fp << p->xi(0) << " " << p->xi(1) << " ";
         fp << p->v.norm() << " ";
         fp << p->f.norm() << " ";
-        fp << p->rho << " "  << p->p 
-        << " " << p->Sf << std::endl; 
-        ++i;
+        fp << p->rho << " "  << p->p  << std::endl;  
   	}
 
   	if (svar.Bcase ==3 && cvar.acase == 5 && svar.aircount !=0)
@@ -324,9 +313,7 @@ void write_fluid_data(std::ofstream& fp, SIM &svar, CROSS &cvar, State &pnp1)
 	        fp << p->xi(0) << " " << p->xi(1) << " ";
 	        fp << p->v.norm() << " ";
 	        fp << p->f.norm() << " ";
-	        fp << p->rho << " "  << p->p 
-	        << " " << p->Sf << std::endl; 
-	        ++i;
+	        fp << p->rho << " "  << p->p << std::endl; 
 	  	}
   	}
 }
@@ -337,7 +324,7 @@ void write_file_header(std::ofstream& fp, SIM &svar, CROSS &cvar, State &pnp1)
 		{	
 			case 1:
 				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"v (m/s)\", \"a (m/s<sup>-1</sup>)\", " << 
-			"\"<greek>r</greek> (kg/m<sup>-3</sup>)\", \"P (Pa)\", \"Aero Force\"" << std::endl;
+			"\"<greek>r</greek> (kg/m<sup>-3</sup>)\", \"P (Pa)\"" << std::endl;
 				write_fluid_data(fp, svar, cvar, pnp1);
 				break;
 			case 2:
