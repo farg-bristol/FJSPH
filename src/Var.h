@@ -57,10 +57,10 @@ typedef struct SIM {
 /*Fluid and smoothing parameters*/
 typedef struct FLUID {
 	ldouble H, HSQ, sr; 					/*Support Radius, SR squared, Search radius*/
-	ldouble rho0; 						/*Resting density*/
+	ldouble rho0; 						/*Resting Fluid density*/
 	ldouble Simmass, Boundmass;			/*Particle and boundary masses*/
 	ldouble correc;						/*Smoothing Kernel Correction*/
-	ldouble alpha,eps,Cs, mu;			/*}*/
+	ldouble alpha,eps,Cs,mu;			/*}*/
 	ldouble sig;							/*} Fluid properties*/
 	ldouble gam, B; 						/*}*/
 	ldouble contangb;					/*Boundary contact angle*/
@@ -74,6 +74,8 @@ typedef struct CROSS
 {
 	int acase;	                        /*Aerodynamic force case*/
 	StateVecD vJet, vInf;               /*Crossflow Parameters: Jet + Freestream velocity*/
+	ldouble rhog;
+	ldouble mug;
 	ldouble Acorrect;					/*Correction factor for aero force*/
 	ldouble a;                          /*Tuning parameters*/
 	ldouble b;                          /*Tuning parameters*/

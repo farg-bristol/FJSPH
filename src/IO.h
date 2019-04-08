@@ -19,8 +19,8 @@
 #define M_PI (4.0*atan(1.0))
 #endif
 
-namespace std 
-{
+using namespace std; 
+
 
 void write_header() 
 {
@@ -172,8 +172,10 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
   		fvar.eps = getDouble(fluid);
   		fvar.contangb = getDouble(fluid);
   		fvar.rho0 = getDouble(fluid);
+  		cvar.rhog = getDouble(fluid);
   		fvar.Cs = getDouble(fluid);
   		fvar.mu = getDouble(fluid);
+  		cvar.mug = getDouble(fluid);
   		fvar.sig = getDouble(fluid);
 
   		fluid.close();
@@ -190,6 +192,8 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
   		fvar.Cs = 100.0;
   		fvar.mu = 1.0;
   		fvar.sig = 0.0728;
+  		cvar.rhog = 1.225;
+  		cvar.mug = 18.5E-06;
 	}
 
   	/*Universal parameters based on input values*/
@@ -334,5 +338,5 @@ void write_file_header(std::ofstream& fp, SIM &svar, CROSS &cvar, State &pnp1)
 				break;
 		}
 }
-}
+
 #endif

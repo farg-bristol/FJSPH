@@ -16,7 +16,7 @@ void AddPoints(ldouble y, SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State 
 	StateVecD f = StateVecD::Zero();
 	ldouble rho=fvar.rho0;
 	ldouble jetS = svar.Start(0)+2*fvar.H;
-	ldouble jetE = svar.Start(0)+svar.Start(1);
+	ldouble jetE = jetS+svar.Start(1);
 	svar.nrefresh = 0;
 
 
