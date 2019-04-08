@@ -51,7 +51,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 	}
 
 /***********************************************************************************/
-/**************CODE IS NOW VERY SENSITIVE TO DT. MODIFY WITH CAUTION****************/
+/***********************************************************************************/
 /***********************************************************************************/
 	svar.dt = 0.3*min(dtf,dtcv);
 /***********************************************************************************/
@@ -105,8 +105,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 		if(k == 0)
 			logbase=log10(sqrt(errsum/(double(svar.totPts))));
 
-		if(k > svar.subits)
-			break;
+		
 
 		error1 = log10(sqrt(errsum/(double(svar.totPts)))) - logbase;
 		// cout << k << "  " << error1  << endl;
@@ -120,6 +119,11 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 			error1 = 0.0;
 		}
 		error2 = error1;
+
+		/*Check if we've exceeded the maximum iteration count*/
+
+		if(k > svar.subits)
+			break;
 		++k;
 	}
 
@@ -159,8 +163,9 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 						}
 						if (refresh ==1)
 						{
-							CloseBoundary(svar, fvar, pn, pnp1);
+							cout << "End of adding particle rounds. Stopping..." << endl;
 							svar.Bclosed = 1;
+							exit(0);
 						}
 					}
 					Sim_Tree NP1_INDEX(2,pnp1,10);
@@ -204,8 +209,10 @@ int main(int argc, char *argv[])
     ///****** Initialise the particles memory *********/
 	State pn;	    /*Particles at n   */
 	State pnp1; 	/*Particles at n+1 */
+
+	cout << "Final particle count:  " << partCount << endl;
 	pn.reserve(partCount);
-  pnp1.reserve(partCount);
+  	pnp1.reserve(partCount);
 
 
 	std::ofstream f1;
@@ -255,7 +262,7 @@ int main(int argc, char *argv[])
 		duration = duration_cast<microseconds>(t2-t1).count()/1e6;
 		cout << "Frame: " << 0 << "  Sim Time: " << svar.t << "  Compute Time: "
 		<< duration <<"  Error: " << error << endl;
-		f2 << "Frame:   Pts:    S-Time:    C-Time    Error:   Its:" << endl;
+		f2 << "Frame:  Points:   Sim Time:       Comp Time:     Error:       Its:" << endl;
 		f2 << 0 << "        " << svar.totPts << "    " << svar.t << "    " << duration
 			<< "    " << error << "  " << 0 << endl;
 
