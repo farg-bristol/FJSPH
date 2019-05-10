@@ -340,5 +340,4 @@ void write_file_header(std::ofstream& fp, SIM &svar, State &pnp1)
 				break;
 		}
 }
-
 #endif

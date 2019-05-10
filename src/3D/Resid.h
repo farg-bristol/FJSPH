@@ -30,6 +30,7 @@ StateVecD AeroForce(StateVecD &Vdiff, SIM &svar, FLUID &fvar, CROSS &cvar)
 	else
 		Cd = (1+0.197*pow(Re,0.63)+2.6e-4*pow(Re,1.38))*(24.0/(Re+0.0000001));
 
+
 	Fd = Cd*Vdiff*Vdiff.norm()*cvar.rhog/(fvar.rho0*svar.Pstep);
 	//Fd[1] = 1.0*Fd[1];
 	//std::cout << "Reynolds: " << Re  << " Cd: " << Cd << " Fd: " << Fd[0] << " " << Fd[1] << std::endl;
@@ -76,15 +77,17 @@ StateVecD Viscosity(FLUID &fvar, Particle &pi,Particle &pj,
 	return Vij*(pj.m*fvar.mu)/(pi.rho*pj.rho)*(1.0/(r*r+0.01*fvar.HSQ))*Rij.dot(Grad);
 }
 
-
 /*Surface Tension - Nair & Poeschel (2017)*/
 StateVecD SurfaceTens(FLUID &fvar, Particle &pj, StateVecD &Rij, ldouble &r, ldouble &npd)
 {
 	/*Surface tension factor*/
-	const static ldouble lam = (6.0/81.0*pow((2.0*fvar.H),4.0)/pow(M_PI,4.0)*
+	const static ldouble lam = (6.0/81.0*pow((2.0*fvar.H),3.0)/pow(M_PI,4.0)*
 							(9.0/4.0*pow(M_PI,3.0)-6.0*M_PI-4.0));
-	ldouble fac=1.0;
-	if(pj.b==0) fac=(1+0.5*cos(M_PI*(fvar.contangb/180)));
+
+	ldouble fac=1.0; /*Boundary Correction Factor*/
+	if(pj.b==0) fac=(1+0.5*cos(M_PI*(fvar.contangb/180))); 
+
+	/*npd = numerical particle density (see code above) */
 	ldouble sij = 0.5*pow(npd,-2.0)*(fvar.sig/lam)*fac;
 	return (Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*fvar.H));
 }
@@ -141,6 +144,7 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 				}
 				break;
 			}
+
 			case 4:	/*Case 3, plus a correction based on number of neighbours*/
 			{
 				if (size < 165)
@@ -282,7 +286,7 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1,outl &outlist)
 				/*drho/dt*/
 				Rrhocontr -= pj.m*(Vij.dot(Grad));
 
-				if (svar.Bcase == 3 && (cvar.acase == 3 || cvar.acase ==5))
+				if (svar.Bcase == 3 && (cvar.acase == 3))
 				{
 					ldouble num = -Rij.dot(cvar.vInf);
 					ldouble denom = Rij.norm()*cvar.vInf.norm();

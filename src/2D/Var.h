@@ -124,3 +124,4 @@ typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,ldouble> Temp_Tree;
 
 
 #endif /* VAR_H */
+

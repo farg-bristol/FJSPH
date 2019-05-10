@@ -163,8 +163,9 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 						}
 						if (refresh ==1)
 						{
-							CloseBoundary(svar, fvar, pn, pnp1);
+							cout << "End of adding particle rounds. Stopping..." << endl;
 							svar.Bclosed = 1;
+							exit(0);
 						}
 					}
 					Sim_Tree NP1_INDEX(2,pnp1,10);

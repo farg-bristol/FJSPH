@@ -100,3 +100,4 @@ void CloseBoundary(SIM &svar, FLUID &fvar, State &pn, State &pnp1)
 }
 
 #endif
+
