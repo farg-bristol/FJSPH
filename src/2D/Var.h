@@ -5,12 +5,12 @@
 #define VAR_H
 
 #include <vector>
-#include "Eigen/Core"
-#include "Eigen/StdVector"
-#include "NanoFLANN/nanoflann.hpp"
-#include "NanoFLANN/utils.h"
-#include "NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
-#include "PDS/poisson_disk_sampling.h"
+#include "../Eigen/Core"
+#include "../Eigen/StdVector"
+#include "../NanoFLANN/nanoflann.hpp"
+#include "../NanoFLANN/utils.h"
+#include "../NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
+
 
 // Define pi
 #ifndef M_PI
@@ -57,10 +57,10 @@ typedef struct SIM {
 /*Fluid and smoothing parameters*/
 typedef struct FLUID {
 	ldouble H, HSQ, sr; 					/*Support Radius, SR squared, Search radius*/
-	ldouble rho0; 						/*Resting density*/
+	ldouble rho0; 						/*Resting Fluid density*/
 	ldouble Simmass, Boundmass;			/*Particle and boundary masses*/
 	ldouble correc;						/*Smoothing Kernel Correction*/
-	ldouble alpha,eps,Cs, mu;			/*}*/
+	ldouble alpha,eps,Cs,mu;			/*}*/
 	ldouble sig;							/*} Fluid properties*/
 	ldouble gam, B; 						/*}*/
 	ldouble contangb;					/*Boundary contact angle*/
@@ -74,11 +74,14 @@ typedef struct CROSS
 {
 	int acase;	                        /*Aerodynamic force case*/
 	StateVecD vJet, vInf;               /*Crossflow Parameters: Jet + Freestream velocity*/
+	ldouble rhog;
+	ldouble mug;
 	ldouble Acorrect;					/*Correction factor for aero force*/
 	ldouble a;                          /*Tuning parameters*/
 	ldouble b;                          /*Tuning parameters*/
 	ldouble h1;                          /*Tuning parameters*/
 	ldouble h2;                          /*Tuning parameters*/
+	StateVecD vortexPos;
 }CROSS;
 
 /*Particle data class*/
@@ -96,6 +99,7 @@ typedef class Particle {
 			b = bound;
 			theta = 0.0;
 		}
+
 
 		int size() const
 		{	/*For neighbour search, return size of xi vector*/
@@ -117,39 +121,6 @@ typedef std::vector<Particle> State;
 typedef std::vector<std::vector<size_t>> outl;
 typedef KDTreeVectorOfVectorsAdaptor<State, ldouble> Sim_Tree;
 typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,ldouble> Temp_Tree;
-
-
-/*Poisson Disk Sampling structure definitions*/
-struct EVecTraits
-{
-	typedef ldouble ValueType;
-
-	static constexpr auto kSize = 2;
-
-	static ValueType Get(const StateVecD& v, const std::size_t i)
-	{return *(&v[0] + i);}
-
-	static void Set(StateVecD* const v, const std::size_t i, const ValueType val)
-	{*(&v[0][0] + i) = val;}
-};
-
-namespace thinks {
-	namespace poisson_disk_sampling {
-		template<>
-		struct VecTraits<StateVecD>
-		{
-			typedef ldouble ValueType;
-
-			static constexpr auto kSize = 2;
-
-			static ValueType Get(const StateVecD& v, const std::size_t i)
-			{return *(&v[0] + i);}
-
-			static void Set(StateVecD* const v, const std::size_t i, const ValueType val)
-			{*(&v[0][0] + i) = val;}
-		};
-	}
-}
 
 
 #endif /* VAR_H */

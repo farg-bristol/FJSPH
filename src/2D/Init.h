@@ -127,7 +127,7 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 			ldouble dtheta = atan((svar.Pstep*svar.Bstep)/r);
 			for (ldouble theta = 0.0; theta < M_PI; theta+=dtheta)
 			{
-				StateVecD xi(-r*cos(theta),r*(1-sin(theta)));
+				StateVecD xi(-r*cos(theta)-svar.Start(0),r*(1-sin(theta))-svar.Start(1));
 				pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
 			}
 			break;
@@ -135,7 +135,7 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 		case 3:
 		{	/*Jet in Crossflow*/
 			ldouble holeS = svar.Start(0); /*Distance from Box start to hole*/
-			ldouble holeD = svar.Start(1)+4*svar.Pstep; /*Diameter of hole (or width)*/
+			ldouble holeD = svar.Start(1)+4*fvar.H; /*Diameter of hole (or width)*/
 			ldouble stepb = (svar.Pstep*svar.Bstep);
 			int Nb = ceil((holeS)/stepb);
 			stepb = holeS/(1.0*Nb);

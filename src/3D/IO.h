@@ -9,9 +9,9 @@
 #include <fstream>
 #include <string.h>
 #include <sstream>
-#include "Eigen/Core"
-#include "Eigen/StdVector"
-#include "Eigen/LU"
+#include "../Eigen/Core"
+#include "../Eigen/StdVector"
+#include "../Eigen/LU"
 
 #include "Var.h"
 
@@ -19,8 +19,8 @@
 #define M_PI (4.0*atan(1.0))
 #endif
 
-namespace std 
-{
+using namespace std; 
+
 
 void write_header() 
 {
@@ -64,7 +64,8 @@ StateVecI getIVector(ifstream& In)
 	std::stringstream sline(line);
 
 	StateVecI x;
-	sline >> x[0]; sline >> x[1]; 
+	sline >> x[0]; sline >> x[1]; sline >> x[2];	
+
 	return x;
 }
 
@@ -75,7 +76,8 @@ StateVecD getDVector(ifstream& In)
 	std::istringstream sline(line);
 	
 	StateVecD x;
-	sline >> x[0]; sline >> x[1];  
+	sline >> x[0]; sline >> x[1]; sline >> x[2]; 
+		
 	return x;
 }
 
@@ -142,7 +144,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 		  		cvar.vJet = getDVector(in); 
 		  		cvar.vInf = getDVector(in);
 		  		cvar.Acorrect = getDouble(in);
-		  		if(cvar.acase == 6)
+		  		if(cvar.acase >= 3)
 		  		{
 		  			cvar.a = getDouble(in);
 		  			cvar.h1 = getDouble(in);
@@ -172,8 +174,10 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
   		fvar.eps = getDouble(fluid);
   		fvar.contangb = getDouble(fluid);
   		fvar.rho0 = getDouble(fluid);
+  		cvar.rhog = getDouble(fluid);
   		fvar.Cs = getDouble(fluid);
   		fvar.mu = getDouble(fluid);
+  		cvar.mug = getDouble(fluid);
   		fvar.sig = getDouble(fluid);
 
   		fluid.close();
@@ -190,25 +194,33 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
   		fvar.Cs = 100.0;
   		fvar.mu = 1.0;
   		fvar.sig = 0.0728;
+  		cvar.rhog = 1.225;
+  		cvar.mug = 18.5E-06;
 	}
 
   	/*Universal parameters based on input values*/
   	svar.addcount = 0;
-  	svar.dt = 2E-07; 		/*Initial timestep*/
+  	svar.dt = 2E-010; 		/*Initial timestep*/
   	svar.t = 0.0;				/*Total simulation time*/
   	fvar.HSQ = fvar.H*fvar.H; 
-  	fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
+  	
+  	if(simDim == 2)
+  		fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
+  	else if(simDim == 3)
+  		fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+
 	fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
 	svar.Bclosed = 0; 		/*Boundary begins open*/
-  	svar.simPts = svar.xyPART[0]*svar.xyPART[1]; /*total sim particles*/
+  	svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
   	svar.aircount = 0;
 
   	/*Mass from spacing and density*/
-	fvar.Simmass = double(fvar.rho0*svar.Pstep*svar.Pstep); 
+	fvar.Simmass = fvar.rho0*pow(svar.Pstep,simDim); 
 	fvar.Boundmass = fvar.Simmass*svar.Bcase;
 	
 	fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
 	fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
+	svar.vortex.GetGamma(cvar.vInf);
 }
 
 /******************* OUTPUTS *********************/
@@ -237,7 +249,7 @@ void write_settings(SIM &svar, FLUID &fvar)
   }
 }
 
-void write_research_data(std::ofstream& fp, SIM &svar, CROSS &cvar, State &pnp1)
+void write_research_data(std::ofstream& fp, SIM &svar, State &pnp1)
 {	
 	if (svar.Bcase >0)
 	{
@@ -245,10 +257,10 @@ void write_research_data(std::ofstream& fp, SIM &svar, CROSS &cvar, State &pnp1)
 	    ", STRANDID=1, SOLUTIONTIME=" << svar.t << std::endl;
 	  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
 		{
-	        fp << b->xi(0) << " " << b->xi(1) << " ";
+	        fp << b->xi(0) << " " << b->xi(1) << " " << b->xi(2) << " ";
 	        fp << b->f.norm() << " ";
 	        fp << b->Af.norm() << " " << b->Sf.norm() << " "; 
-	        fp << b->Sf[0] << " " << b->Sf[1] << " ";
+	        fp << b->Sf[0] << " " << b->Sf[1] << " " << b->Sf[2] << " ";
 	        fp << b->b << " " << b->theta << endl; 
 	  	}
 	}
@@ -257,29 +269,15 @@ void write_research_data(std::ofstream& fp, SIM &svar, CROSS &cvar, State &pnp1)
     ", STRANDID=2, SOLUTIONTIME=" << svar.t  << std::endl;
   	for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
 	{
-        fp << p->xi(0) << " " << p->xi(1) << " ";
+        fp << p->xi(0) << " " << p->xi(1) << " " << p->xi(2) << " ";
         fp << p->f.norm() << " ";
         fp << p->Af[0] << " " << p->Sf.norm() << " "; 
-        fp << p->Sf[0] << " " << p->Sf[1] << " ";
+        fp << p->Sf[0] << " " << p->Sf[1] << " " << p->Sf(2) << " ";
         fp << p->b << " " << p->theta  << endl; 
-  	}
-
-  	if (svar.Bcase ==3 && cvar.acase == 5 && svar.aircount !=0)
-  	{
-		fp <<  "ZONE T=\"Ghost Air\"" <<", I=" << svar.aircount << ", F=POINT" <<
-	    ", STRANDID=3, SOLUTIONTIME=" << svar.t  << std::endl;
-	  	for (auto p=std::next(pnp1.begin(),svar.totPts); p!=pnp1.end(); ++p)
-		{
-	        fp << p->xi(0) << " " << p->xi(1) << " ";
-	        fp << p->f.norm() << " ";
-	        fp << p->Af.norm() << " " << p->Sf.norm() << " "; 
-	        fp << p->Sf[0] << " " << p->Sf[1] << " ";
-	        fp << p->b << endl; 
-	  	}
   	}
 }
 
-void write_fluid_data(std::ofstream& fp, SIM &svar, CROSS &cvar, State &pnp1)
+void write_fluid_data(std::ofstream& fp, SIM &svar, State &pnp1)
 {	
 	if (svar.Bcase >0)
 	{
@@ -287,7 +285,7 @@ void write_fluid_data(std::ofstream& fp, SIM &svar, CROSS &cvar, State &pnp1)
 		    ", STRANDID=1, SOLUTIONTIME=" << svar.t << std::endl;
 		  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
 			{
-		        fp << b->xi[0] << " " << b->xi[1] << " ";
+		        fp << b->xi[0] << " " << b->xi[1] << " " << b->xi[2] << " ";
 		        fp << b->v.norm() << " ";
 		        fp << b->f.norm() << " ";
 		        fp << b->rho << " "  << b->p << std::endl;
@@ -298,41 +296,53 @@ void write_fluid_data(std::ofstream& fp, SIM &svar, CROSS &cvar, State &pnp1)
     ", STRANDID=2, SOLUTIONTIME=" << svar.t  << std::endl;
   	for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
 	{
-        fp << p->xi(0) << " " << p->xi(1) << " ";
+        fp << p->xi(0) << " " << p->xi(1) << " " << p->xi[2] << " ";
         fp << p->v.norm() << " ";
         fp << p->f.norm() << " ";
         fp << p->rho << " "  << p->p  << std::endl;  
-  	}
-
-  	if (svar.Bcase ==3 && cvar.acase == 5 && svar.aircount !=0)
-  	{
-		fp <<  "ZONE T=\"Ghost Air\"" <<", I=" << svar.aircount << ", F=POINT" <<
-	    ", STRANDID=3, SOLUTIONTIME=" << svar.t  << std::endl;
-	  	for (auto p=std::next(pnp1.begin(),svar.totPts); p!=pnp1.end(); ++p)
-		{
-	        fp << p->xi(0) << " " << p->xi(1) << " ";
-	        fp << p->v.norm() << " ";
-	        fp << p->f.norm() << " ";
-	        fp << p->rho << " "  << p->p << std::endl; 
-	  	}
-  	}
+  	}  	
 }
 
-void write_file_header(std::ofstream& fp, SIM &svar, CROSS &cvar, State &pnp1)
+void write_basic_data(std::ofstream& fp, SIM &svar, State &pnp1)
+{	
+	if (svar.Bcase >0)
+	{
+			fp <<  "ZONE T=\"Boundary Data\"" << ", I=" << svar.bndPts << ", F=POINT" <<
+		    ", STRANDID=1, SOLUTIONTIME=" << svar.t << std::endl;
+		  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
+			{
+		        fp << b->xi[0] << " " << b->xi[1] << " " << b->xi[2] << std::endl;
+		  	}
+	}
+    
+    fp <<  "ZONE T=\"Particle Data\"" <<", I=" << svar.simPts << ", F=POINT" <<
+    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << std::endl;
+  	for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
+	{
+        fp << p->xi(0) << " " << p->xi(1) << " " << p->xi[2] << std::endl;  
+  	}
+
+}
+
+void write_file_header(std::ofstream& fp, SIM &svar, State &pnp1)
 {
 	switch (svar.outform)
 		{	
 			case 1:
-				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"v (m/s)\", \"a (m/s<sup>-1</sup>)\", " << 
+				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\", \"v (m/s)\", \"a (m/s<sup>-1</sup>)\", " << 
 			"\"<greek>r</greek> (kg/m<sup>-3</sup>)\", \"P (Pa)\"" << std::endl;
-				write_fluid_data(fp, svar, cvar, pnp1);
+				write_fluid_data(fp, svar, pnp1);
 				break;
 			case 2:
-				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"a (m/s<sup>-1</sup>)\", " << 
-			"\"A<sub>f</sub>\", \"S<sub>f</sub>\", \"S<sub>fx</sub>\", \"S<sub>fy</sub>\", \"B\", \"Theta\""<< std::endl;
-				write_research_data(fp, svar, cvar, pnp1);
+				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\", \"a (m/s<sup>-1</sup>)\", " << 
+			"\"A<sub>f</sub>\", \"S<sub>f</sub>\", \"S<sub>fx</sub>\", \"S<sub>fy</sub>\", \"S<sub>fz</sub>\", \"B\", \"Theta\""<< std::endl;
+				write_research_data(fp, svar, pnp1);	
+				break;
+			case 3:
+				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\""<< std::endl;
+				write_basic_data(fp, svar, pnp1);
 				break;
 		}
 }
-}
+
 #endif

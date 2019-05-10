@@ -1,7 +1,7 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
-#include "Eigen/Core"
+#include "../Eigen/Core"
 #include "Var.h"
 
 ///******Wendland's C2 Quintic Kernel*******

@@ -51,7 +51,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 	}
 
 /***********************************************************************************/
-/**************CODE IS NOW VERY SENSITIVE TO DT. MODIFY WITH CAUTION****************/
+/***********************************************************************************/
 /***********************************************************************************/
 	svar.dt = 0.3*min(dtf,dtcv);
 /***********************************************************************************/
@@ -68,7 +68,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 	while (log10(sqrt(errsum/(double(svar.totPts)))) - logbase > -7.0)
 	{
 		// cout << "K: " << k << endl;
-		Forces(NP1_INDEX,svar,fvar,cvar,pn,pnp1,outlist); /*Guess force at time n+1*/
+		Forces(svar,fvar,cvar,pnp1,outlist); /*Guess force at time n+1*/
 
 		/*Previous State for error calc*/
 		for (size_t  i=0; i< svar.totPts; ++i)
@@ -105,8 +105,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 		if(k == 0)
 			logbase=log10(sqrt(errsum/(double(svar.totPts))));
 
-		if(k > svar.subits)
-			break;
+		
 
 		error1 = log10(sqrt(errsum/(double(svar.totPts)))) - logbase;
 		// cout << k << "  " << error1  << endl;
@@ -120,6 +119,11 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 			error1 = 0.0;
 		}
 		error2 = error1;
+
+		/*Check if we've exceeded the maximum iteration count*/
+
+		if(k > svar.subits)
+			break;
 		++k;
 	}
 
@@ -204,8 +208,10 @@ int main(int argc, char *argv[])
     ///****** Initialise the particles memory *********/
 	State pn;	    /*Particles at n   */
 	State pnp1; 	/*Particles at n+1 */
+
+	cout << "Final particle count:  " << partCount << endl;
 	pn.reserve(partCount);
-  pnp1.reserve(partCount);
+  	pnp1.reserve(partCount);
 
 
 	std::ofstream f1;
@@ -228,7 +234,7 @@ int main(int argc, char *argv[])
 	FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
 
 	///*** Perform an iteration to populate the vectors *****/
-	Forces(NP1_INDEX,svar,fvar,cvar,pn,pnp1,outlist);
+	Forces(svar,fvar,cvar,pnp1,outlist);
 
 
 	///*************** Open simulation files ***************/
@@ -243,19 +249,21 @@ int main(int argc, char *argv[])
 	if (f1.is_open())
 	{
 		f1 << std::scientific << setprecision(5);
-		f2 << std::scientific<< setw(10);
-		f3 << std::scientific << setw(10);
+		if(f2.is_open())
+			f2 << std::scientific<< setw(10);
+		if(f3.is_open())
+			f3 << std::scientific << setw(10);
 
 
 		/* Write file header defining variable names */
-		write_file_header(f1,svar,cvar,pnp1);
+		write_file_header(f1,svar,pnp1);
 
 		/*Timing calculation + error sum output*/
 		t2 = high_resolution_clock::now();
 		duration = duration_cast<microseconds>(t2-t1).count()/1e6;
 		cout << "Frame: " << 0 << "  Sim Time: " << svar.t << "  Compute Time: "
 		<< duration <<"  Error: " << error << endl;
-		f2 << "Frame:   Pts:    S-Time:    C-Time    Error:   Its:" << endl;
+		f2 << "Frame:  Points:   Sim Time:       Comp Time:     Error:       Its:" << endl;
 		f2 << 0 << "        " << svar.totPts << "    " << svar.t << "    " << duration
 			<< "    " << error << "  " << 0 << endl;
 
@@ -298,10 +306,13 @@ int main(int argc, char *argv[])
 			switch (svar.outform)
 			{
 				case 1:
-					write_fluid_data(f1, svar, cvar, pnp1);
+					write_fluid_data(f1, svar, pnp1);
 					break;
 				case 2:
-					write_research_data(f1, svar, cvar, pnp1);
+					write_research_data(f1, svar, pnp1);
+					break;
+				case 3:
+					write_basic_data(f1, svar, pnp1);
 					break;
 			}
 
