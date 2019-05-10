@@ -151,6 +151,11 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 		  			cvar.b = getDouble(in);
 		  			cvar.h2 = getDouble(in);
 		  		}
+		  		else if(cvar.acase > 5)
+		  		{
+		  			cout << "Aerodynamic case is not in design. Stopping..." << endl;
+		  			exit(-1);
+		  		}
 	  		}
 	  		
 	  		

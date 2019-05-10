@@ -127,9 +127,8 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 					ldouble correc = 1.0;
 					if(size > 50)
 					{
-						StateVecD surfNorm = SurfC;
-						ldouble num = surfNorm.dot(cvar.vInf);
-						ldouble denom = surfNorm.norm()*cvar.vInf.norm();
+						ldouble num = SurfC.dot(cvar.vInf);
+						ldouble denom = SurfC.norm()*cvar.vInf.norm();
 						ldouble theta = acos(num/denom)/M_PI;
 						pi.theta = theta;
 						if (theta <= 1.0 )
@@ -152,9 +151,8 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 					double Acorrect = 0.0;
 
 					/*Correction based on surface normal*/
-					StateVecD surfNorm(SurfC[0],-SurfC[1]);
-					ldouble num = surfNorm.dot(cvar.vInf);
-					ldouble denom = surfNorm.norm()*cvar.vInf.norm();
+					ldouble num = SurfC.dot(cvar.vInf);
+					ldouble denom = SurfC.norm()*cvar.vInf.norm();
 					ldouble theta = acos(num/denom)/M_PI;
 					
 					if (theta <= 1.0 )
@@ -175,9 +173,8 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 					StateVecD Vdiff = Vel-pi.V;
 					Fd = AeroForce(Vdiff, svar, fvar, cvar);
 					/*Correction based on surface tension vector*/
-					StateVecD surfNorm = SurfC;
-					ldouble num = surfNorm.dot(Vel);
-					ldouble denom = surfNorm.norm()*Vel.norm();
+					ldouble num = SurfC.dot(Vel);
+					ldouble denom = SurfC.norm()*cvar.vInf.norm();
 					ldouble theta = acos(num/denom)/M_PI;
 					pi.theta = theta;
 					ldouble correc = 0.0;

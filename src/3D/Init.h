@@ -114,6 +114,7 @@ int ParticleCount(SIM &svar)
 			else if (decision == 0)
 				exit(0);
 
+			break;
 		}
 
 			
