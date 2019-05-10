@@ -3,7 +3,9 @@
 0.2           #Aritificial Viscosity factor
 0.1           #XSPH-Correction factor
 150.0         #Boundary contact angle
-1000.0        #Rho_inf
+997.0         #Rho_jet
+1.18          #Rho_gas
 100           #Speed of Sound C_s
-1.0           #Dynamic Viscosity
-0.0728        #Surface Tension
+0.000894      #Liquid Dynamic Viscosity
+0.0000185     #Gas Dynamic Viscosity
+0.0708        #Surface Tension

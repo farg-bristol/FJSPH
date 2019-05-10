@@ -14,25 +14,26 @@
 
 // #include "Eigen/Core"
 // #include "Eigen/StdVector"
-#include "Eigen/LU"
+#include "../Eigen/LU"
 #include "Var.h"
 #include "Kernel.h"
 #include "Cross.h"
-#include "Ghost.h"
 
 StateVecD AeroForce(StateVecD &Vdiff, SIM &svar, FLUID &fvar, CROSS &cvar)
 {
 	StateVecD Fd = StateVecD::Zero();
-	ldouble Re = Vdiff.norm()*2*svar.Pstep*cvar.rhog/cvar.mug;
+	ldouble Re = Vdiff.norm()*svar.Pstep*cvar.rhog/cvar.mug;
 	ldouble Cd = 0.0;
 
+	// pi.theta = Re;
 	if (Re < 3500)
 	 	Cd = (1.0+0.197*pow(Re,0.63)+2.6*pow(Re,1.38))*(24.0/(Re+0.000001));
 	else
-		Cd = (1+0.197*pow(Re,0.63)+2.6e-4*pow(Re,1.38))*(24.0/(Re+0.0000001));
+		Cd = (1+0.197*pow(Re,0.63)+2.6e-4*pow(Re,1.38))*(24.0/(Re));
 
-	Fd = cvar.Acorrect*(2*svar.Pstep)*Cd*Vdiff.normalized()*Vdiff.squaredNorm()*cvar.rhog/fvar.rho0;
-	Fd[1] = 0.5*Fd[1];
+	Fd = Cd*Vdiff*Vdiff.norm()*cvar.rhog/(fvar.rho0*svar.Pstep);
+	// cout << Fd[0] << "  " << Fd[1] << endl;
+	// Fd[1] = 0.1*Fd[1];
 	//std::cout << "Reynolds: " << Re  << " Cd: " << Cd << " Fd: " << Fd[0] << " " << Fd[1] << std::endl;
 	return Fd;
 }
@@ -93,7 +94,7 @@ StateVecD SurfaceTens(FLUID &fvar, Particle &pj, StateVecD &Rij, ldouble &r, ldo
 }
 
 StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar, 
-	Particle &pi, StateVecD &SurfC)
+	Particle &pi, StateVecD &SurfC, size_t size)
 {
 	StateVecD Fd= StateVecD::Zero();
 	if (svar.Bcase == 3 && pi.xi[1] > 2*svar.Pstep)
@@ -107,50 +108,108 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 				if( pi.b == 2)
 				{
 					StateVecD Vdiff = cvar.vInf - pi.V;
-					Fd = AeroForce(Vdiff, svar, fvar, cvar);
+					Fd = cvar.Acorrect*AeroForce(Vdiff, svar, fvar, cvar);
 				}
 
 				break;
 			}
-			case 2:	{	/* Surface particles */
-				if (SurfC.norm()*pow(svar.Pstep*100,3.7622)/pi.m > 2.5)
-				{  /*				^ Need to tune this parameter... */
-					StateVecD Vdiff = cvar.vInf - pi.V;
-					Fd = AeroForce(Vdiff, svar, fvar, cvar);
-				}
-				break;
-			}
-			case 3: {	/* All upstream particles */
+			case 2:	{	/* All upstream particles */
 				if(pi.b == 2 /*&& */)
 				{
 					StateVecD Vdiff = cvar.vInf - pi.V;
-					Fd = AeroForce(Vdiff, svar, fvar, cvar);
+					Fd = cvar.Acorrect*AeroForce(Vdiff, svar, fvar, cvar);
 				}
 				break;
 			}
-			case 4:	{	/* Surface particles proportional to ST*/
-				/*Work in progress...*/
-				break;
-			}
-			case 6: { /*Surface particles, with correction based on surface normal*/
-			// cout << SurfC.norm()*svar.Pstep/pi.m -31.51*svar.Pstep*svar.Pstep + 0.00665*svar.Pstep << endl;
-				if (SurfC.norm()*svar.Pstep/pi.m -31.51*svar.Pstep*svar.Pstep + 0.00665*svar.Pstep > 1.0E-04)
+			case 3: { /*Surface particles, with correction based on surface normal*/
+				if (size < 35)
 				{
 					StateVecD Vdiff = cvar.vInf-pi.V;
 					Fd = AeroForce(Vdiff, svar, fvar, cvar);
+					ldouble correc = 1.0;
+
+					if(size>10)
+					{
+						/*Correction based on surface normal*/
+						ldouble num = SurfC.dot(cvar.vInf);
+						ldouble denom = SurfC.norm()*cvar.vInf.norm();
+						ldouble theta = acos(num/denom)/M_PI;
+						// pi.theta = theta;
+						
+						if (theta <= 1.0 )
+							correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
+					}
+					Fd = cvar.Acorrect*correc*Fd;
+				}
+				break;
+			}
+			case 4:
+			{
+				if (size < 40)
+				{
+					StateVecD Vdiff = cvar.vInf-pi.V;
+					Fd = AeroForce(Vdiff, svar, fvar, cvar);
+					ldouble correc = 1.0;
+					double Acorrect = 0.0;
+
 					/*Correction based on surface normal*/
-					StateVecD surfNorm(SurfC[0],-SurfC[1]);
-					ldouble num = surfNorm.dot(cvar.vInf);
-					ldouble denom = surfNorm.norm()*cvar.vInf.norm();
+					ldouble num = SurfC.dot(cvar.vInf);
+					ldouble denom = SurfC.norm()*cvar.vInf.norm();
 					ldouble theta = acos(num/denom)/M_PI;
-					pi.theta = theta;
+					// pi.theta = theta;
+					
+					if (theta <= 1.0 )
+						correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
+					
+					/*Correct based on the number of neighbours*/
+					Acorrect = exp(-0.1766*double(size));
+					// cout << size << "  " << Acorrect << endl;
+
+					Fd = correc*Acorrect*Fd;
+				}
+				break;
+			}
+			case 5:
+			{	/*Point Vortex simulation*/
+				if (size < 35)
+				{	
+					double gam = cvar.vInf[0];
+					StateVecD vortexP(cvar.vortexPos[0],cvar.vortexPos[1]);
+
+					StateVecD r = pi.xi - vortexP;
+					StateVecD one(1.0,0.0);
+					double angVel = gam/(2*M_PI*r.norm());
+					// double a = (r.dot(one))/(r.norm()*one.norm());
+					double vortexTheta = acos((r.dot(one))/(r.norm()*one.norm()));
+					StateVecD Vel;
+					if(r[1] > 0 )
+					{
+						Vel = StateVecD(angVel*sin(vortexTheta),-angVel*cos(vortexTheta));
+					}
+					else
+					{
+						Vel = StateVecD(-angVel*sin(vortexTheta),-angVel*cos(vortexTheta));
+					}
+					
+					
+					// cout << Vel[0] << "  " << Vel[1] << "  " << vortexP[0] << "  " << gam << endl; 
+					StateVecD Vdiff = Vel-pi.V;
+					Fd = AeroForce(Vdiff, svar, fvar, cvar);
+
+					/*Correction based on surface normal*/
+					ldouble num = SurfC.dot(Vel);
+					ldouble denom = SurfC.norm()*cvar.vInf.norm();
+					ldouble theta = acos(num/denom)/M_PI;
+					
 					ldouble correc = 0.0;
 					if (theta <= 1.0 )
 					{
 						correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
 					}
-
+					
 					Fd = correc*Fd;
+					pi.theta = vortexTheta;
+					// cout << Vel[0] << "  " << Vel[1] << "  " << vortexTheta << " " << a << endl;
 				}
 				break;
 			}
@@ -159,17 +218,17 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 	else if (svar.Bcase == 3 && pi.xi[1] < svar.Pstep)
 	{
 		StateVecD Vdiff = cvar.vJet - pi.V;
-		ldouble Re = Vdiff.norm()*2*svar.Pstep/fvar.mu;
+		ldouble Re = Vdiff.norm()*svar.Pstep*cvar.rhog/cvar.mug;
 		ldouble Cd = 0.1*(1+0.197*pow(Re,0.63)+2.6*pow(Re,1.38))*(24.0/(Re+0.0001));
 
-		Fd = Vdiff.normalized()*Cd*(2*svar.Pstep)*fvar.rho0*Vdiff.squaredNorm();
+		Fd = Cd*Vdiff*Vdiff.norm()*cvar.rhog/(fvar.rho0*svar.Pstep);
 		Fd[1] += 9.81*pi.m;
 	}
 	return Fd;
 }
 
 ///**************** RESID calculation **************
-void Forces(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1,outl &outlist)
+void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1,outl &outlist)
 {
 	svar.maxmu=0; 					/* CFL Parameter */
 	const static ldouble eps = fvar.eps; 		/* XSPH Influence Parameter*/
@@ -201,17 +260,7 @@ void Forces(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, State &pn,
 		}
 
 
-/******* LOOP 3 - only for ghost particle case: Find surface points. *********/
-		if(svar.Bcase == 3 && cvar.acase == 5)
-			Ghost_Particles(NP1_INDEX, numpartdens, svar, fvar, cvar, pn, pnp1,outlist);
-
-/*		cout << "Npts: " << svar.totPts << " Air Count: " << svar.aircount << endl;
-		cout << "Bound Parts: " << svar.bndPts << " Sim Points: " << svar.simPts << endl;
-		cout << "Pn size: " << pn.size() << " PnP1 Size: " << pnp1.size() << endl;
-		cout << "Outlist Size: " << outlist.size() << endl;*/
-
-
-/******* LOOP 4 - All simulation points: Calculate forces on the fluid. *********/
+/******* LOOP 3 - All simulation points: Calculate forces on the fluid. *********/
 		for (size_t i=svar.bndPts; i< svar.totPts + svar.aircount; ++i)
 		{
 			Particle pi = pnp1[i];
@@ -226,8 +275,8 @@ void Forces(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, State &pn,
 
 			vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
 			mu.emplace_back(0);	/*Avoid dereference of empty vector*/
-
-			for (size_t j=0; j < outlist[i].size(); ++j)
+			unsigned int size = outlist[i].size();
+			for (unsigned int j=0; j < size; ++j)
 			{	/* Neighbour list loop. */
 				Particle pj = pnp1[outlist[i][j]];
 
@@ -267,9 +316,7 @@ void Forces(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, State &pn,
 			}
 
 			/*Crossflow force*/
-
-			StateVecD Fd = ApplyAero(svar,fvar,cvar,pi,SurfC);
-
+			StateVecD Fd = ApplyAero(svar,fvar,cvar,pi,SurfC,size);
 
 			pi.Rrho = Rrhocontr; /*drho/dt*/
 			pi.f= contrib + SurfC/pi.m + Fd/pi.m;
@@ -292,7 +339,7 @@ void Forces(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, State &pn,
 void DensityReinit(FLUID &fvar, State &pnp1, outl &outlist)
 {
 	DensVecD one = DensVecD::Zero();
-  one[0] = 1.0;
+    one[0] = 1.0;
 
 	for(size_t i=0; i< pnp1.size(); ++i)
 	{

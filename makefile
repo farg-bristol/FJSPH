@@ -1,25 +1,27 @@
 # Compiler to use. In C++, so g++.
 CXX=g++
 
+CX8=g++-8
+
 # Libraries to include
 INC=
 
 # Compiler flags. If desired add -g for debugging info.
-CFLAGS=-g -std=c++11 -Wall -Wextra -ffast-math -funroll-loops -O3
+CFLAGS=-std=c++11 -Wall -Wextra -ffast-math -funroll-loops -O3
 
 # Find the OS to execute correctly
 UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
 TARGET=WCXSPH# Target executable
-3DTARGET=WCXSPH3D
+3DTARGET=WCXSPH
 else
 TARGET=WCXSPH.exe
-3DTARGET=WCXSPH3D.exe
+3DTARGET=WCXSPH.exe
 endif
 
-SOURCE=src/WCXSPH.cpp
-3DTARGET=WCXSPH3D
-3DSOURCE=src/WCXSPH3D.cpp
+SOURCE=src/2D/WCXSPH.cpp
+#3DTARGET=WCXSPH
+3DSOURCE=src/3D/WCXSPH.cpp
 
 
 # Compile and Build
@@ -30,9 +32,13 @@ build:
 cross:
 	./$(TARGET) Cross.dat SurfaceLeft.plt
 
-# Linux run without .exe
-linux:
-	./$(TARGET) Input.dat
+#add debug flag
+debug:
+	$(CXX) $(INC) -g $(CFLAGS) -o $(TARGET) $(SOURCE)
+
+test:
+	$(CX8) $(INC) -g $(CFLAGS) -o $(TARGET) $(SOURCE)
+
 
 clean:
 	$(RM) $(TARGET)
@@ -42,7 +48,7 @@ new:
 	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE)
 
 3D:
-	$(CXX) $(INC) $(CFLAGS) -o $(3DTARGET) $(3DSOURCE)
+	$(CXX) $(INC) -g $(CFLAGS) -o $(3DTARGET) $(3DSOURCE)
 
 3Drun:
 	./$(3DTARGET).exe 3DInput.dat
