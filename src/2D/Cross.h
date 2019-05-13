@@ -20,51 +20,24 @@ void AddPoints(ldouble y, SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State 
 	svar.nrefresh = 0;
 
 
-	if (cvar.acase == 5)
-	{
-		/*Create the simulation particles*/
-		for( ldouble x = jetS; x<jetE - (jetE-jetS)/2; x+=svar.Pstep)
-		{ /*Do the left set of points*/
-			StateVecD xi(x,y);
-			int pos = svar.totPts+svar.nrefresh;
-			pn.insert(pn.begin()+pos,Particle(xi,v,f,rho,fvar.Simmass,2));
-			pnp1.insert(pnp1.begin()+pos,Particle(xi,v,f,rho,fvar.Simmass,2));
-			++svar.simPts;
-			++svar.nrefresh;
-		}
-
-		ldouble start2 = pn.back().xi[0]+svar.Pstep;
-		for( ldouble x = start2; x<=jetE; x+=svar.Pstep)
-		{	/*Do the right set of points*/
-			StateVecD xi(x,y);
-			int pos = svar.totPts+svar.nrefresh;
-			pn.insert(pn.begin()+pos,Particle(xi,v,f,rho,fvar.Simmass,1));
-			pnp1.insert(pnp1.begin()+pos,Particle(xi,v,f,rho,fvar.Simmass,1));
-			++svar.simPts;
-			++svar.nrefresh;
-		}
+	/*Create the simulation particles*/
+	for( ldouble x = jetS; x<jetE - (jetE-jetS)/2; x+=svar.Pstep)
+	{ /*Do the left set of points*/
+		StateVecD xi(x,y);
+		pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
+		pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
+		++svar.simPts;
+		++svar.nrefresh;
 	}
-	else
-	{
-		/*Create the simulation particles*/
-		for( ldouble x = jetS; x<jetE - (jetE-jetS)/2; x+=svar.Pstep)
-		{ /*Do the left set of points*/
-			StateVecD xi(x,y);
-			pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
-			pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
-			++svar.simPts;
-			++svar.nrefresh;
-		}
 
-		ldouble start2 = pn.back().xi[0]+svar.Pstep;
-		for( ldouble x = start2; x<=jetE; x+=svar.Pstep)
-		{	/*Do the right set of points*/
-			StateVecD xi(x,y);
-			pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,1));
-			pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,1));
-			++svar.simPts;
-			++svar.nrefresh;
-		}
+	ldouble start2 = pn.back().xi[0]+svar.Pstep;
+	for( ldouble x = start2; x<=jetE; x+=svar.Pstep)
+	{	/*Do the right set of points*/
+		StateVecD xi(x,y);
+		pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,1));
+		pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,1));
+		++svar.simPts;
+		++svar.nrefresh;
 	}
 
 	svar.totPts += svar.nrefresh;

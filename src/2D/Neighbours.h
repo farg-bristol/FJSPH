@@ -13,16 +13,16 @@ void FindNeighbours(Sim_Tree &NP1_INDEX, FLUID &fvar, State &pnp1,outl &outlist)
 	outlist.erase(outlist.begin(),outlist.end());
 	ldouble search_radius = fvar.sr;
 	/*Find neighbour list*/
-	for(size_t i=0; i<pnp1.size(); ++i)
+	for(unsigned int i=0; i<pnp1.size(); ++i)
 	{
 		std::vector<std::pair<size_t, ldouble>> matches; /* Nearest Neighbour Search*/
 
 		NP1_INDEX.index->radiusSearch(&pnp1[i].xi[0], search_radius, matches, params);
 
-		std::vector<size_t> temp;
+		std::vector<unsigned int> temp;
 		for (auto &j:matches)
 		{
-			temp.emplace_back(j.first);
+			temp.emplace_back(static_cast<unsigned int>(j.first));
 		}
 		outlist.emplace_back(temp);
 	}

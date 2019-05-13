@@ -17,13 +17,8 @@ void AddPoints(ldouble y, SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State 
 	ldouble rho=fvar.rho0;
 	ldouble jetS = svar.Start(0)+2*fvar.H;
 	ldouble jetE = jetS+svar.Start(1);
-	svar.nrefresh = 0;
-
-	
+	svar.nrefresh = 0;	
 	ldouble jetR = 0.5*(svar.Start(1));
-
-	// cout << "Jet Radius: " << jetR << " Starting x-coord: " << jetS << " Ending x-coord: " << jetE << endl;
-
 
 	/*Create the simulation particles*/
 	for (ldouble x = jetS; x<jetS + jetR; x+=svar.Pstep)
@@ -40,11 +35,6 @@ void AddPoints(ldouble y, SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State 
 				pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
 				++svar.simPts;
 				++svar.nrefresh;
-				// xi(2) = -z;
-				// pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
-				// pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
-				// ++svar.simPts;
-				// ++svar.nrefresh;
 			}
 		}
 		
@@ -63,17 +53,9 @@ void AddPoints(ldouble y, SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State 
 				pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,1));
 				++svar.simPts;
 				++svar.nrefresh;
-				// xi(2) = -z;
-				// pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,1));
-				// pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,1));
-				// ++svar.simPts;
-				// ++svar.nrefresh;
 			}
 		}
 	}
-
-
-	
 
 	svar.totPts += svar.nrefresh;
 	++svar.addcount;

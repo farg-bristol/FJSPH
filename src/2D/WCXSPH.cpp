@@ -62,7 +62,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 		svar.dt = svar.framet;
 
 	/*Save pnp1 state in case of instability.*/
-	State backup = pnp1;
+	
 	vector<StateVecD> xih(svar.totPts);
 
 	while (log10(sqrt(errsum/(double(svar.totPts)))) - logbase > -7.0)
@@ -113,7 +113,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 		if (error1-error2 > 0.0)
 		{	/*If simulation starts diverging, then reduce the timestep and try again.*/
 			// cout << "Unstable timestep. Reducing timestep..." << endl;
-			pnp1 = backup;
+			pnp1 = pn;
 			svar.dt = 0.5*svar.dt;
 			k = 0;
 			error1 = 0.0;
@@ -279,6 +279,9 @@ int main(int argc, char *argv[])
 			    error = Newmark_Beta(NP1_INDEX,svar,fvar,cvar,pn,pnp1,outlist);
 			    stept+=svar.dt;
 			    ++stepits;
+
+			    if(stepits % 20 == 0 )
+			    	DensityReinit(fvar, pnp1, outlist);
 			    //cout << svar.t << "  " << svar.dt << endl;
 			}
 
@@ -303,7 +306,7 @@ int main(int argc, char *argv[])
 			}
 
 
-			DensityReinit(fvar, pnp1, outlist);
+			
 			switch (svar.outform)
 			{
 				case 1:

@@ -61,10 +61,18 @@ StateVecI getIVector(ifstream& In)
 {
 	string line;
 	getline(In,line);
-	std::stringstream sline(line);
-
+	std::istringstream sline(line);
+	// cout << sline.str() << endl;
 	StateVecI x;
-	sline >> x[0]; sline >> x[1]; sline >> x[2];	
+	sline >> x[0]; sline >> x[1]; sline >> x(2);
+
+	// cout << sline.str() << endl;
+
+	if (!sline)
+	{	
+		cout << "2D input provided. Please provide a 3D file." << endl;
+		exit(-1);
+	}
 
 	return x;
 }
@@ -77,6 +85,12 @@ StateVecD getDVector(ifstream& In)
 	
 	StateVecD x;
 	sline >> x[0]; sline >> x[1]; sline >> x[2]; 
+
+	if (!sline)
+	{	
+		cout << "2D input provided. Please provide a 3D file." << endl;
+		exit(-1);
+	}
 		
 	return x;
 }

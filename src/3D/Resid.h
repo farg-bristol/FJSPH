@@ -163,7 +163,7 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 						correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
 					
 					/*Correct based on the number of neighbours*/
-					Acorrect = exp(-0.1766*double(size)); /*NEEDS CHANGING FOR 3D*/
+					Acorrect = exp(-0.035*double(size)); /*NEEDS CHANGING FOR 3D*/
 					// cout << size << "  " << Acorrect << endl;
 
 					Fd = correc*Acorrect*Fd;

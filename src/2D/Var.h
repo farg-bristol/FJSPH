@@ -118,7 +118,7 @@ typedef class Particle {
 typedef std::vector<Particle> State;
 
 /* Neighbour search tree containers */
-typedef std::vector<std::vector<size_t>> outl;
+typedef std::vector<std::vector<unsigned int>> outl;
 typedef KDTreeVectorOfVectorsAdaptor<State, ldouble> Sim_Tree;
 typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,ldouble> Temp_Tree;
 

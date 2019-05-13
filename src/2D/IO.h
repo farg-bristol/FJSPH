@@ -62,9 +62,16 @@ StateVecI getIVector(ifstream& In)
 	string line;
 	getline(In,line);
 	std::stringstream sline(line);
+	int temp;
 
 	StateVecI x;
 	sline >> x[0]; sline >> x[1]; 
+
+	if(sline >> temp)
+	{
+		cout << "\tWARNING: 3D Input provided for a 2D Simulation." << endl;
+		cout << "\t         The third dimension shall be ignored." << endl;
+	}
 	return x;
 }
 
@@ -73,9 +80,17 @@ StateVecD getDVector(ifstream& In)
 	string line;
 	getline(In,line);
 	std::istringstream sline(line);
-	
+	double temp;
+
 	StateVecD x;
 	sline >> x[0]; sline >> x[1];  
+
+	if(sline >> temp)
+	{
+		cout << "\tWARNING: 3D Input provided for a 2D Simulation." << endl;
+		cout << "\t         The third dimension shall be ignored." << endl;
+	}
+
 	return x;
 }
 
@@ -139,10 +154,15 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	  		if(svar.Bcase == 3)
 	  		{
 	  			cvar.acase = getInt(in);
+	  			if (cvar.acase > 5 || cvar.acase < 0)
+		  		{
+		  			cerr << "Force translation case not in design. Stopping... " << endl;
+		  		}
+
 		  		cvar.vJet = getDVector(in); 
 		  		cvar.vInf = getDVector(in);
 		  		cvar.Acorrect = getDouble(in);
-		  		if(cvar.acase >= 3 )
+		  		if(cvar.acase > 2)
 		  		{
 		  			cvar.a = getDouble(in);
 		  			cvar.h1 = getDouble(in);
@@ -152,10 +172,8 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 		  			{
 		  				cvar.vortexPos = getDVector(in);
 		  			}
-		  		}
-	  		}
-	  		
-	  		
+		  		}		
+		  	}	  		
 			in.close();
 	  	}
 	  	else {

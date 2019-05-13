@@ -25,12 +25,11 @@ SOURCE=src/2D/WCXSPH.cpp
 
 
 # Compile and Build
-build:
+2D:
 	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE)
 
-#Crossflow run with different input file
-cross:
-	./$(TARGET) Cross.dat SurfaceLeft.plt
+3D:
+	$(CXX) $(INC) -g $(CFLAGS) -o $(3DTARGET) $(3DSOURCE)
 
 #add debug flag
 debug:
@@ -39,16 +38,9 @@ debug:
 test:
 	$(CX8) $(INC) -g $(CFLAGS) -o $(TARGET) $(SOURCE)
 
-
 clean:
 	$(RM) $(TARGET)
 
 new: 
 	$(RM) $(TARGET)
 	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE)
-
-3D:
-	$(CXX) $(INC) -g $(CFLAGS) -o $(3DTARGET) $(3DSOURCE)
-
-3Drun:
-	./$(3DTARGET).exe 3DInput.dat

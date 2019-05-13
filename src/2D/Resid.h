@@ -12,8 +12,6 @@
 #ifndef RESID_H
 #define RESID_H
 
-// #include "Eigen/Core"
-// #include "Eigen/StdVector"
 #include "../Eigen/LU"
 #include "Var.h"
 #include "Kernel.h"
@@ -94,7 +92,7 @@ StateVecD SurfaceTens(FLUID &fvar, Particle &pj, StateVecD &Rij, ldouble &r, ldo
 }
 
 StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar, 
-	Particle &pi, StateVecD &SurfC, size_t size)
+	Particle &pi, StateVecD &SurfC, unsigned int size)
 {
 	StateVecD Fd= StateVecD::Zero();
 	if (svar.Bcase == 3 && pi.xi[1] > 2*svar.Pstep)
@@ -128,24 +126,27 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 					Fd = AeroForce(Vdiff, svar, fvar, cvar);
 					ldouble correc = 1.0;
 
-					if(size>10)
+					if(size>5)
 					{
 						/*Correction based on surface normal*/
 						ldouble num = SurfC.dot(cvar.vInf);
 						ldouble denom = SurfC.norm()*cvar.vInf.norm();
-						ldouble theta = acos(num/denom)/M_PI;
+						ldouble theta = 2*acos(num/denom)/M_PI;
 						// pi.theta = theta;
 						
-						if (theta <= 1.0 )
-							correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
+						if (theta <= 2.0 )
+							correc = cvar.a*W2Kernel(theta,cvar.h1,1)+cvar.b*W2Kernel(theta,cvar.h2,1);
 					}
+
 					Fd = cvar.Acorrect*correc*Fd;
+
+					// cout << size << "  " << cvar.Acorrect << "  " << correc << "  " << Fd[0] << "  " << Fd[1] << endl;
 				}
 				break;
 			}
 			case 4:
 			{
-				if (size < 40)
+				if (size < 35)
 				{
 					StateVecD Vdiff = cvar.vInf-pi.V;
 					Fd = AeroForce(Vdiff, svar, fvar, cvar);
@@ -162,7 +163,7 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 						correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
 					
 					/*Correct based on the number of neighbours*/
-					Acorrect = exp(-0.1766*double(size));
+					Acorrect = exp(-0.1936*double(size));
 					// cout << size << "  " << Acorrect << endl;
 
 					Fd = correc*Acorrect*Fd;
@@ -242,7 +243,7 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1,outl &outlist)
 		// #pragma omp for
 
 /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
-		for (size_t i=0; i< svar.bndPts; ++i)
+		for (unsigned int i=0; i< svar.bndPts; ++i)
 		{
 			ldouble Rrhocontr = 0.0;
 			Particle pi = pnp1[i];
@@ -261,11 +262,11 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1,outl &outlist)
 
 
 /******* LOOP 3 - All simulation points: Calculate forces on the fluid. *********/
-		for (size_t i=svar.bndPts; i< svar.totPts + svar.aircount; ++i)
+		for (unsigned int i=svar.bndPts; i< svar.totPts + svar.aircount; ++i)
 		{
 			Particle pi = pnp1[i];
 			pi.V = pi.v;
-			if (svar.Bcase == 3 && cvar.acase == 3)
+			if (svar.Bcase == 3 && cvar.acase == 2)
 				pi.b = 2;
 
 			ldouble Rrhocontr = 0.0;
@@ -305,7 +306,7 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1,outl &outlist)
 				/*drho/dt*/
 				Rrhocontr -= pj.m*(Vij.dot(Grad));
 
-				if (svar.Bcase == 3 && (cvar.acase == 3))
+				if (svar.Bcase == 3 && (cvar.acase == 2))
 				{
 					ldouble num = -Rij.dot(cvar.vInf);
 					ldouble denom = Rij.norm()*cvar.vInf.norm();
@@ -319,10 +320,10 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1,outl &outlist)
 			StateVecD Fd = ApplyAero(svar,fvar,cvar,pi,SurfC,size);
 
 			pi.Rrho = Rrhocontr; /*drho/dt*/
-			pi.f= contrib + SurfC/pi.m + Fd/pi.m;
+			pi.f= contrib + SurfC/pi.m + Fd;
 
 			pi.Sf = SurfC/pi.m;
-			pi.Af = Fd/pi.m;
+			pi.Af = Fd;
 			pi.f[1] -= 9.81; /*Add gravity*/
 
 			pnp1[i]=pi; //Update the actual structure
@@ -341,12 +342,12 @@ void DensityReinit(FLUID &fvar, State &pnp1, outl &outlist)
 	DensVecD one = DensVecD::Zero();
     one[0] = 1.0;
 
-	for(size_t i=0; i< pnp1.size(); ++i)
+	for(unsigned int i=0; i< pnp1.size(); ++i)
 	{
 		DensMatD A= DensMatD::Zero();
 		//Find matrix A.
 		Particle pi = pnp1[i];
-		for (size_t j=0; j< outlist[i].size(); ++j)
+		for (unsigned int j=0; j< outlist[i].size(); ++j)
 		{
 			Particle pj = pnp1[outlist[i][j]];
 			StateVecD Rij = pi.xi-pj.xi;
@@ -380,7 +381,7 @@ void DensityReinit(FLUID &fvar, State &pnp1, outl &outlist)
 
 		//Find corrected kernel
 		ldouble rho = 0.0;
-		for (size_t j=0; j< outlist[i].size(); ++j)
+		for (unsigned int j=0; j< outlist[i].size(); ++j)
 		{
 			StateVecD Rij = pi.xi-pnp1[outlist[i][j]].xi;
 			rho += pnp1[outlist[i][j]].m*W2Kernel(Rij.norm(),fvar.H,fvar.correc)*
