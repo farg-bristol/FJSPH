@@ -1,45 +1,46 @@
 # Compiler to use. In C++, so g++.
 CXX=g++
 
+CX8=g++-8
+
 # Libraries to include
-INC= 
+INC=
 
 # Compiler flags. If desired add -g for debugging info.
-CFLAGS= -g -std=c++11 -Wall -Wextra -fopenmp -lm -ffast-math -funroll-loops -O3
+CFLAGS=-std=c++11 -Wall -Wextra -ffast-math -funroll-loops -O3
 
-# Target executable
-TARGET = WCXSPH
+# Find the OS to execute correctly
+UNAME := $(shell uname)
+ifeq ($(UNAME), Linux)
+TARGET=WCXSPH# Target executable
+3DTARGET=WCXSPH
+else
+TARGET=WCXSPH.exe
+3DTARGET=WCXSPH.exe
+endif
+
+SOURCE=src/2D/WCXSPH.cpp
+#3DTARGET=WCXSPH
+3DSOURCE=src/3D/WCXSPH.cpp
+
 
 # Compile and Build
-build: WCXSPH.cpp
-	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $< 
+2D:
+	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE)
 
-# Windows run .exe
-win:
-	./$(TARGET).exe Input.dat 
+3D:
+	$(CXX) $(INC) -g $(CFLAGS) -o $(3DTARGET) $(3DSOURCE)
 
-#Crossflow run with different input file
-cross:
-	./$(TARGET).exe Cross.dat SurfaceLeft.plt
+#add debug flag
+debug:
+	$(CXX) $(INC) -g $(CFLAGS) -o $(TARGET) $(SOURCE)
 
-# Linux run without .exe
-linux: 
-	./$(TARGET) Input.dat
+test:
+	$(CX8) $(INC) -g $(CFLAGS) -o $(TARGET) $(SOURCE)
 
 clean:
-	$(RM) $(TARGET).exe
-
-new:
 	$(RM) $(TARGET)
-	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $< 
 
-3D	: WCXSPH3D.cpp
-	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $< 
-
-3Drun:
-	./$(TARGET).exe 3DInput.dat
-
-
-
-
-
+new: 
+	$(RM) $(TARGET)
+	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE)
