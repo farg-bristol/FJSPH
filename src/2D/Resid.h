@@ -105,7 +105,7 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 			case 1:	{  /*All upstream particles at start*/
 				if( pi.b == 2)
 				{
-					StateVecD Vdiff = cvar.vInf - pi.V;
+					StateVecD Vdiff = cvar.vInf - pi.v;
 					Fd = cvar.Acorrect*AeroForce(Vdiff, svar, fvar, cvar);
 				}
 
@@ -114,7 +114,7 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 			case 2:	{	/* All upstream particles */
 				if(pi.b == 2 /*&& */)
 				{
-					StateVecD Vdiff = cvar.vInf - pi.V;
+					StateVecD Vdiff = cvar.vInf - pi.v;
 					Fd = cvar.Acorrect*AeroForce(Vdiff, svar, fvar, cvar);
 				}
 				break;
@@ -122,7 +122,7 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 			case 3: { /*Surface particles, with correction based on surface normal*/
 				if (size < 35)
 				{
-					StateVecD Vdiff = cvar.vInf-pi.V;
+					StateVecD Vdiff = cvar.vInf-pi.v;
 					Fd = AeroForce(Vdiff, svar, fvar, cvar);
 					ldouble correc = 1.0;
 
@@ -148,7 +148,7 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 			{
 				if (size < 35)
 				{
-					StateVecD Vdiff = cvar.vInf-pi.V;
+					StateVecD Vdiff = cvar.vInf-pi.v;
 					Fd = AeroForce(Vdiff, svar, fvar, cvar);
 					ldouble correc = 1.0;
 					double Acorrect = 0.0;
@@ -163,7 +163,7 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 						correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
 					
 					/*Correct based on the number of neighbours*/
-					Acorrect = exp(-0.1936*double(size));
+					Acorrect = 0.999*exp(-0.2302*double(size))+0.001;
 					// cout << size << "  " << Acorrect << endl;
 
 					Fd = correc*Acorrect*Fd;
@@ -194,7 +194,7 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 					
 					
 					// cout << Vel[0] << "  " << Vel[1] << "  " << vortexP[0] << "  " << gam << endl; 
-					StateVecD Vdiff = Vel-pi.V;
+					StateVecD Vdiff = Vel-pi.v;
 					Fd = AeroForce(Vdiff, svar, fvar, cvar);
 
 					/*Correction based on surface normal*/
@@ -218,7 +218,7 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 	}
 	else if (svar.Bcase == 3 && pi.xi[1] < svar.Pstep)
 	{
-		StateVecD Vdiff = cvar.vJet - pi.V;
+		StateVecD Vdiff = cvar.vJet - pi.v;
 		ldouble Re = Vdiff.norm()*svar.Pstep*cvar.rhog/cvar.mug;
 		ldouble Cd = 0.1*(1+0.197*pow(Re,0.63)+2.6*pow(Re,1.38))*(24.0/(Re+0.0001));
 
@@ -231,9 +231,7 @@ StateVecD ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 ///**************** RESID calculation **************
 void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1,outl &outlist)
 {
-	svar.maxmu=0; 					/* CFL Parameter */
-	const static ldouble eps = fvar.eps; 		/* XSPH Influence Parameter*/
-	
+	svar.maxmu=0; 					/* CFL Parameter */	
 	
 /********* LOOP 1 - all points: Calculate numpartdens ************/
 	ldouble numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
@@ -265,7 +263,6 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1,outl &outlist)
 		for (unsigned int i=svar.bndPts; i< svar.totPts + svar.aircount; ++i)
 		{
 			Particle pi = pnp1[i];
-			pi.V = pi.v;
 			if (svar.Bcase == 3 && cvar.acase == 2)
 				pi.b = 2;
 
@@ -288,7 +285,6 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1,outl &outlist)
 				StateVecD Rij = pj.xi-pi.xi;
 				StateVecD Vij = pj.v-pi.v;
 				ldouble r = Rij.norm();
-				ldouble Kern = W2Kernel(r,fvar.H, fvar.correc);
 				StateVecD Grad = W2GradK(Rij, r,fvar.H, fvar.correc);
 
 				contrib += Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
@@ -298,10 +294,6 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1,outl &outlist)
 
 				/*Surface Tension - Nair & Poeschel (2017)*/
 				SurfC   -= SurfaceTens(fvar,pj,Rij,r,numpartdens);
-
-				/* XSPH Influence*/
-				ldouble rhoij = 0.5*(pi.rho+pj.rho);
-				pi.V += eps*(pj.m/rhoij)*Kern*Vij;
 
 				/*drho/dt*/
 				Rrhocontr -= pj.m*(Vij.dot(Grad));

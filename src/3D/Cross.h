@@ -16,45 +16,42 @@ void AddPoints(ldouble y, SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State 
 	StateVecD f = StateVecD::Zero();
 	ldouble rho=fvar.rho0;
 	ldouble jetS = svar.Start(0)+2*fvar.H;
-	ldouble jetE = jetS+svar.Start(1);
 	svar.nrefresh = 0;	
 	ldouble jetR = 0.5*(svar.Start(1));
 
 	/*Create the simulation particles*/
-	for (ldouble x = jetS; x<jetS + jetR; x+=svar.Pstep)
-	{ /*Do the left set of points*/
+	for (ldouble z = -jetR; z <= jetR; z+= svar.Pstep)
+	{ /*Do the centerline of points*/
+		StateVecD xi(-(jetS+jetR),y,z);
+		pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
+		pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
+		++svar.simPts;
+		++svar.nrefresh;
+	}
+
+	for (ldouble x = svar.Pstep; x < jetR ; x+=svar.Pstep)
+	{ /*Do the either side of the centerline*/
 		for (ldouble z = -jetR; z <= jetR; z+= svar.Pstep)
 		{
 			double r = (x-jetS-jetR); /*Normalise the circle around 0,0*/
 			// cout << (r*r)/(jetR*jetR) + (z*z)/(jetR*jetR) << endl;
 
-			if(((r*r)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
+			if(((x*x)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
     		{   /*If the point is inside the hole diameter, add it*/
-				StateVecD xi(x,y,z);
-				pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
-				pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
-				++svar.simPts;
-				++svar.nrefresh;
-			}
-		}
-		
-	}
-
-	ldouble start2 = pn.back().xi[0]+svar.Pstep;
-	for( ldouble x = start2; x<=jetE; x+=svar.Pstep)
-	{	/*Do the right set of points*/
-		for (ldouble z = -jetR; z <= jetR; z+= svar.Pstep)
-		{
-			double r = (x-jetS-jetR); /*Normalise the circle around 0,0*/
-			if(((r*r)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
-    		{   /*If the point is inside the hole diameter, add it*/
-				StateVecD xi(x,y,z);
+				StateVecD xi(r,y,z);
 				pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,1));
 				pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,1));
 				++svar.simPts;
 				++svar.nrefresh;
+				xi(0) = r-2*x;
+				pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
+				pnp1.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,2));
+				++svar.simPts;
+				++svar.nrefresh;
+
 			}
 		}
+		
 	}
 
 	svar.totPts += svar.nrefresh;

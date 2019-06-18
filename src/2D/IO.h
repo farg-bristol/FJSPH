@@ -208,7 +208,6 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 		svar.beta = 0.25;	svar.gamma = 0.5;
 		fvar.H= 2.0*svar.Pstep;
 	  	fvar.alpha = 0.1;
-  		fvar.eps = 0.05;
   		fvar.contangb = 150.0;
   		fvar.rho0 = 1000.0;
   		fvar.Cs = 100.0;

@@ -12,6 +12,7 @@
 #include "../Eigen/Core"
 #include "../Eigen/StdVector"
 #include "../Eigen/LU"
+// #include <vtkMarchingCubes.h>
 
 #include "Var.h"
 
@@ -20,7 +21,6 @@
 #endif
 
 using namespace std; 
-
 
 void write_header() 
 {
@@ -71,6 +71,8 @@ StateVecI getIVector(ifstream& In)
 	if (!sline)
 	{	
 		cout << "2D input provided. Please provide a 3D file." << endl;
+		cout << "Incorrect line:" << endl;
+		cout << sline.str() << endl;
 		exit(-1);
 	}
 
@@ -89,8 +91,23 @@ StateVecD getDVector(ifstream& In)
 	if (!sline)
 	{	
 		cout << "2D input provided. Please provide a 3D file." << endl;
+		cout << "Incorrect line:" << endl;
+		cout << sline.str() << endl;
 		exit(-1);
 	}
+		
+	return x;
+}
+
+/*Function for a 2D Vector (e.g. Newmark Beta parameters)*/
+StateVecD getvector(ifstream& In)
+{
+	string line;
+	getline(In,line);
+	std::istringstream sline(line);
+	
+	StateVecD x;
+	sline >> x[0]; sline >> x[1]; 
 		
 	return x;
 }
@@ -114,6 +131,22 @@ void DefaultInput(SIM &svar)
 	svar.Bstep = 0.6; 		/*Boundary factor of particle spacing (dx = Pstep*Bstep)*/
 	svar.Bcase = 1; 		/*Boundary case - Rectangle */
 	
+}
+
+void GetAero(FLUID &fvar, ldouble rad)
+{
+	fvar.avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
+	fvar.avar.td = (2.0*fvar.rho0*fvar.avar.L*fvar.avar.L)/(fvar.avar.Cd*fvar.mu);
+	fvar.avar.omega = sqrt((fvar.avar.Ck*fvar.sig)/(fvar.rho0*pow(fvar.avar.L,3.0))-1.0/pow(fvar.avar.td,2.0));
+
+	fvar.avar.tmax = -2.0 *(atan(sqrt(pow(fvar.avar.td*fvar.avar.omega,2.0)+1)
+					+fvar.avar.td*fvar.avar.omega) - M_PI)/fvar.avar.omega;
+
+	fvar.avar.Cdef = 1.0 - exp(-fvar.avar.tmax/fvar.avar.td)*(cos(fvar.avar.omega*fvar.avar.tmax)+
+		1/(fvar.avar.omega*fvar.avar.td)*sin(fvar.avar.omega*fvar.avar.tmax));
+	fvar.avar.ycoef = 0.5*fvar.avar.Cdef*(fvar.avar.Cf/(fvar.avar.Ck*fvar.avar.Cb))*(fvar.rhog*fvar.avar.L)/fvar.sig;
+
+	//cout << fvar.avar.ycoef << "  " << fvar.avar.Cdef << "  " << fvar.avar.tmax << "  " << endl;
 }
 
 void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
@@ -152,7 +185,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	  		svar.Pstep = getDouble(in);
 	  		svar.Bstep = getDouble(in);
 	  		svar.Bcase = getInt(in);
-	  		if(svar.Bcase == 3)
+	  		if(svar.Bcase >= 3)
 	  		{
 	  			cvar.acase = getInt(in);
 		  		cvar.vJet = getDVector(in); 
@@ -165,14 +198,13 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 		  			cvar.b = getDouble(in);
 		  			cvar.h2 = getDouble(in);
 		  		}
-		  		else if(cvar.acase > 5)
+		  		
+		  		if(cvar.acase > 6)
 		  		{
 		  			cout << "Aerodynamic case is not in design. Stopping..." << endl;
 		  			exit(-1);
 		  		}
 	  		}
-	  		
-	  		
 			in.close();
 	  	}
 	  	else {
@@ -185,18 +217,17 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	std::ifstream fluid("Fluid.dat");
 	if (fluid.is_open())
 	{	/*Fluid parameters read*/
-		StateVecD nb = getDVector(fluid);
+		StateVecD nb = getvector(fluid);
 		svar.beta = nb[0];	svar.gamma = nb[1];
 		double Hfac = getDouble(fluid); /*End of state read*/
 	  	fvar.H= Hfac*svar.Pstep;
 	  	fvar.alpha = getDouble(fluid);
-  		fvar.eps = getDouble(fluid);
   		fvar.contangb = getDouble(fluid);
   		fvar.rho0 = getDouble(fluid);
-  		cvar.rhog = getDouble(fluid);
+  		fvar.rhog = getDouble(fluid);
   		fvar.Cs = getDouble(fluid);
   		fvar.mu = getDouble(fluid);
-  		cvar.mug = getDouble(fluid);
+  		fvar.mug = getDouble(fluid);
   		fvar.sig = getDouble(fluid);
 
   		fluid.close();
@@ -207,14 +238,13 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 		svar.beta = 0.25;	svar.gamma = 0.5;
 		fvar.H= 2.0*svar.Pstep;
 	  	fvar.alpha = 0.1;
-  		fvar.eps = 0.05;
   		fvar.contangb = 150.0;
   		fvar.rho0 = 1000.0;
   		fvar.Cs = 100.0;
   		fvar.mu = 1.0;
   		fvar.sig = 0.0728;
-  		cvar.rhog = 1.225;
-  		cvar.mug = 18.5E-06;
+  		fvar.rhog = 1.225;
+  		fvar.mug = 18.5E-06;
 	}
 
   	/*Universal parameters based on input values*/
@@ -227,19 +257,25 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
   		fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
   	else if(simDim == 3)
   		fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+  	else
+  	{
+  		cout << "Simulation Dimension mismatch. Stopping" << endl;
+  		exit(-1);
+  	}
 
 	fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
 	svar.Bclosed = 0; 		/*Boundary begins open*/
   	svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
-  	svar.aircount = 0;
 
   	/*Mass from spacing and density*/
 	fvar.Simmass = fvar.rho0*pow(svar.Pstep,simDim); 
-	fvar.Boundmass = fvar.Simmass*svar.Bcase;
-	
+	fvar.Boundmass = fvar.Simmass;
+	fvar.volume = pow(svar.Pstep,simDim);
 	fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
 	fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
+
 	svar.vortex.GetGamma(cvar.vInf);
+	GetAero(fvar, fvar.H);
 }
 
 /******************* OUTPUTS *********************/
@@ -300,15 +336,15 @@ void write_fluid_data(std::ofstream& fp, SIM &svar, State &pnp1)
 {	
 	if (svar.Bcase >0)
 	{
-			fp <<  "ZONE T=\"Boundary Data\"" << ", I=" << svar.bndPts << ", F=POINT" <<
-		    ", STRANDID=1, SOLUTIONTIME=" << svar.t << std::endl;
-		  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
-			{
-		        fp << b->xi[0] << " " << b->xi[1] << " " << b->xi[2] << " ";
-		        fp << b->v.norm() << " ";
-		        fp << b->f.norm() << " ";
-		        fp << b->rho << " "  << b->p << std::endl;
-		  	}
+		fp <<  "ZONE T=\"Boundary Data\"" << ", I=" << svar.bndPts << ", F=POINT" <<
+	    ", STRANDID=1, SOLUTIONTIME=" << svar.t << std::endl;
+	  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
+		{
+	        fp << b->xi[0] << " " << b->xi[1] << " " << b->xi[2] << " ";
+	        fp << b->v.norm() << " ";
+	        fp << b->f.norm() << " ";
+	        fp << b->rho << " "  << b->p << std::endl;
+	  	}
 	}
     
     fp <<  "ZONE T=\"Particle Data\"" <<", I=" << svar.simPts << ", F=POINT" <<
@@ -326,12 +362,12 @@ void write_basic_data(std::ofstream& fp, SIM &svar, State &pnp1)
 {	
 	if (svar.Bcase >0)
 	{
-			fp <<  "ZONE T=\"Boundary Data\"" << ", I=" << svar.bndPts << ", F=POINT" <<
-		    ", STRANDID=1, SOLUTIONTIME=" << svar.t << std::endl;
-		  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
-			{
-		        fp << b->xi[0] << " " << b->xi[1] << " " << b->xi[2] << std::endl;
-		  	}
+		fp <<  "ZONE T=\"Boundary Data\"" << ", I=" << svar.bndPts << ", F=POINT" <<
+	    ", STRANDID=1, SOLUTIONTIME=" << svar.t << std::endl;
+	  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
+		{
+	        fp << b->xi[0] << " " << b->xi[1] << " " << b->xi[2] << std::endl;
+	  	}
 	}
     
     fp <<  "ZONE T=\"Particle Data\"" <<", I=" << svar.simPts << ", F=POINT" <<
@@ -340,7 +376,24 @@ void write_basic_data(std::ofstream& fp, SIM &svar, State &pnp1)
 	{
         fp << p->xi(0) << " " << p->xi(1) << " " << p->xi[2] << std::endl;  
   	}
+}
 
+void write_VLM_Panels(SIM &svar)
+{
+	if(svar.Bcase == 4)
+  	{
+  		std::ofstream fp("VLM_Panels.plt", std::ios::out);
+  		fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\""<< std::endl;
+  		for (auto p:svar.vortex.panelData)
+		{
+			fp << "ZONE" << endl;
+	        fp << p.p1(0) << " " << p.p1(1) << " " << p.p1(2) << std::endl;
+	        fp << p.p2(0) << " " << p.p2(1) << " " << p.p2(2) << std::endl;
+	        fp << p.p3(0) << " " << p.p3(1) << " " << p.p3(2) << std::endl;
+	        fp << p.p4(0) << " " << p.p4(1) << " " << p.p4(2) << std::endl;
+	        fp << p.p1(0) << " " << p.p1(1) << " " << p.p1(2) << std::endl;  
+	  	}
+  	}
 }
 
 void write_file_header(std::ofstream& fp, SIM &svar, State &pnp1)

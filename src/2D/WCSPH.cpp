@@ -62,49 +62,41 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 		svar.dt = svar.framet;
 
 	/*Save pnp1 state in case of instability.*/
-	State backup = pnp1;
+	
 	vector<StateVecD> xih(svar.totPts);
-	// int RestartCount = 0;
+
 	while (log10(sqrt(errsum/(double(svar.totPts)))) - logbase > -7.0)
 	{
-		/****** UPDATE TREE ***********/
-		NP1_INDEX.index->buildIndex();
-		FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
-
 		// cout << "K: " << k << endl;
 		Forces(svar,fvar,cvar,pnp1,outlist); /*Guess force at time n+1*/
 
 		/*Previous State for error calc*/
-		for (size_t  i=0; i< svar.totPts; ++i)
+		for (uint  i=0; i< svar.totPts; ++i)
 			xih[i] = pnp1[i].xi;
 
 		/*Update the state at time n+1*/
-		for (size_t i=0; i <svar.bndPts; ++i)
+		for (uint i=0; i <svar.bndPts; ++i)
 		{	/****** BOUNDARY PARTICLES ***********/
 			pnp1[i].rho = pn[i].rho+0.5*svar.dt*(pn[i].Rrho+pnp1[i].Rrho);
 			pnp1[i].p = fvar.B*(pow(pnp1[i].rho/fvar.rho0,fvar.gam)-1);
 		}
 
-		for (size_t i=svar.bndPts; i < svar.totPts ; ++i )
+		for (uint i=svar.bndPts; i < svar.totPts ; ++i )
 		{	/****** FLUID PARTICLES ***********/
 			pnp1[i].v = pn[i].v+svar.dt*((1-svar.gamma)*pn[i].f+svar.gamma*pnp1[i].f);
 			pnp1[i].rho = pn[i].rho+svar.dt*((1-svar.gamma)*pn[i].Rrho+svar.gamma*pnp1[i].Rrho);
-			pnp1[i].xi = pn[i].xi+svar.dt*pn[i].V+0.5*(svar.dt*svar.dt)*(1-2*svar.beta)*pn[i].f
+			pnp1[i].xi = pn[i].xi+svar.dt*pn[i].v+0.5*(svar.dt*svar.dt)*(1-2*svar.beta)*pn[i].f
 							+(svar.dt*svar.dt*svar.beta)*pnp1[i].f;
 			pnp1[i].p = fvar.B*(pow(pnp1[i].rho/fvar.rho0,fvar.gam)-1);
-
-			// if (pnp1[i].xi(0) != pnp1[i].xi(0))
-			// {
-			// 	cerr << "Oops. Something went wrong... Stopping." << endl;
-			// 	exit(-1);
-			// }
 		}
 
-		
+		/****** UPDATE TREE ***********/
+		NP1_INDEX.index->buildIndex();
+		FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
 
 		/****** FIND ERROR ***********/
 		errsum = 0.0;
-		for (size_t i=svar.bndPts; i < svar.totPts; ++i)
+		for (uint i=svar.bndPts; i < svar.totPts; ++i)
 		{
 			StateVecD r = pnp1[i].xi-xih[i];
 			errsum += r.squaredNorm();
@@ -113,29 +105,28 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 		if(k == 0)
 			logbase=log10(sqrt(errsum/(double(svar.totPts))));
 
+		
 
 		error1 = log10(sqrt(errsum/(double(svar.totPts)))) - logbase;
-		// cout << RestartCount << "  " << k << "  " << error1  << "  " << svar.dt << endl;
+		// cout << k << "  " << error1  << endl;
 
 		if (error1-error2 > 0.0)
 		{	/*If simulation starts diverging, then reduce the timestep and try again.*/
 			// cout << "Unstable timestep. Reducing timestep..." << endl;
-			pnp1 = backup;
+			pnp1 = pn;
 			svar.dt = 0.5*svar.dt;
 			k = 0;
 			error1 = 0.0;
-			// RestartCount++;
-		}	/*Check if we've exceeded the maximum iteration count*/
-		else if (k > svar.subits)
-			break;
-		else
-		{	/*Otherwise, roll forwards*/
-			++k;
 		}
-		error2 = error1;	
+		error2 = error1;
+
+		/*Check if we've exceeded the maximum iteration count*/
+
+		if(k > svar.subits)
+			break;
+		++k;
 	}
 
-	// RestartCount = 0;
 	/*Add time to global*/
 	svar.t+=svar.dt;
 
@@ -150,7 +141,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 			case 0:
 			{
 				int refresh = 1;
-				for (size_t i = svar.totPts-svar.nrefresh; i<svar.totPts; ++i)
+				for (uint i = svar.totPts-svar.nrefresh; i<svar.totPts; ++i)
 				{	/*Check that the starting area is clear first...*/
 					if(pn[i].xi[1]<svar.Pstep-svar.Box[1])
 						refresh = 0;
@@ -160,24 +151,23 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 				{	/*...If it is, then check if we've exceeded the max points...*/
 					if (svar.addcount < svar.nmax)
 					{	/*...If we havent, then add points. */
-						// cout << "adding points..." << endl;
 						AddPoints(pnp1[svar.totPts-1].xi[1]-svar.Pstep, svar, fvar, cvar, pn, pnp1);
 					}
 					else
 					{	/*...If we have, then check we're sufficiently
 						clear to close the boundary*/
-						for (size_t i = svar.totPts-svar.nrefresh; i<svar.totPts; ++i)
+						for (uint i = svar.totPts-svar.nrefresh; i<svar.totPts; ++i)
 						{
 							if(pn[i].xi(1)<fvar.H*2)
 								refresh = 0;
 						}
 						if (refresh ==1)
 						{
-							CloseBoundary(svar, fvar, pn, pnp1);
+							cout << "End of adding particle rounds. Stopping..." << endl;
 							svar.Bclosed = 1;
+							exit(0);
 						}
 					}
-					Sim_Tree NP1_INDEX(2,pnp1,10);
 					NP1_INDEX.index->buildIndex();
 					FindNeighbours(NP1_INDEX, fvar, pnp1,outlist);
 				}
@@ -214,7 +204,7 @@ int main(int argc, char *argv[])
 	GetInput(argc,argv,svar,fvar,cvar);
 
 	/*Make a guess of how many there will be...*/
-	int partCount = ParticleCount(svar);
+	int partCount = ParticleCount(svar,fvar);
     ///****** Initialise the particles memory *********/
 	State pn;	    /*Particles at n   */
 	State pnp1; 	/*Particles at n+1 */
@@ -259,8 +249,10 @@ int main(int argc, char *argv[])
 	if (f1.is_open())
 	{
 		f1 << std::scientific << setprecision(5);
-		f2 << std::scientific<< setw(10);
-		f3 << std::scientific << setw(10);
+		if(f2.is_open())
+			f2 << std::scientific<< setw(10);
+		if(f3.is_open())
+			f3 << std::scientific << setw(10);
 
 
 		/* Write file header defining variable names */
@@ -277,7 +269,7 @@ int main(int argc, char *argv[])
 
 		///************************* MAIN LOOP ********************/
 
-		for (unsigned int frame = 1; frame<= svar.Nframe; ++frame)
+		for (uint frame = 1; frame<= svar.Nframe; ++frame)
 		{
 			int stepits=0;
 			double stept=0.0;
@@ -286,6 +278,9 @@ int main(int argc, char *argv[])
 			    error = Newmark_Beta(NP1_INDEX,svar,fvar,cvar,pn,pnp1,outlist);
 			    stept+=svar.dt;
 			    ++stepits;
+
+			    if(stepits % 20 == 0 )
+			    	DensityReinit(fvar, pnp1, outlist);
 			    //cout << svar.t << "  " << svar.dt << endl;
 			}
 
@@ -310,7 +305,7 @@ int main(int argc, char *argv[])
 			}
 
 
-			DensityReinit(fvar, pnp1, outlist);
+			
 			switch (svar.outform)
 			{
 				case 1:

@@ -22,6 +22,7 @@
 /* but neighbour search won't have it...       */
 constexpr int simDim = 2;
 typedef double ldouble;
+typedef unsigned int uint;
 
 /****** Eigen vector definitions ************/
 typedef Eigen::Matrix<ldouble,simDim,1> StateVecD;
@@ -35,17 +36,17 @@ typedef Eigen::Matrix<ldouble, simDim+1, simDim+1> DensMatD;
 /*Simulation parameters*/
 typedef struct SIM {
 	StateVecI xyPART; 						/*Starting sim particles in x and y box*/
-	unsigned int simPts,bndPts,totPts;	    /*Simulation particles, Boundary particles, total particles*/
-	unsigned int nrefresh; 					/*Crossflow refresh particle number*/
-	unsigned int nmax;                      /*Max add-particle calls*/
-	unsigned int outframe;	                /*Terminal output frame interval*/
-	unsigned int addcount;					/*Current Number of add-particle calls*/
-	unsigned int aircount;					/*Ghost particle count*/
+	uint simPts,bndPts,totPts;	    /*Simulation particles, Boundary particles, total particles*/
+	uint nrefresh; 					/*Crossflow refresh particle number*/
+	uint nmax;                      /*Max add-particle calls*/
+	uint outframe;	                /*Terminal output frame interval*/
+	uint addcount;					/*Current Number of add-particle calls*/
+	uint aircount;					/*Ghost particle count*/
 	double Pstep,Bstep;						/*Initial spacings for particles and boundary*/
 	StateVecD Box;							/*Box dimensions*/
 	StateVecD Start; 						/*Sim box bottom left coordinate*/
-	unsigned int subits;                    /*Max number of sub-iterations*/
-	unsigned int Nframe; 			        /*Max number of frames to output*/
+	uint subits;                    /*Max number of sub-iterations*/
+	uint Nframe; 			        /*Max number of frames to output*/
 	double dt, t, framet;					/*Timestep, Simulation + frame times*/
 	double beta,gamma;						/*Newmark-Beta Parameters*/
 	double maxmu;                           /*Maximum viscosity component (CFL)*/
@@ -60,7 +61,7 @@ typedef struct FLUID {
 	ldouble rho0; 						/*Resting Fluid density*/
 	ldouble Simmass, Boundmass;			/*Particle and boundary masses*/
 	ldouble correc;						/*Smoothing Kernel Correction*/
-	ldouble alpha,eps,Cs,mu;			/*}*/
+	ldouble alpha,Cs,mu;			/*}*/
 	ldouble sig;							/*} Fluid properties*/
 	ldouble gam, B; 						/*}*/
 	ldouble contangb;					/*Boundary contact angle*/
@@ -92,7 +93,7 @@ typedef class Particle {
 			ldouble Rhoi, ldouble Mi, int bound)
 		{
 			xi = X;	v = Vi; f = Fi;
-			V(0.0,0.0);	Sf(0.0,0.0); Af(0.0,0.0);
+			Sf(0.0,0.0); Af(0.0,0.0);
 			rho = Rhoi;
 			Rrho = 0;
 			m = Mi;
@@ -111,14 +112,14 @@ typedef class Particle {
 			return(xi[a]);
 		}
 
-		StateVecD xi, v, V, f, Sf, Af;
+		StateVecD xi, v, f, Sf, Af;
 		ldouble rho, p, Rrho, m, theta;
 		int b; //What state is a particle. Boundary, forced particle or unforced
 }Particle;
 typedef std::vector<Particle> State;
 
 /* Neighbour search tree containers */
-typedef std::vector<std::vector<unsigned int>> outl;
+typedef std::vector<std::vector<uint>> outl;
 typedef KDTreeVectorOfVectorsAdaptor<State, ldouble> Sim_Tree;
 typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,ldouble> Temp_Tree;
 
