@@ -191,7 +191,6 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 		double Hfac = getDouble(fluid); /*End of state read*/
 	  	fvar.H= Hfac*svar.Pstep;
 	  	fvar.alpha = getDouble(fluid);
-  		fvar.eps = getDouble(fluid);
   		fvar.contangb = getDouble(fluid);
   		fvar.rho0 = getDouble(fluid);
   		cvar.rhog = getDouble(fluid);

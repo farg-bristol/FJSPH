@@ -11,6 +11,7 @@
 
 #include <chrono>
 
+
 #include "Var.h"
 #include "IO.h"
 #include "Kernel.h"
@@ -164,7 +165,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 // cout << "New Timestep: " << svar.dt << endl;
 
 	/*Check if more particles need to be created*/
-	if(svar.Bcase >= 3)
+	if(svar.Bcase >= 3 && svar.Bcase !=5)
 	{
 		switch(svar.Bclosed)
 		{
@@ -173,7 +174,8 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 				int refresh = 1;
 				for (uint i = svar.totPts-svar.nrefresh; i<svar.totPts; ++i)
 				{	/*Check that the starting area is clear first...*/
-					if(pn[i].xi[1]<svar.Pstep-svar.Box[1])
+					StateVecD vec = svar.Rotate.transpose()*(pn[i].xi-svar.Start);
+					if(vec[1]< svar.dx-svar.Jet(1))
 						refresh = 0;
 				}
 
@@ -182,22 +184,15 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 					if (svar.addcount < svar.nmax)
 					{	/*...If we havent, then add points. */
 						// cout << "adding points..." << endl;
-						AddPoints(pnp1[svar.totPts-1].xi[1]-svar.Pstep, svar, fvar, cvar, pn, pnp1);
+						StateVecD vec = svar.Rotate.transpose()*(pn[svar.totPts-1].xi-svar.Start);
+						AddPoints(vec[1]-svar.dx, svar, fvar, cvar, pn, pnp1);
 					}
 					else
 					{	/*...If we have, then check we're sufficiently
 						clear to close the boundary*/
-						for (uint i = svar.totPts-svar.nrefresh; i<svar.totPts; ++i)
-						{
-							if(pn[i].xi(1)<fvar.H*2)
-								refresh = 0;
-						}
-						if (refresh ==1)
-						{
-							cout << "End of adding particle rounds. Stopping..." << endl;
-							svar.Bclosed = 1;
-							exit(0);
-						}
+						cout << "End of adding particle rounds. Stopping..." << endl;
+						svar.Bclosed = 1;
+						
 					}
 					NP1_INDEX.index->buildIndex();
 					FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
@@ -220,7 +215,9 @@ int main(int argc, char *argv[])
 {
 	high_resolution_clock::time_point t1 = high_resolution_clock::now();
 	high_resolution_clock::time_point t2;
-	// Eigen::initParallel();
+	Eigen::initParallel();
+	omp_set_num_threads(nthreads);
+
     double duration;
     double error = 0;
     cout << setw(5);
@@ -245,19 +242,9 @@ int main(int argc, char *argv[])
 	pn.reserve(partCount);
   	pnp1.reserve(partCount);
 
-
-	std::ofstream f1;
-	/*Check for output file name*/
-	if(argc == 3)
-	{	/*Open that file if it has*/
-		f1.open(argv[2], std::ios::out);
-	}
-	else
-	{	/*Otherwise, open a standard file name*/
-		cout << "\tWARNING: output file not provided.\nWill write to Test.plt" << endl;
-		f1.open("Test.plt", std::ios::out);
-	}
-
+  	std::ofstream f1;
+	MakeOutputDir(argc,argv,svar,f1);
+	
 	InitSPH(svar,fvar,cvar, pn, pnp1);
 
 	///********* Tree algorithm stuff ************/
@@ -293,7 +280,8 @@ int main(int argc, char *argv[])
 
 		/* Write file header defining variable names */
 		write_file_header(f1,svar,pnp1);
-		write_VLM_Panels(svar);
+		if(svar.Bcase == 4)
+			svar.vortex.write_VLM_Panels(svar.outfolder);
 
 		/*Timing calculation + error sum output*/
 		t2 = high_resolution_clock::now();

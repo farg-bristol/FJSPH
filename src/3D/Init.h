@@ -32,114 +32,102 @@ int ParticleCount(SIM &svar)
 			partCount += svar.simPts; /*Simulation pn*/
 			break;
 		case 3:
-		{	/*Boundary Points*/
-			ldouble holeS = svar.Start(0); /*Distance from Box start to hole*/
-			ldouble holeD = svar.Start(1)+4*svar.Pstep; /*Diameter of hole (or width)*/
-			
+		{	
+			ldouble holeD = svar.Jet(0)+4*svar.Pstep; /*Diameter of hole (or width)*/
 			ldouble stepb = (svar.Pstep*svar.Bstep);
-			int Nx = ceil((holeS)/stepb);
-			stepb = holeS/(1.0*Nx);
-			int Nz = ceil((svar.Box(2)/stepb));
-
-			/* Trivial values*/			
-			int preHole = (Nx+1)*Nz;
-			int postHole = (ceil((svar.Box(0)-holeS-holeD)/stepx)+1)*Nz;
-
-			/*Find how many points would be there without the hole*/
-            int minusHole = (ceil(holeD/stepb)+1)*Nz;
-
-            /*Find how many points would be in the circle*/
-            int holeCount = 0;
-            for (ldouble x = -0.5*holeD; x <= 0.5*holeD; x+=stepb)
-            {
-            	for(ldouble z = -0.5*holeD; z <= 0.5*holeD; z+=stepb)
-            	{
-	            	if((x*x)/(0.25*holeD*holeD) + (z*z)/(0.25*holeD*holeD) < 1 )
-	                        ++holeCount;
-            	}
-            }
 
             /*Find the points on the side of the pipe (Assume a circle)*/
             float dtheta = atan((stepb)/(0.5*holeD));
+            Ny = ceil(svar.Jet(1)/stepb);
             int holeWall = ceil(2*M_PI/dtheta)*Ny;
-
-            int holeBound = minusHole - holeCount + holeWall;
 
 			/*Simulation Points*/
 			int simCount = 0;
-			holeD = svar.Start(1);
-			for (ldouble x = -0.5*holeD; x <= 0.5*holeD; x+=stepb)
-            {
-            	for(ldouble z = -0.5*holeD; z <= 0.5*holeD; z+=stepb)
-            	{
-	            	if((x*x)/(0.25*holeD*holeD) + (z*z)/(0.25*holeD*holeD) < 1 )
-	                        ++simCount;
-            	}
-            }
+			ldouble jetR = 0.5*(svar.Jet(0));
+			
+			/*Do the centerline of points*/
+			for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
+				simCount++;
+
+			for (ldouble x = svar.dx; x < jetR ; x+=svar.dx)
+			{ /*Do the either side of the centerline*/
+				for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
+				{	/*If the point is inside the hole diameter, add it*/
+					if(((x*x)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
+		    			simCount += 2;
+				}
+			}
 
 			/*Need to add the pn already present*/
-			int simPts = simCount*svar.nmax + simCount*ceil(svar.Box[1]/svar.Pstep);
+			int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
 
-			partCount = preHole + holeBound + postHole + simPts;
+			partCount = holeWall + simPts;
 			
 			break;
 		}
 
 		case 4:
-		{	/*Boundary Points*/
-			ldouble holeS = svar.Start(0); /*Distance from Box start to hole*/
-			ldouble holeD = svar.Start(1)+4*svar.Pstep; /*Diameter of hole (or width)*/
-			
+		{	
+			ldouble holeD = svar.Jet(0)+4*svar.Pstep; /*Diameter of hole (or width)*/
 			ldouble stepb = (svar.Pstep*svar.Bstep);
-			int Nx = ceil((holeS)/stepb);
-			stepb = holeS/(1.0*Nx);
-			int Nz = ceil((svar.Box(2)/stepb));
-
-			/* Trivial values*/			
-			int preHole = (Nx+1)*Nz;
-			int postHole = (ceil((svar.Box(0)-holeS-holeD)/stepx)+1)*Nz;
-
-			/*Find how many points would be there without the hole*/
-            int minusHole = (ceil(holeD/stepb)+1)*Nz;
-
-            /*Find how many points would be in the circle*/
-            int holeCount = 0;
-            for (ldouble x = -0.5*holeD; x <= 0.5*holeD; x+=stepb)
-            {
-            	for(ldouble z = -0.5*holeD; z <= 0.5*holeD; z+=stepb)
-            	{
-	            	if((x*x)/(0.25*holeD*holeD) + (z*z)/(0.25*holeD*holeD) < 1 )
-	                        ++holeCount;
-            	}
-            }
 
             /*Find the points on the side of the pipe (Assume a circle)*/
-            float dtheta = atan((stepb)/(0.5*holeD));
+            double dtheta = atan((stepb)/(0.5*holeD));
+            Ny = ceil(svar.Jet(1)/stepb);
             int holeWall = ceil(2*M_PI/dtheta)*Ny;
-
-            int holeBound = minusHole - holeCount + holeWall;
 
 			/*Simulation Points*/
 			int simCount = 0;
-			holeD = svar.Start(1);
-			for (ldouble x = -0.5*holeD; x <= 0.5*holeD; x+=stepb)
-            {
-            	for(ldouble z = -0.5*holeD; z <= 0.5*holeD; z+=stepb)
-            	{
-	            	if((x*x)/(0.25*holeD*holeD) + (z*z)/(0.25*holeD*holeD) < 1 )
-	                        ++simCount;
-            	}
-            }
+			ldouble jetR = 0.5*(svar.Jet(0));
+			
+			/*Do the centerline of points*/
+			for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
+				simCount++;
+
+			for (ldouble x = svar.dx; x < jetR ; x+=svar.dx)
+			{ /*Do the either side of the centerline*/
+				for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
+				{	/*If the point is inside the hole diameter, add it*/
+					if(((x*x)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
+		    			simCount += 2;
+				}
+			}
 
 			/*Need to add the pn already present*/
-			int simPts = simCount*svar.nmax + simCount*ceil(svar.Box[1]/svar.Pstep);
+			int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
 
-			partCount = preHole + holeBound + postHole + simPts;
+			partCount = holeWall + simPts;
 			
 			break;
 		}
 
-			
+		case 5:
+		{
+			uint simCount = 0;
+			ldouble radius = 0.5*svar.Start(1);
+			for (ldouble y = -radius; y <= radius; y+=svar.dx)
+			{	
+				ldouble xradius = sqrt(radius*radius - y*y);
+				for (ldouble z = -xradius; z <= xradius; z+= svar.dx)
+				{ /*Do the centerline of points*/
+					++simCount;
+				}
+
+				for (ldouble x = svar.dx; x <= xradius ; x+=svar.dx)
+				{ /*Do the either side of the centerline*/
+					for (ldouble z = -xradius; z <= xradius; z+= svar.dx)
+					{
+						if(((x*x) + (z*z) + (y*y)) <= (radius*radius))
+			    		{   /*If the point is inside the hole diameter, add it*/
+							++simCount;
+							++simCount;
+						}
+					}	
+				}
+			}
+			partCount = simCount;
+			break;
+		}		
 	}
 	
 	return partCount;
@@ -165,9 +153,9 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 	
 	//Structure input initialiser
 	//Particle(StateVecD x, StateVecD v, StateVecD vh, StateVecD f, float rho, float Rrho, bool bound) :
-	StateVecD v = StateVecD::Zero();  
-	StateVecD f = StateVecD::Zero(); 
-	ldouble rho=fvar.rho0;  
+	StateVecD v = StateVecD::Zero();   
+	ldouble rho=fvar.rho0;
+	ldouble press = fvar.B*(pow(rho/fvar.rho0,fvar.gam)-1);  
 	 
 /************** Create the boundary pn  *****************/ 	 
 	ldouble stepx = svar.Pstep*svar.Bstep;
@@ -196,9 +184,9 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 				for (int k=0; k<=Nz; ++k) 
 				{	/*Create Left and right boundary faces*/
 					StateVecD xi(0.0,j*stepy,k*stepz);
-					pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
 					xi(0) = svar.Box(0);
-					pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
 				}
 				
 			}
@@ -207,7 +195,7 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 				for (int j=1; j<Ny; ++j)
 				{	/*Create top and bottom boundary faces*/
 					StateVecD xi(i*stepx,j*stepy,0);
-					pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
 					// xi(2)= Box(2); //Top boundary (Typically omitted)
 					// pn.emplace_back(Particle(xi,v,f,rho,Rrho,Boundmass,0));
 				}
@@ -218,9 +206,9 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 				for(int k = 0; k <= Nz; ++k) 
 				{	/*Create far and near boundary*/
 					StateVecD xi(i*stepx, 0, k*stepz);
-					pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
 					xi(1) = svar.Box(1);
-					pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
 				}
 			}		
 			break;
@@ -239,58 +227,22 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 		// }
 		case 3:
 		{	/*Jet in Crossflow*/
-			ldouble holeS = svar.Start(0); /*Distance from Box start to hole*/
-			ldouble holeD = svar.Start(1)+4*fvar.H; /*Diameter of hole (or width)*/
-			ldouble stepb = (svar.Pstep*svar.Bstep);
-			int Nb = ceil((holeS)/stepb);
-			stepb = holeS/(1.0*Nb);
 			
-			// cout << "Bound x-cond: " << svar.Box(0) << " Y-cond: " << svar.Box(1) << " z-cond: " << svar.Box(2) << endl;
-
-			// /*Pre Hole*/
-			// for (ldouble x=0.0; x<holeS; x+= stepb)
-			// {
-			// 	for (ldouble z = -0.5*svar.Box(2); z <= 0.5*svar.Box(2); z+=stepb)
-			// 	{
-			// 		StateVecD xi(x,0.0,z);
-			// 		pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
-			// 	}
-			// }
-
-			// /*Plate around the hole*/
-			// for (ldouble x=holeS; x<holeS+holeD; x+= stepb)
-			// {
-			// 	for (ldouble z = -0.5*svar.Box(2); z <= 0.5*svar.Box(2); z+=stepb)
-			// 	{
-			// 		ldouble r = (x-holeS-0.5*holeD); /*Normalise the circle around 0,0*/
-			// 		if((r*r)/(0.25*holeD*holeD) + (z*z)/(0.25*holeD*holeD) >= 1.0 )
-			// 		{	/*If the point is outside the hole diameter, add it*/
-			// 			StateVecD xi(x,0.0,z);
-			// 			pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
-			// 		}
-			// 	}
-			// }
-
-			// /*Post Hole*/
-			// for (ldouble x=holeS+holeD; x<svar.Box(0); x+= stepb)
-			// {
-			// 	for (ldouble z = -0.5*svar.Box(2); z <= 0.5*svar.Box(2); z+=stepb)
-			// 	{
-			// 		StateVecD xi(x,0.0,z);
-			// 		pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
-			// 	}
-			// }
-
-
+			ldouble holeD = svar.Jet(1)+4*fvar.H; /*Diameter of hole (or width)*/
+			ldouble stepb = (svar.Pstep*svar.Bstep);
+			
 			/*Create a bit of the pipe downward.*/
 			double r = 0.5*holeD;
         	double dtheta = atan((stepb)/(r));
-			for (ldouble y = -stepb; y >= -svar.Box(1)-stepb; y-=stepb)			
+			for (ldouble y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)			
 			{	
 				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
-					StateVecD xi(-r*(1-cos(theta))-holeS, y, r*sin(theta));
-					pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
+					StateVecD xi(-r*(1-cos(theta)), y, r*sin(theta));
+					/*Apply Rotation...*/
+					xi = svar.Rotate*xi;
+					xi += svar.Start;
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
 				}
 				
 			}
@@ -299,67 +251,34 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 		}
 		case 4:
 		{	/*Jet in VLM*/
-			ldouble holeS = svar.Start(0); /*Distance from Box start to hole*/
-			ldouble holeD = svar.Start(1)+4*fvar.H; /*Diameter of hole (or width)*/
+			ldouble holeD = svar.Jet(1)+4*fvar.H; /*Diameter of hole (or width)*/
 			ldouble stepb = (svar.Pstep*svar.Bstep);
-			int Nb = ceil((holeS)/stepb);
-			stepb = holeS/(1.0*Nb);
 			
-			// cout << "Bound x-cond: " << svar.Box(0) << " Y-cond: " << svar.Box(1) << " z-cond: " << svar.Box(2) << endl;
-
-			// /*Pre Hole*/
-			// for (ldouble x=0.0; x<holeS; x+= stepb)
-			// {
-			// 	for (ldouble z = -0.5*svar.Box(2); z <= 0.5*svar.Box(2); z+=stepb)
-			// 	{
-			// 		StateVecD xi(x,0.0,z);
-			// 		pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
-			// 	}
-			// }
-
-			// /*Plate around the hole*/
-			// for (ldouble x=holeS; x<holeS+holeD; x+= stepb)
-			// {
-			// 	for (ldouble z = -0.5*svar.Box(2); z <= 0.5*svar.Box(2); z+=stepb)
-			// 	{
-			// 		ldouble r = (x-holeS-0.5*holeD); /*Normalise the circle around 0,0*/
-			// 		if((r*r)/(0.25*holeD*holeD) + (z*z)/(0.25*holeD*holeD) >= 1.0 )
-			// 		{	/*If the point is outside the hole diameter, add it*/
-			// 			StateVecD xi(x,0.0,z);
-			// 			pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
-			// 		}
-			// 	}
-			// }
-
-			// /*Post Hole*/
-			// for (ldouble x=holeS+holeD; x<svar.Box(0); x+= stepb)
-			// {
-			// 	for (ldouble z = -0.5*svar.Box(2); z <= 0.5*svar.Box(2); z+=stepb)
-			// 	{
-			// 		StateVecD xi(x,0.0,z);
-			// 		pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
-			// 	}
-			// }
-
-
 			/*Create a bit of the pipe downward.*/
 			double r = 0.5*holeD;
         	double dtheta = atan((stepb)/(r));
-			for (ldouble y = -stepb; y >= -svar.Box(1)-stepb; y-=stepb)			
+			for (ldouble y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)			
 			{	
 				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
-					StateVecD xi(-(r*(1-cos(theta))+holeS), y, r*sin(theta));
-					pn.emplace_back(Particle(xi,v,f,rho,fvar.Boundmass,0));
+					StateVecD xi(r*sin(theta), y, r*cos(theta));
+					/*Apply Rotation...*/
+					xi = svar.Rotate*xi;
+					xi += svar.Start;
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
 				}
 				
 			}
 				
 			break;
 		}
+		case 5: 
+		{	/*Droplet case - no boundary*/
+			break;
+		}
 		default: 
 		{
-			cerr << "Boundary case is not within the design. 0 <= Bcase <= 4." << endl;
+			cerr << "Boundary case is not within the design. 0 <= Bcase <= 5." << endl;
 			exit(-1);
 		}
 	}
@@ -373,14 +292,13 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 	{
 		case 3: 
 		{	/*Crossflow case*/
-		// cout << "Got to making simulation points..." << endl;
 			svar.simPts = 0;
 			svar.totPts = pn.size();
 			/*Update n+1 before adding sim pn*/
 			for (auto p: pn)
 				pnp1.emplace_back(p);
 
-			for (ldouble y = 0.0; y > -svar.Box[1]; y-=svar.Pstep)
+			for (ldouble y = 0.0; y > -svar.Jet[1]; y-=svar.dx)
 			{
 				// cout << "In add points for-loop" << endl;
 				AddPoints(y, svar, fvar, cvar, pn, pnp1);
@@ -391,19 +309,31 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 
 		case 4:
 		{
-			/*Crossflow case*/
-		// cout << "Got to making simulation points..." << endl;
+			/*VLM case*/
 			svar.simPts = 0;
 			svar.totPts = pn.size();
 			/*Update n+1 before adding sim pn*/
 			for (auto p: pn)
 				pnp1.emplace_back(p);
 
-			for (ldouble y = 0.0; y > -svar.Box[1]; y-=svar.Pstep)
+			for (ldouble y = 0.0; y > -svar.Jet[1]; y-=svar.dx)
 			{
 				// cout << "In add points for-loop" << endl;
 				AddPoints(y, svar, fvar, cvar, pn, pnp1);
 			}
+
+			break;
+		}
+		case 5:
+		{
+			/*Droplet case*/
+			svar.simPts = 0;
+			svar.totPts = pn.size();
+			/*Update n+1 before adding sim pn*/
+			for (auto p: pn)
+				pnp1.emplace_back(p);
+
+			CreateDroplet(svar,fvar,pn,pnp1);
 
 			break;
 		}
@@ -418,9 +348,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 					for (int k=0; k < svar.xyPART(2); ++k )
 					{
 						StateVecD xi(svar.Start(0)+i*svar.Pstep,svar.Start(1)+j*svar.Pstep,svar.Start(2)+k*svar.Pstep);		
-						pn.emplace_back(Particle(xi,v,f,rho,fvar.Simmass,0));
-					}
-						
+						pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					}		
 				}
 			}
 

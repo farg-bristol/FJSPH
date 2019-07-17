@@ -4,6 +4,10 @@
 #ifndef IO_H
 #define IO_H
 
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <stdio.h>  /* defines FILENAME_MAX */
+#include <dirent.h>
 #include <iostream>
 #include <iomanip>
 #include <fstream>
@@ -12,7 +16,21 @@
 #include "../Eigen/Core"
 #include "../Eigen/StdVector"
 #include "../Eigen/LU"
+// #include "TECIO.h"
+
+// #include <vtkXMLUnstructuredGrid.h>
+// #include <vtkXMLUnstructuredGridWriter.h>
+// #include <vtkSmartPointer.h>
+// #include <vtkPoints.h>
 // #include <vtkMarchingCubes.h>
+
+#ifdef WINDOWS
+    #include <direct.h>
+    #define GetCurrentDir _getcwd
+#else
+    #include <unistd.h>
+    #define GetCurrentDir getcwd
+ #endif
 
 #include "Var.h"
 
@@ -22,13 +40,17 @@
 
 using namespace std; 
 
+inline bool file_exists (const std::string& name) {
+  struct stat buffer;   
+  return (stat (name.c_str(), &buffer) == 0); 
+}
+
 void write_header() 
 {
 	cout << "******************************************************************" << endl << endl;
-	cout << "                              WCXSPH                              " << endl << endl;
+	cout << "                              WCSPH                               " << endl << endl;
 	cout << "        Weakly Compressible Smoothed Particle Hydrodynamics       " << endl;
-	cout << "                       with XSPH correction                       " << endl;
-	cout << "                    for Jet in Crossflow case                     " << endl << endl;
+	cout << "                      for Fuel Jettison case                      " << endl << endl;
 	cout << "                         James O. MacLeod                         " << endl;
 	cout << "                    University of Bristol, U.K.                   " << endl << endl;
 	cout << "******************************************************************" << endl << endl;
@@ -55,6 +77,113 @@ std::string getString(ifstream& In)
 	string line;
 	getline(In,line);
 	return line; 
+}
+
+int MakeOutputDir(int argc, char *argv[], SIM &svar, std::ofstream& f1)
+{
+	char cCurrentPath[FILENAME_MAX];
+	struct stat info;
+	  	
+  	if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
+	return errno;
+
+	/*Open an output directory in the name of the input file, under Outputs*/
+  	string pathname = cCurrentPath;
+  	string input = argv[1];
+  	uint pos1 = input.find("/"); 	uint pos2 = input.find(".");
+  	string file = input.substr(pos1,pos2-pos1);
+  	// cout << file << endl;
+  	pathname.append("/Outputs");
+  	pathname.append(file);
+  	svar.outfolder = pathname;
+	int sreturn=0;
+
+  	if( stat( pathname.c_str(), &info ) != 0 )
+  	{	/*Output directory doesn't exist, so create it*/
+  		string cmd = "mkdir ";
+	  	cmd.append(pathname);
+	    sreturn = system(cmd.c_str());
+	    if(sreturn == -1)
+	    {
+	    	cout << "System command failed to execute." << endl;
+	    	exit(-1);
+	    }
+  	}
+	else if( info.st_mode & S_IFDIR ) 
+	{	/*If it exists, check if there are contents inside directory */
+		DIR *dir;
+		struct dirent *ent;
+		if ((dir = opendir (pathname.c_str())) != NULL) 
+		{
+			ent = readdir (dir);
+			ent = readdir (dir);
+			if((ent = readdir (dir)) != NULL) 
+			{ /* Delete contents inside the directory */
+			    cout << "Deleting files in output directory..." << endl;
+				
+			    string cmd = "exec rm ";
+			    string fuel = pathname;
+				fuel.append("/Fuel.plt");
+				
+				string vlmpanel = pathname;
+				vlmpanel.append("/VLM_Panels.plt");
+				
+				string vlmvortices = pathname;
+				vlmvortices.append("/VLM_Vortices.plt");
+				
+
+				if(file_exists(fuel))
+				{
+					fuel.insert(0,cmd);
+					sreturn = system(fuel.c_str());
+				}
+
+				if(file_exists(vlmpanel))
+				{
+					vlmpanel.insert(0,cmd);
+					sreturn = system(vlmpanel.c_str());
+				}
+
+				if(file_exists(vlmvortices))
+				{
+					vlmvortices.insert(0,cmd);
+					sreturn = system(vlmvortices.c_str());
+				}
+				
+				
+				if(sreturn == -1)
+			    {
+			    	cout << "System command failed to execute." << endl;
+			    	exit(-1);
+			    }
+		  }
+		  closedir (dir);
+		}
+	}
+	else
+	{
+	    cerr << "Can't access or create output directory. Stopping." << endl;
+	    exit(-1);
+	}
+
+	/*Check for output file name*/
+	if(argc == 2)
+	{
+		string path = pathname;
+		path.append("/Fuel.plt");
+		f1.open(path, std::ios::out);
+	}
+	else if(argc == 3)
+	{	/*Open that file if it has*/
+		f1.open(argv[2], std::ios::out);
+	}
+	else
+	{	/*Otherwise, open a standard file name*/
+		cout << "\tWARNING: output file not provided.\nWill write to Test.plt" << endl;
+		f1.open("Test.plt", std::ios::out);
+	}
+
+	return 0;
 }
 
 StateVecI getIVector(ifstream& In)
@@ -149,6 +278,25 @@ void GetAero(FLUID &fvar, ldouble rad)
 	//cout << fvar.avar.ycoef << "  " << fvar.avar.Cdef << "  " << fvar.avar.tmax << "  " << endl;
 }
 
+RotMat GetRotationMat(StateVecD &angles)
+{
+	RotMat rotx, roty, rotz;
+	rotx << 1.0, 0.0            , 0.0           ,
+		    0.0, cos(angles(2)) , sin(angles(2)),
+			0.0, -sin(angles(2)), cos(angles(2));
+
+	roty << cos(angles(1)) , 0.0 , -sin(angles(1)),
+		    0.0            , 1.0 , 0.0            ,
+			sin(angles(1)) , 0.0 , cos(angles(1));
+
+	rotz << cos(angles(0)) , sin(angles(0)) , 0.0 ,
+		    -sin(angles(0)), cos(angles(0)) , 0.0 ,
+			0.0            , 0.0            , 1.0 ;
+
+	return rotx*roty*rotz;
+
+}
+
 void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 {
 	if (argc > 3) 
@@ -161,7 +309,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	if (argc == 1)
     {	/*Check if input has been provided*/
     	cout << "\tWARNING: No inputs provided.\n";
-    	cout << "Program will assume a default set of parameters.";
+    	cout << "Program will assume a default set of parameters.\n";
     	cout << "Output file is \'Test.plt\'" << endl;
     	DefaultInput(svar);
     }
@@ -180,18 +328,27 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	  		svar.subits = getInt(in);
 	  		svar.nmax = getInt(in);	
 	  		svar.xyPART = getIVector(in);
-	  		svar.Start = getDVector(in);
-	  		svar.Box = getDVector(in);
 	  		svar.Pstep = getDouble(in);
 	  		svar.Bstep = getDouble(in);
 	  		svar.Bcase = getInt(in);
-	  		if(svar.Bcase >= 3)
+	  		cvar.acase = getInt(in);
+	  		svar.Start = getDVector(in);
+	  		if(svar.Bcase < 3)
 	  		{
-	  			cvar.acase = getInt(in);
-		  		cvar.vJet = getDVector(in); 
-		  		cvar.vInf = getDVector(in);
+	  			svar.Box= getDVector(in);
+	  		}
+	  		if(svar.Bcase >= 3)
+	  		{	
+	  			StateVecD angles = getDVector(in);
+	  			angles = angles *M_PI/180;
+	  			svar.Rotate = GetRotationMat(angles);
+		  		svar.Jet = getvec(in); /*Defined in VLM.h. Reused here*/
+		  		fvar.pPress = getDouble(in);
+		  		cvar.vJet = StateVecD::Zero(); cvar.vInf = StateVecD::Zero();
+		  		cvar.vJet(1) = getDouble(in);  cvar.vInf(1) = getDouble(in);
+		  		cvar.vJet = svar.Rotate*cvar.vJet;
 		  		cvar.Acorrect = getDouble(in);
-		  		if(cvar.acase >= 3)
+		  		if(cvar.acase >= 2)
 		  		{
 		  			cvar.a = getDouble(in);
 		  			cvar.h1 = getDouble(in);
@@ -199,7 +356,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 		  			cvar.h2 = getDouble(in);
 		  		}
 		  		
-		  		if(cvar.acase > 6)
+		  		if(cvar.acase > 5)
 		  		{
 		  			cout << "Aerodynamic case is not in design. Stopping..." << endl;
 		  			exit(-1);
@@ -270,10 +427,11 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
   	/*Mass from spacing and density*/
 	fvar.Simmass = fvar.rho0*pow(svar.Pstep,simDim); 
 	fvar.Boundmass = fvar.Simmass;
-	fvar.volume = pow(svar.Pstep,simDim);
 	fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
 	fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
-
+	ldouble rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
+	svar.dx = pow(fvar.Simmass/rho, 1.0/double(simDim));
+	cout << rho << "  " << svar.dx << endl;
 	svar.vortex.GetGamma(cvar.vInf);
 	GetAero(fvar, fvar.H);
 }
@@ -306,64 +464,66 @@ void write_settings(SIM &svar, FLUID &fvar)
 
 void write_research_data(std::ofstream& fp, SIM &svar, State &pnp1)
 {	
-	if (svar.Bcase >0)
+	if (svar.Bcase >0 && svar.Bcase != 5)
 	{
 		fp <<  "ZONE T=\"Boundary Data\"" << ", I=" << svar.bndPts << ", F=POINT" <<
-	    ", STRANDID=1, SOLUTIONTIME=" << svar.t << std::endl;
+	    ", STRANDID=1, SOLUTIONTIME=" << svar.t << "\n";
 	  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
 		{
 	        fp << b->xi(0) << " " << b->xi(1) << " " << b->xi(2) << " ";
 	        fp << b->f.norm() << " ";
 	        fp << b->Af.norm() << " " << b->Sf.norm() << " "; 
-	        fp << b->Sf[0] << " " << b->Sf[1] << " " << b->Sf[2] << " ";
-	        fp << b->b << " " << b->theta << endl; 
+	        fp << b->Af[0] << " " << b->Af[1] << " " << b->Af[2] << " ";
+	        fp << b->b << " " << b->theta << "\n"; 
 	  	}
 	}
     
     fp <<  "ZONE T=\"Particle Data\"" <<", I=" << svar.simPts << ", F=POINT" <<
-    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << std::endl;
+    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
   	for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
 	{
         fp << p->xi(0) << " " << p->xi(1) << " " << p->xi(2) << " ";
         fp << p->f.norm() << " ";
         fp << p->Af[0] << " " << p->Sf.norm() << " "; 
-        fp << p->Sf[0] << " " << p->Sf[1] << " " << p->Sf(2) << " ";
-        fp << p->b << " " << p->theta  << endl; 
+        fp << p->Af[0] << " " << p->Af[1] << " " << p->Af(2) << " ";
+        fp << p->b << " " << p->theta  << "\n"; 
   	}
+  	fp << std::flush;
 }
 
 void write_fluid_data(std::ofstream& fp, SIM &svar, State &pnp1)
 {	
-	if (svar.Bcase >0)
+	if (svar.Bcase >0 && svar.Bcase != 5)
 	{
 		fp <<  "ZONE T=\"Boundary Data\"" << ", I=" << svar.bndPts << ", F=POINT" <<
-	    ", STRANDID=1, SOLUTIONTIME=" << svar.t << std::endl;
+	    ", STRANDID=1, SOLUTIONTIME=" << svar.t << "\n";
 	  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
 		{
 	        fp << b->xi[0] << " " << b->xi[1] << " " << b->xi[2] << " ";
 	        fp << b->v.norm() << " ";
 	        fp << b->f.norm() << " ";
-	        fp << b->rho << " "  << b->p << std::endl;
+	        fp << b->rho << " "  << b->p << "\n";
 	  	}
 	}
     
     fp <<  "ZONE T=\"Particle Data\"" <<", I=" << svar.simPts << ", F=POINT" <<
-    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << std::endl;
+    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
   	for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
 	{
         fp << p->xi(0) << " " << p->xi(1) << " " << p->xi[2] << " ";
         fp << p->v.norm() << " ";
         fp << p->f.norm() << " ";
-        fp << p->rho << " "  << p->p  << std::endl;  
+        fp << p->rho << " "  << p->p  << "\n";  
   	}  	
+  	fp << std::flush;
 }
 
 void write_basic_data(std::ofstream& fp, SIM &svar, State &pnp1)
 {	
-	if (svar.Bcase >0)
+	if (svar.Bcase >0 && svar.Bcase != 5)
 	{
 		fp <<  "ZONE T=\"Boundary Data\"" << ", I=" << svar.bndPts << ", F=POINT" <<
-	    ", STRANDID=1, SOLUTIONTIME=" << svar.t << std::endl;
+	    ", STRANDID=1, SOLUTIONTIME=" << svar.t << "\n";
 	  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
 		{
 	        fp << b->xi[0] << " " << b->xi[1] << " " << b->xi[2] << std::endl;
@@ -371,30 +531,24 @@ void write_basic_data(std::ofstream& fp, SIM &svar, State &pnp1)
 	}
     
     fp <<  "ZONE T=\"Particle Data\"" <<", I=" << svar.simPts << ", F=POINT" <<
-    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << std::endl;
+    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
   	for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
 	{
-        fp << p->xi(0) << " " << p->xi(1) << " " << p->xi[2] << std::endl;  
+        fp << p->xi(0) << " " << p->xi(1) << " " << p->xi[2] << "\n";  
   	}
+  	fp << std::flush;
 }
 
-void write_VLM_Panels(SIM &svar)
-{
-	if(svar.Bcase == 4)
-  	{
-  		std::ofstream fp("VLM_Panels.plt", std::ios::out);
-  		fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\""<< std::endl;
-  		for (auto p:svar.vortex.panelData)
-		{
-			fp << "ZONE" << endl;
-	        fp << p.p1(0) << " " << p.p1(1) << " " << p.p1(2) << std::endl;
-	        fp << p.p2(0) << " " << p.p2(1) << " " << p.p2(2) << std::endl;
-	        fp << p.p3(0) << " " << p.p3(1) << " " << p.p3(2) << std::endl;
-	        fp << p.p4(0) << " " << p.p4(1) << " " << p.p4(2) << std::endl;
-	        fp << p.p1(0) << " " << p.p1(1) << " " << p.p1(2) << std::endl;  
-	  	}
-  	}
-}
+
+// void write_VTK_data(char* file, SIM &svar, State &pnp1)
+// {	/*File will be the name of the input file*/
+// 	string string;
+// 	string = file;
+// 	string.append("");
+
+// 	std::ofstream fp("VLM_Panels.plt", std::ios::out);
+
+// }
 
 void write_file_header(std::ofstream& fp, SIM &svar, State &pnp1)
 {
@@ -402,16 +556,16 @@ void write_file_header(std::ofstream& fp, SIM &svar, State &pnp1)
 		{	
 			case 1:
 				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\", \"v (m/s)\", \"a (m/s<sup>-1</sup>)\", " << 
-			"\"<greek>r</greek> (kg/m<sup>-3</sup>)\", \"P (Pa)\"" << std::endl;
+			"\"<greek>r</greek> (kg/m<sup>-3</sup>)\", \"P (Pa)\"" << "\n";
 				write_fluid_data(fp, svar, pnp1);
 				break;
 			case 2:
 				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\", \"a (m/s<sup>-1</sup>)\", " << 
-			"\"A<sub>f</sub>\", \"S<sub>f</sub>\", \"S<sub>fx</sub>\", \"S<sub>fy</sub>\", \"S<sub>fz</sub>\", \"B\", \"Theta\""<< std::endl;
+			"\"A<sub>f</sub>\", \"S<sub>f</sub>\", \"S<sub>fx</sub>\", \"S<sub>fy</sub>\", \"S<sub>fz</sub>\", \"B\", \"Theta\"" << "\n";
 				write_research_data(fp, svar, pnp1);	
 				break;
 			case 3:
-				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\""<< std::endl;
+				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\""<< "\n";
 				write_basic_data(fp, svar, pnp1);
 				break;
 		}

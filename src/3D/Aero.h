@@ -29,6 +29,8 @@
         	[](ldouble lhs, ldouble rhs){return lhs + rhs;})) \
                     initializer(omp_priv = omp_orig)                  
 
+#pragma omp declare reduction(+:StateVecD : omp_out=omp_out+omp_in)\
+                    initializer(omp_priv = omp_orig) 
 
 StateVecD AeroForce(StateVecD &Vdiff, SIM &svar, FLUID &fvar)
 {
@@ -53,133 +55,140 @@ StateVecD CalcForce(SIM &svar, FLUID &fvar, CROSS &cvar,
 	StateVecD Vdiff;
 
 	if(svar.Bcase == 4)
-	{
 		Vdiff = Vel- pi.v;
-	}
-	else if (svar.Bcase == 3)
+	else 
 		Vdiff = cvar.vInf - pi.v;
 
-	if (svar.Bcase >= 3 && pi.xi[1] > 2*svar.Pstep)
+	
+	if (svar.Bcase >= 3 /*&& pi.xi[1] > 2*svar.Pstep*/)
 	{
-		switch(cvar.acase)
+		/*Check if the particle is clear of the starting area*/
+		if(pi.b == 1)
+		{ /*boundary particle value of 1 means its a 
+			fluid particle that isn't clear of the starting area
+			2 means it is clear, amd can receive a force aerodynamically*/
+			StateVecD vec = svar.Rotate.transpose()*(pi.xi-svar.Start);
+			if(vec(1) > 2*svar.Pstep)
+			{	/*Tag it as clear if it's higher than the plane of the exhaust*/
+				pi.b=2;
+			}
+			else
+			{
+				StateVecD Vdiff = cvar.vJet - pi.v;
+				Fd = AeroForce(Vdiff, svar, fvar);
+			}
+		}
+		
+		if(pi.b ==2)
 		{
-			case 0: /*No aero force*/
-				break;
-
-			case 1:	{  /*All upstream particles at start*/
-				if( pi.b == 2)
-				{
-					Fd = cvar.Acorrect*AeroForce(Vdiff, svar, fvar);
+			switch(cvar.acase)
+			{
+				case 0: /*No aero force*/
+					break;
+				case 1:	{ /* All upstream particles */
+					Fd = woccl*cvar.Acorrect*AeroForce(Vdiff, svar, fvar);
+					break;
 				}
-				break;
-			}
-			case 2:	{ /* All upstream particles */
-				Fd = woccl*cvar.Acorrect*AeroForce(Vdiff, svar, fvar);
-				break;
-			}
-			case 3:	{ /*Surface particles, with correction based on surface normal*/
-				// cout << size << endl;
-				if (size < 2.0/3.0 * fvar.avar.nfull)
-				{
-					Fd = AeroForce(Vdiff, svar, fvar);
-					/*Correction based on surface tension vector*/
-					ldouble correc = 1.0;
-					if(size > 20)
+				case 2:	{ /*Surface particles, with correction based on surface normal*/
+					// cout << size << endl;
+					if (size < 2.0/3.0 * fvar.avar.nfull)
 					{
+						Fd = AeroForce(Vdiff, svar, fvar);
+						/*Correction based on surface tension vector*/
+						ldouble correc = 1.0;
+						if(size > 0.1 * fvar.avar.nfull)
+						{
+							ldouble num = SurfC.dot(cvar.vInf);
+							ldouble denom = SurfC.norm()*cvar.vInf.norm();
+							ldouble theta = num/denom;
+							
+							if (theta <= 1.0  && theta >= -1.0)
+							{
+								correc = cvar.a*W2Kernel(1-theta,cvar.h1,1)+
+									cvar.b*W2Kernel(1-theta,cvar.h2,1);
+							}
+
+							// ldouble theta = acos(num/denom)/M_PI;
+						
+							// if (theta <= 1.0 )
+							// correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
+						}
+						Fd = cvar.Acorrect*correc*Fd;
+					}
+					break;
+				}
+				case 3:	/*Case 2, plus a correction based on number of neighbours*/
+				{
+					if (size < 165)
+					{
+						// StateVecD Vdiff = cvar.vInf-pi.v;
+
+						Fd = AeroForce(Vdiff, svar, fvar);
+						ldouble correc = 1.0;
+						double Acorrect = 0.0;
+
+						/*Correction based on surface normal*/
 						ldouble num = SurfC.dot(cvar.vInf);
 						ldouble denom = SurfC.norm()*cvar.vInf.norm();
-						ldouble theta = num/denom;
+						ldouble theta = acos(num/denom)/M_PI;
 						
-						if (theta <= 1.0  && theta >= -1.0)
-						{
-							correc = cvar.a*W2Kernel(1-theta,cvar.h1,1)+
-								cvar.b*W2Kernel(1-theta,cvar.h2,1);
-						}
+						if (theta <= 1.0 )
+							correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
+						
+						/*Correct based on the number of neighbours*/
+						Acorrect = 0.9995*exp(-0.04606*double(size))+0.0005;
+						// cout << size << "  " << Acorrect << endl;
 
-						// ldouble theta = acos(num/denom)/M_PI;
-					
-						// if (theta <= 1.0 )
-						// correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
+						Fd = correc*Acorrect*Fd;
 					}
-					Fd = cvar.Acorrect*correc*Fd;
+					break;
 				}
-				break;
-			}
-			case 4:	/*Case 3, plus a correction based on number of neighbours*/
-			{
-				if (size < 165)
-				{
-					// StateVecD Vdiff = cvar.vInf-pi.v;
-					Fd = AeroForce(Vdiff, svar, fvar);
-					ldouble correc = 1.0;
-					double Acorrect = 0.0;
+				case 4:
+				{	/*Gissler et al (2017)*/
+					if(size < 2.0/3.0 * fvar.avar.nfull)
+					{	
+						ldouble ymax = Vdiff.squaredNorm()*fvar.avar.ycoef;
+						ldouble Re = 2.0*fvar.rhog*Vdiff.norm()*fvar.avar.L/fvar.mug;
+						ldouble Cds;
 
-					/*Correction based on surface normal*/
-					ldouble num = SurfC.dot(cvar.vInf);
-					ldouble denom = SurfC.norm()*cvar.vInf.norm();
-					ldouble theta = acos(num/denom)/M_PI;
-					
-					if (theta <= 1.0 )
-						correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
-					
-					/*Correct based on the number of neighbours*/
-					Acorrect = 0.9995*exp(-0.04606*double(size))+0.0005;
-					// cout << size << "  " << Acorrect << endl;
+						ldouble frac2 = min((2.0/3.0)*fvar.avar.nfull,double(size))
+										/((2.0/3.0)*fvar.avar.nfull);
+						ldouble frac1 = (1.0 - frac2);
 
-					Fd = correc*Acorrect*Fd;
-				}
-				break;
-			}
-			case 5:
-			{	/*Gissler et al (2017)*/
-				if(size < 2.0/3.0 * fvar.avar.nfull)
-				{	
-					ldouble ymax = Vdiff.squaredNorm()*fvar.avar.ycoef;
-					ldouble Re = 2.0*fvar.rhog*Vdiff.norm()*fvar.avar.L/fvar.mug;
-					ldouble Cds;
+						// if (Re < 3500)
+						//  	Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
+						// else
+						// 	Cds = 1.699e-05*pow(Re,1.92)*(24.0/(Re));
+						
+						if( Re <= 1000.0)
+							Cds = (24.0/Re)*(1+(1.0/6.0)*pow(Re,2.0/3.0));
+						else 
+							Cds = 0.424;
 
-					ldouble frac2 = min((2.0/3.0)*fvar.avar.nfull,double(size))
-									/((2.0/3.0)*fvar.avar.nfull);
-					ldouble frac1 = (1.0 - frac2);
+						ldouble Cdl = Cds*(1+2.632*ymax);
+						ldouble	Cdi = frac1*Cdl + /*0.8**/frac2;
 
-					// if (Re < 3500)
-					//  	Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
-					// else
-					// 	Cds = 1.699e-05*pow(Re,1.92)*(24.0/(Re));
-					
-					if( Re <= 1000.0)
-						Cds = (24.0/Re)*(1+(1.0/6.0)*pow(Re,2.0/3.0));
-					else 
-						Cds = 0.424;
+						ldouble Adrop = M_PI*pow((fvar.avar.L + fvar.avar.Cb*fvar.avar.L*ymax),2);
+						ldouble Aunocc = frac1*Adrop + frac2*fvar.HSQ;
 
-					ldouble Cdl = Cds*(1+2.632*ymax);
-					ldouble	Cdi = frac1*Cdl + /*0.8**/frac2;
+						// ldouble num = SurfC.dot(Vdiff);
+						// ldouble denom = SurfC.norm()*cvar.vInf.norm();
+						// ldouble theta = acos(num/denom)/M_PI;
+						// pi.theta = theta;
+						// ldouble correc = 0.0;
 
-					ldouble Adrop = M_PI*pow((fvar.avar.L + fvar.avar.Cb*fvar.avar.L*ymax),2);
-					ldouble Aunocc = frac1*Adrop + frac2*fvar.HSQ;
+						// if (theta <= 1.0 )
+						// 	correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
 
-					// ldouble num = SurfC.dot(Vdiff);
-					// ldouble denom = SurfC.norm()*cvar.vInf.norm();
-					// ldouble theta = acos(num/denom)/M_PI;
-					// pi.theta = theta;
-					// ldouble correc = 0.0;
+						ldouble Ai = (1-woccl)/*correc*/*Aunocc;
 
-					// if (theta <= 1.0 )
-					// 	correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
-
-					ldouble Ai = (1-woccl)/*correc*/*Aunocc;
-
-					Fd = 0.5*fvar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai/pi.m;
+						Fd = 0.5*fvar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai/pi.m;
+					}
 				}
 			}
 		}
 	}
-	else if (svar.Bcase >= 3 && pi.xi[1] < svar.Pstep)
-	{
-		StateVecD Vdiff = cvar.vJet - pi.v;
-		Fd = AeroForce(Vdiff, svar, fvar);
-		Fd[1] += 9.81*pi.m;
-	}
+	
 	return Fd;
 }
 
@@ -218,7 +227,7 @@ void ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 					kernsum += W2Kernel(r,fvar.H,fvar.correc);
 
 					/*Occlusion for Gissler Aero Method*/
-					if (svar.Bcase >= 3 && (cvar.acase == 5 || cvar.acase == 2))
+					if (svar.Bcase >= 3 && (cvar.acase == 5 || cvar.acase == 1))
 					{
 						ldouble num = -Rij.dot((cvar.vInf-pi.v));
 						ldouble denom = Rij.norm()*(cvar.vInf-pi.v).norm();
@@ -255,13 +264,15 @@ void ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 			}/*End of if*/
 		}/*End of particles*/
 
-		#pragma omp parallel for num_threads(nthreads)
+		StateVecD Force = StateVecD::Zero();
+		#pragma omp parallel for num_threads(nthreads) reduction(+:Force)
 		for (uint i = svar.bndPts; i < svar.totPts; ++i)
 		{
 			pnp1[i].f += Af[i];
 			pnp1[i].Af = Af[i];
+			Force +=Af[i];
 		}
-	
+		svar.Force = Force;
 	}
 
 }

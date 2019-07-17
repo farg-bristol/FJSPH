@@ -167,9 +167,6 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1, outl &outlist)
 		for (uint i=svar.bndPts; i < svar.totPts; ++i)
 		{
 			Part pi = pnp1[i];
-			if (svar.Bcase >= 3 && cvar.acase == 3)
-				pi.b = 2;
-
 			uint size = outlist[i].size();
 			pnp1[i].theta = double(size);
 
