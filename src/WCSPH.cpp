@@ -14,10 +14,10 @@
 
 #include "Var.h"
 #include "IO.h"
+#include "Neighbours.h"
 #include "Kernel.h"
 #include "Init.h"
-#include "Cross.h"
-#include "Neighbours.h"
+#include "Add.h"
 #include "Resid.h"
 
 // using namespace std;
@@ -27,7 +27,7 @@ using namespace nanoflann;
 
 
 ///**************** Integration loop **************///
-ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
+ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, MESH &cells,
 	 State &pn, State &pnp1, outl &outlist)
 {
 
@@ -62,7 +62,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 	if (svar.dt > svar.framet)
 		svar.dt = svar.framet;
 
-	vector<StateVecD> xih(svar.totPts);
+	vector<StateVecD> xih(svar.totPts,StateVecD::Zero());
 	// int RestartCount = 0;
 	while (log10(sqrt(errsum/(double(svar.totPts)))) - logbase > -7.0)
 	{
@@ -99,7 +99,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 		// #pragma omp parallel shared(a,b,c,d,dt,dt2,B,gam) num_threads(nthreads)
 		{
 			// #pragma omp for 
-			for (uint i=0; i <= svar.totPts; ++i)
+			for (uint i=0; i <= svar.bndPts; ++i)
 			{	/****** BOUNDARY PARTICLES ***********/
 				#pragma omp critical
 				{
@@ -112,13 +112,30 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 			// #pragma omp for
 			for (uint i=svar.bndPts; i < svar.totPts ; ++i)
 			{	/****** FLUID PARTICLES ***********/
-				#pragma omp critical
-				{
-				pnp1[i].v =  pn[i].v +dt*(a*pn[i].f+b*pnp1[i].f);
-				pnp1[i].xi = pn[i].xi+dt*pn[i].v+dt2*(0.5*c*pn[i].f+d*pnp1[i].f);
+				/*For the particles inside the pipe, perform a prescribed motion, and don't update pressure*/
+				/*Check if the particle is clear of the starting area*/
+				if(pnp1[i].b == 1)
+				{ /*boundary particle value of 1 means its a 
+					fluid particle that isn't clear of the starting area
+					2 means it is clear, amd can receive a force aerodynamically*/
+					StateVecD vec = svar.Rotate.transpose()*(pnp1[i].xi-svar.Start);
+					if(vec(1) > 2*svar.Pstep)
+					{	/*Tag it as clear if it's higher than the plane of the exit*/
+						pnp1[i].b=2;
+					}
+					else
+					{
+						pnp1[i].xi = pn[i].xi + dt*pn[i].v;
+					}
 				}
-				// pnp1[i].rho = pn[i].rho+dt*(a*pn[i].Rrho+b*pnp1[i].Rrho);
-				// pnp1[i].p = fvar.B*(pow(pnp1[i].rho/fvar.rho0,fvar.gam)-1);
+
+				if(pnp1[i].b==2)
+				{
+					pnp1[i].v =  pn[i].v +dt*(a*pn[i].f+b*pnp1[i].f);
+					pnp1[i].xi = pn[i].xi+dt*pn[i].v+dt2*(0.5*c*pn[i].f+d*pnp1[i].f);
+					pnp1[i].rho = pn[i].rho+dt*(a*pn[i].Rrho+b*pnp1[i].Rrho);
+					pnp1[i].p = fvar.B*(pow(pnp1[i].rho/fvar.rho0,fvar.gam)-1);
+				}
 			}
 		}
 
@@ -205,6 +222,9 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar,
 	}
 
 
+	/*Find which cell the particle is in*/
+
+
 	/****** UPDATE TIME N ***********/
 	pn = pnp1;
 
@@ -216,12 +236,12 @@ int main(int argc, char *argv[])
 	high_resolution_clock::time_point t1 = high_resolution_clock::now();
 	high_resolution_clock::time_point t2;
 	Eigen::initParallel();
-	omp_set_num_threads(nthreads);
+	omp_set_num_threads(NTHREADS);
 
     double duration;
     double error = 0;
     cout << setw(5);
-
+    cout << SIMDIM << endl;
     write_header();
 
     /******* Define the global simulation parameters ******/
@@ -229,8 +249,11 @@ int main(int argc, char *argv[])
 	FLUID fvar;
 	CROSS cvar;
 	outl outlist;
+	MESH cells;
 
 	GetInput(argc,argv,svar,fvar,cvar);
+	
+	// Read_TAUMESH(cells);
 
 	/*Make a guess of how many there will be...*/
 	int partCount = ParticleCount(svar);
@@ -241,119 +264,161 @@ int main(int argc, char *argv[])
 	cout << "Final particle count:  " << partCount << endl;
 	pn.reserve(partCount);
   	pnp1.reserve(partCount);
-
-  	std::ofstream f1;
-	MakeOutputDir(argc,argv,svar,f1);
 	
-	InitSPH(svar,fvar,cvar, pn, pnp1);
+	MakeOutputDir(argc,argv,svar);
+
+	InitSPH(svar,fvar,cvar,cells,pn,pnp1);
 
 	///********* Tree algorithm stuff ************/
-	Sim_Tree NP1_INDEX(simDim,pnp1,20);
+	Sim_Tree NP1_INDEX(SIMDIM,pnp1,20);
 	NP1_INDEX.index->buildIndex();
 	FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
-
+	
+	///*** Perform an iteration to populate the vectors *****/
 	std::vector<std::vector<uint>>::iterator nfull = 
 		std::max_element(outlist.begin(),outlist.end(),
 		[](std::vector<uint> p1, std::vector<uint> p2){return p1.size()< p2.size();});
-
 	fvar.avar.nfull = double(nfull->size());
-	// cout << fvar.avar.nfull << endl;
-	///*** Perform an iteration to populate the vectors *****/
+
 	Forces(svar,fvar,cvar,pnp1, outlist);
 
-
 	///*************** Open simulation files ***************/
-	std::ofstream f2,f3;
+	std::ofstream f1,f2,f3;
+
+
 	if (svar.frameout == 1)
 		f2.open("frame.info", std::ios::out);
 
-	if(svar.outform ==2)
+	if(svar.frameout ==2)
 		f3.open("Crossflow.txt", std::ios::out);
 
+	f1 << std::scientific << setprecision(6);
+	f2 << std::scientific<< setw(10);
+	f3 << std::scientific << setw(10);
 
-	if (f1.is_open())
+	if(svar.outtype == 0 )
 	{
-		f1 << std::scientific << setprecision(5);
-		f2 << std::scientific<< setw(10);
-		f3 << std::scientific << setw(10);
-
-
-		/* Write file header defining variable names */
-		write_file_header(f1,svar,pnp1);
-		if(svar.Bcase == 4)
-			svar.vortex.write_VLM_Panels(svar.outfolder);
-
-		/*Timing calculation + error sum output*/
-		t2 = high_resolution_clock::now();
-		duration = duration_cast<microseconds>(t2-t1).count()/1e6;
-		cout << "Frame: " << 0 << "  Sim Time: " << svar.t << "  Compute Time: "
-		<< duration <<"  Error: " << error << endl;
-		f2 << "Frame:  Points:   Sim Time:       Comp Time:     Error:       Its:" << endl;
-		f2 << 0 << "        " << svar.totPts << "    " << svar.t << "    " << duration
-			<< "    " << error << "  " << 0 << endl;
-
-		///************************* MAIN LOOP ********************/
-
-		for (uint frame = 1; frame<= svar.Nframe; ++frame)
+		if(svar.outform < 3)
 		{
-			int stepits=0;
-			double stept=0.0;
-			while (stept<svar.framet)
-			{
-			    error = Newmark_Beta(NP1_INDEX,svar,fvar,cvar,pn,pnp1,outlist);
-			    stept+=svar.dt;
-			    ++stepits;
-			    //cout << svar.t << "  " << svar.dt << endl;
-			}
-
-
-			t2= high_resolution_clock::now();
-			duration = duration_cast<microseconds>(t2-t1).count()/1e6;
-
-			/*Write each frame info to file (Useful to debug for example)*/
-			if (svar.frameout == 1)
-			{
-				f2 << frame << "         " << svar.totPts << "  " << svar.t << "  " << duration
-				<< "  " << error << "  " << stepits << endl;
-			}
-
-			if(svar.outframe !=0)
-			{
-				if (frame % svar.outframe == 0 )
-				{	/*Output to console every 20 or so steps*/
-				  	cout << "Frame: " << frame << "  Sim Time: " << svar.t-svar.dt << "  Compute Time: "
-				  	<< duration <<"  Error: " << error << endl;
-				}
-			}
-
-
-			DensityReinit(fvar, pnp1, outlist);
-			switch (svar.outform)
-			{
-				case 1:
-					write_fluid_data(f1, svar, pnp1);
-					break;
-				case 2:
-					write_research_data(f1, svar, pnp1);
-					break;
-				case 3:
-					write_basic_data(f1, svar, pnp1);
-					break;
-			}
-
+			Write_Boundary_Binary(svar,pnp1);
+			Init_Binary_PLT(svar);
+			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,2); /*Write sim particles*/
 		}
-		f1.close();
-		if (f2.is_open())
-			f2.close();
-		if(f3.is_open())
-			f3.close();
+		else if (svar.outform > 2)
+		{
+			cout << "Output type not within design. Outputting basic data..." << endl;
+			svar.outform = 0;
+			Write_Boundary_Binary(svar,pnp1);
+			Init_Binary_PLT(svar);
+			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,2); /*Write sim particles*/
+		}
 	}
-	else
+	else if (svar.outtype == 1)
 	{
-		cerr << "Error opening frame output file." << endl;
-		exit(-1);
+		if (svar.Bcase > 0 && svar.Bcase != 5)
+		{	/*If the boundary exists, write it.*/
+			string bfile = svar.outfolder;
+			bfile.append("/Boundary.plt");
+			std::ofstream fb(bfile, std::ios::out);
+			if(fb.is_open())
+			{
+				Write_Boundary_ASCII(fb,svar,pnp1);
+				fb.close();
+			}
+			else
+			{
+				cerr << "Error opening boundary file." << endl;
+				exit(-1);
+			}
+		}
+
+		/* Write first timestep */
+		string mainfile = svar.outfolder;
+		mainfile.append("/Fuel.plt");
+		f1.open(mainfile, std::ios::out);
+		if(f1.is_open())
+		{
+			Write_ASCII_header(f1,svar);
+			Write_ASCII_Timestep(f1,svar,pnp1);	
+		}
+		else
+		{
+			cerr << "Failed to open fuel.plt. Stopping." << endl;
+			exit(-1);
+		}
 	}
 
+	#if SIMDIM == 3
+		if(svar.Bcase == 4)
+			svar.vortex.write_VLM_Panels(svar.outfolder);		
+	#endif
+	/*Timing calculation + error sum output*/
+	t2 = high_resolution_clock::now();
+	duration = duration_cast<microseconds>(t2-t1).count()/1e6;
+	cout << "Frame: " << 0 << "  Sim Time: " << svar.t << "  Compute Time: "
+	<< duration <<"  Error: " << error << endl;
+	f2 << "Frame:  Points:   Sim Time:       Comp Time:     Error:       Its:" << endl;
+	f2 << 0 << "        " << svar.totPts << "    " << svar.t << "    " << duration
+		<< "    " << error << "  " << 0 << endl;
+
+	///************************* MAIN LOOP ********************/
+	svar.frame = 0;
+	for (uint frame = 1; frame<= svar.Nframe; ++frame)
+	{
+		int stepits=0;
+		double stept=0.0;
+		while (stept<svar.framet)
+		{
+		    error = Newmark_Beta(NP1_INDEX,svar,fvar,cvar,cells,pn,pnp1,outlist);
+		    stept+=svar.dt;
+		    ++stepits;
+		    //cout << svar.t << "  " << svar.dt << endl;
+		}
+		++svar.frame;
+
+		t2= high_resolution_clock::now();
+		duration = duration_cast<microseconds>(t2-t1).count()/1e6;
+
+		/*Write each frame info to file (Useful to debug for example)*/
+		if (svar.frameout == 1)
+		{
+			f2 << frame << "         " << svar.totPts << "  " << svar.t << "  " << duration
+			<< "  " << error << "  " << stepits << endl;
+		}
+
+		if(svar.outframe !=0)
+		{
+			if (frame % svar.outframe == 0 )
+			{	/*Output to console every 20 or so steps*/
+			  	cout << "Frame: " << frame << "  Sim Time: " << svar.t-svar.dt << "  Compute Time: "
+			  	<< duration <<"  Error: " << error << endl;
+			}
+		}
+
+
+		// DensityReinit(fvar, pnp1, outlist);
+		if (svar.outtype == 0)
+		{
+			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,2); /*Write sim particles*/
+		} 
+		else if (svar.outtype == 1)
+		{
+			Write_ASCII_Timestep(f1,svar,pnp1);
+		}
+	}
+	if (f1.is_open())
+		f1.close();
+	if (f2.is_open())
+		f2.close();
+	if (f3.is_open())
+		f3.close();
+			
+	if(svar.outtype == 0)
+	{
+		if(TECEND142())
+			exit(-1);
+	}
+	
 	cout << "Simulation complete!" << endl;
     cout << "Time taken:\t" << duration << " seconds" << endl;
     cout << "Total simulation time:\t" << svar.t << " seconds" << endl;

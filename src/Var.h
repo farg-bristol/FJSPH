@@ -4,39 +4,42 @@
 #ifndef VAR_H
 #define VAR_H
 
-#include <vector>
-#include "VLM.h"
-#include "../Eigen/Core"
-#include "../Eigen/StdVector"
-// #include "../Eigen/LU"
-// #include "../Eigen/Geometry"
-#include "../NanoFLANN/nanoflann.hpp"
-#include "../NanoFLANN/utils.h"
-#include "../NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
+/*Define Simulation Dimension*/
+#ifndef SIMDIM
+#define SIMDIM 2
+#endif
+#define NTHREADS 4
 
+#if SIMDIM == 3
+	#include "VLM.h"
+#endif
+
+#include <vector>
+#include "Eigen/Core"
+#include "Eigen/StdVector"
+#include "NanoFLANN/nanoflann.hpp"
+#include "NanoFLANN/utils.h"
+#include "NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 
 // Define pi
 #ifndef M_PI
 #define M_PI (4.0*atan(1.0))
 #endif
 
-/* Define Simulation dimension, and data type. */
+/* Define data type. */
 /* Want to have long double at some point,     */
 /* but neighbour search won't have it...       */
-constexpr int simDim = 3;
 typedef double ldouble;
 typedef unsigned int uint;
-constexpr uint nthreads = 4;
-
 
 /****** Eigen vector definitions ************/
-typedef Eigen::Matrix<ldouble,simDim,1> StateVecD;
-typedef Eigen::Matrix<int,simDim,1> StateVecI;
-typedef Eigen::Matrix<ldouble,simDim,simDim> RotMat;
+typedef Eigen::Matrix<ldouble,SIMDIM,1> StateVecD;
+typedef Eigen::Matrix<int,SIMDIM,1> StateVecI;
+typedef Eigen::Matrix<ldouble,SIMDIM,SIMDIM> RotMat;
 
 /*Vector definitions for Density reinitialisation*/
-typedef Eigen::Matrix<ldouble, simDim+1,1> DensVecD;
-typedef Eigen::Matrix<ldouble, simDim+1, simDim+1> DensMatD;
+typedef Eigen::Matrix<ldouble, SIMDIM+1,1> DensVecD;
+typedef Eigen::Matrix<ldouble, SIMDIM+1, SIMDIM+1> DensMatD;
 
 /*Aerodynamic Properties*/
 typedef class AERO
@@ -75,15 +78,19 @@ typedef struct SIM {
 	Eigen::Vector2d Jet;			/*Jet properties*/
 	uint subits;                    /*Max number of sub-iterations*/
 	uint Nframe; 			        /*Max number of frames to output*/
+	uint frame;						/*Current frame number*/
 	double dt, t, framet;			/*Timestep, Simulation + frame times*/
 	double beta,gamma;				/*Newmark-Beta Parameters*/
 	double maxmu;                   /*Maximum viscosity component (CFL)*/
 	int Bcase, Bclosed;				/*What boundary shape to take*/
-	int outform;                    /*Output type. Fluid properties or Research.*/
-	int frameout;                   /**/
+	uint outtype;                   /*ASCII or binary output*/
+	uint outform;                   /*Output type. Fluid properties or Research.*/
+	uint frameout;                  /**/
 	uint framecount;
 	std::string outfolder;			
-	VLM vortex;
+	#if SIMDIM == 3
+		VLM vortex;
+	#endif
 	StateVecD Force;					/*Total Force*/
 } SIM;
 
@@ -94,13 +101,12 @@ typedef struct FLUID {
 	ldouble pPress;					/*Starting pressure in pipe*/
 	ldouble Simmass, Boundmass;		/*Particle and boundary masses*/
 	ldouble correc;					/*Smoothing Kernel Correction*/
-	ldouble alpha,Cs,mu;		/*}*/
+	ldouble alpha,Cs,mu;		    /*}*/
 	ldouble sig;					/* Fluid properties*/
 	ldouble gam, B; 				/*}*/
 	ldouble mug;					/* Gas Properties*/
 	ldouble rhog;
 	ldouble contangb;				/*Boundary contact angle*/
-	ldouble volume;					/*Particle volume*/
 	AERO avar;
 	//double front, height, height0;		/*Dam Break validation parameters*/
 
@@ -117,6 +123,45 @@ typedef struct CROSS
 	ldouble h1;                         /*Tuning parameters*/
 	ldouble h2;                         /*Tuning parameters*/
 }CROSS;
+
+typedef struct MESH
+{
+	void reserve(int np, int ne)
+	{
+		verts = std::vector<StateVecD>(np);
+		pointMach = std::vector<double>(np);
+		pointCp = std::vector<double>(np);
+		pointVel = std::vector<StateVecD>(np);
+
+		elems = std::vector<std::vector<int>>(np,std::vector<int>(8));
+		// elemverts = std::vector<std::vector<StateVecD>>(np,std::vector<StateVecD>(8));
+		// elemfaces.reserve(ne);
+		elemfaces = std::vector<std::vector<std::vector<StateVecD>>>
+				(np,std::vector<std::vector<StateVecD>>(6,std::vector<StateVecD>(4)));
+		cellMach = std::vector<double>(ne);
+		cellCp = std::vector<double>(ne);
+		cellVel = std::vector<StateVecD>(ne);
+		elemneighb.reserve(ne);
+	}
+
+	std::string zone;
+	uint numPoint, numElem, nfaces;
+	/*Point based data*/
+	std::vector<StateVecD> verts;
+	std::vector<double> pointMach;
+	std::vector<double> pointCp;
+	std::vector<StateVecD> pointVel;
+
+	/*Cell based data*/
+	std::vector<std::vector<int>> elems;
+	// std::vector<std::vector<StateVecD>> elemverts;
+	/*Yep... a triple layered vector...*/
+	std::vector<std::vector<std::vector<StateVecD>>> elemfaces; 
+	std::vector<std::vector<int>> elemneighb;
+	std::vector<double> cellMach;
+	std::vector<double> cellCp;
+	std::vector<StateVecD> cellVel;
+}MESH;
 
 /*Particle data class*/
 typedef class Particle {

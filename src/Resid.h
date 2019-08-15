@@ -12,12 +12,8 @@
 #ifndef RESID_H
 #define RESID_H
 
-// #include "Eigen/Core"
-// #include "Eigen/StdVector"
-#include "../Eigen/LU"
 #include "Var.h"
 #include "Kernel.h"
-#include "Cross.h"
 #include "Aero.h"
 
 
@@ -43,7 +39,7 @@ std::vector<StateVecD> GetColourGrad(SIM &svar, FLUID &fvar, State &pnp1, outl &
 {
 	std::vector<StateVecD> cgrad(svar.totPts, StateVecD::Zero());
 
-	#pragma omp parallel for num_threads(nthreads)
+	#pragma omp parallel for
 	for(uint i=svar.bndPts; i < svar.totPts; ++i)
 	{
 		StateVecD pi = pnp1[i].xi;
@@ -130,10 +126,10 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1, outl &outlist)
 {
 	svar.maxmu=0; 					/* CFL Parameter */
 	StateVecD g = StateVecD::Zero();	/*Gravity Vector*/
-			  g(1) = -9.81;
+			  g(2) = -9.81;
 	
 	/********* LOOP 1 - all points: Calculate numpartdens ************/
-	ldouble numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
+	// ldouble numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
 	// std::vector<StateVecD> cgrad(svar.totPts,StateVecD::Zero());
 	// cgrad = GetColourGrad(svar,fvar,pnp1,outlist);
 
@@ -141,7 +137,7 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1, outl &outlist)
 	std::vector<StateVecD> RV(svar.totPts,StateVecD::Zero()); /*Residual force*/
 	std::vector<StateVecD> ST(svar.totPts,StateVecD::Zero()); /*Surface tension force*/		
 
-	#pragma omp parallel shared(g) num_threads(nthreads)
+	#pragma omp parallel shared(g)
 	{
 /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
 		#pragma omp for reduction(+:Rrhocontr)
@@ -170,7 +166,7 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1, outl &outlist)
 			uint size = outlist[i].size();
 			pnp1[i].theta = double(size);
 
-			vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
+			std::vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
 			mu.reserve(size+1);
 			mu.emplace_back(0);	/*Avoid dereference of empty vector*/
 			
@@ -197,7 +193,7 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1, outl &outlist)
 				visc    = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
 
 				/*Surface Tension - Nair & Poeschel (2017)*/
-				SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
+				// SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
 				// SurfC = HuST(fvar,pi,pj,Rij,r,cgrad[i],cgrad[j]);
 
 				/*drho/dt*/
@@ -230,68 +226,68 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1, outl &outlist)
 
 	}
 		/*Aerodynamic force*/
+	if(svar.Bcase >= 3)
 		ApplyAero(svar,fvar,cvar,pnp1,outlist);
 	
 }
 
-///*Density Reinitialisation using Least Moving Squares as in A. Colagrossi (2003)*
-void DensityReinit(FLUID &fvar, State &pnp1, outl &outlist)
-{
-	DensVecD one = DensVecD::Zero();
-  	one[0] = 1.0;
-  	// #pragma omp parallel
-  	{
-  		#pragma omp parallel for num_threads(nthreads)
-		for(uint i=0; i< outlist.size(); ++i)
-		{
-			DensMatD A= DensMatD::Zero();
-			//Find matrix A.
-			Part pi = pnp1[i];
-			for (auto j:outlist[i])
-			{
-				Particle pj = pnp1[j];
-				StateVecD Rij = pi.xi-pj.xi;
-				DensMatD Abar = DensMatD::Zero();
-				// Abar << 1   , Rij(0)        , Rij(1)        , Rij(2)        ,
-				// 	    Rij(0) , Rij(0)*Rij(0) , Rij(1)*Rij(0) , Rij(2)*Rij(0) ,
-				// 	    Rij(1) , Rij(0)*Rij(1) , Rij(1)*Rij(1) , Rij(2)*Rij(1) ,
-				//      Rij(2) , Rij(0)*Rij(2) , Rij(1)*Rij(2) , Rij(2)*Rij(2) ;
+// ///*Density Reinitialisation using Least Moving Squares as in A. Colagrossi (2003)*
+// void DensityReinit(FLUID &fvar, State &pnp1, outl &outlist)
+// {
+// 	DensVecD one = DensVecD::Zero();
+//   	one[0] = 1.0;
+  	
+// 	#pragma omp parallel for
+// 	for(uint i=0; i< outlist.size(); ++i)
+// 	{
+// 		DensMatD A= DensMatD::Zero();
+// 		//Find matrix A.
+// 		Part pi = pnp1[i];
+// 		for (auto j:outlist[i])
+// 		{
+// 			Particle pj = pnp1[j];
+// 			StateVecD Rij = pi.xi-pj.xi;
+// 			DensMatD Abar = DensMatD::Zero();
+// 			// Abar << 1   , Rij(0)        , Rij(1)        , Rij(2)        ,
+// 			// 	    Rij(0) , Rij(0)*Rij(0) , Rij(1)*Rij(0) , Rij(2)*Rij(0) ,
+// 			// 	    Rij(1) , Rij(0)*Rij(1) , Rij(1)*Rij(1) , Rij(2)*Rij(1) ,
+// 			//      Rij(2) , Rij(0)*Rij(2) , Rij(1)*Rij(2) , Rij(2)*Rij(2) ;
 
-		        Abar(0,0) = 1;
-			    for (int ii = 0; ii < Rij.cols(); ++ii)
-			    {
-			        Abar(ii+1,0) = Rij[ii];
-			        Abar(0,ii+1) = Rij[ii];
-			        for (int jj = 0; jj<=ii; ++jj)
-			        {
-			            Abar(ii+1,jj+1) = Rij[ii]*Rij[jj];
-			            Abar(jj+1,ii+1) = Rij[ii]*Rij[jj];
-			        }
-			    }
+// 	        Abar(0,0) = 1;
+// 		    for (int ii = 0; ii < Rij.cols(); ++ii)
+// 		    {
+// 		        Abar(ii+1,0) = Rij[ii];
+// 		        Abar(0,ii+1) = Rij[ii];
+// 		        for (int jj = 0; jj<=ii; ++jj)
+// 		        {
+// 		            Abar(ii+1,jj+1) = Rij[ii]*Rij[jj];
+// 		            Abar(jj+1,ii+1) = Rij[ii]*Rij[jj];
+// 		        }
+// 		    }
 
-				A+= W2Kernel(Rij.norm(),fvar.H,fvar.correc)*Abar*pj.m/pj.rho;
-			}
+// 			A+= W2Kernel(Rij.norm(),fvar.H,fvar.correc)*Abar*pj.m/pj.rho;
+// 		}
 
-			DensVecD Beta;
-			//Check if A is invertible
-			Eigen::FullPivLU<DensMatD> lu(A);
-			if (lu.isInvertible())
-				Beta = lu.inverse()*one;
-			else
-				Beta = (1)*one;
+// 		DensVecD Beta;
+// 		//Check if A is invertible
+// 		Eigen::FullPivLU<DensMatD> lu(A);
+// 		if (lu.isInvertible())
+// 			Beta = lu.inverse()*one;
+// 		else
+// 			Beta = (1)*one;
 
-			//Find corrected kernel
-			ldouble rho = 0.0;
-			for (uint j=0; j< outlist[i].size(); ++j)
-			{
-				StateVecD Rij = pi.xi-pnp1[outlist[i][j]].xi;
-				rho += pnp1[outlist[i][j]].m*W2Kernel(Rij.norm(),fvar.H,fvar.correc)*
-				(Beta(0)+Beta(1)*Rij(0)+Beta(2)*Rij(1));
-			}
+// 		//Find corrected kernel
+// 		ldouble rho = 0.0;
+// 		for (uint j=0; j< outlist[i].size(); ++j)
+// 		{
+// 			StateVecD Rij = pi.xi-pnp1[outlist[i][j]].xi;
+// 			rho += pnp1[outlist[i][j]].m*W2Kernel(Rij.norm(),fvar.H,fvar.correc)*
+// 			(Beta(0)+Beta(1)*Rij(0)+Beta(2)*Rij(1));
+// 		}
 
-			pnp1[i].rho = rho;
-		}
-	}
-}
+// 		pnp1[i].rho = rho;
+// 	}
+
+// }
 
 #endif

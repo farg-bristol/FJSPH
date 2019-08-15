@@ -4,7 +4,7 @@ CXX=g++
 CX8=g++-8
 
 # Libraries to include
-INC=
+LIBS=-lnetcdf_c++4 -ltecio -lgmpxx -lgmp
 
 # Compiler flags. If desired add -g for debugging info.
 CFLAGS=-std=c++11 -Wall -Wextra -ffast-math -funroll-loops -O3 -fopenmp
@@ -13,34 +13,30 @@ CFLAGS=-std=c++11 -Wall -Wextra -ffast-math -funroll-loops -O3 -fopenmp
 UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
 TARGET=WCSPH# Target executable
-3DTARGET=WCSPH
 else
 TARGET=WCSPH.exe
-3DTARGET=WCSPH.exe
 endif
 
-SOURCE=src/2D/WCSPH.cpp
-#3DTARGET=WCXSPH
-3DSOURCE=src/3D/WCSPH.cpp
+SOURCE=src/WCSPH.cpp
 
 
 # Compile and Build
 2D:
-	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE)
+	$(CXX) -DSIMDIM=2 $(CFLAGS) $(SOURCE) $(LIBS) -o $(TARGET)
 
 3D:
-	$(CXX) $(INC) $(CFLAGS) -o $(3DTARGET) $(3DSOURCE)
+	$(CXX) -DSIMDIM=3 $(CFLAGS) $(SOURCE) $(LIBS) -o $(TARGET)
 
 #add debug flag
 debug2:
-	$(CXX) $(INC) -g $(CFLAGS) -o $(TARGET) $(SOURCE)
+	$(CXX) -g -DSIMDIM=2 $(CFLAGS) $(SOURCE) $(LIBS) -o $(TARGET)
 
 debug3:
-	$(CXX) $(INC) -g $(CFLAGS) -o $(3DTARGET) $(3DSOURCE)
+	$(CXX) -g -DSIMDIM=3 $(CFLAGS) $(SOURCE) $(LIBS) -o $(TARGET)
 
 clean:
 	$(RM) $(TARGET)
 
 new: 
 	$(RM) $(TARGET)
-	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE)
+	$(CXX) $(CFLAGS) -o $(TARGET) $(SOURCE) $(LIBS)
