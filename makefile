@@ -4,51 +4,39 @@ CXX=g++
 CX8=g++-8
 
 # Libraries to include
-INC=
+LIBS=-lnetcdf_c++4 -ltecio -lgmpxx -lgmp
 
 # Compiler flags. If desired add -g for debugging info.
-CFLAGS=-std=c++11 -Wall -Wextra -ffast-math -funroll-loops -O3
+CFLAGS=-std=c++11 -Wall -Wextra -ffast-math -funroll-loops -O3 -fopenmp
 
 # Find the OS to execute correctly
 UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
-TARGET=WCXSPH# Target executable
-3DTARGET=WCXSPH
+TARGET=WCSPH# Target executable
 else
-TARGET=WCXSPH.exe
-3DTARGET=WCXSPH.exe
+TARGET=WCSPH.exe
 endif
 
-SOURCE=src/2D/WCXSPH.cpp
-#3DTARGET=WCXSPH
-3DSOURCE=src/3D/WCXSPH.cpp
+SOURCE=src/WCSPH.cpp
 
 
 # Compile and Build
-build:
-	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE)
+2D:
+	$(CXX) -DSIMDIM=2 $(CFLAGS) $(SOURCE) $(LIBS) -o $(TARGET)
 
-#Crossflow run with different input file
-cross:
-	./$(TARGET) Cross.dat SurfaceLeft.plt
+3D:
+	$(CXX) -DSIMDIM=3 $(CFLAGS) $(SOURCE) $(LIBS) -o $(TARGET)
 
 #add debug flag
-debug:
-	$(CXX) $(INC) -g $(CFLAGS) -o $(TARGET) $(SOURCE)
+debug2:
+	$(CXX) -g -DSIMDIM=2 $(CFLAGS) $(SOURCE) $(LIBS) -o $(TARGET)
 
-test:
-	$(CX8) $(INC) -g $(CFLAGS) -o $(TARGET) $(SOURCE)
-
+debug3:
+	$(CXX) -g -DSIMDIM=3 $(CFLAGS) $(SOURCE) $(LIBS) -o $(TARGET)
 
 clean:
 	$(RM) $(TARGET)
 
 new: 
 	$(RM) $(TARGET)
-	$(CXX) $(INC) $(CFLAGS) -o $(TARGET) $(SOURCE)
-
-3D:
-	$(CXX) $(INC) -g $(CFLAGS) -o $(3DTARGET) $(3DSOURCE)
-
-3Drun:
-	./$(3DTARGET).exe 3DInput.dat
+	$(CXX) $(CFLAGS) -o $(TARGET) $(SOURCE) $(LIBS)
