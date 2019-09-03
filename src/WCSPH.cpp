@@ -11,7 +11,6 @@
 
 #include <chrono>
 
-
 #include "Var.h"
 #include "IO.h"
 #include "Neighbours.h"
@@ -19,12 +18,12 @@
 #include "Init.h"
 #include "Add.h"
 #include "Resid.h"
+#include "Crossing.h"
 
 // using namespace std;
 using namespace std::chrono;
 using namespace Eigen;
 using namespace nanoflann;
-
 
 ///**************** Integration loop **************///
 ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, MESH &cells,
@@ -62,7 +61,8 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, M
 	if (svar.dt > svar.framet)
 		svar.dt = svar.framet;
 
-	vector<StateVecD> xih(svar.totPts,StateVecD::Zero());
+
+	vector<StateVecD> xih(svar.totPts);
 	// int RestartCount = 0;
 	while (log10(sqrt(errsum/(double(svar.totPts)))) - logbase > -7.0)
 	{
@@ -82,8 +82,8 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, M
 		// #pragma omp parallel
 	
 		/*Previous State for error calc*/
-		// #pragma omp parallel for
-		for (uint  i=0; i< svar.totPts; ++i)
+		#pragma omp parallel for
+		for (uint  i=0; i < svar.totPts; ++i)
 			xih[i] = pnp1[i].xi;
 
 		ldouble a = 1 - svar.gamma;
@@ -96,58 +96,115 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, M
 		ldouble gam = fvar.gam;
 
 		/*Update the state at time n+1*/
-		// #pragma omp parallel shared(a,b,c,d,dt,dt2,B,gam) num_threads(nthreads)
+		#pragma omp parallel shared(a,b,c,d,dt,dt2,B,gam,cells,fvar)
 		{
 			// #pragma omp for 
-			for (uint i=0; i <= svar.bndPts; ++i)
+			for (uint ii=0; ii <= svar.bndPts; ++ii)
 			{	/****** BOUNDARY PARTICLES ***********/
-				#pragma omp critical
+				// #pragma omp critical
 				{
-				pnp1[i].rho = pn[i].rho+0.5*dt*(pn[i].Rrho+pnp1[i].Rrho);
-				pnp1[i].p = B*(pow(pnp1[i].rho/fvar.rho0,gam)-1);
+				pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+pnp1[ii].Rrho);
+				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
 				}
 			}
 			
 
-			// #pragma omp for
-			for (uint i=svar.bndPts; i < svar.totPts ; ++i)
+			#pragma omp for
+			for (uint ii=svar.bndPts; ii < svar.totPts ; ++ii)
 			{	/****** FLUID PARTICLES ***********/
 				/*For the particles inside the pipe, perform a prescribed motion, and don't update pressure*/
 				/*Check if the particle is clear of the starting area*/
-				if(pnp1[i].b == 1)
+				if(pnp1[ii].b == 1)
 				{ /*boundary particle value of 1 means its a 
 					fluid particle that isn't clear of the starting area
 					2 means it is clear, amd can receive a force aerodynamically*/
-					StateVecD vec = svar.Rotate.transpose()*(pnp1[i].xi-svar.Start);
+					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
 					if(vec(1) > 2*svar.Pstep)
 					{	/*Tag it as clear if it's higher than the plane of the exit*/
-						pnp1[i].b=2;
+						pnp1[ii].b=2;
+						if(svar.Bcase == 6)
+						{
+							/*Search through the cells to find which cell it's in*/
+							if (outlist[ii].size() < fvar.avar.nfull)
+							{
+								#if SIMDIM == 3
+									uint found = 0;
+									uint jj = 0;
+									StateVecD testp = pnp1[ii].xi;
+									// cout << cells.cFaces.size() << endl;
+									for(std::vector<std::vector<StateVecD>> const& cell:cells.cFaces)
+									{
+										if(Crossings3D(cell,testp))
+										{
+											pnp1[ii].cellID = jj;
+											pnp1[ii].cellV = cells.cVel[jj];
+											found = 1;
+											// cout << "Cell found!" << endl;
+											break;
+											
+										}
+										++jj;
+									}
+
+									if(found != 1)
+									{
+										cout << "Containing cell not found. Something is wrong." << endl;
+										exit(-1);
+									}	
+								#else
+									uint found = 0;
+									uint jj = 0;
+									StateVecD testp = pnp1[ii].xi;
+									/*Do a cell containment*/
+									for(std::vector<StateVecD> const& cell:cells.cVerts)
+									{
+										if(Crossings2D(cell,testp))
+										{
+											pnp1[ii].cellID = jj;
+											pnp1[ii].cellV = cells.cVel[jj];
+											found = 1;
+											// cout << "Found the containing cell!" << endl;
+											// cout << jj << "  " << cells.cVel[jj][0] << endl;
+											break;
+											
+										}
+										++jj;
+									}
+
+									if(found != 1)
+									{
+										cout << "Containing cell not found. Something is wrong." << endl;
+										exit(-1);
+									}
+								#endif
+							}
+						}
 					}
 					else
 					{
-						pnp1[i].xi = pn[i].xi + dt*pn[i].v;
+						pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
 					}
 				}
 
-				if(pnp1[i].b==2)
-				{
-					pnp1[i].v =  pn[i].v +dt*(a*pn[i].f+b*pnp1[i].f);
-					pnp1[i].xi = pn[i].xi+dt*pn[i].v+dt2*(0.5*c*pn[i].f+d*pnp1[i].f);
-					pnp1[i].rho = pn[i].rho+dt*(a*pn[i].Rrho+b*pnp1[i].Rrho);
-					pnp1[i].p = fvar.B*(pow(pnp1[i].rho/fvar.rho0,fvar.gam)-1);
+				if(pnp1[ii].b==2)
+				{	
+					pnp1[ii].v =  pn[ii].v +dt*(a*pn[ii].f+b*pnp1[ii].f);
+					pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(0.5*c*pn[ii].f+d*pnp1[ii].f);
+					pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
+					pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
 				}
-			}
-		}
-
-			/****** FIND ERROR ***********/
-			errsum = 0.0;
-			// #pragma omp parallel for reduction(+:errsum)
-			for (uint i=svar.bndPts; i < svar.totPts; ++i)
-			{
-				StateVecD r = pnp1[i].xi-xih[i];
-				errsum += r.squaredNorm();
-			}
+			} /*End fluid particles*/
 		
+		/****** FIND ERROR ***********/
+		errsum = 0.0;
+		#pragma omp parallel for reduction(+:errsum)
+		for (uint i=svar.bndPts; i < svar.totPts; ++i)
+		{
+			StateVecD r = pnp1[i].xi-xih[i];
+			errsum += r.squaredNorm();
+		}
+		
+		}/*End pragma omp parallel*/
 
 		if(k == 0)
 			logbase=log10(sqrt(errsum/(double(svar.totPts))));
@@ -171,8 +228,9 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, M
 		{	/*Otherwise, roll forwards*/
 			++k;
 		}
-		error2 = error1;	
-	}
+		error2 = error1;
+
+	} /*End of subits*/
 
 	// RestartCount = 0;
 	/*Add time to global*/
@@ -180,6 +238,82 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, M
 
 // cout << "Timestep Params: " << maxf << " " << fvar.Cs + maxmu << " " << dtf << " " << dtcv << endl;
 // cout << "New Timestep: " << svar.dt << endl;
+
+	/*Check if the particle has moved to a new cell*/
+	if (svar.Bcase == 6)
+	{
+	/*Find which cell the particle is in*/
+		#pragma omp parallel for shared(cells, fvar)
+		for (uint ii = svar.bndPts; ii < svar.totPts; ++ii)
+		{
+			if (pnp1[ii].b == 2 && outlist[ii].size() < fvar.avar.nfull )
+			{   
+				#if SIMDIM == 3
+				uint found = 0;
+				StateVecD testp = pnp1[ii].xi;
+				for(auto cell:cells.cNeighb[pnp1[ii].cellID])
+				{
+
+					if(Crossings3D(cells.cFaces[cell],testp))
+					{
+						pnp1[ii].cellID = cell;
+						pnp1[ii].cellV = cells.cVel[cell];
+						found = 1;
+						break;
+					}
+				}
+
+				if(found == 0)
+				{	/*The containing cell wasn't found in the neighbours.*/
+					/*Scan through the whole list again*/
+					uint jj = 0;
+					for(auto cell:cells.cFaces)
+					{
+						if(Crossings3D(cell,testp))
+						{
+							pnp1[ii].cellID = jj;
+							pnp1[ii].cellV = cells.cVel[jj];
+							break;
+						}
+						++jj;
+					}
+				}	
+				
+				#else					
+					uint found = 0;
+					StateVecD testp = pnp1[ii].xi;
+					/*Do a cell containment*/
+					for(auto cell:cells.cNeighb[pnp1[ii].cellID])
+					{
+						if(Crossings2D(cells.cVerts[cell],testp))
+						{
+							pnp1[ii].cellID = cell;
+							pnp1[ii].cellV = cells.cVel[cell];
+							found = 1;
+							break;
+						}
+					}
+
+					if(found == 0)
+					{	/*The containing cell wasn't found in the neighbours.*/
+						/*Scan through the whole list again*/
+						uint jj = 0;
+						for(auto cell:cells.cVerts)
+						{
+							if(Crossings2D(cell,testp))
+							{
+								pnp1[ii].cellID = jj;
+								pnp1[ii].cellV = cells.cVel[jj];
+								break;
+							}
+							++jj;
+						}
+					}
+				#endif
+			}
+		}
+	}
+	
 
 	/*Check if more particles need to be created*/
 	if(svar.Bcase >= 3 && svar.Bcase !=5)
@@ -191,7 +325,7 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, M
 				int refresh = 1;
 				for (uint i = svar.totPts-svar.nrefresh; i<svar.totPts; ++i)
 				{	/*Check that the starting area is clear first...*/
-					StateVecD vec = svar.Rotate.transpose()*(pn[i].xi-svar.Start);
+					StateVecD vec = svar.Transp*(pnp1[i].xi-svar.Start);
 					if(vec[1]< svar.dx-svar.Jet(1))
 						refresh = 0;
 				}
@@ -201,13 +335,13 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, M
 					if (svar.addcount < svar.nmax)
 					{	/*...If we havent, then add points. */
 						// cout << "adding points..." << endl;
-						StateVecD vec = svar.Rotate.transpose()*(pn[svar.totPts-1].xi-svar.Start);
+						StateVecD vec = svar.Transp*(pnp1[svar.totPts-1].xi-svar.Start);
 						AddPoints(vec[1]-svar.dx, svar, fvar, cvar, pn, pnp1);
 					}
 					else
 					{	/*...If we have, then check we're sufficiently
 						clear to close the boundary*/
-						cout << "End of adding particle rounds. Stopping..." << endl;
+						cout << "End of adding particle rounds." << endl;
 						svar.Bclosed = 1;
 						
 					}
@@ -220,10 +354,6 @@ ldouble Newmark_Beta(Sim_Tree &NP1_INDEX, SIM &svar, FLUID &fvar, CROSS &cvar, M
 				break;
 		}
 	}
-
-
-	/*Find which cell the particle is in*/
-
 
 	/****** UPDATE TIME N ***********/
 	pn = pnp1;
@@ -240,8 +370,7 @@ int main(int argc, char *argv[])
 
     double duration;
     double error = 0;
-    cout << setw(5);
-    cout << SIMDIM << endl;
+    cout << std::scientific<< setw(10);
     write_header();
 
     /******* Define the global simulation parameters ******/
@@ -253,7 +382,10 @@ int main(int argc, char *argv[])
 
 	GetInput(argc,argv,svar,fvar,cvar);
 	
-	// Read_TAUMESH(cells);
+	if(svar.Bcase == 6)
+	{
+		Read_TAUMESH(svar.infolder,cells);
+	}
 
 	/*Make a guess of how many there will be...*/
 	int partCount = ParticleCount(svar);
@@ -267,7 +399,10 @@ int main(int argc, char *argv[])
 	
 	MakeOutputDir(argc,argv,svar);
 
-	InitSPH(svar,fvar,cvar,cells,pn,pnp1);
+	if (svar.Bcase == 6)
+		Write_Mesh_Data(svar,cells);
+
+	InitSPH(svar,fvar,cvar,pn,pnp1);
 
 	///********* Tree algorithm stuff ************/
 	Sim_Tree NP1_INDEX(SIMDIM,pnp1,20);
@@ -278,7 +413,13 @@ int main(int argc, char *argv[])
 	std::vector<std::vector<uint>>::iterator nfull = 
 		std::max_element(outlist.begin(),outlist.end(),
 		[](std::vector<uint> p1, std::vector<uint> p2){return p1.size()< p2.size();});
-	fvar.avar.nfull = double(nfull->size());
+
+	#if SIMDIM == 3
+		fvar.avar.nfull = (2.0/3.0) * double(nfull->size());
+	#endif
+	#if SIMDIM == 2
+		fvar.avar.nfull = 2.0/3.0 * double(nfull->size());
+	#endif
 
 	Forces(svar,fvar,cvar,pnp1, outlist);
 

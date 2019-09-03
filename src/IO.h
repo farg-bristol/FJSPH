@@ -274,7 +274,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	if (argc > 3) 
 	{	/*Check number of input arguments*/
 		cout << "\tWARNING: only two input arguments accepted,\n";
-		cout << "1: Input file   2: Output file directory.\n";
+		cout << "1: Input file directoy   2: Output file directory.\n";
 		cout << "Other inputs will be ignored." << endl;
 	}
 
@@ -286,7 +286,13 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
     else if (argc > 1)
     {	/*Get parameters if it has been provided*/
     	// cout << argv[1] << endl;
-    	std::ifstream in(argv[1]);
+    	string file = argv[1];
+    	if(file.back() != '/')
+	    	file.append("/");
+
+	    svar.infolder = file;
+		file.append("Settings.dat");
+    	std::ifstream in(file);
 	  	if(in.is_open()) 
 	  	{	/*Simulation parameters*/
 	  		cout << "Input file opened. Reading settings..." << endl;
@@ -313,6 +319,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	  			StateVecD angles = getDVector(in);
 	  			angles = angles *M_PI/180;
 	  			svar.Rotate = GetRotationMat(angles);
+	  			svar.Transp = svar.Rotate.transpose();
 		  		svar.Jet = getvector(in); /*Defined in VLM.h. Reused here*/
 		  		fvar.pPress = getDouble(in);
 		  		cvar.vJet = StateVecD::Zero(); cvar.vInf = StateVecD::Zero();
@@ -337,13 +344,15 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 			in.close();
 	  	}
 	  	else {
-		    cerr << "Error opening the input file." << endl;
+		    cerr << "Error opening the settings file." << endl;
 		    exit(-1);
 	  	}
 	}
 
 	/*Get fluid properties from fluid.dat*/
-	std::ifstream fluid("Fluid.dat");
+	string file = svar.infolder;
+	file.append("Fluid.dat");
+	std::ifstream fluid(file);
 	if (fluid.is_open())
 	{	/*Fluid parameters read*/
 		Eigen::Vector2d nb = getvector(fluid);
@@ -408,32 +417,45 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	ldouble rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
 	svar.dx = pow(fvar.Simmass/rho, 1.0/double(SIMDIM));
 	// cout << rho << "  " << svar.dx << endl;
+
 	#if SIMDIM == 3
-		svar.vortex.GetGamma(cvar.vInf);
+		if(svar.Bcase == 4)
+		{
+			svar.vortex.Init(svar.infolder);	
+			svar.vortex.GetGamma(cvar.vInf);	
+		}
 	#endif
+
 	GetAero(fvar, fvar.H);
 }
 
-void Get_Vector(ifstream &fin, int np, std::vector<StateVecD> &var, int yvalue)
+std::ifstream& GotoLine(std::ifstream& file, unsigned int num){
+    file.seekg(std::ios::beg);
+    for(uint i=0; i < num - 1; ++i){
+        file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+    }
+    return file;
+}
+
+void Get_Vector(ifstream &fin, const uint np, std::vector<StateVecD> &var, const uint yskip)
 {
 	string line;
 	for(uint dim =0; dim < SIMDIM; dim++)
 	{	
 		uint i = 0;
-		if(SIMDIM == 2)
-		{	/*If in 2D, skip the y-dimension, and read the z-dim.*/
-			if(yvalue == 0)
+		/*If in 2D, skip the y-dimension, and read the z-dim.*/
+		if(yskip == 1)
+		{
+			if (dim == 1)
 			{
-				if (dim == 1)
+				for(uint ii = 0; ii < ceil(float(np)/5.0); ++ii)
 				{
-					for(int ii = 0; ii <= floor(np/5); ++ii)
-					{
-						getline(fin, line);
-					}
+					// fin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+					getline(fin,line);
 				}
 			}
 		}
-		for(int ii = 0; ii <= floor(np/5); ++ii)
+		for(int ii = 0; ii < ceil(float(np)/5.0); ++ii)
 		{
 			getline(fin, line);
 			istringstream sline(line);
@@ -452,16 +474,21 @@ void Get_Vector(ifstream &fin, int np, std::vector<StateVecD> &var, int yvalue)
 				}
 			}
 		}
+		if (i!= var.size())
+		{
+			cout << "Mismatch of array size.\n" << 
+			" Not all of the array has been populated." << endl;
+		}
 	}
 }
 
 template <class T>
-void Get_Scalar_Data(ifstream &fin, const int np, T &var)
+void Get_Scalar_Data(ifstream &fin, const uint np, T &var)
 {
 	string line;
 
 	uint i = 0;
-	for(int ii = 0; ii <= floor(np/5); ++ii)
+	for(uint ii = 0; ii < ceil(float(np)/5.0); ++ii)
 	{
 		getline(fin, line);
 		istringstream sline(line);
@@ -480,12 +507,47 @@ void Get_Scalar_Data(ifstream &fin, const int np, T &var)
 			}
 		}
 	}
+
+	if (i!= var.size())
+	{
+		cout << "Mismatch of array size.\n" << 
+		" Not all of the array has been populated." << endl;
+	}
+}
+
+void Get_Cells(ifstream &fin, const uint nE, const uint nCverts, std::vector<std::vector<uint>> &cell)
+{
+	string line;
+	// getline(fin, line);
+	// cout << line << endl;
+	for(uint ii = 0; ii < nE; ++ii)
+	{
+		getline(fin, line);
+		istringstream sline(line);
+
+		for (uint jj = 0; jj < nCverts; ++jj)
+		{	
+			uint temp;
+			sline >> temp;
+			cell[ii][jj] = (temp-1);								
+		}
+	}
+}
+
+
+void Skip_Variable(ifstream &fin, const int np)
+{
+	for(int ii = 0; ii < ceil(float(np)/5.0); ++ii)
+	{
+		fin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+	}
 }
 
 template <class T>
 void Average_Point_to_Cell(std::vector<T> &pData, std::vector<T> &cData,
-							const std::vector<std::vector<int>> &elems, const T zero)
+							const std::vector<std::vector<uint>> &elems, const T zero)
 {
+	uint nVerts = elems[0].size();
 	for(uint ii = 0; ii < elems.size(); ++ii)
 	{
 		T sum = zero;
@@ -493,117 +555,165 @@ void Average_Point_to_Cell(std::vector<T> &pData, std::vector<T> &cData,
 		{
 			sum += pData[jj];
 		}
-		cData[ii] = sum/8.0;
+		cData[ii] = sum/nVerts;
 	}
 }
 
-void Read_TAUMESH(MESH &cells)
+void Read_TAUMESH(string input, MESH &cells)
 {
-	std::ifstream fin("sol.pval.1000.plt", std::ios::in);
+	input.append("sol.pval.1000.plt");
+	std::ifstream fin(input, std::ios::in);
 
-	if(fin.is_open())
+	if(!fin.is_open())
 	{
-		std::string line;
-		getline(fin,line);
-		getline(fin,line);
+		cout << "Couldn't open sol.pval.1000.plt. Stopping." << endl;
+		cout << "Path attempted: " << input << endl;
+		exit(-1);
+	}
+	else 
+	{
+		cout << "Mesh file open, reading data..." << endl;
+	}
+	std::string line;
+	getline(fin,line);
+	getline(fin,line);
 
-		uint veltype = 0;
-		if(line.find("\"x_velocity\"")!=string::npos)
-		{
-			if(line.find("\"y_velocity\"")!=string::npos)
-			{
-				if(line.find("\"z_velocity\"")!=string::npos)
-				{
-					cout << "All velocity components found!" << endl;
-					cout << "Continuing!" << endl;
-				}
-				else
-				{
-					cout << "velocity components \"u\" and \"v\" found, but no \"w\"..." << endl;
-					cout << "I can't work with this. Stopping..." << endl;
-					exit(-1);
-				}
-			}
-			else if (line.find("\"z_velocity\"")!=string::npos)
-			{
-				cout << "velocity components \"u\" and \"w\" found, but no \"v\"..." << endl;
-				cout << "I can work with this. Continuing..." << endl;
-				veltype = 1;
-			}
-			else
-			{
-				cout << "Only velocity component \"u\" found, but no \"v\" and \"w\"..." << endl;
-				cout << "I can't work with this. Stopping..." << endl;
-				exit(-1);
-			}
-		}
-		else if (line.find("\"y_velocity\"")!=string::npos)
+	uint veltype = 0;
+	if(line.find("\"x_velocity\"")!=string::npos)
+	{
+		if(line.find("\"y_velocity\"")!=string::npos)
 		{
 			if(line.find("\"z_velocity\"")!=string::npos)
 			{
-				cout << "velocity components \"v\" and \"w\" found, but no \"u\"..." << endl;
-				cout << "I can't work with this. Stopping..." << endl;
-				exit(-1);
+				cout << "All velocity components found!" << endl;
+				cout << "Continuing!" << endl;
 			}
 			else
 			{
-				cout << "Only velocity component \"v\" found, but no \"u\" and \"w\"..." << endl;
+				cout << "velocity components \"u\" and \"v\" found, but no \"w\"..." << endl;
 				cout << "I can't work with this. Stopping..." << endl;
 				exit(-1);
 			}
 		}
 		else if (line.find("\"z_velocity\"")!=string::npos)
 		{
-			cout << "Only velocity component \"w\" found, but no \"u\" and \"v\"..." << endl;
-			cout << "I can't work with this. Stopping..." << endl;
+			cout << "velocity components \"u\" and \"w\" found, but no \"v\"..." << endl;
+			#if SIMDIM == 2
+				cout << "I can work with this. Continuing..." << endl;
+				veltype = 1;
+			#else 
+				cerr << "SIMDIM is 3, and \"v\" velocity component missing. Stopping." << endl;
 				exit(-1);
+			#endif
 		}
 		else
 		{
-			cout << "Warning: No velocity components provided.\n" ;
+			cout << "Only velocity component \"u\" found, but no \"v\" and \"w\"..." << endl;
 			cout << "I can't work with this. Stopping..." << endl;
 			exit(-1);
 		}
-
-		std::size_t ptr = line.find("\"cp\"");
-		std::size_t ptr2 = line.find("\"Mach_number\"");
-
-		if(ptr != string::npos)
+	}
+	else if (line.find("\"y_velocity\"")!=string::npos)
+	{
+		if(line.find("\"z_velocity\"")!=string::npos)
 		{
-			cout << "Cp data present" << endl;
-
+			cout << "velocity components \"v\" and \"w\" found, but no \"u\"..." << endl;
+			cout << "I can't work with this. Stopping..." << endl;
+			exit(-1);
 		}
-		if (ptr2 != string::npos)
+		else
 		{
-			cout << "Mach data present" << endl;
+			cout << "Only velocity component \"v\" found, but no \"u\" and \"w\"..." << endl;
+			cout << "I can't work with this. Stopping..." << endl;
+			exit(-1);
 		}
+	}
+	else if (line.find("\"z_velocity\"")!=string::npos)
+	{
+		cout << "Only velocity component \"w\" found, but no \"u\" and \"v\"..." << endl;
+		cout << "I can't work with this. Stopping..." << endl;
+			exit(-1);
+	}
+	else
+	{
+		cout << "Warning: No velocity components provided.\n" ;
+		cout << "I can't work with this. Stopping..." << endl;
+		exit(-1);
+	}
 
-		int mfirst =0;
-		if(ptr != string::npos && ptr2 != string::npos)
-		{
-			if (ptr < ptr2)
-			{
-				mfirst = 0;
-			}
-			else
-			{
-				mfirst = 1;
-			}
-		}
+	uint nvar = std::count(line.begin(),line.end(),'\"');
+	nvar /= 2;
+	std::size_t ptr = line.find("\"x_velocity\"");
+	uint velstart = std::count(line.begin(),line.begin()+ptr, '\"');
+	velstart/=2;
 
-		getline(fin, line); /*Get Zone line data. Tells which type of volume*/
+	/*Next bit depends on dimensions. If 3D, read the hexa data.*/
+	/*If 2D, skip this and read the symmetry plane data.*/
 
-		if(line.find("hexa")!=string::npos)
-		{
-			/*Do something. N verts = 8, N faces = 6, N edges = 12*/
-		}
+	getline(fin, line); /*Get Zone line data. Tells which type of volume*/
+	uint nF, nCverts, nFverts;
+	
+	if(line.find("hexa")!=string::npos)
+	{
+		/*Do something. N verts = 8, N faces = 6, N edges = 12*/
+		#if SIMDIM == 2
+			nCverts = 4;
+			nF = 0;
+			nFverts = 0;
+		#else
+			nF = 6;
+			nCverts = 8;
+			nFverts = 4;
+		#endif
+	}
+	else if(line.find("tetra")!=string::npos)
+	{
+		/*Do something else. */
+		#if SIMDIM == 2
+			nCverts = 3;
+			nF = 0;
+			nFverts = 0;
+		#else
+			nF = 4;
+			nCverts = 4;
+			nFverts = 3;
+		#endif
+	}
+	else
+	{
+		cout << "Couldn't determine which type of volume used." << endl;
+		exit(-1);
+	}
+	
+	
+	getline(fin, line); /*Get numbers*/
+	uint nP = 0;
+	uint nE = 0;
+	std::size_t ptr2;
+	ptr = line.find("N=");
+	if(ptr!=string::npos)
+	{
+		ptr2 = line.find_first_not_of("0123456789",ptr+2);
+		string temp = line.substr(ptr+2,ptr2-(ptr+2));
+		
+		nP = stoi(temp);
+	}
+	ptr = line.find("E=");
+	if(ptr!=string::npos)
+	{
+		ptr2 = line.find_first_not_of("0123456789",ptr+2);
+		string temp = line.substr(ptr+2,ptr2-(ptr+2));
+		
+		nE = stoi(temp);
+	}
 
-		if(line.find("tetra")!=string::npos)
-		{
-			/*Do something else. */
-		}
-
-		getline(fin, line); /*Get numbers*/
+	#if SIMDIM == 2
+		/*Skip the 3D data and read a symmetry plane*/
+		uint lineNo = ceil(float(nP)/5.0)*nvar + nE+7;
+		GotoLine(fin,lineNo);
+		getline(fin,line);
+		// cout << lineNo << endl;
+		// cout << line << endl;
 
 		ptr = line.find("N=");
 		if(ptr!=string::npos)
@@ -611,76 +721,123 @@ void Read_TAUMESH(MESH &cells)
 			ptr2 = line.find_first_not_of("0123456789",ptr+2);
 			string temp = line.substr(ptr+2,ptr2-(ptr+2));
 			
-			cells.numPoint = stoi(temp);
+			nP = stoi(temp);
 		}
+		else
+		{
+			cout << "Number of vertices not found. Stopping." << endl;
+			cout << "Line: " << lineNo << " Contents: " << line << endl;
+			exit(-1);
+		}
+
 		ptr = line.find("E=");
 		if(ptr!=string::npos)
 		{
 			ptr2 = line.find_first_not_of("0123456789",ptr+2);
 			string temp = line.substr(ptr+2,ptr2-(ptr+2));
 			
-			cells.numElem = stoi(temp);
-		}
-
-		// cout << cells.numPoint << "  " << cells.numElem << endl;
-		cells.reserve(cells.numPoint,cells.numElem);
-
-		getline(fin,line);
-
-		/*************** START OF VERTICES DATA *******************/
-		/*Get the position vectors*/
-		Get_Vector(fin, cells.numPoint, cells.verts, 0);
-
-		/*Get velocities*/
-		Get_Vector(fin, cells.numPoint, cells.pointVel, veltype);
-		
-		
-		if(mfirst == 1)
-		{	
-			Get_Scalar_Data(fin, cells.numPoint, cells.pointMach);
-			Get_Scalar_Data(fin, cells.numPoint, cells.pointCp);
+			nE = stoi(temp);
 		}
 		else
-		{	
-			Get_Scalar_Data(fin, cells.numPoint, cells.pointCp);
-			Get_Scalar_Data(fin, cells.numPoint, cells.pointMach);
-		}
-		/***************** END OF VERTICES DATA *******************/
-
-		// cout << cells.verts.size() << "  " << cells.pointMach.size() <<  endl;
-		// cout << cells.pointMach.back() << endl;
-		
-
-		/*BEGINNING OF CELL CONNECTIVITY*/
-		for(uint ii = 0; ii <= cells.numElem; ++ii)
 		{
-			getline(fin, line);
-			istringstream sline(line);
-
-			for (uint jj = 0; jj < 8; ++jj)
-			{	
-				int temp;
-				sline >> temp;
-				cells.elems[ii][jj] = (temp-1);								
-			}
+			cout << "Number of elements not found. Stopping." << endl;
+			cout << "Line: " << lineNo << " Contents: " << line << endl;
+			exit(-1); 
 		}
+		// cout << nP << "  " << nE << endl;
+	#endif  
 
-		fin.close();
-	}
-	else
+	// cout << cells.numPoint << "  " << cells.numElem << endl;
+	cells.reserve(nP,nE,nCverts,nF,nFverts);
+	
+	getline(fin,line);
+
+	/*************** START OF VERTICES DATA *******************/
+	/*Get the position vectors*/
+	#if SIMDIM == 2	/*Skip y component*/
+		Get_Vector(fin, nP, cells.verts, 1);
+	#else /*get y for 3D sim*/
+		Get_Vector(fin, nP, cells.verts, 0);
+	#endif
+
+	/*Skip variables aside from the velocity vectors*/
+	for (uint ii = 3; ii < velstart ; ++ii)
+		Skip_Variable(fin,nP);
+
+
+	#if SIMDIM == 2
+		if (veltype == 1) /*Don't skip since there isnt a y vel*/
+			Get_Vector(fin, nP, cells.pVel, 0); 
+		else /*Skip y velocity component*/
+			Get_Vector(fin, nP, cells.pVel, 1);
+	#else /*Get the 3D velocity*/
+		if(veltype == 0)
+			Get_Vector(fin, nP, cells.pVel, 0);
+	#endif
+
+	uint velend;
+	#if SIMDIM == 2
+		if (veltype == 1)
+			velend = 2;
+		else
+			velend = 3;
+	#else
+		velend = SIMDIM;
+	#endif 
+
+	/*Skip remaining variables to get to the cell data*/
+	for (uint ii = 0; ii < nvar - (velstart+velend); ++ii)
+		Skip_Variable(fin,nP);
+
+	/***************** END OF VERTICES DATA *******************/
+
+	// cout << cells.verts.size() << "  " << cells.pointMach.size() <<  endl;
+	// cout << cells.pointMach.back() << endl;
+	// getline(fin,line);
+	// cout << line << endl;
+
+	/*BEGINNING OF CELL CONNECTIVITY*/
+	Get_Cells(fin,nE,nCverts,cells.elems);
+
+	// getline(fin,line);
+	// cout << line << endl;
+	fin.close(); 
+	
+
+
+
+	#if SIMDIM == 2
+
+	// cout << cells.verts.size() << endl; 
+	for(uint ii = 0; ii < nE; ++ii)
 	{
-		cout << "Couldn't open sol.pval.1000.plt. Stopping" << endl;
-		exit(-1);
+		for (uint jj = 0; jj < nCverts; ++jj)
+		{	
+			if (ii > cells.cVerts.size())
+			{
+				cout << "Loop attempted to access out of bounds." << endl;
+				exit(-1);
+			}
+			if(cells.elems[ii][jj]>cells.verts.size())
+			{
+				cout << "Value in element list exceeds vertex list size." << endl;
+				cout << ii << "  " << jj << "  " << cells.elems[ii][jj] << endl;
+				exit(-1);
+			}
+			cells.cVerts[ii][jj] = cells.verts[cells.elems[ii][jj]];								
+		}
 	}
 
-	// for(uint ii = 0; ii <= cells.numElem; ++ii)
+	// uint cellID = 14603;
+	// for(uint jj = 0; jj < nCverts; ++jj)
 	// {
-	// 	for (uint jj = 0; jj < 8; ++jj)
-	// 	{	
-	// 		cells.elemverts[ii][jj] = cells.verts[cells.elems[ii][jj]];								
-	// 	}
+	// 	cout << cells.elems[cellID][jj] + 1 << ":  " << cells.cVerts[cellID][jj][0] <<
+	// 	        "  " << cells.cVerts[cellID][jj][1] << endl;
 	// }
+	// cout << endl;
 
+	#endif
+	
 	// for(uint ii = 0; ii < 3; ++ii)
 	// {	
 	// 	cout << endl << "Cell: " << ii << endl;
@@ -691,25 +848,64 @@ void Read_TAUMESH(MESH &cells)
 	// 	}
 	// }
 	
-	/*Face vertices to have all faces counter-clockwise*/
-	std::vector<std::vector<int>> facenum = {{1,5,6,2},{2,6,7,3},{0,3,7,4},
-											{0,4,5,1},{0,1,2,3},{7,6,5,4}};
 
-	/*Build Face data for containement queries*/
-	for(uint ii = 0; ii <= cells.numElem; ++ii)
-	{	
-		uint jj = 0; 
-		for(auto faces:facenum)
+	#if SIMDIM == 3
+		/*Face vertices to have all faces counter-clockwise*/
+		std::vector<std::vector<int>> facenum = {{1,5,6,2},{2,6,7,3},{0,3,7,4},
+												{0,4,5,1},{0,1,2,3},{7,6,5,4}};
+		
+		// cout << nE << "  " << nF << "  " << nCverts << endl;
+		// cout << cells.verts.size() << "  " << cells.elems.size() << endl;
+		// cout << cells.cFaces.size() << "  " << cells.cFaces[0].size() << "  ";
+		// cout << cells.cFaces[0][0].size() << endl;
+		
+		/*Build Face data for containement queries*/
+		for(uint ii = 0; ii < nE; ++ii)
 		{	
-			uint kk = 0;
-			for (auto vert:faces)
-			{
-				cells.elemfaces[ii][jj][kk] = cells.verts[cells.elems[ii][vert]];
-				++kk;
+			uint jj = 0; 
+			for(auto faces:facenum)
+			{	
+				uint kk = 0;
+				for (auto vert:faces)
+				{
+					// cout << vert << "  ";
+					if (ii > cells.cFaces.size())
+					{
+						cout << "Loop attempted to access out of bounds." << endl;
+						exit(-1);
+					}
+					if(cells.elems[ii][vert]>cells.verts.size())
+					{
+						cout << "Value in element list exceeds vertex list size." << endl;
+						cout << ii << "  " << vert << "  " << cells.elems[ii][vert] << endl;
+						exit(-1);
+					}
+					cells.cFaces[ii][jj][kk] = cells.verts[cells.elems[ii][vert]];
+					++kk;
+				}
+				// cout << endl;
+				++jj;
 			}
-			++jj;
 		}
-	}
+
+		// uint ii = 21707;	
+		// cout << endl << "Cell: " << ii << endl;
+		// uint jj = 0;
+		// for (std::vector<StateVecD> const& faces: cells.cFaces[ii] )
+		// {	
+		// 	cout << "Face: " << jj << endl;
+		// 	uint kk = 0;
+		// 	for (StateVecD const& verts:faces)
+		// 	{
+		// 		cout << facenum[jj][kk] << ":  " << verts[0] << "  " << verts[1] 
+		// 			 << "  " << verts[2] << endl;
+		// 		++kk;
+		// 	}
+		// 	++jj;
+	
+		// }
+		
+	#endif
 
 
 	/*Build Cell connectivity*/
@@ -719,33 +915,53 @@ void Read_TAUMESH(MESH &cells)
 	/* check if a cell has 2 vertices the same in it as the checked cell
 		If yes, then it's a neighbour. */
 	cout << "Building cell neighbours..." << endl;
-
-	for (uint ii = 0; ii < cells.numElem; ++ii)
+	
+	
+	#pragma omp parallel 
 	{
-		cells.elemneighb.emplace_back();
-		for (uint jj = 0; jj < cells.numElem; ++jj)
+		std::vector<std::vector<uint>> cNeighb = std::vector<std::vector<uint>>(nE,std::vector<uint>());
+	    #pragma omp for schedule(static) nowait
+		for (uint ii = 0; ii < nE; ++ii)
 		{
-			if (jj == ii)
-				continue;
-
-			int count = 0;
-			for (uint kk = 0; kk < cells.elems[ii].size(); ++kk)
+			for (uint jj = 0; jj < nE; ++jj)
 			{
-				if(std::find(cells.elems[jj].begin(),cells.elems[jj].end(),cells.elems[ii][kk])!=cells.elems[jj].end())
-					count++;
-			}
+				if (jj == ii)
+					continue;
 
-			if(count >=2)
-				cells.elemneighb[ii].emplace_back(jj);
+				uint count = 0;
+				for (uint kk = 0; kk < cells.elems[ii].size(); ++kk)
+				{
+					if(std::find(cells.elems[jj].begin(),cells.elems[jj].end(),cells.elems[ii][kk])!=cells.elems[jj].end())
+						count++;
+				}
+
+				uint thresh;
+				#if SIMDIM == 2
+					thresh = 1;
+				#else
+					thresh = 2;
+				#endif
+
+				if(count >=thresh)
+					cNeighb[ii].push_back(jj);
+			}
 		}
+		
+		#pragma omp for schedule(static) ordered
+    	for(int i=0; i<NTHREADS; i++)
+    	{
+    		#pragma omp ordered
+    		cells.cNeighb.insert(cells.cNeighb.end(), cNeighb.begin(), cNeighb.end());
+    	}
+	       
 	}
 
 	cout << "Averaging point data to the cell..." << endl;
 	StateVecD zero = StateVecD::Zero();
 	/*Average data from the points to find the cell based data*/
-	Average_Point_to_Cell(cells.pointVel,cells.cellVel, cells.elems, zero);
-	Average_Point_to_Cell(cells.pointCp,cells.cellCp, cells.elems, 0.0);
-	Average_Point_to_Cell(cells.pointMach,cells.cellMach, cells.elems, 0.0);
+	Average_Point_to_Cell(cells.pVel,cells.cVel, cells.elems, zero);
+	// Average_Point_to_Cell(cells.pointCp,cells.cellCp, cells.elems, 0.0);
+	// Average_Point_to_Cell(cells.pointMach,cells.cellMach, cells.elems, 0.0);
 
 }
 
@@ -777,6 +993,80 @@ void Write_settings(SIM &svar, FLUID &fvar)
     cerr << "Error opening the settings output file." << endl;
     exit(-1);
   }
+}
+
+void Write_Mesh_Data(SIM &svar, MESH &cells)
+{
+	string mesh = svar.outfolder;
+	mesh.append("/Mesh.plt");
+	std::ofstream fm(mesh, std::ios::out);
+
+	if(!fm.is_open())
+	{ 
+		cout << "Failed to open mesh output file" << endl;
+		exit(-1);
+	}
+
+	#if SIMDIM == 2
+		fm << "TITLE = \"2D TAU Solution\"\n";
+		fm << "VARIABLES = \"x (m)\" \"z (m)\" \"x_velocity\" \"z_velocity\"\n";
+		fm << "ZONE T=\"2D Solution Plane\"\n";
+		fm << "VARLOCATION=([1-2]=NODAL,[3-4]=CELLCENTERED)\n";
+		fm << "N=" << cells.numPoint << ", E=" << cells.numElem << ", F=FEBLOCK ET=Quadrilateral\n\n";
+	#endif
+
+	#if SIMDIM == 3
+		fm << "TITLE = \"3D TAU Solution\"\n";
+		fm << "VARIABLES = \"x (m)\" \"y (m)\" \"z (m)\" \"x_velocity\" \"y_velocity\" \"z_velocity\"\n";
+		fm << "ZONE T=\"3D Solution Plane\"\n";
+		fm << "VARLOCATION=([1-3]=NODAL,[4-6]=CELLCENTERED)\n";
+		fm << "N=" << cells.numPoint << ", E=" << cells.numElem << ", F=FEBLOCK ET=Brick\n\n";
+	#endif
+
+	for(uint ii = 0; ii < SIMDIM; ++ii)
+	{	uint kk = 0;
+		for(uint jj = 0; jj < cells.numPoint; ++jj)
+		{
+			fm << cells.verts[jj][ii] << " ";
+			kk++;
+
+			if(kk == 5)
+			{
+				fm << "\n";
+				kk = 0;
+			}
+		}
+
+		fm << "\n";
+	}
+
+	for(uint ii = 0; ii < SIMDIM; ++ii)
+	{	uint kk = 0;
+		for(uint jj = 0; jj < cells.numElem; ++jj)
+		{
+			fm << cells.cVel[jj][ii] << " ";
+			kk++;
+
+			if(kk == 5)
+			{
+				fm << "\n";
+				kk = 0;
+			}
+		}
+		fm << "\n";
+	}
+
+	for(uint ii = 0; ii <= cells.numElem; ++ii)
+	{
+		for(auto elem:cells.elems[ii])
+		{
+			fm << elem+1 << " ";
+		}
+
+		fm << "\n";
+	}
+
+
 }
 
 void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, State &pnp1)
@@ -819,9 +1109,9 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, State &pnp1)
 		        
 		        fp << p->f.norm() << " " << p->Af(0) << " " << p->Sf.norm() << " ";
 		        for(uint i = 0; i < SIMDIM; ++i)
-		        	fp << p->Af(i) << " "; 
+		        	fp << p->cellV(i) << " "; 
 
-		        fp << p->b << " " << p->theta  << "\n"; 
+		        fp << p->b << " " << p->cellID+1  << "\n"; 
 		  	}  	
 		  	fp << std::flush;
 		  	break;
@@ -854,15 +1144,15 @@ void Write_ASCII_header(std::ofstream& fp, SIM &svar)
 		switch (svar.outform)
 		{	
 			case 0:
-				fp << "VARIABLES = \"x (m)\", \"y (m)\""<< "\n";
+				fp << "VARIABLES = \"x (m)\", \"z (m)\""<< "\n";
 				break;
 			case 1:
-				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"v (m/s)\", \"a (m/s<sup>-1</sup>)\", " << 
+				fp << "VARIABLES = \"x (m)\", \"z (m)\", \"v (m/s)\", \"a (m/s<sup>-1</sup>)\", " << 
 			"\"<greek>r</greek> (kg/m<sup>-3</sup>)\", \"P (Pa)\"" << "\n";
 				break;
 			case 2:
-				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"a (m/s<sup>-1</sup>)\", " << 
-			"\"A<sub>f</sub>\", \"S<sub>f</sub>\", \"S<sub>fx</sub>\", \"S<sub>fy</sub>\", \"B\", \"Theta\"" << "\n";
+				fp << "VARIABLES = \"x (m)\", \"z (m)\", \"a (m/s<sup>-1</sup>)\", " << 
+			"\"A<sub>f</sub>\", \"S<sub>f</sub>\", \"S<sub>fx</sub>\", \"S<sub>fz</sub>\", \"B\", \"Theta\"" << "\n";
 				break;
 		}
 		break;

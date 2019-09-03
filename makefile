@@ -4,7 +4,8 @@ CXX=g++
 CX8=g++-8
 
 # Libraries to include
-LIBS=-lnetcdf_c++4 -ltecio -lgmpxx -lgmp
+LIBS=-ltecio -lgmpxx -lgmp
+#-lnetcdf_c++4
 
 # Compiler flags. If desired add -g for debugging info.
 CFLAGS=-std=c++11 -Wall -Wextra -ffast-math -funroll-loops -O3 -fopenmp

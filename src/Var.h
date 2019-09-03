@@ -75,6 +75,7 @@ typedef struct SIM {
 	StateVecD Box;					/*Box dimensions*/
 	StateVecD Start; 				/*Sim box bottom left coordinate*/
 	RotMat Rotate;				    /*Starting rotation matrix*/ 
+	RotMat Transp;
 	Eigen::Vector2d Jet;			/*Jet properties*/
 	uint subits;                    /*Max number of sub-iterations*/
 	uint Nframe; 			        /*Max number of frames to output*/
@@ -87,7 +88,7 @@ typedef struct SIM {
 	uint outform;                   /*Output type. Fluid properties or Research.*/
 	uint frameout;                  /**/
 	uint framecount;
-	std::string outfolder;			
+	std::string infolder, outfolder;			
 	#if SIMDIM == 3
 		VLM vortex;
 	#endif
@@ -126,41 +127,57 @@ typedef struct CROSS
 
 typedef struct MESH
 {
-	void reserve(int np, int ne)
+	void reserve(const uint nV, const uint nC, const uint nCverts, const uint nfaces, const uint nFverts)
 	{
-		verts = std::vector<StateVecD>(np);
-		pointMach = std::vector<double>(np);
-		pointCp = std::vector<double>(np);
-		pointVel = std::vector<StateVecD>(np);
+		verts = std::vector<StateVecD>(nV);
+		pVel = std::vector<StateVecD>(nV);
+		// pointMach = std::vector<double>(np);
+		// pointCp = std::vector<double>(np);
 
-		elems = std::vector<std::vector<int>>(np,std::vector<int>(8));
-		// elemverts = std::vector<std::vector<StateVecD>>(np,std::vector<StateVecD>(8));
-		// elemfaces.reserve(ne);
-		elemfaces = std::vector<std::vector<std::vector<StateVecD>>>
-				(np,std::vector<std::vector<StateVecD>>(6,std::vector<StateVecD>(4)));
-		cellMach = std::vector<double>(ne);
-		cellCp = std::vector<double>(ne);
-		cellVel = std::vector<StateVecD>(ne);
-		elemneighb.reserve(ne);
+		elems = std::vector<std::vector<uint>>(nC,std::vector<uint>(nCverts));
+		#if SIMDIM == 2
+			cVerts = std::vector<std::vector<StateVecD>>(nC,std::vector<StateVecD>(nCverts));
+			if(nfaces != 0 || nFverts !=0)
+			{
+				std::cout << "Some 3D data has been initialised.\n"
+				<< "Please check the simulation dimensions" << std::endl;
+			}
+		#else /*Don't ask...*/
+			cFaces = std::vector<std::vector<std::vector<StateVecD>>>
+				(nC,std::vector<std::vector<StateVecD>>(nfaces,std::vector<StateVecD>(nFverts)));
+		#endif
+		cVel = std::vector<StateVecD>(nC);		
+		// cellMach = std::vector<double>(ne);
+		// cellCp = std::vector<double>(ne);
+		// cNeighb = std::vector<std::vector<uint>>(nC,std::vector<uint>());
+		cNeighb.reserve(nC);
+		
+		numPoint = nV;
+		numElem = nC;
+		nFaces = nfaces;
 	}
 
 	std::string zone;
-	uint numPoint, numElem, nfaces;
+	uint numPoint, numElem, nFaces;
 	/*Point based data*/
 	std::vector<StateVecD> verts;
-	std::vector<double> pointMach;
-	std::vector<double> pointCp;
-	std::vector<StateVecD> pointVel;
+	std::vector<StateVecD> pVel;
+	// std::vector<double> pointMach;
+	// std::vector<double> pointCp;
 
 	/*Cell based data*/
-	std::vector<std::vector<int>> elems;
-	// std::vector<std::vector<StateVecD>> elemverts;
-	/*Yep... a triple layered vector...*/
-	std::vector<std::vector<std::vector<StateVecD>>> elemfaces; 
-	std::vector<std::vector<int>> elemneighb;
-	std::vector<double> cellMach;
-	std::vector<double> cellCp;
-	std::vector<StateVecD> cellVel;
+	std::vector<std::vector<uint>> elems;
+	#if SIMDIM == 2
+		std::vector<std::vector<StateVecD>> cVerts;
+	#endif
+	/*Yep... a quad layered vector... I don't like it any more than you*/
+	#if SIMDIM == 3
+		std::vector<std::vector<std::vector<StateVecD>>> cFaces; 
+	#endif
+	std::vector<StateVecD> cVel;
+	std::vector<std::vector<uint>> cNeighb;
+	// std::vector<double> cellMach;
+	// std::vector<double> cellCp;
 }MESH;
 
 /*Particle data class*/
@@ -178,6 +195,8 @@ typedef class Particle {
 			p = press;
 			Rrho = 0.0;
 			theta = 0.0;
+			cellV = StateVecD::Zero();
+			cellID = 0;
 		}
 
 		int size() const
@@ -199,12 +218,14 @@ typedef class Particle {
 		StateVecD xi, v, f, Sf, Af, normal;
 		ldouble rho, p, Rrho, m, theta;
 		uint b; //What state is a particle. Boundary, forced particle or unforced
+		StateVecD cellV;
+		uint cellID;
 }Particle;
 
 typedef class Part {
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-		Part(Particle pi)
+		Part(const Particle pi)
 		{
 			xi = pi.xi; v = pi.v; 
 			rho = pi.rho; 
@@ -213,6 +234,8 @@ typedef class Part {
 			b = pi.b;
 			Sf = pi.Sf;
 			normal = pi.normal;
+			cellV = pi.cellV;
+			cellID = pi.cellID;
 		}
 
 		int size() const
@@ -225,7 +248,7 @@ typedef class Part {
 			return(xi[a]);
 		}
 
-		void operator=(Particle pi)
+		void operator=(const Particle pi)
 		{
 			xi = pi.xi; v = pi.v; 
 			rho = pi.rho; 
@@ -244,6 +267,8 @@ typedef class Part {
 		StateVecD xi, v, Sf, normal;
 		ldouble rho, p, m;
 		uint b; //What state is a particle. Boundary, forced particle or unforced
+		StateVecD cellV;
+		uint cellID;
 }Part;
 
 typedef std::vector<Particle> State;

@@ -35,73 +35,15 @@ typedef struct Panel
 	Eigen::Vector3d norm;
 }Panel;
 
-int getI(std::ifstream& In)
-{
-	std::string line;
-	getline(In,line);
-	int i = stoi(line);
-	return i;
-}
-
-double getD(std::ifstream& In)
-{
-	std::string line;
-	getline(In,line);
-	double d = stod(line);
-	return d; 
-}
-
-std::string getS(std::ifstream& In)
-{
-	std::string line;
-	getline(In,line);
-	return line; 
-}
-
-Eigen::Vector2i getIVec(std::ifstream& In)
-{
-	std::string line;
-	getline(In,line);
-	std::istringstream sline(line);
-	// cout << sline.str() << endl;
-	Eigen::Vector2i x;
-	sline >> x[0]; sline >> x[1];
-
-	return x;
-}
-
-/*Function for a 2D Vector*/
-Eigen::Vector2d getvec(std::ifstream& In)
-{
-	std::string line;
-	getline(In,line);
-	std::istringstream sline(line);
-	
-	Eigen::Vector2d x;
-	sline >> x[0]; sline >> x[1]; 
-		
-	return x;
-}
-
-Eigen::Vector3i get3dVector(std::ifstream& In)
-{
-	std::string line;
-	getline(In,line);
-	std::istringstream sline(line);
-	
-	Eigen::Vector3i x;
-	sline >> x[0]; sline >> x[1]; sline >> x[2]; 
-		
-	return x;
-}
-
-
 typedef class VLM
 {
 	public:
-		VLM()
+		VLM(){}
+
+		void Init(std::string input)
 		{
-			std::ifstream filein("VLM.dat", std::ios::in);
+			input.append("VLM.dat");
+			std::ifstream filein(input, std::ios::in);
 
 			if(filein.is_open())
 			{
@@ -154,7 +96,6 @@ typedef class VLM
 			Freestream = Freestream.normalized();
 
 			MakeMatrix();
-
 		}
 
 		void GetGamma(Eigen::Vector3d inf)
@@ -256,6 +197,67 @@ typedef class VLM
 		}
 
 	protected:
+
+		int getI(std::ifstream& In)
+		{
+			std::string line;
+			getline(In,line);
+			int i = stoi(line);
+			return i;
+		}
+
+		double getD(std::ifstream& In)
+		{
+			std::string line;
+			getline(In,line);
+			double d = stod(line);
+			return d; 
+		}
+
+		std::string getS(std::ifstream& In)
+		{
+			std::string line;
+			getline(In,line);
+			return line; 
+		}
+
+		Eigen::Vector2i getIVec(std::ifstream& In)
+		{
+			std::string line;
+			getline(In,line);
+			std::istringstream sline(line);
+			// cout << sline.str() << endl;
+			Eigen::Vector2i x;
+			sline >> x[0]; sline >> x[1];
+
+			return x;
+		}
+
+		/*Function for a 2D Vector*/
+		Eigen::Vector2d getvec(std::ifstream& In)
+		{
+			std::string line;
+			getline(In,line);
+			std::istringstream sline(line);
+			
+			Eigen::Vector2d x;
+			sline >> x[0]; sline >> x[1]; 
+				
+			return x;
+		}
+
+		Eigen::Vector3i get3dVector(std::ifstream& In)
+		{
+			std::string line;
+			getline(In,line);
+			std::istringstream sline(line);
+			
+			Eigen::Vector3i x;
+			sline >> x[0]; sline >> x[1]; sline >> x[2]; 
+				
+			return x;
+		}
+
 		void MakeMatrix(void)
 		{
 			/*Define the steps for each dimension*/

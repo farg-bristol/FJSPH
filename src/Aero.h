@@ -57,6 +57,10 @@ StateVecD CalcForce(SIM &svar, FLUID &fvar, CROSS &cvar,
 		Vdiff = Vel- pi.v;
 		#endif
 	}
+	else if (svar.Bcase == 6)
+	{
+		Vdiff = pi.cellV - pi.v;
+	}
 	else 
 		Vdiff = cvar.vInf - pi.v;
 	
@@ -73,7 +77,7 @@ StateVecD CalcForce(SIM &svar, FLUID &fvar, CROSS &cvar,
 			}
 			case 2:	{ /*Surface particles, with correction based on surface normal*/
 				// cout << size << endl;
-				if (size < 2.0/3.0 * fvar.avar.nfull)
+				if (size < fvar.avar.nfull)
 				{
 					Fd = AeroForce(Vdiff, svar, fvar);
 					/*Correction based on surface tension vector*/
@@ -125,7 +129,7 @@ StateVecD CalcForce(SIM &svar, FLUID &fvar, CROSS &cvar,
 			}
 			case 4:
 			{	/*Gissler et al (2017)*/
-				if(size < 2.0/3.0 * fvar.avar.nfull)
+				if(size < fvar.avar.nfull)
 				{	
 					ldouble ymax = Vdiff.squaredNorm()*fvar.avar.ycoef;
 					ldouble Re = 2.0*fvar.rhog*Vdiff.norm()*fvar.avar.L/fvar.mug;
@@ -204,14 +208,30 @@ void ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 				kernsum += W2Kernel(r,fvar.H,fvar.correc);
 
 				/*Occlusion for Gissler Aero Method*/
-				if (svar.Bcase >= 3 && (cvar.acase == 5 || cvar.acase == 1))
+				if (svar.Bcase >= 3 && (cvar.acase == 4 || cvar.acase == 1))
 				{
-					ldouble num = -Rij.dot((cvar.vInf-pi.v));
-					ldouble denom = Rij.norm()*(cvar.vInf-pi.v).norm();
-					// cout << num/denom << endl;
-					if (num/denom  > woccl)
+					StateVecD Vdiff;
+	
+					if(svar.Bcase == 4)
 					{
-						woccl = num/denom;
+						#if SIMDIM == 3
+						StateVecD Vel = svar.vortex.getVelocity(pi.xi);
+						Vdiff = Vel- pi.v;
+						#endif
+					}
+					else if (svar.Bcase == 6)
+					{
+						Vdiff = pi.cellV - pi.v;
+					}
+					else 
+						Vdiff = cvar.vInf - pi.v;
+
+					ldouble frac = -Rij.normalized().dot(Vdiff.normalized());
+					
+					// cout << num/denom << endl;
+					if (frac  > woccl)
+					{
+						woccl = frac;
 					}
 				}
 			} /*End of neighbours*/

@@ -126,7 +126,11 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1, outl &outlist)
 {
 	svar.maxmu=0; 					/* CFL Parameter */
 	StateVecD g = StateVecD::Zero();	/*Gravity Vector*/
-			  g(2) = -9.81;
+	#if SIMDIM == 3
+		g(2) = -9.81;
+	#else
+		g(1) = -9.81;
+	#endif
 	
 	/********* LOOP 1 - all points: Calculate numpartdens ************/
 	// ldouble numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
