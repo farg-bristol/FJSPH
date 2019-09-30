@@ -23,21 +23,18 @@ int ParticleCount(SIM &svar)
 		int Nz = ceil(svar.Box(2)/step);
 	#endif
 
-	switch(svar.Bcase)
-	{
-		case 0:
+		if(svar.Bcase == 0)
 			partCount += svar.simPts; /*Simulation pn*/
-			break;
-		case 1:
+		else if (svar.Bcase == 1)
+		{
 			#if (SIMDIM == 3)
 				partCount = Nx*Nz + 2*Nx*Ny + 2*Ny*Nz; /*Boundary particles*/
 			#else
 				partCount = 2*Ny + Nx; /*Boundary particles*/
 			#endif
 			partCount += svar.simPts; /*Simulation pn*/
-
-			break;
-		case 3:
+		}
+		else if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
 		{	
 			#if SIMDIM == 3
 			{
@@ -88,48 +85,8 @@ int ParticleCount(SIM &svar)
 				partCount = holeWall + simPts;
 			}
 			#endif
-			break;
 		}
-
-		case 4:
-		{	
-			#if SIMDIM == 3
-				ldouble holeD = svar.Jet(0)+4*svar.Pstep; /*Diameter of hole (or width)*/
-
-	            /*Find the points on the side of the pipe (Assume a circle)*/
-	            double dtheta = atan((step)/(0.5*holeD));
-	            Ny = ceil(svar.Jet(1)/step);
-	            int holeWall = ceil(2*M_PI/dtheta)*Ny;
-
-				/*Simulation Points*/
-				int simCount = 0;
-				ldouble jetR = 0.5*(svar.Jet(0));
-				
-				/*Do the centerline of points*/
-				for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
-					simCount++;
-
-				for (ldouble x = svar.dx; x < jetR ; x+=svar.dx)
-				{ /*Do the either side of the centerline*/
-					for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
-					{	/*If the point is inside the hole diameter, add it*/
-						if(((x*x)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
-			    			simCount += 2;
-					}
-				}
-
-				/*Need to add the pn already present*/
-				int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
-
-				partCount = holeWall + simPts;
-			#else
-				cout << "VLM case is not available in 2D. Stopping." << endl;
-				exit(-1);
-			#endif
-			break;
-		}
-
-		case 5:
+		else if (svar.Bcase == 5)
 		{	
 			#if SIMDIM == 3
 				uint simCount = 0;
@@ -174,28 +131,17 @@ int ParticleCount(SIM &svar)
 				}
 				partCount = simCount;
 			#endif
+		}	
 
-			break;
-		}		
-	}
-	
 	return partCount;
 }
 
-void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, MESH &cells, State &pn, State &pnp1)
+void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 {
-	switch (svar.Bcase)
-	{
-		case 3:
-			cout << "Initialising simulation..." << endl;
-			break;
-		case 4:
-			cout << "Initialising simulation..." << endl;
-			break;
-		default:
-			cout << "Initialising simulation with " << svar.simPts << " points" << endl;
-			break;
-	}
+	if (svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
+		cout << "Initialising simulation..." << endl;
+	else
+		cout << "Initialising simulation with " << svar.simPts << " points" << endl;	
 	
 	
 	//Structure input initialiser
@@ -206,12 +152,13 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, MESH &cells, State &pn, State 
 	 
 /************** Create the boundary pn  *****************/ 	 
 	ldouble step = svar.Pstep*svar.Bstep;
-	int Ny = ceil(svar.Box(1)/step);	
-	int Nx = ceil(svar.Box(0)/step);
+	int Ny = ceil((svar.Box(1)+4*svar.Pstep)/step);	
+	int Nx = ceil((svar.Box(0)+4*svar.Pstep)/step);
 	#if (SIMDIM == 3)
 		int Nz = ceil(svar.Box(2)/step);
 	#endif
-	
+	uint pID = 0;
+
  	if(svar.Bcase == 0 || svar.Bcase == 5)
 	{ /*No boundary*/
 
@@ -224,9 +171,11 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, MESH &cells, State &pn, State 
 				for (int k=0; k<=Nz; ++k) 
 				{	/*Create Left and right boundary faces*/
 					StateVecD xi(0.0,j*step,k*step);
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
 					xi(0) = svar.Box(0);
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
 				}
 				
 			}
@@ -235,7 +184,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, MESH &cells, State &pn, State 
 				for (int j=1; j<Ny; ++j)
 				{	/*Create top and bottom boundary faces*/
 					StateVecD xi(i*step,j*step,0);
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
 					// xi(2)= Box(2); //Top boundary (Typically omitted)
 					// pn.emplace_back(Particle(xi,v,f,rho,Rrho,Boundmass,0));
 				}
@@ -246,15 +196,19 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, MESH &cells, State &pn, State 
 				for(int k = 0; k <= Nz; ++k) 
 				{	/*Create far and near boundary*/
 					StateVecD xi(i*step, 0, k*step);
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
 					xi(1) = svar.Box(1);
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
 				}
 			}
-		#else 
-			for(int i = 0; i <= Ny ; ++i) {
-			StateVecD xi(-svar.Start(0),i*step-svar.Start(1));
-			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+		#else /*SIMDIM == 2*/
+			for(int i = 0; i <= Ny ; ++i) 
+			{	/* Left Wall*/
+				StateVecD xi(-svar.Start(0)-2*svar.Pstep,i*step-svar.Start(1)-2*svar.Pstep);
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
 			}
 	/*			// Optional lid
 			for(int i = 1; i <Nx ; ++i) {
@@ -266,17 +220,21 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, MESH &cells, State &pn, State 
 			x(0) = svar.Box(0) -stepx;
 			pn.emplace_back(Particle(x,v,f,rho,fvar.Boundmass,true));
 	*/
-			for(int i= Ny; i>0; --i) {
-				StateVecD xi(svar.Box(0)-svar.Start(0),i*step-svar.Start(1));
-				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));	
+			for(int i= Ny; i>0; --i) 
+			{	/*Right Wall*/
+				StateVecD xi(Nx*step-svar.Start(0)-2*svar.Pstep,i*step-svar.Start(1)-2*svar.Pstep);
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));	
+				pID++;
 			}
-			for(int i = Nx; i > 0; --i) {
-				StateVecD xi(i*step-svar.Start(0),-svar.Start(1));
-				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+			for(int i = Nx; i > 0; --i) 
+			{	/*Floor*/
+				StateVecD xi(i*step-svar.Start(0)-2*svar.Pstep,-svar.Start(1)-2*svar.Pstep);
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
 			}
 		#endif		
 	}
-	else if(svar.Bcase == 3 || svar.Bcase == 4)
+	else if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
 	{	/*Jet in Crossflow*/
 		#if SIMDIM == 3
 			ldouble holeD = svar.Jet(1)+4*fvar.H; /*Diameter of hole (or width)*/
@@ -293,7 +251,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, MESH &cells, State &pn, State 
 					/*Apply Rotation...*/
 					xi = svar.Rotate*xi;
 					xi += svar.Start;
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
 				}	
 			}
 		#else
@@ -306,7 +265,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, MESH &cells, State &pn, State 
 				StateVecD xi(-jetR,y);
 				xi = svar.Rotate*xi;
 				xi += svar.Start;
-				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
 			}
 
 			for (ldouble y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)
@@ -314,105 +274,84 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, MESH &cells, State &pn, State 
 				StateVecD xi(jetR,y);
 				xi = svar.Rotate*xi;
 				xi += svar.Start;
-				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
 			}
 		#endif
 	}
-	else if(svar.Bcase > 5) 
+	else if(svar.Bcase > 6) 
 	{
-		cerr << "Boundary case is not within the design. 0 <= Bcase <= 5." << endl;
+		cerr << "Boundary case is not within the design. 0 <= Bcase <= 6." << endl;
 		exit(-1);
 	}
 	
 	svar.bndPts = pn.size();
 	
 /***********  Create the simulation pn  **************/
-	switch(svar.Bcase)
+	if (svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
 	{
-		case 3: 
-		{	/*Crossflow case*/
-			svar.simPts = 0;
-			svar.totPts = pn.size();
-			/*Update n+1 before adding sim pn*/
-			for (auto p: pn)
-				pnp1.emplace_back(p);
+		/*Crossflow case*/
+		svar.simPts = 0;
+		svar.totPts = pn.size();
+		/*Update n+1 before adding sim pn*/
+		for (auto p: pn)
+			pnp1.emplace_back(p);
 
-			for (ldouble y = 0.0; y > -svar.Jet[1]; y-=svar.dx)
-			{
-				// cout << "In add points for-loop" << endl;
-				AddPoints(y, svar, fvar, cvar, pn, pnp1);
-			}
-
-			break;
-		}
-
-		case 4:
+		for (ldouble y = 0.0; y > -svar.Jet[1]; y-=svar.dx)
 		{
-			/*VLM case*/ /*NOT AVAILABLE IN 2D*/
-			svar.simPts = 0;
-			svar.totPts = pn.size();
-			/*Update n+1 before adding sim pn*/
-			for (auto p: pn)
-				pnp1.emplace_back(p);
-
-			for (ldouble y = 0.0; y > -svar.Jet[1]; y-=svar.dx)
-			{
-				// cout << "In add points for-loop" << endl;
-				AddPoints(y, svar, fvar, cvar, pn, pnp1);
-			}
-
-			break;
-		}
-		case 5:
-		{
-			/*Droplet case*/
-			svar.simPts = 0;
-			svar.totPts = pn.size();
-			/*Update n+1 before adding sim pn*/
-			for (auto p: pn)
-				pnp1.emplace_back(p);
-
-			CreateDroplet(svar,fvar,pn,pnp1);
-
-			break;
-		}
-
-		default:
-		{	
-			#if SIMDIM == 3
-				/*Create the simulation pn*/
-				for( int i=0; i< svar.xyPART(0); ++i) 
-				{
-					for(int j=0; j< svar.xyPART(1); ++j)
-					{				
-						for (int k=0; k < svar.xyPART(2); ++k )
-						{
-							StateVecD xi(svar.Start(0)+i*svar.Pstep,
-								svar.Start(1)+j*svar.Pstep,svar.Start(2)+k*svar.Pstep);		
-							pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
-						}		
-					}
-				}
-			#else
-				/*Create the simulation pn*/
-				for( int i=0; i< svar.xyPART(0); ++i) 
-				{
-					for(int j=0; j< svar.xyPART(1); ++j)
-					{				
-						StateVecD xi(svar.Start(0)+i*svar.Pstep,svar.Start(1)+j*svar.Pstep);		
-						pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));		
-					}
-				}
-			#endif
-
-			
-
-			for (auto p: pn)
-				pnp1.emplace_back(p);
-
-			break;
+			// cout << "In add points for-loop" << endl;
+			AddPoints(y, svar, fvar, cvar, pn, pnp1);
 		}
 	}
+	else if(svar.Bcase == 5)
+	{
+		/*Droplet case*/
+		svar.simPts = 0;
+		svar.totPts = pn.size();
+		/*Update n+1 before adding sim pn*/
+		for (auto p: pn)
+			pnp1.emplace_back(p);
+
+		CreateDroplet(svar,fvar,pn,pnp1);
+	}
+	else
+	{	
+		press =fvar.pPress;
+		rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
+		#if SIMDIM == 3
+			/*Create the simulation pn*/
+			for( int i=0; i< svar.xyPART(0); ++i) 
+			{
+				for(int j=0; j< svar.xyPART(1); ++j)
+				{				
+					for (int k=0; k < svar.xyPART(2); ++k )
+					{
+						StateVecD xi(svar.Start(0)+i*svar.dx,
+							svar.Start(1)+j*svar.dx,svar.Start(2)+k*svar.dx);		
+						pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,2,pID));
+						pID++;
+					}		
+				}
+			}
+		#else
+			/*Create the simulation pn*/
+			for( int i=0; i< svar.xyPART(0); ++i) 
+			{
+				for(int j=0; j< svar.xyPART(1); ++j)
+				{				
+					StateVecD xi(svar.Start(0)+i*svar.dx,svar.Start(1)+j*svar.dx);		
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,2,pID));
+					pn.back().cellRho = fvar.rhog;
+					pn.back().cellP = 20000-fvar.gasPress;
+					pID++;
+				}
+			}
+		#endif
+
+		for (auto p: pn)
+			pnp1.emplace_back(p);
+	}
+	
 		
 	// svar.simPts+=10*10;
 
@@ -432,6 +371,5 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, MESH &cells, State &pn, State 
 	
 	// cout << "Refresh round pn: " << svar.nrefresh << endl;
 }
-
 
 #endif

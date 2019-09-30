@@ -2,10 +2,8 @@
 #define CROSSING_H
 
 #include "Eigen/Core"
+#include "Eigen/Geometry"
 #include "Var.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
 #include <gmpxx.h>
 
 #define X 0
@@ -25,154 +23,254 @@
 /* Input 2D polygon _pgon_ with _numverts_ number of vertices and test point */
 /* _point_, returns 1 if inside, 0 if outside.  WINDING and CONVEX can be    */
 /* defined for this test.                                                    */
-int Crossings2D(std::vector<StateVecD> &pgon, StateVecD &point)
-{
-  int numverts = pgon.size();
-  int i, j, yflag0, yflag1, inside_flag, line_flag;
-  double  ty, tx;
-  StateVecD vtx0, vtx1;
-
-    tx = point[X] ;
-    ty = point[Y] ;
-
-    vtx0 = pgon[numverts-1] ;
-    /* get test bit for above/below X axis */
-    yflag0 = ( vtx0[Y] >= ty ) ;
-    i = 0;
-    vtx1 = pgon[i] ;
-
-    inside_flag = 0 ;
-    line_flag = 0;
-    for ( j = numverts+1 ; --j ; ) 
+#if SIMDIM == 2
+    int Crossings2D(std::vector<StateVecD> const& pgon, StateVecD const& point)
     {
-    yflag1 = ( vtx1[Y] >= ty ) ;
-    /* Check if endpoints straddle (are on opposite sides) of X axis
-     * (i.e. the Y's differ); if so, +X ray could intersect this edge.
-         * Credit to Joseph Samosky to try dropping
-     * the "both left or both right" part of my code.
-     */
-    if ( yflag0 != yflag1 ) 
-    {
-        /* Check intersection of pgon segment with +X ray.
-         * Note if >= point's X; if so, the ray hits it.
-         * The division operation is avoided for the ">=" test by checking
-         * the sign of the first vertex wrto the test point; idea inspired
-         * by Joseph Samosky's and Mark Haigh-Hutchinson's different
-         * polygon inclusion tests.
+        
+        int numverts = pgon.size();
+        int i, j, yflag0, yflag1, inside_flag, line_flag;
+        double  ty, tx;
+        StateVecD vtx0, vtx1;
+
+        tx = point[X] ;
+        ty = point[Y] ;
+
+        vtx0 = pgon[numverts-1] ;
+        /* get test bit for above/below X axis */
+        yflag0 = ( vtx0[Y] >= ty ) ;
+        i = 0;
+        vtx1 = pgon[i] ;
+
+        inside_flag = 0 ;
+        line_flag = 0;
+        for ( j = numverts+1 ; --j ; ) 
+        {
+        yflag1 = ( vtx1[Y] >= ty ) ;
+        /* Check if endpoints straddle (are on opposite sides) of X axis
+         * (i.e. the Y's differ); if so, +X ray could intersect this edge.
+             * Credit to Joseph Samosky to try dropping
+         * the "both left or both right" part of my code.
          */
-        if ( ((vtx1[Y]-ty) * (vtx1[X]-vtx0[X]) >=
-          (vtx1[X]-tx) * (vtx1[Y]-vtx0[Y])) == yflag1 )
-      {
-      inside_flag = !inside_flag ;
+        if ( yflag0 != yflag1 ) 
+        {
+            /* Check intersection of pgon segment with +X ray.
+             * Note if >= point's X; if so, the ray hits it.
+             * The division operation is avoided for the ">=" test by checking
+             * the sign of the first vertex wrto the test point; idea inspired
+             * by Joseph Samosky's and Mark Haigh-Hutchinson's different
+             * polygon inclusion tests.
+             */
+            if ( ((vtx1[Y]-ty) * (vtx1[X]-vtx0[X]) >=
+              (vtx1[X]-tx) * (vtx1[Y]-vtx0[Y])) == yflag1 )
+            {
+              inside_flag = !inside_flag ;
+            }
+
+            /* For convex cells, further optimisation can be done: */
+            /* A ray can only pass through a maximum of two faces.*/
+            /* If this is second edge hit, then done testing. */
+            if ( line_flag ) return inside_flag ;
+
+            /* note that one edge has been hit by the ray's line */
+            line_flag = TRUE ;
         }
 
-        /* For convex cells, further optimisation can be done: */
-        /* A ray can only pass through a maximum of two faces.*/
-        /* If this is second edge hit, then done testing. */
-        if ( line_flag ) goto Exit ;
-
-        /* note that one edge has been hit by the ray's line */
-        line_flag = TRUE ;
+        /* Move to the next pair of vertices, retaining info as possible. */
+        yflag0 = yflag1 ;
+        vtx0 = vtx1 ;
+        ++i;
+        vtx1 = pgon[i] ;
+        }
+        
+        return( inside_flag ) ;
     }
 
-    /* Move to the next pair of vertices, retaining info as possible. */
-    yflag0 = yflag1 ;
-    vtx0 = vtx1 ;
-    ++i;
-    vtx1 = pgon[i] ;
-    }
-    Exit: ;
-    return( inside_flag ) ;
-}
 
-
-int Crossing2DPrecise(std::vector<StateVecD> &pgon, StateVecD &point)
-{
-  int numverts = pgon.size();
-  int i, j, yflag0, yflag1, inside_flag, line_flag;
-  mpf_class  ty, tx;
-  mpf_class vtx0[SIMDIM], vtx1[SIMDIM];
-  i = 0;
-
-  tx = point[X];
-  ty = point[Y];
-
-
-    vtx0[0] = pgon[numverts-1][0]; vtx0[1] =  pgon[numverts-1][1];
-    /* get test bit for above/below X axis */
-    yflag0 = ( vtx0[Y] > ty ) ;
-    
-    // vtx1 = pgon[i] ;
-
-    inside_flag = 0 ;
-    line_flag = 0;
-    for ( j = numverts+1 ; --j ; ) 
+    int Crossing2DPrecise(std::vector<StateVecD> &pgon, StateVecD &point)
     {
-    yflag1 = (vtx1[Y] > ty) ;
-    /* Check if endpoints straddle (are on opposite sides) of X axis
-     * (i.e. the Y's differ); if so, +X ray could intersect this edge.
-     */
-    if ( yflag0 != yflag1 ) 
-    {
-        /* Check intersection of pgon segment with +X ray.
-         * Note if >= point's X; if so, the ray hits it.
-         * The division operation is avoided for the ">=" test by checking
-         * the sign of the first vertex wrto the test point; idea inspired
-         * by Joseph Samosky's and Mark Haigh-Hutchinson's different
-         * polygon inclusion tests.
+        int numverts = pgon.size();
+        int i, j, yflag0, yflag1, inside_flag, line_flag;
+        mpf_class  ty, tx;
+        mpf_class vtx0[SIMDIM], vtx1[SIMDIM];
+        i = 0;
+
+        tx = point[X];
+        ty = point[Y];
+
+
+        vtx0[0] = pgon[numverts-1][0]; vtx0[1] =  pgon[numverts-1][1];
+        /* get test bit for above/below X axis */
+        yflag0 = ( vtx0[Y] > ty ) ;
+        
+        // vtx1 = pgon[i] ;
+
+        inside_flag = 0 ;
+        line_flag = 0;
+        for ( j = numverts+1 ; --j ; ) 
+        {
+        yflag1 = (vtx1[Y] > ty) ;
+        /* Check if endpoints straddle (are on opposite sides) of X axis
+         * (i.e. the Y's differ); if so, +X ray could intersect this edge.
          */
-        if ( ((vtx1[Y]-ty) * (vtx1[X]-vtx0[X]) >
-          (vtx1[X]-tx) * (vtx1[Y]-vtx0[Y])) == yflag1 )
-      {
-      inside_flag = !inside_flag ;
+        if ( yflag0 != yflag1 ) 
+        {
+            /* Check intersection of pgon segment with +X ray.
+             * Note if >= point's X; if so, the ray hits it.
+             * The division operation is avoided for the ">=" test by checking
+             * the sign of the first vertex wrto the test point; idea inspired
+             * by Joseph Samosky's and Mark Haigh-Hutchinson's different
+             * polygon inclusion tests.
+             */
+            if ( ((vtx1[Y]-ty) * (vtx1[X]-vtx0[X]) >
+              (vtx1[X]-tx) * (vtx1[Y]-vtx0[Y])) == yflag1 )
+          {
+          inside_flag = !inside_flag ;
+            }
+
+            /* For convex cells, further optimisation can be done: */
+            /* A ray can only pass through a maximum of two faces.*/
+            /* If this is second edge hit, then done testing. */
+            if ( line_flag ) goto Exit ;
+
+            /* note that one edge has been hit by the ray's line */
+            line_flag = TRUE ;
         }
 
-        /* For convex cells, further optimisation can be done: */
-        /* A ray can only pass through a maximum of two faces.*/
-        /* If this is second edge hit, then done testing. */
-        if ( line_flag ) goto Exit ;
-
-        /* note that one edge has been hit by the ray's line */
-        line_flag = TRUE ;
+        /* Move to the next pair of vertices, retaining info as possible. */
+        yflag0 = yflag1 ;
+        vtx0[0] = vtx1[0]; vtx0[1] = vtx1[1];
+        ++i;
+        vtx1[0] = pgon[i][0]; vtx1[1] = pgon[i][1];
+        }
+        Exit: ;
+        return( inside_flag ) ;    
     }
-
-    /* Move to the next pair of vertices, retaining info as possible. */
-    yflag0 = yflag1 ;
-    vtx0[0] = vtx1[0]; vtx0[1] = vtx1[1];
-    ++i;
-    vtx1[0] = pgon[i][0]; vtx1[1] = pgon[i][1];
-    }
-    Exit: ;
-    return( inside_flag ) ;    
-}
+#endif
 
 /*Crossing test for 3 dimensions.*/
-/* Cast a ray across the X-dimension, and use signed volumes*/
-/*  of tetrahedra to identify if the ray crosses the plane */
-int Crossings3D(std::vector<std::vector<StateVecD>> &pfaces, StateVecD &point)
-{
-  double d;
-  StateVecD p2f, norm, tp;
+#if SIMDIM == 3
+    int Crossings3D(std::vector<std::vector<StateVecD>> const& pfaces, 
+                    StateVecD const& point)
+    {
+      
+        double d;
+        StateVecD p2f, normal;
 
-  tp = point;
-  for (auto face: pfaces) 
-    { /*Check that the test point is on the correct side of each face 
-        (requires convex, anti-clockwise faces) */
+        for (std::vector<StateVecD> const& face: pfaces) 
+        {   /*Check that the test point is on the correct side of each face 
+            (requires convex, anti-clockwise faces when viewed from outside) */
 
-    /*Find the face normal*/
-    norm = (face[1]-face[0]).cross(face[2]-face[0]);
-    norm = norm.normalized();
-      p2f = face[0] - tp;
-      d = p2f.dot(norm);
-      d /= p2f.norm();
+            /*Find the face normal*/
+            normal = ((face[1]-face[0]).cross(face[2]-face[0])).normalized();
+            p2f = face[0] - point;
+            d = -(p2f.dot(normal));
+            d /= p2f.norm();
 
-      if(d < -1e-15)
-      {
-        return 0;
-      }
+            if(d < -1e-15)
+            {
+                return 0;
+            }
+        }
+     
+      return 1;
     }
+#endif
 
-  return 1;
+void FindCell(const uint start, const uint end, const ldouble nfull, 
+        State& pnp1, const MESH& cells, const outl& outlist)
+{
+    /*Find which cell the particle is in*/
+    #pragma omp parallel for
+    for (uint ii = start; ii < end; ++ii)
+    {
+        if (pnp1[ii].b == 2 && outlist[ii].size() < nfull )
+        {   
+            #if SIMDIM == 3
+            uint found = 0;
+            StateVecD testp = pnp1[ii].xi;
+            /*Test the cell it is already in first*/
+            if(Crossings3D(cells.cFaces[pnp1[ii].cellID],testp))
+            {
+                found = 1;
+            }
+            else
+            {
+                for(auto cell:cells.cNeighb[pnp1[ii].cellID])
+                {
+
+                    if(Crossings3D(cells.cFaces[cell],testp))
+                    {
+                        pnp1[ii].cellID = cell;
+                        pnp1[ii].cellV = cells.cVel[cell];
+                        pnp1[ii].cellP = cells.cellP[cell];
+                        pnp1[ii].cellRho = cells.cellRho[cell];
+                        found = 1;
+                        break;
+                    }
+                }
+            }
+
+            if(found == 0)
+            {   /*The containing cell wasn't found in the neighbours.*/
+                /*Scan through the whole list again*/
+                uint jj = 0;
+                for(auto cell:cells.cFaces)
+                {
+                    if(Crossings3D(cell,testp))
+                    {
+                        pnp1[ii].cellID = jj;
+                        pnp1[ii].cellV = cells.cVel[jj];
+                        pnp1[ii].cellP = cells.cellP[jj];
+                        pnp1[ii].cellRho = cells.cellRho[jj];
+                        break;
+                    }
+                    ++jj;
+                }
+            }   
+            
+            #else                   
+                uint found = 0;
+                StateVecD testp = pnp1[ii].xi;
+                /*Do a cell containment*/
+                 if(Crossings2D(cells.cVerts[pnp1[ii].cellID],testp))
+                {
+                    found = 1;
+                }
+                else
+                {
+                    for(auto cell:cells.cNeighb[pnp1[ii].cellID])
+                    {
+                        if(Crossings2D(cells.cVerts[cell],testp))
+                        {
+                            pnp1[ii].cellID = cell;
+                            pnp1[ii].cellV = cells.cVel[cell];
+                            pnp1[ii].cellP = cells.cellP[cell];
+                            pnp1[ii].cellRho = cells.cellRho[cell];
+                            found = 1;
+                            break;
+                        }
+                    }
+                }
+                
+                if(found == 0)
+                {   /*The containing cell wasn't found in the neighbours.*/
+                    /*Scan through the whole list again*/
+                    uint jj = 0;
+                    for(auto cell:cells.cVerts)
+                    {
+                        if(Crossings2D(cell,testp))
+                        {
+                            pnp1[ii].cellID = jj;
+                            pnp1[ii].cellV = cells.cVel[jj];
+                            pnp1[ii].cellP = cells.cellP[jj];
+                            pnp1[ii].cellRho = cells.cellRho[jj];
+                            break;
+                        }
+                        ++jj;
+                    }
+                }
+            #endif
+        }
+    }
 }
-
 #endif
