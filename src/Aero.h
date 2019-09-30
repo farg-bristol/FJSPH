@@ -185,7 +185,7 @@ void ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 	{
 		uint size = outlist[i].size();
 		
-		if (size < 2.0/3.0 * fvar.avar.nfull)
+		if (size < fvar.avar.nfull)
 		{	
 			Part pi = pnp1[i];
 			pi.normal = StateVecD::Zero();
