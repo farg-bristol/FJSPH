@@ -132,7 +132,7 @@ typedef class VLM
  			// }
  		}
 
-		Eigen::Vector3d getVelocity(Eigen::Vector3d pos)
+		Eigen::Vector3d getVelocity(const Eigen::Vector3d pos)
 		{	/*Find velocity for a particle at its position*/
 			Eigen::Vector3d vel = Eigen::Vector3d::Zero();
 

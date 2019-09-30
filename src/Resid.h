@@ -15,13 +15,14 @@
 #include "Var.h"
 #include "Kernel.h"
 #include "Aero.h"
+#include "Add.h"
 
-
-ldouble GetNumpartdens(SIM &svar, FLUID &fvar, State &pnp1, outl &outlist)
+ldouble GetNumpartdens(const SIM &svar, const FLUID &fvar, const State &pnp1, const outl &outlist)
 {
 	ldouble npd = 0.0;
-	#pragma omp parallel for reduction(+:npd)
-	for (uint i=0; i< svar.totPts; ++i)
+	const uint end = svar.totPts;
+	#pragma omp parallel for reduction(+:npd) shared(outlist)
+	for (uint i=0; i< end; ++i)
 	{
 		StateVecD pi = pnp1[i].xi;
 		for (uint j=0; j<outlist[i].size(); ++j)
@@ -35,12 +36,14 @@ ldouble GetNumpartdens(SIM &svar, FLUID &fvar, State &pnp1, outl &outlist)
 }
 
 /* Colour field gradient in Hu et al (2014) method, note the bottom variable to account for no air*/
-std::vector<StateVecD> GetColourGrad(SIM &svar, FLUID &fvar, State &pnp1, outl &outlist)
+std::vector<StateVecD> GetColourGrad(const SIM &svar, const FLUID &fvar, const State &pnp1, const outl &outlist)
 {
 	std::vector<StateVecD> cgrad(svar.totPts, StateVecD::Zero());
+	const uint start = svar.bndPts;
+	const uint end = svar.totPts;
 
-	#pragma omp parallel for
-	for(uint i=svar.bndPts; i < svar.totPts; ++i)
+	#pragma omp parallel for shared(outlist)
+	for(uint i=start; i < end; ++i)
 	{
 		StateVecD pi = pnp1[i].xi;
 		// StateVecD top = StateVecD::Zero();
@@ -71,32 +74,39 @@ std::vector<StateVecD> GetColourGrad(SIM &svar, FLUID &fvar, State &pnp1, outl &
 	return cgrad;
 }
 
-StateVecD Base(FLUID &fvar, Part &pi, Part &pj, 
-	StateVecD &Rij, StateVecD &Vij, ldouble &r, StateVecD &Grad, std::vector<ldouble> &mu)
+StateVecD Base(const FLUID &fvar, const Part &pi, const Part &pj, 
+	const StateVecD &Rij, const StateVecD &Vij, const ldouble &r, 
+	const StateVecD &Grad, std::vector<ldouble> &mu)
 {
-	const static ldouble alpha = fvar.alpha; 	/* Artificial Viscosity Parameter*/
-
 	/*Pressure and artificial viscosity - Monaghan (1994) p.400*/
-	ldouble rhoij = 0.5*(pi.rho+pj.rho);
-	ldouble cbar= 0.5*(sqrt((fvar.B*fvar.gam)/pi.rho)+sqrt((fvar.B*fvar.gam)/pj.rho));
+	ldouble pifac;
 	ldouble vdotr = Vij.dot(Rij);
 	ldouble muij= fvar.H*vdotr/(r*r+0.01*fvar.HSQ);
+	if (vdotr > 0.0) 
+	{
+		pifac = 0.0;
+	}
+	else
+	{
+		ldouble rhoij = 0.5*(pi.rho+pj.rho);
+		ldouble cbar= 0.5*(sqrt((fvar.B*fvar.gam)/pi.rho)+sqrt((fvar.B*fvar.gam)/pj.rho));
+		pifac = fvar.alpha*cbar*muij/rhoij;
+	}
+	
 	mu.emplace_back(muij);
-	ldouble pifac = alpha*cbar*muij/rhoij;
-
-	if (vdotr > 0) pifac = 0;
 	return Grad*(pifac - pi.p*pow(pi.rho,-2)-pj.p*pow(pj.rho,-2));
 }
 
 /*Laminar Viscosity - Morris (2003)*/
-StateVecD Viscosity(FLUID &fvar, Part &pi, Part &pj, 
-	StateVecD &Rij, StateVecD &Vij, ldouble &r, StateVecD &Grad)
+StateVecD Viscosity(const FLUID &fvar, const Part &pi, const Part &pj, 
+	const StateVecD &Rij, const StateVecD &Vij, const ldouble &r, const StateVecD &Grad)
 {
-	return -Vij*(fvar.mu)/(pi.rho*pj.rho)*(1.0/(r*r+0.01*fvar.HSQ))*Rij.dot(Grad);
+	return -Vij*((fvar.mu)/(pi.rho*pj.rho))*(1.0/(r*r+0.01*fvar.HSQ))*Rij.dot(Grad);
 }
 
 /*Surface Tension - Nair & Poeschel (2017)*/
-StateVecD SurfaceTens(FLUID &fvar, Part &pj, StateVecD &Rij, ldouble &r, ldouble &npd)
+StateVecD SurfaceTens(const FLUID &fvar, const Part &pj, const StateVecD &Rij, 
+					  const ldouble &r, const ldouble &npd)
 {
 	/*Surface tension factor*/
 	const static ldouble lam = (6.0/81.0*pow((2.0*fvar.H),3.0)/pow(M_PI,4.0)*
@@ -110,7 +120,8 @@ StateVecD SurfaceTens(FLUID &fvar, Part &pj, StateVecD &Rij, ldouble &r, ldouble
 	return -(Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*fvar.H));
 }
 
-StateVecD HuST(FLUID &fvar, Part &pi, Part &pj, StateVecD &Rij, ldouble &r, StateVecD &cgradi, StateVecD &cgradj)
+StateVecD HuST(const FLUID &fvar, const Part &pi, const Part &pj, 
+			  const StateVecD &Rij, const ldouble &r, const StateVecD &cgradi, const StateVecD &cgradj)
 {
 
 	StateVecD Fst;
@@ -122,7 +133,8 @@ StateVecD HuST(FLUID &fvar, Part &pi, Part &pj, StateVecD &Rij, ldouble &r, Stat
 }
 
 ///**************** RESID calculation **************
-void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1, outl &outlist)
+void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, State& airP*/,
+	 const vector<vector<Part>>& neighb, const outl& outlist)
 {
 	svar.maxmu=0; 					/* CFL Parameter */
 	StateVecD g = StateVecD::Zero();	/*Gravity Vector*/
@@ -131,7 +143,9 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1, outl &outlist)
 	#else
 		g(1) = -9.81;
 	#endif
-	
+	const uint start = svar.bndPts;
+	const uint end = svar.totPts;
+
 	/********* LOOP 1 - all points: Calculate numpartdens ************/
 	// ldouble numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
 	// std::vector<StateVecD> cgrad(svar.totPts,StateVecD::Zero());
@@ -145,45 +159,52 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1, outl &outlist)
 	{
 /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
 		#pragma omp for reduction(+:Rrhocontr)
-		for (uint i=0; i< svar.bndPts; ++i)
+		for (uint ii=0; ii < start; ++ii)
 		{
-			
-			Part pi = pnp1[i];
+			Part pi = pnp1[ii];
 
-			for(auto j:outlist[i])
+			for(auto j:outlist[ii])
 			{
 				Part pj = pnp1[j];
 				StateVecD Rij = pj.xi-pi.xi;
 				StateVecD Vij = pj.v-pi.v;
 				ldouble r = Rij.norm();
 				StateVecD Grad = W2GradK(Rij, r,fvar.H,fvar.correc);
-				Rrhocontr[i] -= pj.m*(Vij.dot(Grad));
+				Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
 			}
-			pnp1[i].Rrho = Rrhocontr[i]; /*drho/dt*/
+			pnp1[ii].Rrho = Rrhocontr[ii]; /*drho/dt*/
 		}
 
+		
 /******* LOOP 3 - All simulation points: Calculate forces on the fluid. *********/
 		#pragma omp for reduction(+:Rrhocontr, RV, ST) /*Reduction defs in Aero.h*/
-		for (uint i=svar.bndPts; i < svar.totPts; ++i)
+		for (uint ii=start; ii < end; ++ii)
 		{
-			Part pi = pnp1[i];
-			uint size = outlist[i].size();
-			pnp1[i].theta = double(size);
+			Part pi = pnp1[ii];
+			uint size = outlist[ii].size();
+			// pnp1[i].theta = double(size);
+			// pnp1[ii].theta = 0.0;
 
 			std::vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
 			mu.reserve(size+1);
-			mu.emplace_back(0);	/*Avoid dereference of empty vector*/
-			
-			for (auto j:outlist[i])
+			mu.emplace_back(0);	/*Avoid dereference of empty vector*/			
+			if (ii > neighb.size())
+			{
+				cout << "neighb array smaller than totPts" << endl;
+				exit(-1);
+			}
+			for (Part const& pj:neighb[ii])
 			{	/* Neighbour list loop. */
-				StateVecD contrib= StateVecD::Zero();
+				StateVecD contrib = StateVecD::Zero();
 				StateVecD visc = StateVecD::Zero();
-				StateVecD SurfC= StateVecD::Zero();
+				// StateVecD SurfC= StateVecD::Zero();
 
-				Part pj(pnp1[j]);
+				// Part pj(pnp1[j]);
 
 				/*Check if the position is the same, and skip the particle if yes*/
-				if(i == j)
+				// #pragma omp critical
+				// cout << pi.partID << "  " << pj.partID << "  ";
+				if(pi.partID == pj.partID)
 					continue;
 
 				StateVecD Rij = pj.xi-pi.xi;
@@ -192,7 +213,7 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1, outl &outlist)
 				StateVecD Grad = W2GradK(Rij, r,fvar.H, fvar.correc);
 
 				contrib = Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
-
+				
 				/*Laminar Viscosity - Morris (2003)*/
 				visc    = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
 
@@ -201,31 +222,39 @@ void Forces(SIM &svar, FLUID &fvar, CROSS &cvar, State &pnp1, outl &outlist)
 				// SurfC = HuST(fvar,pi,pj,Rij,r,cgrad[i],cgrad[j]);
 
 				/*drho/dt*/
-				Rrhocontr[i] -= pj.m*(Vij.dot(Grad));
+				Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
 
-				RV[i] += pj.m*contrib + pj.m*visc + SurfC/pj.m;
-				ST[i] += SurfC/pj.m;
-			}
-	
+				RV[ii] += pj.m*contrib + pj.m*visc /*+ SurfC/pj.m*/;
+
+				if (pj.b == 3)
+				{
+					// cout << "Interacting with an air particle" << endl;
+					ST[ii] += pj.m*contrib + pj.m*visc;
+					// contrib *= 0.01;
+					// #pragma omp critical
+					// cout << pj.m*contrib(0) << "  " << pj.m*contrib(1) << 
+					//  "  " << pj.m*visc(0) << "  " << pj.m*visc(1) << "  " << pj.m*(Vij.dot(Grad)) <<  endl;
+				}
+
+				// ST[ii] += SurfC/pj.m;
+			}/*End of neighbours*/
+			
+			
+			// cout << RV[ii](0) << "  " << RV[ii](1) << "  " << Rrhocontr[ii] << endl;
 			//CFL f_cv Calc
 			ldouble it = *max_element(mu.begin(),mu.end());
 			if (it > svar.maxmu)
 				svar.maxmu=it;
 		} /*End of sim parts*/
 
+		// cout << endl;
 		//Update the actual structure
 		#pragma omp for
-		for(uint i=0; i < svar.bndPts; ++i)
+		for(uint ii=0; ii < end; ++ii)
 		{
-			pnp1[i].Rrho = Rrhocontr[i]; /*drho/dt*/			
-		}
-
-		#pragma omp for
-		for(uint i=svar.bndPts; i < svar.totPts; ++i)
-		{
-			pnp1[i].f = RV[i] + g;
-			pnp1[i].Rrho = Rrhocontr[i]; /*drho/dt*/
-			pnp1[i].Sf = ST[i];			
+			pnp1[ii].f = RV[ii] + g;
+			pnp1[ii].Rrho = Rrhocontr[ii]; /*drho/dt*/
+			pnp1[ii].Sf = ST[ii];			
 		}
 
 	}

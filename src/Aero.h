@@ -28,7 +28,7 @@
 #pragma omp declare reduction(+:StateVecD : omp_out=omp_out+omp_in)\
                     initializer(omp_priv = omp_orig) 
 
-StateVecD AeroForce(StateVecD &Vdiff, SIM &svar, FLUID &fvar)
+StateVecD AeroForce(const StateVecD &Vdiff, const SIM &svar, const FLUID &fvar)
 {
 	StateVecD Fd = StateVecD::Zero();
 	ldouble Re = Vdiff.norm()*svar.Pstep*fvar.rhog/fvar.mug;
@@ -43,18 +43,17 @@ StateVecD AeroForce(StateVecD &Vdiff, SIM &svar, FLUID &fvar)
 }
 
 
-StateVecD CalcForce(SIM &svar, FLUID &fvar, CROSS &cvar, 
-	Part &pi, StateVecD &SurfC, uint size, ldouble woccl)
+StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar, 
+	const Part &pi, const StateVecD &SurfC, const uint size, const ldouble woccl)
 {
 	StateVecD Fd= StateVecD::Zero();
 	
-	StateVecD Vdiff;
-	
+	StateVecD Vdiff;	
 	if(svar.Bcase == 4)
 	{
 		#if SIMDIM == 3
 		StateVecD Vel = svar.vortex.getVelocity(pi.xi);
-		Vdiff = Vel- pi.v;
+		Vdiff = Vel - pi.v;
 		#endif
 	}
 	else if (svar.Bcase == 6)
@@ -62,8 +61,11 @@ StateVecD CalcForce(SIM &svar, FLUID &fvar, CROSS &cvar,
 		Vdiff = pi.cellV - pi.v;
 	}
 	else 
+	{
 		Vdiff = cvar.vInf - pi.v;
+	}
 	
+	const double nfull = fvar.avar.nfull;
 	
 	if(pi.b ==2)
 	{
@@ -77,12 +79,12 @@ StateVecD CalcForce(SIM &svar, FLUID &fvar, CROSS &cvar,
 			}
 			case 2:	{ /*Surface particles, with correction based on surface normal*/
 				// cout << size << endl;
-				if (size < fvar.avar.nfull)
+				if (size < nfull)
 				{
 					Fd = AeroForce(Vdiff, svar, fvar);
 					/*Correction based on surface tension vector*/
 					ldouble correc = 1.0;
-					if(size > 0.1 * fvar.avar.nfull)
+					if(size > 0.1 * nfull)
 					{
 						ldouble num = SurfC.dot(cvar.vInf-pi.v);
 						ldouble denom = SurfC.norm()*(cvar.vInf-pi.v).norm();
@@ -100,7 +102,7 @@ StateVecD CalcForce(SIM &svar, FLUID &fvar, CROSS &cvar,
 			}
 			case 3:	/*Case 2, plus a correction based on number of neighbours*/
 			{
-				if (size < 165)
+				if (size < nfull)
 				{
 					// StateVecD Vdiff = cvar.vInf-pi.v;
 
@@ -129,14 +131,14 @@ StateVecD CalcForce(SIM &svar, FLUID &fvar, CROSS &cvar,
 			}
 			case 4:
 			{	/*Gissler et al (2017)*/
-				if(size < fvar.avar.nfull)
+				if(size < nfull)
 				{	
 					ldouble ymax = Vdiff.squaredNorm()*fvar.avar.ycoef;
 					ldouble Re = 2.0*fvar.rhog*Vdiff.norm()*fvar.avar.L/fvar.mug;
 					ldouble Cds;
 
-					ldouble frac2 = std::min((2.0/3.0)*fvar.avar.nfull,double(size))
-									/((2.0/3.0)*fvar.avar.nfull);
+					ldouble frac2 = std::min((2.0/3.0)*nfull,double(size))
+									/((2.0/3.0)*nfull);
 					ldouble frac1 = (1.0 - frac2);
 
 					// if (Re < 3500)
@@ -175,25 +177,27 @@ StateVecD CalcForce(SIM &svar, FLUID &fvar, CROSS &cvar,
 	return Fd;
 }
 
-void ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar, 
-	State &pnp1, outl &outlist)
+void ApplyAero(SIM &svar, const FLUID &fvar, const CROSS &cvar, 
+	State &pnp1, const outl &outlist)
 {
 	std::vector<StateVecD> Af(svar.totPts,StateVecD::Zero());
+	const uint start = svar.bndPts;
+	const uint end = svar.totPts;
 
-	#pragma omp parallel for reduction(+:Af)
-	for (uint i=svar.bndPts; i < svar.totPts; ++i)
+	#pragma omp parallel for reduction(+:Af) shared(svar)
+	for (uint i=start; i < end; ++i)
 	{
 		uint size = outlist[i].size();
 		
 		if (size < fvar.avar.nfull)
 		{	
-			Part pi = pnp1[i];
+			Part pi(pnp1[i]);
 			pi.normal = StateVecD::Zero();
 			ldouble kernsum = 0.0;
 			ldouble woccl = 0.0;
 			for (auto j:outlist[i])
 			{	/* Neighbour list loop. */
-				Part pj = pnp1[j];
+				const Part pj(pnp1[i]);
 
 				if(i == j)
 				{
@@ -208,7 +212,7 @@ void ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 				kernsum += W2Kernel(r,fvar.H,fvar.correc);
 
 				/*Occlusion for Gissler Aero Method*/
-				if (svar.Bcase >= 3 && (cvar.acase == 4 || cvar.acase == 1))
+				if (svar.Bcase > 2 && (cvar.acase == 4 || cvar.acase == 1))
 				{
 					StateVecD Vdiff;
 	
@@ -224,12 +228,14 @@ void ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 						Vdiff = pi.cellV - pi.v;
 					}
 					else 
+					{
 						Vdiff = cvar.vInf - pi.v;
+					}
 
-					ldouble frac = -Rij.normalized().dot(Vdiff.normalized());
+					ldouble frac = -Vdiff.normalized().dot(Rij.normalized());
 					
 					// cout << num/denom << endl;
-					if (frac  > woccl)
+					if (frac > woccl)
 					{
 						woccl = frac;
 					}
@@ -238,11 +244,12 @@ void ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 
 			/*Find the aero force*/
 			StateVecD Fd = CalcForce(svar,fvar,cvar,pi,pi.normal,size,woccl);
+			// pnp1[i].theta = woccl;
 			// if(size > 1.0/3.0 *fvar.avar.nfull)
 			// {
 			for (auto j:outlist[i])
 			{	/* Neighbour list loop. */
-				Part pj = pnp1[j];
+				const Part pj = pnp1[j];
 
 				if(pj.b == 0)
 					continue;
@@ -259,11 +266,12 @@ void ApplyAero(SIM &svar, FLUID &fvar, CROSS &cvar,
 			// }
 
 		}/*End of if*/
+
 	}/*End of particles*/
 
 	StateVecD Force = StateVecD::Zero();
 	#pragma omp parallel for reduction(+:Force)
-	for (uint i = svar.bndPts; i < svar.totPts; ++i)
+	for (uint i = start; i < end; ++i)
 	{
 		pnp1[i].f += Af[i];
 		pnp1[i].Af = Af[i];

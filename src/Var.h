@@ -26,6 +26,8 @@
 #define M_PI (4.0*atan(1.0))
 #endif
 
+using std::vector;
+
 /* Define data type. */
 /* Want to have long double at some point,     */
 /* but neighbour search won't have it...       */
@@ -72,6 +74,7 @@ typedef struct SIM {
 	uint outframe;	                /*Terminal output frame interval*/
 	uint addcount;					/*Current Number of add-particle calls*/
 	double Pstep,Bstep, dx;			/*Initial spacings for particles and boundary*/
+	uint nfull;						/*Full neighbour list amount*/
 	StateVecD Box;					/*Box dimensions*/
 	StateVecD Start; 				/*Sim box bottom left coordinate*/
 	RotMat Rotate;				    /*Starting rotation matrix*/ 
@@ -83,12 +86,13 @@ typedef struct SIM {
 	double dt, t, framet;			/*Timestep, Simulation + frame times*/
 	double beta,gamma;				/*Newmark-Beta Parameters*/
 	double maxmu;                   /*Maximum viscosity component (CFL)*/
-	int Bcase, Bclosed;				/*What boundary shape to take*/
+	int Bcase, Bclosed, ghost;		/*What boundary shape to take*/
 	uint outtype;                   /*ASCII or binary output*/
 	uint outform;                   /*Output type. Fluid properties or Research.*/
 	uint frameout;                  /**/
 	uint framecount;
-	std::string infolder, outfolder;			
+	std::string infolder, outfolder;
+	std::string meshfile;			
 	#if SIMDIM == 3
 		VLM vortex;
 	#endif
@@ -99,7 +103,8 @@ typedef struct SIM {
 typedef struct FLUID {
 	ldouble H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
 	ldouble rho0; 					/*Resting Fluid density*/
-	ldouble pPress;					/*Starting pressure in pipe*/
+	ldouble pPress, gasPress;		/*Starting pressure in pipe*/
+	ldouble gasDynamic, gasVel;     /*Reference gas velocity*/
 	ldouble Simmass, Boundmass;		/*Particle and boundary masses*/
 	ldouble correc;					/*Smoothing Kernel Correction*/
 	ldouble alpha,Cs,mu;		    /*}*/
@@ -107,6 +112,8 @@ typedef struct FLUID {
 	ldouble gam, B; 				/*}*/
 	ldouble mug;					/* Gas Properties*/
 	ldouble rhog;
+	ldouble T;						/*Temperature*/
+	ldouble Rgas;                   /*Specific gas constant*/
 	ldouble contangb;				/*Boundary contact angle*/
 	AERO avar;
 	//double front, height, height0;		/*Dam Break validation parameters*/
@@ -131,8 +138,9 @@ typedef struct MESH
 	{
 		verts = std::vector<StateVecD>(nV);
 		pVel = std::vector<StateVecD>(nV);
-		// pointMach = std::vector<double>(np);
-		// pointCp = std::vector<double>(np);
+		pointCp = std::vector<double>(nV);
+		pointP = std::vector<double>(nV);
+		pointRho = std::vector<double>(nV);
 
 		elems = std::vector<std::vector<uint>>(nC,std::vector<uint>(nCverts));
 		#if SIMDIM == 2
@@ -147,11 +155,12 @@ typedef struct MESH
 				(nC,std::vector<std::vector<StateVecD>>(nfaces,std::vector<StateVecD>(nFverts)));
 		#endif
 		cVel = std::vector<StateVecD>(nC);		
-		// cellMach = std::vector<double>(ne);
-		// cellCp = std::vector<double>(ne);
+		cellCp = std::vector<double>(nC);
+		cellP = std::vector<double>(nC);
+		cellRho = std::vector<double>(nC);
 		// cNeighb = std::vector<std::vector<uint>>(nC,std::vector<uint>());
 		cNeighb.reserve(nC);
-		
+
 		numPoint = nV;
 		numElem = nC;
 		nFaces = nfaces;
@@ -162,8 +171,9 @@ typedef struct MESH
 	/*Point based data*/
 	std::vector<StateVecD> verts;
 	std::vector<StateVecD> pVel;
-	// std::vector<double> pointMach;
-	// std::vector<double> pointCp;
+	std::vector<double> pointCp;
+	std::vector<double> pointP;
+	std::vector<double> pointRho;
 
 	/*Cell based data*/
 	std::vector<std::vector<uint>> elems;
@@ -176,18 +186,21 @@ typedef struct MESH
 	#endif
 	std::vector<StateVecD> cVel;
 	std::vector<std::vector<uint>> cNeighb;
-	// std::vector<double> cellMach;
-	// std::vector<double> cellCp;
+	std::vector<double> cellCp;
+	std::vector<double> cellP;
+	std::vector<double> cellRho;
 }MESH;
 
 /*Particle data class*/
 typedef class Particle {
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-		Particle(StateVecD X, StateVecD Vi, ldouble Rhoi, ldouble Mi, ldouble press, int bound)
+		Particle(const StateVecD X, const StateVecD& Vi, const ldouble Rhoi, const ldouble Mi, 
+			const ldouble press, const int bound, const uint pID)
 		{
 			xi = X;	v = Vi; 
 			rho = Rhoi; m = Mi; b = bound;
+			partID = pID;
 			f = StateVecD::Zero();
 			Sf = StateVecD::Zero(); 
 			Af = StateVecD::Zero();
@@ -197,6 +210,8 @@ typedef class Particle {
 			theta = 0.0;
 			cellV = StateVecD::Zero();
 			cellID = 0;
+			cellP = 0.0;
+			cellRho = 0.0;
 		}
 
 		int size() const
@@ -204,7 +219,7 @@ typedef class Particle {
 			return(xi.size());
 		}
 
-		double operator[](int a) const
+		ldouble operator[](int a) const
 		{	/*For neighbour search, return index of xi vector*/
 			return(xi[a]);
 		}
@@ -219,14 +234,16 @@ typedef class Particle {
 		ldouble rho, p, Rrho, m, theta;
 		uint b; //What state is a particle. Boundary, forced particle or unforced
 		StateVecD cellV;
-		uint cellID;
+		uint partID, cellID;
+		ldouble cellP, cellRho;
 }Particle;
 
 typedef class Part {
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-		Part(const Particle pi)
+		Part(const Particle& pi)
 		{
+			partID = pi.partID;
 			xi = pi.xi; v = pi.v; 
 			rho = pi.rho; 
 			p = pi.p;
@@ -236,6 +253,23 @@ typedef class Part {
 			normal = pi.normal;
 			cellV = pi.cellV;
 			cellID = pi.cellID;
+			cellP = pi.cellP;
+			cellRho = pi.cellRho;
+		}
+
+		Part(const StateVecD xin, const StateVecD vin, const ldouble pin, 
+				const ldouble rhoin, const ldouble min, const uint bin, const uint pID)
+		{
+			xi = xin;
+			v = vin;
+			p = pin;
+			rho = rhoin;
+			m = min;
+			b = bin;
+			partID = pID;
+			cellV = StateVecD::Zero();
+			cellP = 0.0;
+			cellRho = 0.0;
 		}
 
 		int size() const
@@ -243,19 +277,24 @@ typedef class Part {
 			return(xi.size());
 		}
 
-		double operator[](int a) const
+		ldouble operator[](int a) const
 		{	/*For neighbour search, return index of xi vector*/
 			return(xi[a]);
 		}
 
 		void operator=(const Particle pi)
 		{
+			partID = pi.partID;
 			xi = pi.xi; v = pi.v; 
 			rho = pi.rho; 
 			p = pi.p;
 			m = pi.m;
 			b = pi.b;
 			Sf = pi.Sf;
+			cellV = pi.cellV;
+			cellID = pi.cellID;
+			cellP = pi.cellP;
+			cellRho = pi.cellRho;
 		}
 
 		// void erase_list(void)
@@ -266,9 +305,10 @@ typedef class Part {
 
 		StateVecD xi, v, Sf, normal;
 		ldouble rho, p, m;
-		uint b; //What state is a particle. Boundary, forced particle or unforced
+		uint b; //What state is a particle. Boundary, forced particle or unforced, or air
 		StateVecD cellV;
-		uint cellID;
+		uint partID, cellID;
+		ldouble cellP, cellRho;
 }Part;
 
 typedef std::vector<Particle> State;

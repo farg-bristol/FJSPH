@@ -175,4 +175,102 @@
       return 1;
     }
 #endif
+
+void FindCell(const uint start, const uint end, const ldouble nfull, 
+        State& pnp1, const MESH& cells, const outl& outlist)
+{
+    /*Find which cell the particle is in*/
+    #pragma omp parallel for
+    for (uint ii = start; ii < end; ++ii)
+    {
+        if (pnp1[ii].b == 2 && outlist[ii].size() < nfull )
+        {   
+            #if SIMDIM == 3
+            uint found = 0;
+            StateVecD testp = pnp1[ii].xi;
+            /*Test the cell it is already in first*/
+            if(Crossings3D(cells.cFaces[pnp1[ii].cellID],testp))
+            {
+                found = 1;
+            }
+            else
+            {
+                for(auto cell:cells.cNeighb[pnp1[ii].cellID])
+                {
+
+                    if(Crossings3D(cells.cFaces[cell],testp))
+                    {
+                        pnp1[ii].cellID = cell;
+                        pnp1[ii].cellV = cells.cVel[cell];
+                        pnp1[ii].cellP = cells.cellP[cell];
+                        pnp1[ii].cellRho = cells.cellRho[cell];
+                        found = 1;
+                        break;
+                    }
+                }
+            }
+
+            if(found == 0)
+            {   /*The containing cell wasn't found in the neighbours.*/
+                /*Scan through the whole list again*/
+                uint jj = 0;
+                for(auto cell:cells.cFaces)
+                {
+                    if(Crossings3D(cell,testp))
+                    {
+                        pnp1[ii].cellID = jj;
+                        pnp1[ii].cellV = cells.cVel[jj];
+                        pnp1[ii].cellP = cells.cellP[jj];
+                        pnp1[ii].cellRho = cells.cellRho[jj];
+                        break;
+                    }
+                    ++jj;
+                }
+            }   
+            
+            #else                   
+                uint found = 0;
+                StateVecD testp = pnp1[ii].xi;
+                /*Do a cell containment*/
+                 if(Crossings2D(cells.cVerts[pnp1[ii].cellID],testp))
+                {
+                    found = 1;
+                }
+                else
+                {
+                    for(auto cell:cells.cNeighb[pnp1[ii].cellID])
+                    {
+                        if(Crossings2D(cells.cVerts[cell],testp))
+                        {
+                            pnp1[ii].cellID = cell;
+                            pnp1[ii].cellV = cells.cVel[cell];
+                            pnp1[ii].cellP = cells.cellP[cell];
+                            pnp1[ii].cellRho = cells.cellRho[cell];
+                            found = 1;
+                            break;
+                        }
+                    }
+                }
+                
+                if(found == 0)
+                {   /*The containing cell wasn't found in the neighbours.*/
+                    /*Scan through the whole list again*/
+                    uint jj = 0;
+                    for(auto cell:cells.cVerts)
+                    {
+                        if(Crossings2D(cell,testp))
+                        {
+                            pnp1[ii].cellID = jj;
+                            pnp1[ii].cellV = cells.cVel[jj];
+                            pnp1[ii].cellP = cells.cellP[jj];
+                            pnp1[ii].cellRho = cells.cellRho[jj];
+                            break;
+                        }
+                        ++jj;
+                    }
+                }
+            #endif
+        }
+    }
+}
 #endif

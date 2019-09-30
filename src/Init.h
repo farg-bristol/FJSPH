@@ -152,12 +152,13 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 	 
 /************** Create the boundary pn  *****************/ 	 
 	ldouble step = svar.Pstep*svar.Bstep;
-	int Ny = ceil(svar.Box(1)/step);	
-	int Nx = ceil(svar.Box(0)/step);
+	int Ny = ceil((svar.Box(1)+4*svar.Pstep)/step);	
+	int Nx = ceil((svar.Box(0)+4*svar.Pstep)/step);
 	#if (SIMDIM == 3)
 		int Nz = ceil(svar.Box(2)/step);
 	#endif
-	
+	uint pID = 0;
+
  	if(svar.Bcase == 0 || svar.Bcase == 5)
 	{ /*No boundary*/
 
@@ -170,9 +171,11 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 				for (int k=0; k<=Nz; ++k) 
 				{	/*Create Left and right boundary faces*/
 					StateVecD xi(0.0,j*step,k*step);
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
 					xi(0) = svar.Box(0);
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
 				}
 				
 			}
@@ -181,7 +184,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 				for (int j=1; j<Ny; ++j)
 				{	/*Create top and bottom boundary faces*/
 					StateVecD xi(i*step,j*step,0);
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
 					// xi(2)= Box(2); //Top boundary (Typically omitted)
 					// pn.emplace_back(Particle(xi,v,f,rho,Rrho,Boundmass,0));
 				}
@@ -192,15 +196,19 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 				for(int k = 0; k <= Nz; ++k) 
 				{	/*Create far and near boundary*/
 					StateVecD xi(i*step, 0, k*step);
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
 					xi(1) = svar.Box(1);
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
 				}
 			}
-		#else 
-			for(int i = 0; i <= Ny ; ++i) {
-			StateVecD xi(-svar.Start(0),i*step-svar.Start(1));
-			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+		#else /*SIMDIM == 2*/
+			for(int i = 0; i <= Ny ; ++i) 
+			{	/* Left Wall*/
+				StateVecD xi(-svar.Start(0)-2*svar.Pstep,i*step-svar.Start(1)-2*svar.Pstep);
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
 			}
 	/*			// Optional lid
 			for(int i = 1; i <Nx ; ++i) {
@@ -212,13 +220,17 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 			x(0) = svar.Box(0) -stepx;
 			pn.emplace_back(Particle(x,v,f,rho,fvar.Boundmass,true));
 	*/
-			for(int i= Ny; i>0; --i) {
-				StateVecD xi(svar.Box(0)-svar.Start(0),i*step-svar.Start(1));
-				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));	
+			for(int i= Ny; i>0; --i) 
+			{	/*Right Wall*/
+				StateVecD xi(Nx*step-svar.Start(0)-2*svar.Pstep,i*step-svar.Start(1)-2*svar.Pstep);
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));	
+				pID++;
 			}
-			for(int i = Nx; i > 0; --i) {
-				StateVecD xi(i*step-svar.Start(0),-svar.Start(1));
-				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+			for(int i = Nx; i > 0; --i) 
+			{	/*Floor*/
+				StateVecD xi(i*step-svar.Start(0)-2*svar.Pstep,-svar.Start(1)-2*svar.Pstep);
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
 			}
 		#endif		
 	}
@@ -239,7 +251,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 					/*Apply Rotation...*/
 					xi = svar.Rotate*xi;
 					xi += svar.Start;
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
 				}	
 			}
 		#else
@@ -252,7 +265,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 				StateVecD xi(-jetR,y);
 				xi = svar.Rotate*xi;
 				xi += svar.Start;
-				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
 			}
 
 			for (ldouble y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)
@@ -260,7 +274,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 				StateVecD xi(jetR,y);
 				xi = svar.Rotate*xi;
 				xi += svar.Start;
-				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
 			}
 		#endif
 	}
@@ -301,6 +316,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 	}
 	else
 	{	
+		press =fvar.pPress;
+		rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
 		#if SIMDIM == 3
 			/*Create the simulation pn*/
 			for( int i=0; i< svar.xyPART(0); ++i) 
@@ -309,9 +326,10 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 				{				
 					for (int k=0; k < svar.xyPART(2); ++k )
 					{
-						StateVecD xi(svar.Start(0)+i*svar.Pstep,
-							svar.Start(1)+j*svar.Pstep,svar.Start(2)+k*svar.Pstep);		
-						pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));
+						StateVecD xi(svar.Start(0)+i*svar.dx,
+							svar.Start(1)+j*svar.dx,svar.Start(2)+k*svar.dx);		
+						pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,2,pID));
+						pID++;
 					}		
 				}
 			}
@@ -321,8 +339,11 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 			{
 				for(int j=0; j< svar.xyPART(1); ++j)
 				{				
-					StateVecD xi(svar.Start(0)+i*svar.Pstep,svar.Start(1)+j*svar.Pstep);		
-					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0));		
+					StateVecD xi(svar.Start(0)+i*svar.dx,svar.Start(1)+j*svar.dx);		
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,2,pID));
+					pn.back().cellRho = fvar.rhog;
+					pn.back().cellP = 20000-fvar.gasPress;
+					pID++;
 				}
 			}
 		#endif
