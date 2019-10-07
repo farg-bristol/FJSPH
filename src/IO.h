@@ -323,7 +323,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	  		cvar.acase = getInt(in, lineno);
 	  		svar.ghost = getInt(in, lineno);
 	  		svar.Start = getDVector(in, lineno);
-	  		if(svar.Bcase < 3)
+	  		if(svar.Bcase < 2)
 	  		{
 	  			svar.Box= getDVector(in, lineno);
 	  			(void)getDouble(in, lineno);
@@ -339,7 +339,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	  				exit(-1);
 	  			}
 	  		}
-	  		else if(svar.Bcase > 2 && svar.Bcase < 7)
+	  		else if(svar.Bcase > 1 && svar.Bcase < 7)
 	  		{	
 	  			StateVecD angles = getDVector(in, lineno);
 	  			angles = angles *M_PI/180;
@@ -467,7 +467,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 
 std::ifstream& GotoLine(std::ifstream& file, unsigned int num){
     file.seekg(std::ios::beg);
-    for(uint i=0; i < num - 1; ++i){
+    for(uint ii=0; ii < num - 1; ++ii){
         file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
     }
     return file;
@@ -486,7 +486,7 @@ void Get_Vector(ifstream& fin, const uint np, std::vector<StateVecD>& var, const
 	string line;
 	for(uint dim =0; dim < SIMDIM; dim++)
 	{	
-		uint i = 0;
+		uint kk = 0;
 		/*If in 2D, skip the y-dimension, and read the z-dim.*/
 		if(yskip == 1)
 		{
@@ -513,17 +513,17 @@ void Get_Vector(ifstream& fin, const uint np, std::vector<StateVecD>& var, const
 					break;
 				else
 				{
-					var[i](dim) = temp;
-					++i;
+					var[kk](dim) = temp;
+					++kk;
 				}
 			}
 		}
-		if (i!= var.size())
+		if (kk!= var.size())
 		{
 			cout << "Mismatch of array size.\n" << 
 			" Not all of the array has been populated." << endl;
-			cout << "populated: " << i << " Array size: " << var.size() << endl;
-			cout << var[i] << endl;
+			cout << "populated: " << kk << " Array size: " << var.size() << endl;
+			cout << var[kk] << endl;
 		} 
 	}
 }
@@ -533,7 +533,7 @@ void Get_Scalar_Data(ifstream& fin, const uint np, T& var)
 {
 	string line;
 
-	uint i = 0;
+	uint kk = 0;
 	for(uint ii = 0; ii < ceil(float(np)/5.0); ++ii)
 	{
 		getline(fin, line);
@@ -548,18 +548,18 @@ void Get_Scalar_Data(ifstream& fin, const uint np, T& var)
 				break;
 			else
 			{
-				var[i] = temp;
-				++i;
+				var[kk] = temp;
+				++kk;
 			}
 		}
 	}
 
-	if (i!= var.size())
+	if (kk!= var.size())
 	{
 		cout << "Mismatch of array size.\n" << 
 		" Not all of the array has been populated." << endl;
-		cout << "populated: " << i << " Array size: " << var.size() << endl;
-		cout << var[i] << endl;
+		cout << "populated: " << kk << " Array size: " << var.size() << endl;
+		cout << var[kk] << endl;
 	}
 }
 

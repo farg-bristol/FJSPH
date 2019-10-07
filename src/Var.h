@@ -8,7 +8,10 @@
 #ifndef SIMDIM
 #define SIMDIM 2
 #endif
+
+#ifndef NTHREADS
 #define NTHREADS 4
+#endif
 
 #if SIMDIM == 3
 	#include "VLM.h"
@@ -69,11 +72,12 @@ typedef class AERO
 typedef struct SIM {
 	StateVecI xyPART; 				/*Starting sim particles in x and y box*/
 	uint simPts,bndPts,totPts;	    /*Simulation particles, Boundary particles, total particles*/
+	uint finPts;					/*How many points there will be at simulation end*/
 	uint nrefresh; 					/*Crossflow refresh particle number*/
 	uint nmax;                      /*Max add-particle calls*/
 	uint outframe;	                /*Terminal output frame interval*/
 	uint addcount;					/*Current Number of add-particle calls*/
-	double Pstep,Bstep, dx;			/*Initial spacings for particles and boundary*/
+	double Pstep,Bstep, dx, clear;	/*Initial spacings for particles and boundary*/
 	uint nfull;						/*Full neighbour list amount*/
 	StateVecD Box;					/*Box dimensions*/
 	StateVecD Start; 				/*Sim box bottom left coordinate*/

@@ -87,7 +87,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 					// cout << "Generating air particles" << endl;
 					temp = PoissonSample::generatePoissonPoints(svar,fvar,ii,pnp1,outlist);
 
-					// cout << "Before: " << outlist[i].size() << " After: " << neighb.size() << endl;
+					// cout << "Before: " << outlist[ii].size() << " After: " << neighb.size() << endl;
 				}
 
 				local.emplace_back(temp);
@@ -112,10 +112,11 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 	vector<StateVecD> xih(svar.totPts);
 	const ldouble a = 1 - svar.gamma;
 	const ldouble b = svar.gamma;
-	const ldouble c = 1-2*svar.beta;
+	const ldouble c = 0.5*(1-2*svar.beta);
 	const ldouble d = svar.beta;
 	const ldouble B = fvar.B;
 	const ldouble gam = fvar.gam;
+
 	// int RestartCount = 0;
 	while (log10(sqrt(errsum/(double(svar.totPts)))) - logbase > -7.0)
 	{
@@ -147,7 +148,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 				{
 					cout << "Generating air particles" << endl;
 					temp.insert(temp.end(), air[ii].begin(), air[ii].end());
-					// cout << "Before: " << outlist[i].size() << " After: " << neighb.size() << endl;
+					// cout << "Before: " << outlist[ii].size() << " After: " << neighb.size() << endl;
 				}
 
 				// cout << temp.size() << endl;
@@ -180,8 +181,8 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 	
 		/*Previous State for error calc*/
 		#pragma omp parallel for shared(pnp1)
-		for (uint  i=0; i < svar.totPts; ++i)
-			xih[i] = pnp1[i].xi;
+		for (uint  ii=0; ii < svar.totPts; ++ii)
+			xih[ii] = pnp1[ii].xi;
 
 
 		const ldouble dt = svar.dt;
@@ -209,7 +210,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 					/* 2 means it is clear, and can receive a force aerodynamically*/
 					/* 3 is an air particle. Stored only for one timestep at a time*/
 					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
-					if(vec(1) > 2*svar.Pstep)
+					if(vec(1) > svar.clear)
 					{	/*Tag it as clear if it's higher than the plane of the exit*/
 						pnp1[ii].b=2;
 						if(svar.Bcase == 6)
@@ -283,7 +284,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 				if(pnp1[ii].b==2)
 				{	
 					pnp1[ii].v =  pn[ii].v +dt*(a*pn[ii].f+b*pnp1[ii].f);
-					pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(0.5*c*pn[ii].f+d*pnp1[ii].f);
+					pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(c*pn[ii].f+d*pnp1[ii].f);
 					pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
 					pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
 				}
@@ -292,9 +293,9 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 		/****** FIND ERROR ***********/
 		errsum = 0.0;
 		#pragma omp parallel for reduction(+:errsum)
-		for (uint i=start; i < end; ++i)
+		for (uint ii=start; ii < end; ++ii)
 		{
-			StateVecD r = pnp1[i].xi-xih[i];
+			StateVecD r = pnp1[ii].xi-xih[ii];
 			errsum += r.squaredNorm();
 		}
 		
@@ -337,18 +338,26 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 	
 
 	/*Check if more particles need to be created*/
-	if(svar.Bcase >= 3 && svar.Bcase !=5)
+	if(svar.Bcase >= 2 && svar.Bcase !=5)
 	{
 		switch(svar.Bclosed)
 		{
 			case 0:
 			{
 				int refresh = 1;
-				for (uint i = svar.totPts-svar.nrefresh; i<svar.totPts; ++i)
+				for (uint ii = svar.totPts-svar.nrefresh; ii<svar.totPts; ++ii)
 				{	/*Check that the starting area is clear first...*/
-					StateVecD vec = svar.Transp*(pnp1[i].xi-svar.Start);
-					if(vec[1]< svar.dx-svar.Jet(1))
-						refresh = 0;
+					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
+					if(svar.Bcase == 2)
+					{
+						if(vec[1]< svar.dx-svar.Jet(1)*3)
+							refresh = 0;
+					}
+					else
+					{
+						if(vec[1]< svar.dx-svar.Jet(1))
+							refresh = 0;
+					}
 				}
 
 				if(refresh == 1)
@@ -397,7 +406,8 @@ int main(int argc, char *argv[])
 
     double duration;
     double error = 0;
-    cout << std::scientific<< setw(10);
+    cout.width(13);
+    cout << std::scientific << std::left;
     write_header();
 
     /******* Define the global simulation parameters ******/
@@ -423,6 +433,7 @@ int main(int argc, char *argv[])
 	State pnp1; 	/*Particles at n+1 */
 
 	cout << "Final particle count:  " << partCount << endl;
+	svar.finPts = partCount;
 	pn.reserve(partCount);
   	pnp1.reserve(partCount);
 	
@@ -597,8 +608,8 @@ int main(int argc, char *argv[])
 	duration = duration_cast<microseconds>(t2-t1).count()/1e6;
 	cout << "Frame: " << 0 << "  Sim Time: " << svar.t << "  Compute Time: "
 	<< duration <<"  Error: " << error << endl;
-	f2 << "Frame:  Points:   Sim Time:       Comp Time:     Error:       Its:" << endl;
-	f2 << 0 << "        " << svar.totPts << "    " << svar.t << "    " << duration
+	f2 << "Frame:  B-Points: S-Points:  Sim Time:       Comp Time:     Error:       Its:" << endl;
+	f2 << 0 << "        " << svar.bndPts << "  " << svar.simPts << "    " << svar.t << "    " << duration
 		<< "    " << error << "  " << 0 << endl;
 
 	///************************* MAIN LOOP ********************/
@@ -622,8 +633,9 @@ int main(int argc, char *argv[])
 		/*Write each frame info to file (Useful to debug for example)*/
 		if (svar.frameout == 1)
 		{
-			f2 << frame << "         " << svar.totPts << "  " << svar.t << "  " << duration
-			<< "  " << error << "  " << stepits << endl;
+			f2 << frame << "        " << svar.bndPts << "  " << svar.simPts << "    " << svar.t << "    " << duration
+				<< "    " << error << "  " << stepits << endl;
+			
 		}
 
 		if(svar.outframe !=0)

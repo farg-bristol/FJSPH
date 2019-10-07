@@ -17,23 +17,23 @@ void FindNeighbours(const Sim_Tree& NP1_INDEX, const FLUID& fvar, const State& p
 	{	/*Find neighbour list*/
 		outl local; /*Local processor copy*/
 		#pragma omp for schedule(static) nowait 
-		for(uint i=0; i < pnp1.size(); ++i)
+		for(uint ii=0; ii < pnp1.size(); ++ii)
 		{
 			// std::cout << pnp1[i].list.size();
 			std::vector<std::pair<size_t, ldouble>> matches; /* Nearest Neighbour Search*/
-			NP1_INDEX.index->radiusSearch(&pnp1[i].xi[0], search_radius, matches, params);
+			NP1_INDEX.index->radiusSearch(&pnp1[ii].xi[0], search_radius, matches, params);
 			
 			std::vector<uint> temp;
-			for (auto &j:matches)
+			for (auto &jj:matches)
 			{
-				temp.emplace_back(static_cast<uint>(j.first));
+				temp.emplace_back(static_cast<uint>(jj.first));
 			}
 			local.emplace_back(temp);
 			// std::cout << "  " << pnp1[i].list.size() << std::endl;
 		}
 
 		#pragma omp for schedule(static) ordered
-    	for(int i=0; i<NTHREADS; i++)
+    	for(int ii=0; ii<NTHREADS; ii++)
     	{
     		#pragma omp ordered
     		outlist.insert(outlist.end(),local.begin(),local.end());

@@ -34,6 +34,58 @@ int ParticleCount(SIM &svar)
 			#endif
 			partCount += svar.simPts; /*Simulation pn*/
 		}
+		else if (svar.Bcase == 2)
+		{
+			#if SIMDIM == 3
+			{
+				ldouble holeD = svar.Jet(0)+4*svar.Pstep; /*Diameter of hole (or width)*/
+
+	            /*Find the points on the side of the pipe (Assume a circle)*/
+	            float dtheta = atan((step)/(0.5*holeD));
+	            Ny = ceil(svar.Jet(1)/step);
+	            int holeWall = ceil(2*M_PI/dtheta)*Ny;
+
+				/*Simulation Points*/
+				int simCount = 0;
+				ldouble jetR = 0.5*(svar.Jet(0));
+				
+				/*Do the centerline of points*/
+				for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
+					simCount++;
+
+				for (ldouble x = svar.dx; x < jetR ; x+=svar.dx)
+				{ /*Do the either side of the centerline*/
+					for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
+					{	/*If the point is inside the hole diameter, add it*/
+						if(((x*x)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
+			    			simCount += 2;
+					}
+				}
+
+				/*Need to add the pn already present*/
+				int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
+
+				partCount = holeWall + simPts;
+			}
+			#else
+			{
+	            /*Find the points on the side of the pipe*/
+	            Ny = ceil((svar.Jet(1)*3)/step);
+	            int holeWall = 2*Ny;
+
+				/*Simulation Points*/
+				int simCount = 0;
+				ldouble jetR = 2*(0.5*(svar.Jet(0)));
+				for (ldouble x = -jetR; x <= jetR; x+= svar.dx)
+					simCount++;
+
+				/*Need to add the pn already present*/
+				int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
+
+				partCount = holeWall + simPts;
+			}
+			#endif
+		}
 		else if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
 		{	
 			#if SIMDIM == 3
@@ -140,6 +192,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 {
 	if (svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
 		cout << "Initialising simulation..." << endl;
+	else if (svar.Bcase == 5)
+		cout << "Initialising simulation with " << svar.finPts << " points" << endl;
 	else
 		cout << "Initialising simulation with " << svar.simPts << " points" << endl;	
 	
@@ -234,10 +288,135 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 			}
 		#endif		
 	}
+	else if (svar.Bcase == 2)
+	{	/*Converging nozzle for jet spray*/
+		#if SIMDIM == 3
+			ldouble holeD = svar.Jet(0)+2*fvar.H; /*Diameter of hole (or width)*/
+			ldouble stepb = (svar.Pstep*svar.Bstep);
+			
+
+			/*Create a bit of the pipe downward.*/
+			double r = 0.5*holeD;
+	    	double dtheta = atan((stepb)/(r));
+			for (ldouble y = 0; y > -svar.Jet(1); y-=stepb)			
+			{	
+				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				{
+					StateVecD xi(r*sin(theta), y, r*cos(theta));
+					/*Apply Rotation...*/
+					xi = svar.Rotate*xi;
+					xi += svar.Start;
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
+				}	
+			}
+
+			/*Interpolate between the big and small diameters*/
+			for (ldouble y = -svar.Jet(1)*1; y > -svar.Jet(1)*2; y-=stepb)			
+			{	
+				ldouble x = holeD + (y-2*svar.Jet(1))*(r-holeD)/(-svar.Jet(1));
+				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				{
+					StateVecD xi(x*sin(theta), y, x*cos(theta));
+					/*Apply Rotation...*/
+					xi = svar.Rotate*xi;
+					xi += svar.Start;
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
+				}	
+			}
+
+			/*Create the wide bit of the nozzle*/
+			r = holeD;
+	    	dtheta = atan((stepb)/(r));
+			for (ldouble y = -svar.Jet(1)*2; y >= -svar.Jet(1)*3; y-=stepb)			
+			{	
+				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				{
+					StateVecD xi(r*sin(theta), y, r*cos(theta));
+					/*Apply Rotation...*/
+					xi = svar.Rotate*xi;
+					xi += svar.Start;
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
+				}	
+			}
+
+		#else
+
+			ldouble stepb = (svar.Pstep*svar.Bstep);
+			ldouble jetR = 0.5*(svar.Jet(0)+2*fvar.H); /*Diameter of hole (or width)*/
+			ldouble resR = jetR*2.0;
+
+			/*Create the wide bit of the nozzle*/
+			for (ldouble y = -svar.Jet(1)*2; y >= -svar.Jet(1)*3; y-=stepb)
+			{
+				StateVecD xi(-resR,y);
+				xi = svar.Rotate*xi;
+				xi += svar.Start;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+			}	
+
+			/*Create the tapering section*/
+			for (ldouble y = -svar.Jet(1); y > -svar.Jet(1)*2; y-=stepb)
+			{
+				/*Interpolate between resR and jetR*/
+				ldouble x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
+				StateVecD xi(-x,y);
+				xi = svar.Rotate*xi;
+				xi += svar.Start;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+			}
+
+			/*Create the exit bit.*/
+			for (ldouble y = 0; y > -svar.Jet(1); y-=stepb)
+			{
+				StateVecD xi(-jetR,y);
+				xi = svar.Rotate*xi;
+				xi += svar.Start;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+			}
+
+			/*Create the wide bit of the nozzle*/
+			for (ldouble y = -svar.Jet(1)*2; y >= -svar.Jet(1)*3; y-=stepb)
+			{
+				StateVecD xi(resR,y);
+				xi = svar.Rotate*xi;
+				xi += svar.Start;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+			}
+
+			/*Create the tapering section*/
+			for (ldouble y = -svar.Jet(1); y > -svar.Jet(1)*2; y-=stepb)
+			{
+				/*Interpolate between resR and jetR*/
+				ldouble x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
+				StateVecD xi(x,y);
+				xi = svar.Rotate*xi;
+				xi += svar.Start;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+			}
+
+			/*Create the exit bit.*/
+			for (ldouble y = 0; y > -svar.Jet(1); y-=stepb)
+			{
+				StateVecD xi(jetR,y);
+				xi = svar.Rotate*xi;
+				xi += svar.Start;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+			}
+		#endif
+	}
 	else if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
 	{	/*Jet in Crossflow*/
 		#if SIMDIM == 3
-			ldouble holeD = svar.Jet(1)+4*fvar.H; /*Diameter of hole (or width)*/
+			ldouble holeD = svar.Jet(0)+4*fvar.H; /*Diameter of hole (or width)*/
 			ldouble stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
@@ -256,10 +435,9 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 				}	
 			}
 		#else
-			ldouble jetR = 0.5*(svar.Jet(1)+4*fvar.H); /*Diameter of hole (or width)*/
+			ldouble jetR = 0.5*(svar.Jet(0)+4*fvar.H); /*Radius of hole (or width)*/
 			ldouble stepb = (svar.Pstep*svar.Bstep);
 			
-			/*Create a bit of the pipe downward.*/
 			/*Create a bit of the pipe downward.*/
 			for (ldouble y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)			{
 				StateVecD xi(-jetR,y);
@@ -288,7 +466,23 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 	svar.bndPts = pn.size();
 	
 /***********  Create the simulation pn  **************/
-	if (svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
+	if(svar.Bcase == 2)
+	{
+		/*Crossflow case*/
+		svar.simPts = 0;
+		svar.totPts = pn.size();
+		/*Update n+1 before adding sim pn*/
+		for (auto p: pn)
+			pnp1.emplace_back(p);
+
+		for (ldouble y = -svar.Jet[1]*2; y > -svar.Jet[1]*3; y-=svar.dx)
+		{
+			// cout << "In add points for-loop" << endl;
+			AddPoints(y, svar, fvar, cvar, pn, pnp1);
+		}
+		svar.clear = -svar.Jet[1]*2;
+	}
+	else if (svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
 	{
 		/*Crossflow case*/
 		svar.simPts = 0;
@@ -302,6 +496,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 			// cout << "In add points for-loop" << endl;
 			AddPoints(y, svar, fvar, cvar, pn, pnp1);
 		}
+
+		svar.clear = 0.0;
 	}
 	else if(svar.Bcase == 5)
 	{
@@ -364,6 +560,8 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 	{
 		cerr<< "Mismatch of particle count." << endl;
 		cerr<< "Particle array size doesn't match defined values." << endl;
+		cerr<< "Total Points: " << svar.totPts << "  Boundary Points: " << svar.bndPts
+			<< "  Simulation Points: " << svar.simPts << endl;
 		Write_settings(svar,fvar);
 		exit(-1);
 	}

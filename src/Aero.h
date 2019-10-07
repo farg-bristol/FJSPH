@@ -43,8 +43,8 @@ StateVecD AeroForce(const StateVecD &Vdiff, const SIM &svar, const FLUID &fvar)
 }
 
 
-StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar, 
-	const Part &pi, const StateVecD &SurfC, const uint size, const ldouble woccl)
+StateVecD CalcForce(SIM& svar, const FLUID& fvar, const CROSS& cvar, 
+	const Part &pi, const StateVecD& SurfC, const uint size, const ldouble woccl)
 {
 	StateVecD Fd= StateVecD::Zero();
 	
@@ -86,8 +86,8 @@ StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 					ldouble correc = 1.0;
 					if(size > 0.1 * nfull)
 					{
-						ldouble num = SurfC.dot(cvar.vInf-pi.v);
-						ldouble denom = SurfC.norm()*(cvar.vInf-pi.v).norm();
+						ldouble num = SurfC.dot(Vdiff);
+						ldouble denom = SurfC.norm()*(Vdiff).norm();
 						ldouble theta = num/denom;
 						
 						if (theta <= 1.0  && theta >= -1.0)
@@ -111,8 +111,8 @@ StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 					double Acorrect = 0.0;
 
 					/*Correction based on surface normal*/
-					ldouble num = SurfC.dot(cvar.vInf-pi.v);
-					ldouble denom = SurfC.norm()*(cvar.vInf-pi.v).norm();
+					ldouble num = SurfC.dot(Vdiff);
+					ldouble denom = SurfC.norm()*(Vdiff).norm();
 					ldouble theta = num/denom;
 					
 					if (theta <= 1.0  && theta >= -1.0)
@@ -131,14 +131,14 @@ StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 			}
 			case 4:
 			{	/*Gissler et al (2017)*/
-				if(size < nfull)
-				{	
+				// if(size < nfull)
+				// {	
 					ldouble ymax = Vdiff.squaredNorm()*fvar.avar.ycoef;
 					ldouble Re = 2.0*fvar.rhog*Vdiff.norm()*fvar.avar.L/fvar.mug;
 					ldouble Cds;
 
-					ldouble frac2 = std::min((2.0/3.0)*nfull,double(size))
-									/((2.0/3.0)*nfull);
+					ldouble frac2 = std::min(nfull,double(size))
+									/(nfull);
 					ldouble frac1 = (1.0 - frac2);
 
 					// if (Re < 3500)
@@ -169,7 +169,7 @@ StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 					ldouble Ai = (1-woccl)/*correc*/*Aunocc;
 
 					Fd = 0.5*fvar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai/pi.m;
-				}
+				// }
 			}
 		}
 	}
@@ -185,21 +185,21 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 	const uint end = svar.totPts;
 
 	#pragma omp parallel for reduction(+:Af) shared(svar)
-	for (uint i=start; i < end; ++i)
+	for (uint ii=start; ii < end; ++ii)
 	{
-		uint size = outlist[i].size();
+		uint size = outlist[ii].size();
 		
-		if (size < fvar.avar.nfull)
-		{	
-			Part pi(pnp1[i]);
+		// if (size < fvar.avar.nfull)
+		// {	
+			Part pi(pnp1[ii]);
 			pi.normal = StateVecD::Zero();
 			ldouble kernsum = 0.0;
 			ldouble woccl = 0.0;
-			for (auto j:outlist[i])
+			for (auto jj:outlist[ii])
 			{	/* Neighbour list loop. */
-				const Part pj(pnp1[i]);
+				const Part pj(pnp1[jj]);
 
-				if(i == j)
+				if(ii == jj)
 				{
 					kernsum += W2Kernel(0,fvar.H,fvar.correc);
 					continue;
@@ -247,9 +247,9 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 			// pnp1[i].theta = woccl;
 			// if(size > 1.0/3.0 *fvar.avar.nfull)
 			// {
-			for (auto j:outlist[i])
+			for (auto jj:outlist[ii])
 			{	/* Neighbour list loop. */
-				const Part pj = pnp1[j];
+				const Part pj = pnp1[jj];
 
 				if(pj.b == 0)
 					continue;
@@ -257,7 +257,7 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 				ldouble r = (pj.xi-pi.xi).norm();
 				ldouble kern = W2Kernel(r,fvar.H,fvar.correc);
 				// #pragma omp critical
-				Af[j] += Fd*kern/kernsum;
+				Af[jj] += Fd*kern/kernsum;
 			}
 			// }
 			// else 
@@ -265,17 +265,17 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 			// 	pnp1[i].Af += Fd;
 			// }
 
-		}/*End of if*/
+		// }/*End of if*/
 
-	}/*End of particles*/
+	}/*End of ii particles*/
 
 	StateVecD Force = StateVecD::Zero();
 	#pragma omp parallel for reduction(+:Force)
-	for (uint i = start; i < end; ++i)
+	for (uint ii = start; ii < end; ++ii)
 	{
-		pnp1[i].f += Af[i];
-		pnp1[i].Af = Af[i];
-		Force +=Af[i];
+		pnp1[ii].f += Af[ii];
+		pnp1[ii].Af = Af[ii];
+		Force += Af[ii];
 	}
 	svar.Force = Force;
 	

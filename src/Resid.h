@@ -22,12 +22,12 @@ ldouble GetNumpartdens(const SIM &svar, const FLUID &fvar, const State &pnp1, co
 	ldouble npd = 0.0;
 	const uint end = svar.totPts;
 	#pragma omp parallel for reduction(+:npd) shared(outlist)
-	for (uint i=0; i< end; ++i)
+	for (uint ii=0; ii< end; ++ii)
 	{
-		StateVecD pi = pnp1[i].xi;
-		for (uint j=0; j<outlist[i].size(); ++j)
+		StateVecD pi = pnp1[ii].xi;
+		for (auto jj:outlist[ii])
 		{ /* Surface Tension calcs */
-			StateVecD pj = pnp1[outlist[i][j]].xi;
+			StateVecD pj = pnp1[jj].xi;
 			ldouble r = (pj-pi).norm();
 			npd += W2Kernel(r,fvar.H,fvar.correc);
 		}
@@ -43,31 +43,31 @@ std::vector<StateVecD> GetColourGrad(const SIM &svar, const FLUID &fvar, const S
 	const uint end = svar.totPts;
 
 	#pragma omp parallel for shared(outlist)
-	for(uint i=start; i < end; ++i)
+	for(uint ii=start; ii < end; ++ii)
 	{
-		StateVecD pi = pnp1[i].xi;
+		StateVecD pi = pnp1[ii].xi;
 		// StateVecD top = StateVecD::Zero();
 		ldouble bottom = 0.0;
-		// pnp1[i].normal = StateVecD::Zero();
+		// pnp1[ii].normal = StateVecD::Zero();
 		
-		for(auto j:outlist[i])
+		for(auto jj:outlist[ii])
 		{	/*Find the denominator to correct absence of second phase*/
-			Part pj = pnp1[j];
+			Part pj = pnp1[jj];
 			ldouble r = (pj.xi-pi).norm();
 			bottom +=(pj.m/pj.rho)*W2Kernel(r,fvar.H,fvar.correc);
 
 		}
 
-		for(auto j:outlist[i])
+		for(auto jj:outlist[ii])
 		{	/*Find the numerator and sum*/
-			Part pj = pnp1[j];
+			Part pj = pnp1[jj];
 			StateVecD Rij = pj.xi-pi;
 			ldouble r = Rij.norm();
-			cgrad[i] += (pj.m/pj.rho)*W2GradK(Rij,r,fvar.H,fvar.correc);
-			// pnp1[i].normal += Rij;
+			cgrad[ii] += (pj.m/pj.rho)*W2GradK(Rij,r,fvar.H,fvar.correc);
+			// pnp1[ii].normal += Rij;
 		}
 		
-		cgrad[i] = cgrad[i]/bottom;
+		cgrad[ii] = cgrad[ii]/bottom;
 
 	}
 
@@ -147,7 +147,7 @@ void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, Stat
 	const uint end = svar.totPts;
 
 	/********* LOOP 1 - all points: Calculate numpartdens ************/
-	// ldouble numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
+	ldouble numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
 	// std::vector<StateVecD> cgrad(svar.totPts,StateVecD::Zero());
 	// cgrad = GetColourGrad(svar,fvar,pnp1,outlist);
 
@@ -155,7 +155,7 @@ void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, Stat
 	std::vector<StateVecD> RV(svar.totPts,StateVecD::Zero()); /*Residual force*/
 	std::vector<StateVecD> ST(svar.totPts,StateVecD::Zero()); /*Surface tension force*/		
 
-	#pragma omp parallel shared(g)
+	#pragma omp parallel shared(g,numpartdens)
 	{
 /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
 		#pragma omp for reduction(+:Rrhocontr)
@@ -182,7 +182,7 @@ void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, Stat
 		{
 			Part pi = pnp1[ii];
 			uint size = outlist[ii].size();
-			// pnp1[i].theta = double(size);
+			// pnp1[ii].theta = double(size);
 			// pnp1[ii].theta = 0.0;
 
 			std::vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
@@ -197,7 +197,7 @@ void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, Stat
 			{	/* Neighbour list loop. */
 				StateVecD contrib = StateVecD::Zero();
 				StateVecD visc = StateVecD::Zero();
-				// StateVecD SurfC= StateVecD::Zero();
+				StateVecD SurfC= StateVecD::Zero();
 
 				// Part pj(pnp1[j]);
 
@@ -218,13 +218,13 @@ void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, Stat
 				visc    = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
 
 				/*Surface Tension - Nair & Poeschel (2017)*/
-				// SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
-				// SurfC = HuST(fvar,pi,pj,Rij,r,cgrad[i],cgrad[j]);
+				SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
+				// SurfC = HuST(fvar,pi,pj,Rij,r,cgrad[ii],cgrad[jj]);
 
 				/*drho/dt*/
 				Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
 
-				RV[ii] += pj.m*contrib + pj.m*visc /*+ SurfC/pj.m*/;
+				RV[ii] += pj.m*contrib + pj.m*visc + SurfC/pj.m;
 
 				if (pj.b == 3)
 				{
@@ -259,7 +259,7 @@ void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, Stat
 
 	}
 		/*Aerodynamic force*/
-	if(svar.Bcase >= 3)
+	if(svar.Bcase > 1)
 		ApplyAero(svar,fvar,cvar,pnp1,outlist);
 	
 }
