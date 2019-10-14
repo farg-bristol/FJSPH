@@ -12,7 +12,7 @@
 using std::cout;
 using std::endl;
 
-void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const CROSS &cvar, State &pn, State &pnp1)
+void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const AERO &avar, State &pn, State &pnp1)
 {	
 	// cout << "Adding points..." << endl;
 	uint pID = svar.totPts;
@@ -24,12 +24,12 @@ void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const CROSS &cvar,
 	StateVecD v;
 	if(svar.Bcase == 2)
 	{
-		v = (cvar.vJet*pow(jetR,2))/(0.6*pow(resR,2));
+		v = (avar.vJet*pow(jetR,2))/(0.6*pow(resR,2));
 		jetR *= 2;
 	}
 	else
 	{
-		v = cvar.vJet;  /*Jet velocity*/
+		v = avar.vJet;  /*Jet velocity*/
 	}
 	
 
@@ -104,7 +104,7 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 	StateVecD v = StateVecD::Zero();
 	ldouble rho = fvar.Simmass/pow(svar.dx,SIMDIM);
 	// ldouble rho = fvar.rho0;
-	ldouble press = fvar.B*(pow(rho/fvar.rho0,fvar.gam)-1);
+	ldouble press = fvar.pPress;
 	// ldouble press = 0.0;
 	svar.nrefresh = 0;	
 	ldouble radius = 0.5*svar.Start(0);
@@ -368,11 +368,11 @@ namespace PoissonSample
 		Return a vector of generated points
 		sampleLimit - refer to bridson-siggraph07-poissondisk.pdf for details (the value 'k')
 	**/
-	std::vector<Part> generatePoissonPoints(const SIM& svar, const FLUID& fvar, const uint& host, 
+	std::vector<Part> generatePoissonPoints(SIM& svar, const FLUID& fvar, const uint& host, 
 			State& pnp1, const outl& outlist)
 	{
 		/*Variables for the poisson disk sampling*/
-		ldouble minDist = svar.Pstep;
+		ldouble minDist /*= svar.Pstep*/;
 		ldouble radius = fvar.sr;
 		uint sampleLimit = 30;
 		PRNG generator;
@@ -380,18 +380,32 @@ namespace PoissonSample
 		uint pID = svar.totPts;
 
 		/*Properties for new particles*/
-		const StateVecD vel = pnp1[host].cellV;
-		ldouble press;
+		StateVecD vel = pnp1[host].cellV;
+		ldouble press = 0;
 		if(svar.Bcase == 6)
 			press = fvar.gasPress - pnp1[host].cellP;
-		else
-			press = 0;
-		// const ldouble press = -100000;
+		else if(svar.Bcase == 4)
+		{
+			#if SIMDIM == 3
+			ldouble Vel = svar.vortex.getVelocity(pnp1[host].xi).norm();
+			press = fvar.gasPress + 0.5*fvar.rhog*
+				(pow(fvar.gasVel,2.0)-pow(Vel,2.0));
+			#endif
+		}
+		// else
+		// {
+		// 	vel = pnp1[host].v;
+		// }
+
+		press = -100000;
+
 		// const ldouble rho = pnp1[host].cellRho;
 		// const ldouble mass = fvar.rhog* pow(svar.Pstep, SIMDIM);
 		const ldouble rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
 		const ldouble mass = pnp1[host].m;
+		const ldouble deltax = pow(fvar.Simmass/rho, 1.0/double(SIMDIM));
 
+		minDist = deltax;
 		std::vector<Part> samplePoints;
 		std::vector<StateVecD> processList;
 		std::vector<Part> airP;

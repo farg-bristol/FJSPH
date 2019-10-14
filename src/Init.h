@@ -142,7 +142,7 @@ int ParticleCount(SIM &svar)
 		{	
 			#if SIMDIM == 3
 				uint simCount = 0;
-				ldouble radius = 0.5*svar.Start(1);
+				ldouble radius = 0.5*svar.Start(0);
 				for (ldouble y = -radius; y <= radius; y+=svar.dx)
 				{	
 					ldouble xradius = sqrt(radius*radius - y*y);
@@ -166,7 +166,7 @@ int ParticleCount(SIM &svar)
 				partCount = simCount;
 			#else
 				uint simCount = 0;
-				ldouble radius = 0.5*svar.Start(1);
+				ldouble radius = 0.5*svar.Start(0);
 				for (ldouble y = -radius; y <= radius; y+=svar.dx)
 				{	
 					++simCount;
@@ -183,12 +183,36 @@ int ParticleCount(SIM &svar)
 				}
 				partCount = simCount;
 			#endif
+		}
+		else if (svar.Bcase == 7) 
+		{	/*Piston driven flow*/
+			/*Create the reservoir tank*/
+			ldouble tankW = svar.Start(0);
+			ldouble tankD = svar.Start(1);
+			ldouble stepb = (svar.Pstep*svar.Bstep);
+
+			uint pisCnt = ceil((tankW -4*svar.Pstep)/stepb);
+			
+			/*Create the reservoir tank*/
+			uint wall = ceil((-svar.Jet(1)*2+(svar.Jet(1)*2+tankD+2*svar.dx)/stepb));
+			
+			/*Create the tapering section*/
+			uint taper = ceil((svar.Jet(1))/stepb);
+
+			/*Create the exit bit.*/
+			uint exit = ceil(svar.Jet(1)/stepb);
+
+			/*Simulation Particles*/
+			uint simCount = floor(tankW/svar.dx)*floor(tankD/svar.dx);	
+
+			partCount = pisCnt + 2*(wall+taper+exit) + simCount;
+
 		}	
 
 	return partCount;
 }
 
-void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
+void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 {
 	if (svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
 		cout << "Initialising simulation..." << endl;
@@ -201,9 +225,12 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 	//Structure input initialiser
 	//Particle(StateVecD x, StateVecD v, StateVecD vh, StateVecD f, float rho, float Rrho, bool bound) :
 	StateVecD v = StateVecD::Zero();   
-	ldouble rho=fvar.rho0;
-	ldouble press = fvar.B*(pow(rho/fvar.rho0,fvar.gam)-1);  
-	 
+	// ldouble rho=fvar.rho0;
+	// ldouble press = fvar.B*(pow(rho/fvar.rho0,fvar.gam)-1);  
+	
+	ldouble press = fvar.pPress;
+	ldouble rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
+
 /************** Create the boundary pn  *****************/ 	 
 	ldouble step = svar.Pstep*svar.Bstep;
 	int Ny = ceil((svar.Box(1)+4*svar.Pstep)/step);	
@@ -291,7 +318,7 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 	else if (svar.Bcase == 2)
 	{	/*Converging nozzle for jet spray*/
 		#if SIMDIM == 3
-			ldouble holeD = svar.Jet(0)+2*fvar.H; /*Diameter of hole (or width)*/
+			ldouble holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
 			ldouble stepb = (svar.Pstep*svar.Bstep);
 			
 
@@ -345,7 +372,7 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 		#else
 
 			ldouble stepb = (svar.Pstep*svar.Bstep);
-			ldouble jetR = 0.5*(svar.Jet(0)+2*fvar.H); /*Diameter of hole (or width)*/
+			ldouble jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Diameter of hole (or width)*/
 			ldouble resR = jetR*2.0;
 
 			/*Create the wide bit of the nozzle*/
@@ -416,7 +443,7 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 	else if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
 	{	/*Jet in Crossflow*/
 		#if SIMDIM == 3
-			ldouble holeD = svar.Jet(0)+4*fvar.H; /*Diameter of hole (or width)*/
+			ldouble holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
 			ldouble stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
@@ -435,7 +462,7 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 				}	
 			}
 		#else
-			ldouble jetR = 0.5*(svar.Jet(0)+4*fvar.H); /*Radius of hole (or width)*/
+			ldouble jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Radius of hole (or width)*/
 			ldouble stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
@@ -457,7 +484,88 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 			}
 		#endif
 	}
-	else if(svar.Bcase > 6) 
+	else if (svar.Bcase == 7) 
+	{	/*Piston driven flow*/
+		ldouble stepb = (svar.Pstep*svar.Bstep);
+		ldouble tankW = svar.Start(0)+8*svar.dx;
+		ldouble tankD = svar.Start(1);
+
+		ldouble jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Diameter of hole (or width)*/
+		ldouble resR = 0.5*tankW;
+
+		v = (avar.vJet*pow(jetR,2))/(0.6*pow(resR,2));
+		/*Create the piston*/
+		for(ldouble x = -(resR-fvar.H); x < (resR -fvar.H); x+=stepb)
+		{
+			StateVecD xi(-resR,-(2*svar.Jet(1)+tankD+fvar.H));
+			xi = svar.Rotate*xi;
+			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+			pID++;
+			svar.psnPts = pID;
+		}
+
+		/*Create the reservoir tank*/
+		for (ldouble y = -(svar.Jet(1)*2+tankD+fvar.H); y <= -svar.Jet(1)*2; y+=stepb)
+		{
+			StateVecD xi(-resR,y);
+			xi = svar.Rotate*xi;
+			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+			pID++;
+		}
+
+		/*Create the tapering section*/
+		for (ldouble y = -svar.Jet(1)*2; y < -svar.Jet(1); y+=stepb)
+		{
+			/*Interpolate between resR and jetR*/
+			ldouble x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
+			StateVecD xi(-x,y);
+			xi = svar.Rotate*xi;
+			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+			pID++;
+		}
+
+		/*Create the exit bit.*/
+		for (ldouble y = -svar.Jet(1); y < 0; y+=stepb)
+		{
+			StateVecD xi(-jetR,y);
+			xi = svar.Rotate*xi;
+			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+			pID++;
+		}
+
+		/*Create the exit bit.*/
+		for (ldouble y = 0; y > -svar.Jet(1); y-=stepb)
+		{
+			StateVecD xi(jetR,y);
+			xi = svar.Rotate*xi;
+			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+			pID++;
+		}
+
+		/*Create the tapering section*/
+		for (ldouble y = -svar.Jet(1); y > -svar.Jet(1)*2; y-=stepb)
+		{
+			/*Interpolate between resR and jetR*/
+			ldouble x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
+			StateVecD xi(x,y);
+			xi = svar.Rotate*xi;
+			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+			pID++;
+		}
+
+		/*Create the other wall.*/
+		for (ldouble y = -svar.Jet(1)*2; y >= -(svar.Jet(1)*2+tankD+fvar.H); y-=stepb)
+		{
+			StateVecD xi(resR,y);
+			xi = svar.Rotate*xi;
+			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+			pID++;
+		}
+
+
+
+	}
+	else if(svar.Bcase > 7) 
 	{
 		cerr << "Boundary case is not within the design. 0 <= Bcase <= 6." << endl;
 		exit(-1);
@@ -478,7 +586,7 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 		for (ldouble y = -svar.Jet[1]*2; y > -svar.Jet[1]*3; y-=svar.dx)
 		{
 			// cout << "In add points for-loop" << endl;
-			AddPoints(y, svar, fvar, cvar, pn, pnp1);
+			AddPoints(y, svar, fvar, avar, pn, pnp1);
 		}
 		svar.clear = -svar.Jet[1]*2;
 	}
@@ -494,7 +602,7 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 		for (ldouble y = 0.0; y > -svar.Jet[1]; y-=svar.dx)
 		{
 			// cout << "In add points for-loop" << endl;
-			AddPoints(y, svar, fvar, cvar, pn, pnp1);
+			AddPoints(y, svar, fvar, avar, pn, pnp1);
 		}
 
 		svar.clear = 0.0;
@@ -509,6 +617,29 @@ void InitSPH(SIM &svar, FLUID &fvar, CROSS &cvar, State &pn, State &pnp1)
 			pnp1.emplace_back(p);
 
 		CreateDroplet(svar,fvar,pn,pnp1);
+	}
+	else if (svar.Bcase == 7)
+	{
+		/*Create fluid in the reservoir*/
+		ldouble tankW = svar.Start(0);
+		ldouble tankD = svar.Start(1);
+
+		press = fvar.pPress;
+		rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
+
+		/*Create the simulation pn*/
+		for(ldouble x = -(0.5*tankW); x < 0.5*tankW; x+=svar.dx) 
+		{
+			for(ldouble y = -(tankD + 2*svar.Jet(1)); y < 2*svar.Jet(1); y+=svar.dx)
+			{				
+				StateVecD xi(x,y);		
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,2,pID));
+				pn.back().cellRho = fvar.rhog;
+				pn.back().cellP = 20000-fvar.gasPress;
+				pID++;
+			}
+		}
+
 	}
 	else
 	{	

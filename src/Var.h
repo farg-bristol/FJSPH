@@ -57,15 +57,22 @@ typedef class AERO
 			Cd = 5;
 			Cb = 0.5;
 		}
+		ldouble L;							/*Gissler Parameters*/
+		ldouble td;							/* }*/
+		ldouble omega;						/* }*/
+		ldouble tmax;						/* }*/
+		ldouble ycoef;						/* }*/
+		ldouble woccl;						/* }*/
+		ldouble Cf, Ck, Cd, Cb, Cdef;		/* }*/
+		ldouble nfull;						/* }*/
 
-		ldouble tmax;
-		ldouble ycoef;
-		ldouble woccl;
-		ldouble L;
-		ldouble Cf, Ck, Cd, Cb, Cdef;
-		ldouble td;
-		ldouble omega;
-		ldouble nfull;
+		int acase;	                        /*Aerodynamic force case*/
+		StateVecD vJet, vInf;               /*Jet + Freestream velocity*/
+		ldouble Acorrect;					/*Correction factor for aero force*/
+		ldouble a;                          /*Case 3 tuning parameters*/
+		ldouble b;                          /*}*/
+		ldouble h1;                         /*}*/
+		ldouble h2;                         /*}*/
 }AERO;
 
 /*Simulation parameters*/
@@ -73,6 +80,7 @@ typedef struct SIM {
 	StateVecI xyPART; 				/*Starting sim particles in x and y box*/
 	uint simPts,bndPts,totPts;	    /*Simulation particles, Boundary particles, total particles*/
 	uint finPts;					/*How many points there will be at simulation end*/
+	uint psnPts;					/*Piston Points*/
 	uint nrefresh; 					/*Crossflow refresh particle number*/
 	uint nmax;                      /*Max add-particle calls*/
 	uint outframe;	                /*Terminal output frame interval*/
@@ -92,9 +100,10 @@ typedef struct SIM {
 	double maxmu;                   /*Maximum viscosity component (CFL)*/
 	int Bcase, Bclosed, ghost;		/*What boundary shape to take*/
 	uint outtype;                   /*ASCII or binary output*/
-	uint outform;                   /*Output type. Fluid properties or Research.*/
+	uint outform, boutform;         /*Output type. Fluid properties or Research.*/
 	uint frameout;                  /**/
 	uint framecount;
+
 	std::string infolder, outfolder;
 	std::string meshfile;			
 	#if SIMDIM == 3
@@ -119,22 +128,9 @@ typedef struct FLUID {
 	ldouble T;						/*Temperature*/
 	ldouble Rgas;                   /*Specific gas constant*/
 	ldouble contangb;				/*Boundary contact angle*/
-	AERO avar;
+	ldouble resVel;					/*Reservoir velocity*/
 	//double front, height, height0;		/*Dam Break validation parameters*/
-
 }FLUID;
-
-/*Crossflow parameters*/
-typedef struct CROSS
-{
-	int acase;	                        /*Aerodynamic force case*/
-	StateVecD vJet, vInf;               /*Crossflow Parameters: Jet + Freestream velocity*/
-	ldouble Acorrect;					/*Correction factor for aero force*/
-	ldouble a;                          /*Tuning parameters*/
-	ldouble b;                          /*Tuning parameters*/
-	ldouble h1;                         /*Tuning parameters*/
-	ldouble h2;                         /*Tuning parameters*/
-}CROSS;
 
 typedef struct MESH
 {

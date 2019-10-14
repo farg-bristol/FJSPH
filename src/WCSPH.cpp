@@ -26,12 +26,13 @@ using namespace Eigen;
 using namespace nanoflann;
 
 ///**************** Integration loop **************///
-ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CROSS& cvar, 
+ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const AERO& avar, 
 	const MESH& cells, State& pn, State& pnp1/*, State& airP*/, outl& outlist)
 {
 	// cout << "Entered Newmark_Beta" << endl;
 	const uint start = svar.bndPts;
 	const uint end = svar.totPts;
+	const uint piston = svar.psnPts;
 		
 	double errsum = 1.0;
 	double logbase = 0.0;
@@ -47,11 +48,11 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 	ldouble dtcv = fvar.H/(fvar.Cs+svar.maxmu);
 
 
-	if (std::isinf(maxf))
-	{
-		std::cerr << "Forces are quasi-infinite. Stopping..." << std::endl;
-		exit(-1);
-	}
+	// if (std::isinf(maxf))
+	// {
+	// 	std::cerr << "Forces are quasi-infinite. Stopping..." << std::endl;
+	// 	exit(-1);
+	// }
 
 /***********************************************************************************/
 /***********************************************************************************/
@@ -68,11 +69,12 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 	/*Check if the particle has moved to a new cell*/
 	if (svar.Bcase == 6)
 	{
-		FindCell(start,end,fvar.avar.nfull,pnp1,cells,outlist);
+		FindCell(start,end,avar.nfull,pnp1,cells,outlist);
 	}
-
+	// cout << svar.Start(0) << "  " << svar.Start(1) << endl;
+	// cout << svar.Transp << endl;
 	/*Check if a particle is running low on neighbours, and add ficticious particles*/
-	std::vector<std::vector<Part>> air(svar.totPts);
+	std::vector<std::vector<Part>> air(start);
 	if(svar.ghost == 1 )
 	{
 		#pragma omp parallel shared(pnp1, outlist)
@@ -81,15 +83,13 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 			#pragma omp for schedule(static) nowait
 			for (uint ii = start; ii < end; ++ii)
 			{
+				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
 				std::vector<Part> temp;
-				if(pnp1[ii].b == 2 && outlist[ii].size() < fvar.avar.nfull)
+				if(vec(1) > 0.0 && pnp1[ii].b == 2 &&
+				outlist[ii].size() > 0.4*avar.nfull && outlist[ii].size() < avar.nfull)
 				{
-					// cout << "Generating air particles" << endl;
 					temp = PoissonSample::generatePoissonPoints(svar,fvar,ii,pnp1,outlist);
-
-					// cout << "Before: " << outlist[ii].size() << " After: " << neighb.size() << endl;
 				}
-
 				local.emplace_back(temp);
 			}
 
@@ -128,30 +128,25 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 		// cout << "Creating neighb list" << endl;
 		std::vector<std::vector<Part>> neighb;
 		neighb.reserve(end);
-		for(uint ii = 0; ii < start; ++ii)
-		{
-			neighb.emplace_back();
-		}
+		// for(uint ii = 0; ii < start; ++ii)
+		// {
+		// 	neighb.emplace_back();
+		// }
 
 		#pragma omp parallel shared(pnp1, outlist, air)
 		{
 			std::vector<std::vector<Part>> local;
 			#pragma omp for schedule(static) nowait
-			for (uint ii = start; ii < end; ++ii)
+			for (uint ii = 0; ii < end; ++ii)
 			{
 				std::vector<Part> temp;
-
 				for(auto jj:outlist[ii])
 					temp.push_back(Part(pnp1[jj])); 
 
-				if(air[ii].size()!=0)
+				if(air[ii].size()>0)
 				{
-					cout << "Generating air particles" << endl;
 					temp.insert(temp.end(), air[ii].begin(), air[ii].end());
-					// cout << "Before: " << outlist[ii].size() << " After: " << neighb.size() << endl;
 				}
-
-				// cout << temp.size() << endl;
 				local.push_back(temp);
 			}
 
@@ -175,7 +170,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 		
 		// cout << "K: " << k << endl;
 		// cout << "Calculating forces" << endl;
- 		Forces(svar,fvar,cvar,pnp1,neighb,outlist); /*Guess force at time n+1*/
+ 		Forces(svar,fvar,avar,pnp1,neighb,outlist); /*Guess force at time n+1*/
 
 		// #pragma omp parallel
 	
@@ -191,8 +186,17 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 		/*Update the state at time n+1*/
 		#pragma omp parallel shared(pn)
 		{
+			// #pragma omp for
+			// for (uint ii = 0; ii < piston; ++ii)
+			// {	/****** PISTON PARTICLES *************/
+			// 	pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+pnp1[ii].Rrho);
+			// 	pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
+			// 	pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
+			// }
+
+
 			#pragma omp for 
-			for (uint ii=0; ii < start; ++ii)
+			for (uint ii=piston; ii < start; ++ii)
 			{	/****** BOUNDARY PARTICLES ***********/
 				pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+pnp1[ii].Rrho);
 				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
@@ -201,8 +205,8 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 
 			#pragma omp for
 			for (uint ii=start; ii < end; ++ii)
-			{	/****** FLUID PARTICLES ***********/
-				/*For the particles inside the pipe, perform a prescribed motion, and don't update pressure*/
+			{	/****** FLUID PARTICLES **************/
+				
 				/*Check if the particle is clear of the starting area*/
 				if(pnp1[ii].b == 1)
 				{   /* boundary particle value of 1 means its a                    */
@@ -216,7 +220,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 						if(svar.Bcase == 6)
 						{
 							/*Search through the cells to find which cell it's in*/
-							if (outlist[ii].size() < fvar.avar.nfull)
+							if (outlist[ii].size() < avar.nfull)
 							{
 								#if SIMDIM == 3
 									uint found = 0;
@@ -276,13 +280,16 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 						}
 					}
 					else
-					{
+					{	
+						/*For the particles marked 1, perform a prescribed motion*/
 						pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
+						pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
+						pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
 					}
 				}
 
 				if(pnp1[ii].b==2)
-				{	
+				{	/*For the particles marked 2, intergrate as normal*/
 					pnp1[ii].v =  pn[ii].v +dt*(a*pn[ii].f+b*pnp1[ii].f);
 					pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(c*pn[ii].f+d*pnp1[ii].f);
 					pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
@@ -293,7 +300,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 		/****** FIND ERROR ***********/
 		errsum = 0.0;
 		#pragma omp parallel for reduction(+:errsum)
-		for (uint ii=start; ii < end; ++ii)
+		for (uint ii = start; ii < end; ++ii)
 		{
 			StateVecD r = pnp1[ii].xi-xih[ii];
 			errsum += r.squaredNorm();
@@ -366,7 +373,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const CR
 					{	/*...If we havent, then add points. */
 						// cout << "adding points..." << endl;
 						StateVecD vec = svar.Transp*(pnp1[svar.totPts-1].xi-svar.Start);
-						AddPoints(vec[1]-svar.dx, svar, fvar, cvar, pn, pnp1);
+						AddPoints(vec[1]-svar.dx, svar, fvar, avar, pn, pnp1);
 					}
 					else
 					{	/*...If we have, then check we're sufficiently
@@ -413,11 +420,11 @@ int main(int argc, char *argv[])
     /******* Define the global simulation parameters ******/
 	SIM svar;
 	FLUID fvar;
-	CROSS cvar;
+	AERO avar;
 	outl outlist;
 	MESH cells;
 
-	GetInput(argc,argv,svar,fvar,cvar);
+	GetInput(argc,argv,svar,fvar,avar);
 	
 	if(svar.Bcase == 6)
 	{
@@ -442,7 +449,7 @@ int main(int argc, char *argv[])
 	if (svar.Bcase == 6)
 		Write_Mesh_Data(svar,cells);
 
-	InitSPH(svar,fvar,cvar,pn,pnp1);
+	InitSPH(svar,fvar,avar,pn,pnp1);
 
 	///********* Tree algorithm stuff ************/
 	Sim_Tree NP1_INDEX(SIMDIM,pnp1,20);
@@ -455,18 +462,18 @@ int main(int argc, char *argv[])
 	// 	[](std::vector<uint> p1, std::vector<uint> p2){return p1.size()< p2.size();});
 
 	#if SIMDIM == 3
-		// fvar.avar.nfull = (2.0/3.0) * double(nfull->size());
-		fvar.avar.nfull = 1.713333e+02;
+		// avar.nfull = (2.0/3.0) * double(nfull->size());
+		avar.nfull = 1.713333e+02;
 		svar.nfull = 257;
 	#endif
 	#if SIMDIM == 2
-		// fvar.avar.nfull = (2.0/3.0) * double(nfull->size());
-		fvar.avar.nfull = 32.67;
+		// avar.nfull = (2.0/3.0) * double(nfull->size());
+		avar.nfull = 32.67;
 		svar.nfull = 48;
 	#endif
 
 	
-	// cout << fvar.avar.nfull << endl;
+	// cout << avar.nfull << endl;
 
 	/*Check if a particle is running low on neighbours, and add ficticious particles*/
 	const uint start = svar.bndPts;
@@ -484,7 +491,7 @@ int main(int argc, char *argv[])
 		for (uint ii = start; ii < end; ++ii)
 		{
 			std::vector<Part> temp;
-			if(svar.ghost == 1 && pnp1[ii].b == 2 && outlist[ii].size() < fvar.avar.nfull)
+			if(svar.ghost == 1 && pnp1[ii].b == 2 && outlist[ii].size() < avar.nfull)
 				temp = PoissonSample::generatePoissonPoints(svar,fvar,ii,pnp1,outlist);
 
 			for(auto j:outlist[ii])
@@ -518,10 +525,10 @@ int main(int argc, char *argv[])
 	}
 
 
-	Forces(svar,fvar,cvar,pnp1,neighb,outlist);
+	Forces(svar,fvar,avar,pnp1,neighb,outlist);
 
 	///*************** Open simulation files ***************/
-	std::ofstream f1,f2,f3;
+	std::ofstream f1,f2,f3,fb;
 
 
 	if (svar.frameout == 1)
@@ -561,15 +568,24 @@ int main(int argc, char *argv[])
 	}
 	else if (svar.outtype == 1)
 	{
+
 		if (svar.Bcase != 0 && svar.Bcase != 5)
 		{	/*If the boundary exists, write it.*/
 			string bfile = svar.outfolder;
 			bfile.append("/Boundary.plt");
-			std::ofstream fb(bfile, std::ios::out);
+			fb.open(bfile, std::ios::out);
 			if(fb.is_open())
 			{
-				Write_Boundary_ASCII(fb,svar,pnp1);
-				fb.close();
+				if(svar.boutform == 0)
+				{
+					Write_Boundary_ASCII(fb,svar,pnp1);
+					fb.close();
+				}
+				else
+				{
+					Write_ASCII_header(fb,svar);
+					Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts);
+				}
 			}
 			else
 			{
@@ -585,7 +601,10 @@ int main(int argc, char *argv[])
 		if(f1.is_open())
 		{
 			Write_ASCII_header(f1,svar);
-			Write_ASCII_Timestep(f1,svar,pnp1);	
+			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts);
+			if(svar.Bcase != 0 && svar.Bcase != 5 && svar.boutform == 1)
+				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts);
+
 		}
 		else
 		{
@@ -620,7 +639,7 @@ int main(int argc, char *argv[])
 		double stept=0.0;
 		while (stept<svar.framet)
 		{
-		    error = Newmark_Beta(NP1_INDEX,svar,fvar,cvar,cells,pn,pnp1,outlist);
+		    error = Newmark_Beta(NP1_INDEX,svar,fvar,avar,cells,pn,pnp1,outlist);
 		    stept+=svar.dt;
 		    ++stepits;
 		    //cout << svar.t << "  " << svar.dt << endl;
@@ -655,7 +674,10 @@ int main(int argc, char *argv[])
 		} 
 		else if (svar.outtype == 1)
 		{
-			Write_ASCII_Timestep(f1,svar,pnp1);
+			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts);
+			if(svar.Bcase != 0 && svar.Bcase != 5 && svar.boutform == 1)
+				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts);
+
 		}
 	}
 	if (f1.is_open())
@@ -664,6 +686,8 @@ int main(int argc, char *argv[])
 		f2.close();
 	if (f3.is_open())
 		f3.close();
+	if (fb.is_open())
+		fb.close();
 			
 	if(svar.outtype == 0)
 	{

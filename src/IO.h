@@ -232,20 +232,26 @@ Eigen::Vector2d getvector(ifstream& In, uint& lineno)
 	return x;
 }
 
-void GetAero(FLUID &fvar, ldouble rad)
+void GetAero(AERO &avar, const FLUID& fvar, const ldouble rad)
 {
-	fvar.avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
-	fvar.avar.td = (2.0*fvar.rho0*fvar.avar.L*fvar.avar.L)/(fvar.avar.Cd*fvar.mu);
-	fvar.avar.omega = sqrt((fvar.avar.Ck*fvar.sig)/(fvar.rho0*pow(fvar.avar.L,3.0))-1.0/pow(fvar.avar.td,2.0));
+	#if SIMDIM == 3
+		avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
+	#endif
+	#if SIMDIM == 2
+		avar.L = 2*rad;
+	#endif
+	avar.td = (2.0*fvar.rho0*pow(avar.L,SIMDIM-1))/(avar.Cd*fvar.mu);
 
-	fvar.avar.tmax = -2.0 *(atan(sqrt(pow(fvar.avar.td*fvar.avar.omega,2.0)+1)
-					+fvar.avar.td*fvar.avar.omega) - M_PI)/fvar.avar.omega;
+	avar.omega = sqrt((avar.Ck*fvar.sig)/(fvar.rho0*pow(avar.L,SIMDIM))-1.0/pow(avar.td,2.0));
 
-	fvar.avar.Cdef = 1.0 - exp(-fvar.avar.tmax/fvar.avar.td)*(cos(fvar.avar.omega*fvar.avar.tmax)+
-		1/(fvar.avar.omega*fvar.avar.td)*sin(fvar.avar.omega*fvar.avar.tmax));
-	fvar.avar.ycoef = 0.5*fvar.avar.Cdef*(fvar.avar.Cf/(fvar.avar.Ck*fvar.avar.Cb))*(fvar.rhog*fvar.avar.L)/fvar.sig;
+	avar.tmax = -2.0 *(atan(sqrt(pow(avar.td*avar.omega,2.0)+1)
+					+avar.td*avar.omega) - M_PI)/avar.omega;
 
-	//cout << fvar.avar.ycoef << "  " << fvar.avar.Cdef << "  " << fvar.avar.tmax << "  " << endl;
+	avar.Cdef = 1.0 - exp(-avar.tmax/avar.td)*(cos(avar.omega*avar.tmax)+
+		1/(avar.omega*avar.td)*sin(avar.omega*avar.tmax));
+	avar.ycoef = 0.5*avar.Cdef*(avar.Cf/(avar.Ck*avar.Cb))*(fvar.rhog*avar.L)/fvar.sig;
+
+	//cout << avar.ycoef << "  " << avar.Cdef << "  " << avar.tmax << "  " << endl;
 }
 
 RotMat GetRotationMat(StateVecD &angles)
@@ -280,7 +286,7 @@ RotMat GetRotationMat(StateVecD &angles)
 
 }
 
-void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
+void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
 {
 	if (argc > 3) 
 	{	/*Check number of input arguments*/
@@ -313,6 +319,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	  		svar.outframe = getInt(in, lineno);
 	  		svar.outtype = getInt(in, lineno);
 	  		svar.outform = getInt(in, lineno);
+	  		svar.boutform = getInt(in, lineno);
 	  		svar.frameout = getInt(in, lineno);
 	  		svar.subits = getInt(in, lineno);
 	  		svar.nmax = getInt(in, lineno);	
@@ -320,7 +327,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	  		svar.Pstep = getDouble(in, lineno);
 	  		svar.Bstep = getDouble(in, lineno);
 	  		svar.Bcase = getInt(in, lineno);
-	  		cvar.acase = getInt(in, lineno);
+	  		avar.acase = getInt(in, lineno);
 	  		svar.ghost = getInt(in, lineno);
 	  		svar.Start = getDVector(in, lineno);
 	  		if(svar.Bcase < 2)
@@ -339,7 +346,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	  				exit(-1);
 	  			}
 	  		}
-	  		else if(svar.Bcase > 1 && svar.Bcase < 7)
+	  		else if(svar.Bcase > 1 && svar.Bcase < 8)
 	  		{	
 	  			StateVecD angles = getDVector(in, lineno);
 	  			angles = angles *M_PI/180;
@@ -347,19 +354,19 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 	  			svar.Transp = svar.Rotate.transpose();
 		  		svar.Jet = getvector(in, lineno); /*Defined in VLM.h. Reused here*/
 		  		fvar.pPress = getDouble(in, lineno);
-		  		cvar.vJet = StateVecD::Zero(); cvar.vInf = StateVecD::Zero();
-		  		cvar.vJet(1) = getDouble(in, lineno);  
-		  		cvar.vJet = svar.Rotate*cvar.vJet;
-		  		cvar.vInf = getDVector(in, lineno);
-		  		if(cvar.acase >= 2)
+		  		avar.vJet = StateVecD::Zero(); avar.vInf = StateVecD::Zero();
+		  		avar.vJet(1) = getDouble(in, lineno);  
+		  		avar.vJet = svar.Rotate*avar.vJet;
+		  		avar.vInf = getDVector(in, lineno);
+		  		if(avar.acase >= 2)
 		  		{
-		  			cvar.a = getDouble(in, lineno);
-		  			cvar.h1 = getDouble(in, lineno);
-		  			cvar.b = getDouble(in, lineno);
-		  			cvar.h2 = getDouble(in, lineno);
+		  			avar.a = getDouble(in, lineno);
+		  			avar.h1 = getDouble(in, lineno);
+		  			avar.b = getDouble(in, lineno);
+		  			avar.h2 = getDouble(in, lineno);
 		  		}
 		  		
-		  		if(cvar.acase > 5)
+		  		if(avar.acase > 5)
 		  		{
 		  			cout << "Aerodynamic case is not in design. Stopping..." << endl;
 		  			exit(-1);
@@ -397,11 +404,21 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
   		fvar.mu = getDouble(fluid, lineno);
   		fvar.mug = getDouble(fluid, lineno);
   		fvar.sig = getDouble(fluid, lineno);
-  		fvar.gasVel = getDouble(fluid, lineno);
-  		fvar.gasPress = getDouble(fluid, lineno);
-  		fvar.T = getDouble(fluid, lineno);
-  		svar.meshfile = getString(fluid, lineno);
+  		if(svar.Bcase == 6 || svar.Bcase == 4)
+  		{
+	  		fvar.gasVel = getDouble(fluid, lineno);
+	  		fvar.gasPress = getDouble(fluid, lineno);
+	  		fvar.T = getDouble(fluid, lineno);
+
+	  		if(svar.Bcase == 6)
+		  		svar.meshfile = getString(fluid, lineno);
+  		}
   		fluid.close();
+
+  		if(svar.Bcase == 4)
+  		{
+  			fvar.gasVel=avar.vInf(1);
+  		}
 	}
 	else 
 	{
@@ -426,6 +443,7 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 
 	fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
 	svar.Bclosed = 0; 		/*Boundary begins open*/
+	svar.psnPts = 0; 		/*Start with no pison points*/
 	switch(SIMDIM)
 	{
 		case 2:
@@ -458,11 +476,11 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, CROSS &cvar)
 		if(svar.Bcase == 4)
 		{
 			svar.vortex.Init(svar.infolder);	
-			svar.vortex.GetGamma(cvar.vInf);	
+			svar.vortex.GetGamma(avar.vInf);	
 		}
 	#endif
 
-	GetAero(fvar, fvar.H);
+	GetAero(avar, fvar, fvar.H);
 }
 
 std::ifstream& GotoLine(std::ifstream& file, unsigned int num){
@@ -1383,15 +1401,21 @@ void Write_Mesh_Data(SIM &svar, MESH &cells)
 
 }
 
-void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, State &pnp1/*, State &airP*/)
+void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1, 
+	const uint bwrite, const uint start, const uint end /*, State &airP*/ )
 {
-	 fp <<  "ZONE T=\"Particle Data\"" <<", I=" << svar.simPts << ", F=POINT" <<
-    ", STRANDID=1, SOLUTIONTIME=" << svar.t  << "\n";
+	if(bwrite == 1)
+	 	fp <<  "ZONE T=\"Boundary Data\"";
+	else
+		fp <<  "ZONE T=\"Particle Data\"";
+
+    fp <<", I=" << end - start << ", F=POINT" <<", STRANDID=1, SOLUTIONTIME=" << svar.t  << "\n";
+
     switch(svar.outform)
     {
     	case 0:
     	{
-    		for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
+    		for (auto p=std::next(pnp1.begin(),start); p!=std::next(pnp1.begin(),end); ++p)
 			{
 				for(uint i = 0; i < SIMDIM; ++i)
 		        	fp << p->xi(i) << " "; 
@@ -1414,7 +1438,7 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, State &pnp1/*, State &ai
     	}
     	case 1:
     	{
-    		for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
+    		for (auto p=std::next(pnp1.begin(),start); p!=std::next(pnp1.begin(),end); ++p)
 			{	
 				for(uint i = 0; i < SIMDIM; ++i)
 		        	fp << p->xi(i) << " ";

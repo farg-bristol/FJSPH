@@ -82,7 +82,7 @@ StateVecD Base(const FLUID &fvar, const Part &pi, const Part &pj,
 	ldouble pifac;
 	ldouble vdotr = Vij.dot(Rij);
 	ldouble muij= fvar.H*vdotr/(r*r+0.01*fvar.HSQ);
-	if (vdotr > 0.0) 
+	if (vdotr > 0.0 || pj.b == 3) 
 	{
 		pifac = 0.0;
 	}
@@ -133,7 +133,7 @@ StateVecD HuST(const FLUID &fvar, const Part &pi, const Part &pj,
 }
 
 ///**************** RESID calculation **************
-void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, State& airP*/,
+void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, State& pnp1/*, State& airP*/,
 	 const vector<vector<Part>>& neighb, const outl& outlist)
 {
 	svar.maxmu=0; 					/* CFL Parameter */
@@ -145,6 +145,7 @@ void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, Stat
 	#endif
 	const uint start = svar.bndPts;
 	const uint end = svar.totPts;
+	const uint piston = svar.psnPts;
 
 	/********* LOOP 1 - all points: Calculate numpartdens ************/
 	ldouble numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
@@ -158,25 +159,66 @@ void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, Stat
 	#pragma omp parallel shared(g,numpartdens)
 	{
 /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
-		#pragma omp for reduction(+:Rrhocontr)
+		// #pragma omp for reduction(+:Rrhocontr)
+		// for (uint ii=0; ii < start; ++ii)
+		// {
+		// 	Part pi = pnp1[ii];
+
+		// 	for(auto j:outlist[ii])
+		// 	{
+		// 		Part pj = pnp1[j];
+		// 		StateVecD Rij = pj.xi-pi.xi;
+		// 		StateVecD Vij = pj.v-pi.v;
+		// 		ldouble r = Rij.norm();
+		// 		StateVecD Grad = W2GradK(Rij, r,fvar.H,fvar.correc);
+		// 		Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
+		// 	}
+		// 	pnp1[ii].Rrho = Rrhocontr[ii]; /*drho/dt*/
+		// }
+
+/******** LOOP 3 - Piston points: Calculate density and pressure. **********/		
+		#pragma omp for reduction(+:Rrhocontr, RV) /*Reduction defs in Aero.h*/
 		for (uint ii=0; ii < start; ++ii)
 		{
 			Part pi = pnp1[ii];
+			uint size = outlist[ii].size();
+			// pnp1[ii].theta = double(size);
+			// pnp1[ii].theta = 0.0;
 
-			for(auto j:outlist[ii])
+			std::vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
+			mu.reserve(size+1);
+			mu.emplace_back(0);	/*Avoid dereference of empty vector*/			
+			if (ii > neighb.size())
 			{
-				Part pj = pnp1[j];
+				cout << "neighb array smaller than totPts" << endl;
+				exit(-1);
+			}
+			for (Part const& pj:neighb[ii])
+			{	/* Neighbour list loop. */
+				StateVecD contrib = StateVecD::Zero();
+
+				// Part pj(pnp1[j]);
+
+				/*Check if the position is the same, and skip the particle if yes*/
+				// #pragma omp critical
+				// cout << pi.partID << "  " << pj.partID << "  ";
+				if(pi.partID == pj.partID)
+					continue;
+
 				StateVecD Rij = pj.xi-pi.xi;
 				StateVecD Vij = pj.v-pi.v;
 				ldouble r = Rij.norm();
-				StateVecD Grad = W2GradK(Rij, r,fvar.H,fvar.correc);
-				Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
-			}
-			pnp1[ii].Rrho = Rrhocontr[ii]; /*drho/dt*/
-		}
+				StateVecD Grad = W2GradK(Rij, r,fvar.H, fvar.correc);
 
-		
-/******* LOOP 3 - All simulation points: Calculate forces on the fluid. *********/
+				contrib = Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
+				/*drho/dt*/
+				Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
+				RV[ii] += pj.m*contrib;
+			}/*End of neighbours*/
+			
+		} /*End of boundary parts*/
+
+/******* LOOP 4 - All simulation points: Calculate forces on the fluid. *********/
 		#pragma omp for reduction(+:Rrhocontr, RV, ST) /*Reduction defs in Aero.h*/
 		for (uint ii=start; ii < end; ++ii)
 		{
@@ -214,33 +256,31 @@ void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, Stat
 
 				contrib = Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
 				
-				/*Laminar Viscosity - Morris (2003)*/
-				visc    = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
+				if (pj.b != 3)
+				{
+					/*Laminar Viscosity - Morris (2003)*/
+					visc    = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
+				
+					/*Surface Tension - Nair & Poeschel (2017)*/
+					SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
+					// SurfC = HuST(fvar,pi,pj,Rij,r,cgrad[ii],cgrad[jj]);
+				}
+					/*drho/dt*/
+					Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
+				
 
-				/*Surface Tension - Nair & Poeschel (2017)*/
-				SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
-				// SurfC = HuST(fvar,pi,pj,Rij,r,cgrad[ii],cgrad[jj]);
-
-				/*drho/dt*/
-				Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
+				
 
 				RV[ii] += pj.m*contrib + pj.m*visc + SurfC/pj.m;
 
 				if (pj.b == 3)
 				{
-					// cout << "Interacting with an air particle" << endl;
 					ST[ii] += pj.m*contrib + pj.m*visc;
-					// contrib *= 0.01;
-					// #pragma omp critical
-					// cout << pj.m*contrib(0) << "  " << pj.m*contrib(1) << 
-					//  "  " << pj.m*visc(0) << "  " << pj.m*visc(1) << "  " << pj.m*(Vij.dot(Grad)) <<  endl;
 				}
 
 				// ST[ii] += SurfC/pj.m;
 			}/*End of neighbours*/
 			
-			
-			// cout << RV[ii](0) << "  " << RV[ii](1) << "  " << Rrhocontr[ii] << endl;
 			//CFL f_cv Calc
 			ldouble it = *max_element(mu.begin(),mu.end());
 			if (it > svar.maxmu)
@@ -249,6 +289,14 @@ void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, Stat
 
 		// cout << endl;
 		//Update the actual structure
+		StateVecD Force = StateVecD::Zero();
+		#pragma omp for
+		for (uint ii = 0; ii < piston; ++ii)
+		{
+			Force += RV[ii];
+		}
+		svar.Force = Force;
+
 		#pragma omp for
 		for(uint ii=0; ii < end; ++ii)
 		{
@@ -260,7 +308,7 @@ void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, Stat
 	}
 		/*Aerodynamic force*/
 	if(svar.Bcase > 1)
-		ApplyAero(svar,fvar,cvar,pnp1,outlist);
+		ApplyAero(svar,fvar,avar,pnp1,outlist);
 	
 }
 
