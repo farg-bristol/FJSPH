@@ -8,16 +8,12 @@
 #include <sys/types.h>
 #include <stdio.h>  /* defines FILENAME_MAX */
 #include <dirent.h>
-#include <iostream>
-#include <iomanip>
-#include <fstream>
-#include <string.h>
-#include <sstream>
 #include "Eigen/Core"
 #include "Eigen/StdVector"
 #include "Eigen/LU"
 #include "Var.h"
 #include "BinaryIO.h"
+#include "TauIO.h"
 
 #ifdef WINDOWS
     #include <direct.h>
@@ -146,9 +142,11 @@ double getDouble(ifstream& In, uint& lineno)
 std::string getString(ifstream& In, uint& lineno)
 {
 	string line;
-	getline(In,line,' ');
+	getline(In,line);
 	lineno++;
-	return line; 
+	size_t ptr = line.find_first_of(' ');
+	string result = line.substr(0,ptr);
+	return result; 
 }
 
 StateVecI getIVector(ifstream& In, uint& lineno)
@@ -411,7 +409,10 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
 	  		fvar.T = getDouble(fluid, lineno);
 
 	  		if(svar.Bcase == 6)
+	  		{
 		  		svar.meshfile = getString(fluid, lineno);
+		  		svar.solfile = getString(fluid,lineno);
+	  		}
   		}
   		fluid.close();
 
@@ -483,816 +484,114 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
 	GetAero(avar, fvar, fvar.H);
 }
 
-std::ifstream& GotoLine(std::ifstream& file, unsigned int num){
-    file.seekg(std::ios::beg);
-    for(uint ii=0; ii < num - 1; ++ii){
-        file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
-    }
-    return file;
-}
 
-void Skip_Variable(ifstream& fin, const int np)
-{
-	for(int ii = 0; ii < ceil(float(np)/5.0); ++ii)
-	{
-		fin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
-	}
-}
+// #if SIMDIM == 2
+// void Read_Radial(string input, MESH &cells)
+// {
+// 	input.append("O_Mesh.plt");
+// 	std::ifstream fin(input, std::ios::in);
+// 	ZONE zone;
 
-void Get_Vector(ifstream& fin, const uint np, std::vector<StateVecD>& var, const uint yskip)
-{
-	string line;
-	for(uint dim =0; dim < SIMDIM; dim++)
-	{	
-		uint kk = 0;
-		/*If in 2D, skip the y-dimension, and read the z-dim.*/
-		if(yskip == 1)
-		{
-			if (dim == 1)
-			{
-				for(uint ii = 0; ii < ceil(float(np)/5.0); ++ii)
-				{
-					fin.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
-					// getline(fin,line);
-				}
-			}
-		}
-		for(int ii = 0; ii < ceil(float(np)/5.0); ++ii)
-		{
-			getline(fin, line);
-			std::istringstream sline(line);
+// 	if(!fin.is_open())
+// 	{
+// 		cout << "Couldn't open O_Mesh.plt. Stopping." << endl;
+// 		cout << "Path attempted: " << input << endl;
+// 		exit(-1);
+// 	}
+// 	else 
+// 	{
+// 		cout << "Mesh file open, reading data..." << endl;
+// 	}
+// 	std::string line;
+// 	getline(fin,line);
+// 	getline(fin,line);
 
-			for (uint jj = 0; jj < 5; ++jj)
-			{	
-				double temp;
-				sline >> temp;
+// 	/*If 2D, skip this and read the symmetry plane data.*/
 
-				if (!sline)
-					break;
-				else
-				{
-					var[kk](dim) = temp;
-					++kk;
-				}
-			}
-		}
-		if (kk!= var.size())
-		{
-			cout << "Mismatch of array size.\n" << 
-			" Not all of the array has been populated." << endl;
-			cout << "populated: " << kk << " Array size: " << var.size() << endl;
-			cout << var[kk] << endl;
-		} 
-	}
-}
+// 	getline(fin, line); /*Get Zone line data. Tells which type of volume*/
+// 	uint nF, nCverts, nFverts;
 
-template <class T>
-void Get_Scalar_Data(ifstream& fin, const uint np, T& var)
-{
-	string line;
+// 	nCverts = 4;
+// 	nF = 0;
+// 	nFverts = 0;
 
-	uint kk = 0;
-	for(uint ii = 0; ii < ceil(float(np)/5.0); ++ii)
-	{
-		getline(fin, line);
-		std::istringstream sline(line);
-
-		for (uint jj = 0; jj < 5; ++jj)
-		{	
-			double temp;
-			sline >> temp;
-
-			if (!sline)
-				break;
-			else
-			{
-				var[kk] = temp;
-				++kk;
-			}
-		}
-	}
-
-	if (kk!= var.size())
-	{
-		cout << "Mismatch of array size.\n" << 
-		" Not all of the array has been populated." << endl;
-		cout << "populated: " << kk << " Array size: " << var.size() << endl;
-		cout << var[kk] << endl;
-	}
-}
-
-void Get_Cells(ifstream& fin, const uint nE, const uint nCverts, std::vector<std::vector<uint>>& cell)
-{
-	string line;
-	// getline(fin, line);
-	// cout << line << endl;
-	for(uint ii = 0; ii < nE; ++ii)
-	{
-		getline(fin, line);
-		std::istringstream sline(line);
-
-		for (uint jj = 0; jj < nCverts; ++jj)
-		{	
-			uint temp;
-			sline >> temp;
-			cell[ii][jj] = (temp-1);								
-		}
-	}
-}
-
-std::vector<ldouble> CpToPressure(const std::vector<ldouble>& Cp, const FLUID& fvar)
-{
-	std::vector<ldouble> press(Cp.size());
-	#pragma omp parallel for shared(Cp)
-	for (uint ii = 0; ii < Cp.size(); ++ii)
-	{
-		press[ii] = Cp[ii]*fvar.gasDynamic + fvar.gasPress;
-	}
-	return press;
-}
-
-void NormalisePressure(MESH &cells, const FLUID& fvar)
-{
-	/*Check for density and pressure information*/
-	/*Create the data based on the other.*/
-	if(cells.pointP[0]!=0)
-	{
-		cells.pointP = CpToPressure(cells.pointCp,fvar);
-	}
-
-	if(cells.pointRho[0]!=0)
-	{
-		for(uint ii = 0; ii < cells.pointRho.size(); ++ii)
-		{
-			cells.pointRho[ii] = cells.pointP[ii]/(fvar.Rgas*fvar.T);
-		}
-	}
-
-	/*Normalise pressure to be in terms of the Tait equation*/
-	/*I have no idea if this is conservative...*/
-	for(uint ii = 0; ii < cells.pointP.size(); ++ii)
-	{
-		cells.pointP[ii] -= fvar.gasPress;
-
-		// cells.pointRho[ii] = fvar.rhog*pow((cells.pointP[ii]/fvar.B +1),1/fvar.gam);
-	}
-}
-
-
-template <class T>
-void Average_Point_to_Cell(std::vector<T>& pData, std::vector<T>& cData,
-							const std::vector<std::vector<uint>>& elems, const T zero)
-{
-	uint nVerts = elems[0].size();
-	for(uint ii = 0; ii < elems.size(); ++ii)
-	{
-		T sum = zero;
-		for (auto jj:elems[ii])
-		{
-			sum += pData[jj];
-		}
-		cData[ii] = sum/nVerts;
-	}
-}
-
-void Read_TAUMESH(string input, MESH& cells, FLUID& fvar)
-{
-	// input.append(svar.meshfile);
-	std::ifstream fin(input, std::ios::in);
-
-	if(!fin.is_open())
-	{
-		cout << "Couldn't open mesh file. Stopping." << endl;
-		cout << "Path attempted: " << input << endl;
-		exit(-1);
-	}
-	else 
-	{
-		cout << "Mesh file open, reading data..." << endl;
-	}
-	std::string line;
-	getline(fin,line);
-	getline(fin,line);
-
-	uint veltype = 0;
-	if(line.find("\"x_velocity\"")!=string::npos)
-	{
-		if(line.find("\"y_velocity\"")!=string::npos)
-		{
-			if(line.find("\"z_velocity\"")!=string::npos)
-			{
-				cout << "All velocity components found!" << endl;
-			}
-			else
-			{
-				cout << "velocity components \"u\" and \"v\" found, but no \"w\"..." << endl;
-				cout << "I can't work with this. Stopping..." << endl;
-				exit(-1);
-			}
-		}
-		else if (line.find("\"z_velocity\"")!=string::npos)
-		{
-			cout << "velocity components \"u\" and \"w\" found, but no \"v\"..." << endl;
-			#if SIMDIM == 2
-				cout << "I can work with this. Continuing..." << endl;
-				veltype = 1;
-			#else 
-				cerr << "SIMDIM is 3, and \"v\" velocity component missing. Stopping." << endl;
-				exit(-1);
-			#endif
-		}
-		else
-		{
-			cout << "Only velocity component \"u\" found, but no \"v\" and \"w\"..." << endl;
-			cout << "I can't work with this. Stopping..." << endl;
-			exit(-1);
-		}
-	}
-	else if (line.find("\"y_velocity\"")!=string::npos)
-	{
-		if(line.find("\"z_velocity\"")!=string::npos)
-		{
-			cout << "velocity components \"v\" and \"w\" found, but no \"u\"..." << endl;
-			cout << "I can't work with this. Stopping..." << endl;
-			exit(-1);
-		}
-		else
-		{
-			cout << "Only velocity component \"v\" found, but no \"u\" and \"w\"..." << endl;
-			cout << "I can't work with this. Stopping..." << endl;
-			exit(-1);
-		}
-	}
-	else if (line.find("\"z_velocity\"")!=string::npos)
-	{
-		cout << "Only velocity component \"w\" found, but no \"u\" and \"v\"..." << endl;
-		cout << "I can't work with this. Stopping..." << endl;
-			exit(-1);
-	}
-	else
-	{
-		cout << "Warning: No velocity components provided.\n" ;
-		cout << "I can't work with this. Stopping..." << endl;
-		exit(-1);
-	}
-
-	uint nvar = std::count(line.begin(),line.end(),'\"');
-	nvar /= 2;
-	std::size_t ptr = line.find("\"x_velocity\"");
-	uint velstart = std::count(line.begin(),line.begin()+ptr, '\"');
-	velstart/=2;
-
-	/*Check to see if there is pressure data available*/
-	ptr = line.find("\"pressure\"");
-	uint pressOrcp = 1;
-	uint cpstart = 0;
-	if (ptr != string::npos)
-	{
-		cout << "Pressure data directly available!" << endl;
-		pressOrcp = 0;
-		cpstart = std::count(line.begin(),line.begin()+ptr, '\"');
-		cpstart/=2;
-	}
-	else
-	{
-		ptr = line.find("\"cp\"");	
-		if (ptr != string::npos)
-		{
-			cpstart = std::count(line.begin(),line.begin()+ptr, '\"');
-			cpstart/=2; 
-		}
-		else 
-		{
-			cout << "Couldn't find any pressure data" << endl;
-		}
-	}
-
-	/*Check to see if there is density data available*/
-	ptr = line.find("\"density\"");
-	uint densstart = 0;
-	if (ptr != string::npos)
-	{
-		cout << "Density data directly available!" << endl;
+// 	getline(fin, line); /*Get numbers*/
+	
+// 	std::size_t ptr2;
+// 	std::size_t ptr = line.find("N=");
+// 	if(ptr!=string::npos)
+// 	{
+// 		ptr2 = line.find_first_not_of("0123456789",ptr+2);
+// 		string temp = line.substr(ptr+2,ptr2-(ptr+2));
 		
-		densstart = std::count(line.begin(),line.begin()+ptr, '\"');
-		densstart/=2;
-	}
-	else
-	{
-
-	}
-
-
-
-	/*Next bit depends on dimensions. If 3D, read the hexa data.*/
-	/*If 2D, skip this and read the symmetry plane data.*/
-
-	getline(fin, line); /*Get Zone line data. Tells which type of volume*/
-	uint nF, nCverts, nFverts;
-	
-	if(line.find("hexa")!=string::npos)
-	{
-		/*N verts = 8, N faces = 6, N edges = 12*/
-		#if SIMDIM == 2
-			nCverts = 4;
-			nF = 0;
-			nFverts = 0;
-		#else
-			nF = 6;
-			nCverts = 8;
-			nFverts = 4;
-		#endif
-	}
-	else if(line.find("tetra")!=string::npos)
-	{
-		/*N verts = 4, N faces = 4, N edges = 6*/
-		#if SIMDIM == 2
-			nCverts = 3;
-			nF = 0;
-			nFverts = 0;
-		#else
-			nF = 4;
-			nCverts = 4;
-			nFverts = 3;
-		#endif
-	}
-	else
-	{
-		cout << "Couldn't determine which type of volume used." << endl;
-		exit(-1);
-	}
-	
-	
-	getline(fin, line); /*Get numbers*/
-	uint nP = 0;
-	uint nE = 0;
-	std::size_t ptr2;
-	ptr = line.find("N=");
-	if(ptr!=string::npos)
-	{
-		ptr2 = line.find_first_not_of("0123456789",ptr+2);
-		string temp = line.substr(ptr+2,ptr2-(ptr+2));
+// 		zone.nP = stoi(temp);
+// 	}
+// 	ptr = line.find("E=");
+// 	if(ptr!=string::npos)
+// 	{
+// 		ptr2 = line.find_first_not_of("0123456789",ptr+2);
+// 		string temp = line.substr(ptr+2,ptr2-(ptr+2));
 		
-		nP = stoi(temp);
-	}
-	ptr = line.find("E=");
-	if(ptr!=string::npos)
-	{
-		ptr2 = line.find_first_not_of("0123456789",ptr+2);
-		string temp = line.substr(ptr+2,ptr2-(ptr+2));
+// 		zone.nE = stoi(temp);
+// 	}
+
+// 	// cout << cells.numPoint << "  " << cells.numElem << endl;
+// 	// cells.reserve(zone.nP,zone.nE,nCverts,nF,nFverts);
+	
+// 	getline(fin,line);
+
+// 	cells.verts = Get_Vector(fin, zone, 0);
+
+// 	cells.cVel = Get_Vector(fin, zone, 0); 
+
+// 	Get_2DCells(fin,cells.verts,zone,cells.elems, cells.cVerts);
+
+// 	// getline(fin,line);
+// 	// cout << line << endl;
+// 	fin.close(); 
+
+// 	cout << "Building cell neighbours..." << endl;
+	
+// 	#pragma omp parallel 
+// 	{
+// 		std::vector<std::vector<uint>> cNeighb = std::vector<std::vector<uint>>(zone.nE,std::vector<uint>());
+// 	    #pragma omp for schedule(static) nowait
+// 		for (uint ii = 0; ii < zone.nE; ++ii)
+// 		{
+// 			for (uint jj = 0; jj < zone.nE; ++jj)
+// 			{
+// 				if (jj == ii)
+// 					continue;
+
+// 				uint count = 0;
+// 				for (uint kk = 0; kk < cells.elems[ii].size(); ++kk)
+// 				{
+// 					if(std::find(cells.elems[jj].begin(),cells.elems[jj].end(),cells.elems[ii][kk])!=cells.elems[jj].end())
+// 						count++;
+// 				}
+
+// 				uint thresh;
+// 				#if SIMDIM == 2
+// 					thresh = 1;
+// 				#else
+// 					thresh = 2;
+// 				#endif
+
+// 				if(count >=thresh)
+// 					cNeighb[ii].push_back(jj);
+// 			}
+// 		}
 		
-		nE = stoi(temp);
-	}
-
-	#if SIMDIM == 2
-		/*Skip the 3D data and read a symmetry plane*/
-		uint lineNo = ceil(float(nP)/5.0)*nvar + nE+7;
-		GotoLine(fin,lineNo);
-		getline(fin,line);
-		// cout << lineNo << endl;
-		// cout << line << endl;
-
-		ptr = line.find("N=");
-		if(ptr!=string::npos)
-		{
-			ptr2 = line.find_first_not_of("0123456789",ptr+2);
-			string temp = line.substr(ptr+2,ptr2-(ptr+2));
-			
-			nP = stoi(temp);
-		}
-		else
-		{
-			cout << "Number of vertices not found. Stopping." << endl;
-			cout << "Line: " << lineNo << " Contents: " << line << endl;
-			exit(-1);
-		}
-
-		ptr = line.find("E=");
-		if(ptr!=string::npos)
-		{
-			ptr2 = line.find_first_not_of("0123456789",ptr+2);
-			string temp = line.substr(ptr+2,ptr2-(ptr+2));
-			
-			nE = stoi(temp);
-		}
-		else
-		{
-			cout << "Number of elements not found. Stopping." << endl;
-			cout << "Line: " << lineNo << " Contents: " << line << endl;
-			exit(-1); 
-		}
-		// cout << nP << "  " << nE << endl;
-	#endif  
-
-	// cout << cells.numPoint << "  " << cells.numElem << endl;
-	cells.reserve(nP,nE,nCverts,nF,nFverts);
-	
-	getline(fin,line);
-
-	/*************** START OF VERTICES DATA *******************/
-	uint varcount = 0;
-	/*Get the position vectors*/
-	#if SIMDIM == 2	/*Skip y component*/
-		Get_Vector(fin, nP, cells.verts, 1);
-	#else /*get y for 3D sim*/
-		Get_Vector(fin, nP, cells.verts, 0);
-	#endif
-
-	varcount +=3;
-	/*Skip variables aside from the velocity vectors*/
-	for (uint ii = 3; ii < velstart ; ++ii)
-	{
-		if(varcount == cpstart)
-		{	/*If Cp data is encountered, then read it in.*/
-			if(pressOrcp == 1)
-				Get_Scalar_Data(fin, nP, cells.pointCp);
-			else
-				Get_Scalar_Data(fin, nP, cells.pointP);
-		}
-		else if(varcount == densstart)
-		{
-			Get_Scalar_Data(fin, nP, cells.pointRho);
-		}
-		else
-		{
-			Skip_Variable(fin,nP);
-		}
-		varcount++;
-	}
-	
-
-	#if SIMDIM == 2
-		if (veltype == 1) /*Don't skip since there isnt a y vel*/
-		{
-			Get_Vector(fin, nP, cells.pVel, 0);
-			varcount += 2;
-		} 
-		else /*Skip y velocity component*/
-		{
-			Get_Vector(fin, nP, cells.pVel, 1);
-			varcount +=3;
-		}
-	#else /*Get the 3D velocity*/
-		if(veltype == 0)
-		{
-			Get_Vector(fin, nP, cells.pVel, 0);
-			varcount +=3;
-		} 
-	#endif
-
-	uint velend;
-	#if SIMDIM == 2
-		if (veltype == 1)
-			velend = 2;
-		else
-			velend = 3;
-	#else
-		velend = SIMDIM;
-	#endif 
-
-	/*Skip remaining variables to get to the cell data*/
-	for (uint ii = 0; ii < nvar - (velstart+velend); ++ii)
-	{
-		if(varcount == cpstart)
-		{	/*If Cp data is encountered, then read it in.*/
-			if(pressOrcp == 1)
-				Get_Scalar_Data(fin, nP, cells.pointCp);
-			else
-				Get_Scalar_Data(fin, nP, cells.pointP);
-		}
-		else if(varcount == densstart)
-		{
-			Get_Scalar_Data(fin, nP, cells.pointRho);
-		}
-		else
-		{
-			Skip_Variable(fin,nP);
-		}
-		varcount++;
-	}
-
-	if(varcount != nvar)
-	{
-		cout << "Some point data has been missed. \nCell data won't be read correctly. Stopping." << endl;
-		exit(-1);
-	}
-
-	cout << "Vertex data complete. Reading cells..." << endl;
-
-	/***************** END OF VERTICES DATA *******************/
-
-	// cout << cells.verts.size() << "  " << cells.pointMach.size() <<  endl;
-	// cout << cells.pointMach.back() << endl;
-	// getline(fin,line);
-	// cout << line << endl;
-
-	/*BEGINNING OF CELL CONNECTIVITY*/
-	Get_Cells(fin,nE,nCverts,cells.elems);
-
-	cout << "Cell data complete. Closing file..." << endl;
- 
-	// getline(fin,line);
-	// cout << line << endl;
-	fin.close(); 
-	
-	#if SIMDIM == 2
-
-	// cout << cells.verts.size() << endl; 
-	for(uint ii = 0; ii < nE; ++ii)
-	{
-		for (uint jj = 0; jj < nCverts; ++jj)
-		{	
-			if (ii > cells.cVerts.size())
-			{
-				cout << "Loop attempted to access out of bounds." << endl;
-				exit(-1);
-			}
-			if(cells.elems[ii][jj]>cells.verts.size())
-			{
-				cout << "Value in element list exceeds vertex list size." << endl;
-				cout << ii << "  " << jj << "  " << cells.elems[ii][jj] << endl;
-				exit(-1);
-			}
-			cells.cVerts[ii][jj] = cells.verts[cells.elems[ii][jj]];								
-		}
-	}
-
-	// uint cellID = 14603;
-	// for(uint jj = 0; jj < nCverts; ++jj)
-	// {
-	// 	cout << cells.elems[cellID][jj] + 1 << ":  " << cells.cVerts[cellID][jj][0] <<
-	// 	        "  " << cells.cVerts[cellID][jj][1] << endl;
-	// }
-	// cout << endl;
-
-	#endif
-	
-	// for(uint ii = 0; ii < 3; ++ii)
-	// {	
-	// 	cout << endl << "Cell: " << ii << endl;
-	// 	for (auto vert: cells.elems[ii] )
-	// 	{
-	// 		cout << cells.verts[vert][0] << "  " << cells.verts[vert][1] 
-	// 			<< "  " << cells.verts[vert][2] << endl;
-	// 	}
-	// }
-	
-
-	#if SIMDIM == 3
-		/*Face vertices to have all faces counter-clockwise*/
-		std::vector<std::vector<int>> facenum = {{1,5,6,2},{2,6,7,3},{0,3,7,4},
-												{0,4,5,1},{0,1,2,3},{7,6,5,4}};
-		
-		// cout << nE << "  " << nF << "  " << nCverts << endl;
-		// cout << cells.verts.size() << "  " << cells.elems.size() << endl;
-		// cout << cells.cFaces.size() << "  " << cells.cFaces[0].size() << "  ";
-		// cout << cells.cFaces[0][0].size() << endl;
-		
-		/*Build Face data for containement queries*/
-		for(uint ii = 0; ii < nE; ++ii)
-		{	
-			uint jj = 0; 
-			for(auto faces:facenum)
-			{	
-				uint kk = 0;
-				for (auto vert:faces)
-				{
-					// cout << vert << "  ";
-					if (ii > cells.cFaces.size())
-					{
-						cout << "Loop attempted to access out of bounds." << endl;
-						exit(-1);
-					}
-					if(cells.elems[ii][vert]>cells.verts.size())
-					{
-						cout << "Value in element list exceeds vertex list size." << endl;
-						cout << ii << "  " << vert << "  " << cells.elems[ii][vert] << endl;
-						exit(-1);
-					}
-					cells.cFaces[ii][jj][kk] = cells.verts[cells.elems[ii][vert]];
-					++kk;
-				}
-				// cout << endl;
-				++jj;
-			}
-		}
-
-		// uint ii = 21707;	
-		// cout << endl << "Cell: " << ii << endl;
-		// uint jj = 0;
-		// for (std::vector<StateVecD> const& faces: cells.cFaces[ii] )
-		// {	
-		// 	cout << "Face: " << jj << endl;
-		// 	uint kk = 0;
-		// 	for (StateVecD const& verts:faces)
-		// 	{
-		// 		cout << facenum[jj][kk] << ":  " << verts[0] << "  " << verts[1] 
-		// 			 << "  " << verts[2] << endl;
-		// 		++kk;
-		// 	}
-		// 	++jj;
-	
-		// }
-		
-	#endif
-
-
-	/*Build Cell connectivity*/
-	/*Find the cell neighbours so that they can be checked 
-		when a particle isn't in the cell any more*/
-
-	/* check if a cell has 2 vertices the same in it as the checked cell
-		If yes, then it's a neighbour. */
-	cout << "Building cell neighbours..." << endl;
-	
-	
-	#pragma omp parallel 
-	{
-		std::vector<std::vector<uint>> cNeighb = std::vector<std::vector<uint>>(nE,std::vector<uint>());
-	    #pragma omp for schedule(static) nowait
-		for (uint ii = 0; ii < nE; ++ii)
-		{
-			for (uint jj = 0; jj < nE; ++jj)
-			{
-				if (jj == ii)
-					continue;
-
-				uint count = 0;
-				for (uint kk = 0; kk < cells.elems[ii].size(); ++kk)
-				{
-					if(std::find(cells.elems[jj].begin(),cells.elems[jj].end(),cells.elems[ii][kk])!=cells.elems[jj].end())
-						count++;
-				}
-
-				uint thresh;
-				#if SIMDIM == 2
-					thresh = 1;
-				#else
-					thresh = 2;
-				#endif
-
-				if(count >=thresh)
-					cNeighb[ii].push_back(jj);
-			}
-		}
-		
-		#pragma omp for schedule(static) ordered
-    	for(int i=0; i<NTHREADS; i++)
-    	{
-    		#pragma omp ordered
-    		cells.cNeighb.insert(cells.cNeighb.end(), cNeighb.begin(), cNeighb.end());
-    	}
+// 		#pragma omp for schedule(static) ordered
+//     	for(int i=0; i<NTHREADS; i++)
+//     	{
+//     		#pragma omp ordered
+//     		cells.cNeighb.insert(cells.cNeighb.end(), cNeighb.begin(), cNeighb.end());
+//     	}
 	       
-	}
-
-	cout << "Averaging point data to the cell..." << endl;
-
-
-	StateVecD zero = StateVecD::Zero();
-	/*Average data from the points to find the cell based data*/
-	NormalisePressure(cells,fvar);
-
-	Average_Point_to_Cell(cells.pVel,cells.cVel, cells.elems, zero);
-	Average_Point_to_Cell(cells.pointRho,cells.cellRho,cells.elems,0.0);
-	if(pressOrcp == 1)
-	{
-		Average_Point_to_Cell(cells.pointCp,cells.cellCp,cells.elems,0.0);
-		cells.cellP = CpToPressure(cells.cellCp,fvar);
-	}
-	else
-		Average_Point_to_Cell(cells.pointP,cells.cellP,cells.elems,0.0);
-	
-	// Average_Point_to_Cell(cells.pointMach,cells.cellMach, cells.elems, 0.0);
-
-}
-
-#if SIMDIM == 2
-void Read_Radial(string input, MESH &cells)
-{
-	input.append("O_Mesh.plt");
-	std::ifstream fin(input, std::ios::in);
-
-	if(!fin.is_open())
-	{
-		cout << "Couldn't open O_Mesh.plt. Stopping." << endl;
-		cout << "Path attempted: " << input << endl;
-		exit(-1);
-	}
-	else 
-	{
-		cout << "Mesh file open, reading data..." << endl;
-	}
-	std::string line;
-	getline(fin,line);
-	getline(fin,line);
-
-	/*If 2D, skip this and read the symmetry plane data.*/
-
-	getline(fin, line); /*Get Zone line data. Tells which type of volume*/
-	uint nF, nCverts, nFverts;
-
-	nCverts = 4;
-	nF = 0;
-	nFverts = 0;
-
-	getline(fin, line); /*Get numbers*/
-	uint nP = 0;
-	uint nE = 0;
-	std::size_t ptr2;
-	std::size_t ptr = line.find("N=");
-	if(ptr!=string::npos)
-	{
-		ptr2 = line.find_first_not_of("0123456789",ptr+2);
-		string temp = line.substr(ptr+2,ptr2-(ptr+2));
-		
-		nP = stoi(temp);
-	}
-	ptr = line.find("E=");
-	if(ptr!=string::npos)
-	{
-		ptr2 = line.find_first_not_of("0123456789",ptr+2);
-		string temp = line.substr(ptr+2,ptr2-(ptr+2));
-		
-		nE = stoi(temp);
-	}
-
-	// cout << cells.numPoint << "  " << cells.numElem << endl;
-	cells.reserve(nP,nE,nCverts,nF,nFverts);
-	
-	getline(fin,line);
-
-	Get_Vector(fin, nP, cells.verts, 0);
-
-	Get_Vector(fin, nE, cells.cVel, 0); 
-
-	/*BEGINNING OF CELL CONNECTIVITY*/
-	Get_Cells(fin,nE,nCverts,cells.elems);
-
-	// getline(fin,line);
-	// cout << line << endl;
-	fin.close(); 
-
-	for(uint ii = 0; ii < nE; ++ii)
-	{
-		for (uint jj = 0; jj < nCverts; ++jj)
-		{	
-			if (ii > cells.cVerts.size())
-			{
-				cout << "Loop attempted to access out of bounds." << endl;
-				exit(-1);
-			}
-			if(cells.elems[ii][jj]>cells.verts.size())
-			{
-				cout << "Value in element list exceeds vertex list size." << endl;
-				cout << ii << "  " << jj << "  " << cells.elems[ii][jj] << endl;
-				exit(-1);
-			}
-			cells.cVerts[ii][jj] = cells.verts[cells.elems[ii][jj]];								
-		}
-	}
-
-	cout << "Building cell neighbours..." << endl;
-	
-	#pragma omp parallel 
-	{
-		std::vector<std::vector<uint>> cNeighb = std::vector<std::vector<uint>>(nE,std::vector<uint>());
-	    #pragma omp for schedule(static) nowait
-		for (uint ii = 0; ii < nE; ++ii)
-		{
-			for (uint jj = 0; jj < nE; ++jj)
-			{
-				if (jj == ii)
-					continue;
-
-				uint count = 0;
-				for (uint kk = 0; kk < cells.elems[ii].size(); ++kk)
-				{
-					if(std::find(cells.elems[jj].begin(),cells.elems[jj].end(),cells.elems[ii][kk])!=cells.elems[jj].end())
-						count++;
-				}
-
-				uint thresh;
-				#if SIMDIM == 2
-					thresh = 1;
-				#else
-					thresh = 2;
-				#endif
-
-				if(count >=thresh)
-					cNeighb[ii].push_back(jj);
-			}
-		}
-		
-		#pragma omp for schedule(static) ordered
-    	for(int i=0; i<NTHREADS; i++)
-    	{
-    		#pragma omp ordered
-    		cells.cNeighb.insert(cells.cNeighb.end(), cNeighb.begin(), cNeighb.end());
-    	}
-	       
-	}
-}
-#endif
+// 	}
+// }
+// #endif
 
 /*************************************************************************/
 /**************************** ASCII OUTPUTS ******************************/
@@ -1325,84 +624,8 @@ void Write_settings(SIM &svar, FLUID &fvar)
   }
 }
 
-void Write_Mesh_Data(SIM &svar, MESH &cells)
-{
-	string mesh = svar.outfolder;
-	mesh.append("/Mesh.plt");
-	std::ofstream fm(mesh, std::ios::out);
-
-	if(!fm.is_open())
-	{ 
-		cout << "Failed to open mesh output file" << endl;
-		exit(-1);
-	}
-
-	#if SIMDIM == 2
-		fm << "TITLE = \"2D TAU Solution\"\n";
-		fm << "VARIABLES = \"x (m)\" \"z (m)\" \"x_velocity\" \"z_velocity\"\n";
-		fm << "ZONE T=\"2D Solution Plane\"\n";
-		fm << "VARLOCATION=([1-2]=NODAL,[3-4]=CELLCENTERED)\n";
-		fm << "N=" << cells.numPoint << ", E=" << cells.numElem << ", F=FEBLOCK ET=Quadrilateral\n\n";
-	#endif
-
-	#if SIMDIM == 3
-		fm << "TITLE = \"3D TAU Solution\"\n";
-		fm << "VARIABLES = \"x (m)\" \"y (m)\" \"z (m)\" \"x_velocity\" \"y_velocity\" \"z_velocity\"\n";
-		fm << "ZONE T=\"3D Solution Plane\"\n";
-		fm << "VARLOCATION=([1-3]=NODAL,[4-6]=CELLCENTERED)\n";
-		fm << "N=" << cells.numPoint << ", E=" << cells.numElem << ", F=FEBLOCK ET=Brick\n\n";
-	#endif
-
-	for(uint ii = 0; ii < SIMDIM; ++ii)
-	{	uint kk = 0;
-		for(uint jj = 0; jj < cells.numPoint; ++jj)
-		{
-			fm << cells.verts[jj][ii] << " ";
-			kk++;
-
-			if(kk == 5)
-			{
-				fm << "\n";
-				kk = 0;
-			}
-		}
-
-		if(kk % 5 != 0)
-			fm << "\n";
-	}
-
-	for(uint ii = 0; ii < SIMDIM; ++ii)
-	{	uint kk = 0;
-		for(uint jj = 0; jj < cells.numElem; ++jj)
-		{
-			fm << cells.cVel[jj][ii] << " ";
-			kk++;
-
-			if(kk == 5)
-			{
-				fm << "\n";
-				kk = 0;
-			}
-		}
-
-		if(kk % 5 != 0)
-			fm << "\n";
-	}
-
-	for(uint ii = 0; ii <= cells.numElem; ++ii)
-	{	
-		for(auto elem:cells.elems[ii])
-		{
-			fm << elem+1 << " ";
-		}
-		fm << "\n";
-	}
-
-
-}
-
 void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1, 
-	const uint bwrite, const uint start, const uint end /*, State &airP*/ )
+	const uint bwrite, const uint start, const uint end , State &airP )
 {
 	if(bwrite == 1)
 	 	fp <<  "ZONE T=\"Boundary Data\"";
@@ -1422,17 +645,17 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1,
 				fp << "\n";  
 		  	}
 
-		  	// if (airP.size() > 0 )
-		  	// {
-			  // 	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
-			  //   ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
-			  // 	for(auto p:airP)
-			  // 	{
-			  // 		for(uint i = 0; i < SIMDIM; ++i)
-			  //       	fp << p.xi(i) << " "; 
-					// fp << "\n"; 
-			  // 	}
-		  	// }
+		  	if (airP.size() > 0 )
+		  	{
+			  	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
+			    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
+			  	for(auto p:airP)
+			  	{
+			  		for(uint i = 0; i < SIMDIM; ++i)
+			        	fp << p.xi(i) << " "; 
+					fp << "\n"; 
+			  	}
+		  	}
 		  	fp << std::flush;
 		  	break;
     	}
@@ -1448,21 +671,21 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1,
 		        fp << p->rho << " "  << p->p  << "\n";
 		  	}
 
-		  // 	if (airP.size() > 0 )
-		  // 	{
-			 //  	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
-			 //    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
+		  	if (airP.size() > 0 )
+		  	{
+			  	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
+			    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
 
-			 //  	for(auto p:airP)
-			 //  	{
-			 //  		for(uint i = 0; i < SIMDIM; ++i)
-			 //        	fp << p.xi(i) << " "; 
+			  	for(auto p:airP)
+			  	{
+			  		for(uint i = 0; i < SIMDIM; ++i)
+			        	fp << p.xi(i) << " "; 
 
-			 //        fp << p.v.norm() << " ";
-			 //        fp << p.f.norm() << " ";
-			 //        fp << p.rho << " "  << p.p  << "\n";
-			 //  	}
-		 	// }
+			        fp << p.v.norm() << " ";
+			        fp << p.f.norm() << " ";
+			        fp << p.rho << " "  << p.p  << "\n";
+			  	}
+		 	}
 		  	fp << std::flush;
 		  	break;
     	}
@@ -1473,30 +696,30 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1,
 				for(uint i = 0; i < SIMDIM; ++i)
 		        	fp << p->xi(i) << " ";
 		        
-		        fp << p->f.norm() << " " << p->Af.norm() << " " << p->Sf.norm() << " ";
+		        fp << p->f.norm() << " " << p->Af.norm() << " " << p->cellP << " ";
 		        for(uint i = 0; i < SIMDIM; ++i)
 		        	fp << p->cellV(i) << " "; 
 
 		        fp << p->b << " " << p->theta  << "\n"; 
 		  	}  
 
-		  	// if (airP.size() > 0 )
-		  	// {
-			  // 	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
-			  //   ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
+		  	if (airP.size() > 0 )
+		  	{
+			  	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
+			    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
 			    
-			  // 	for(auto p:airP)
-			  // 	{
-			  // 		for(uint i = 0; i < SIMDIM; ++i)
-			  //       	fp << p.xi(i) << " "; 
+			  	for(auto p:airP)
+			  	{
+			  		for(uint i = 0; i < SIMDIM; ++i)
+			        	fp << p.xi(i) << " "; 
 
-			  //     	fp << p.f.norm() << " " << p.Af.norm() << " " << p.Sf.norm() << " ";
-			  //       for(uint i = 0; i < SIMDIM; ++i)
-			  //       	fp << p.cellV(i) << " "; 
+			      	fp << p.f.norm() << " " << p.Af.norm() << " " << p.Sf.norm() << " ";
+			        for(uint i = 0; i < SIMDIM; ++i)
+			        	fp << p.cellV(i) << " "; 
 
-			  //       fp << p.b << " " << p.theta  << "\n"; 
-			  // 	}
-		  	// }	
+			        fp << p.b << " " << p.theta  << "\n"; 
+			  	}
+		  	}	
 		  	fp << std::flush;
 		  	break;
     	}

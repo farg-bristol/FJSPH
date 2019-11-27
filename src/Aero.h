@@ -133,13 +133,13 @@ StateVecD CalcForce(SIM& svar, const FLUID& fvar, const AERO& avar,
 			{	/*Gissler et al (2017)*/
 				// if(size < nfull)
 				// {	
-					ldouble ymax = Vdiff.squaredNorm()*avar.ycoef;
-					ldouble Re = 2.0*fvar.rhog*Vdiff.norm()*avar.L/fvar.mug;
+					const ldouble ymax = Vdiff.squaredNorm()*avar.ycoef;
+					const ldouble Re = 2.0*fvar.rhog*Vdiff.norm()*avar.L/fvar.mug;
 					ldouble Cds;
 
-					ldouble frac2 = std::min(nfull,double(size))
+					const ldouble frac2 = std::min(nfull,double(size))
 									/(nfull);
-					ldouble frac1 = (1.0 - frac2);
+					const ldouble frac1 = (1.0 - frac2);
 
 					// if (Re < 3500)
 					//  	Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
@@ -151,20 +151,20 @@ StateVecD CalcForce(SIM& svar, const FLUID& fvar, const AERO& avar,
 					else 
 						Cds = 0.424;
 
-					ldouble Cdl = Cds*(1+2.632*ymax);
-					ldouble	Cdi = frac1*Cdl + /*0.8**/frac2;
+					const ldouble Cdl = Cds*(1+2.632*ymax);
+					const ldouble	Cdi = frac1*Cdl + /*0.8**/frac2;
 
 					#if SIMDIM == 3 
-						ldouble Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
-						ldouble Aunocc = frac1*Adrop + frac2*fvar.HSQ;
+						const ldouble Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
+						const ldouble Aunocc = frac1*Adrop + frac2*fvar.HSQ;
 					#endif
 					#if SIMDIM == 2
-						ldouble Adrop = M_PI*(avar.L + avar.Cb*avar.L*ymax);
-						ldouble Aunocc = frac1*Adrop + frac2*fvar.H;
+						const ldouble Adrop = M_PI*(avar.L + avar.Cb*avar.L*ymax);
+						const ldouble Aunocc = frac1*Adrop + frac2*fvar.H;
 					#endif
 
 
-					ldouble Ai = (1-woccl)/*correc*/*Aunocc;
+					const ldouble Ai = (1-woccl)/*correc*/*Aunocc;
 
 					Fd = 0.5*fvar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai/pi.m;
 				// }
@@ -176,13 +176,13 @@ StateVecD CalcForce(SIM& svar, const FLUID& fvar, const AERO& avar,
 }
 
 void ApplyAero(SIM &svar, const FLUID &fvar, const AERO &avar, 
-	State &pnp1, const outl &outlist)
+	const State &pnp1, const outl &outlist, vector<StateVecD>& res)
 {
-	std::vector<StateVecD> Af(svar.totPts,StateVecD::Zero());
-	const uint start = svar.bndPts;
-	const uint end = svar.totPts;
+	// std::vector<StateVecD> Af(svar.totPts,StateVecD::Zero());
+	const static uint start = svar.bndPts;
+	const static uint end = svar.totPts;
 
-	#pragma omp parallel for reduction(+:Af) shared(svar)
+	#pragma omp parallel for reduction(+:res) shared(svar)
 	for (uint ii=start; ii < end; ++ii)
 	{
 		uint size = outlist[ii].size();
@@ -193,13 +193,13 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const AERO &avar,
 			pi.normal = StateVecD::Zero();
 			ldouble kernsum = 0.0;
 			ldouble woccl = 0.0;
-			for (auto jj:outlist[ii])
+			for (auto const jj:outlist[ii])
 			{	/* Neighbour list loop. */
 				const Part pj(pnp1[jj]);
 
-				if(ii == jj)
+				if(pi.partID == pj.partID)
 				{
-					kernsum += W2Kernel(0,fvar.H,fvar.correc);
+					kernsum += fvar.correc;
 					continue;
 				}
 
@@ -254,8 +254,7 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const AERO &avar,
 				
 				ldouble r = (pj.xi-pi.xi).norm();
 				ldouble kern = W2Kernel(r,fvar.H,fvar.correc);
-				// #pragma omp critical
-				Af[jj] += Fd*kern/kernsum;
+				res[jj] += Fd*kern/kernsum;
 			}
 			// }
 			// else 
@@ -268,13 +267,13 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const AERO &avar,
 	}/*End of ii particles*/
 
 	// StateVecD Force = StateVecD::Zero();
-	#pragma omp parallel for/* reduction(+:Force)*/
-	for (uint ii = start; ii < end; ++ii)
-	{
-		pnp1[ii].f += Af[ii];
-		pnp1[ii].Af = Af[ii];
-		// Force += Af[ii];
-	}
+	// #pragma omp parallel for/* reduction(+:Force)*/
+	// for (uint ii = start; ii < end; ++ii)
+	// {
+	// 	res[ii] += Af[ii];
+	// 	// pnp1[ii].Af = Af[ii];
+	// 	// Force += Af[ii];
+	// }
 	// svar.Force = Force;
 	
 

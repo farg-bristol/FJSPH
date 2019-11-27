@@ -3,8 +3,7 @@
 /*** Force Calculation: On Simulating Free Surface Flows using SPH. Monaghan, J.J. (1994) ***/
 /***			        + XSPH Correction (Also described in Monaghan)                    ***/
 /*** Viscosity:         Laminar Viscosity as described by Morris (1997)                   ***/
-/*** Surface Tension:   Tartakovsky and Panchenko (2016)                                  ***/
-/*** Density Reinitialisation: Colagrossi, A. and Landrini, M. (2003): MLS                ***/
+/*** Surface Tension:   Tartakovsky and Panchenko (2016)   (Currently inactive)           ***/
 /*** Smoothing Kernel: Wendland's C2 ***/
 /*** Integrator: Newmark-Beta ****/
 /*** Variable Timestep Criteria: CFL + Monaghan, J.J. (1989) conditions ***/
@@ -19,390 +18,85 @@
 #include "Add.h"
 #include "Resid.h"
 #include "Crossing.h"
+#include "Newmark_Beta.h"
 
-// using namespace std;
 using namespace std::chrono;
-using namespace Eigen;
 using namespace nanoflann;
 
-///**************** Integration loop **************///
-ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, SIM& svar, const FLUID& fvar, const AERO& avar, 
-	const MESH& cells, State& pn, State& pnp1/*, State& airP*/, outl& outlist)
+
+void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outlist, State& pnp1, State& airP)
 {
-	// cout << "Entered Newmark_Beta" << endl;
 	const uint start = svar.bndPts;
 	const uint end = svar.totPts;
-	const uint piston = svar.psnPts;
-		
-	double errsum = 1.0;
-	double logbase = 0.0;
-	unsigned int k = 0;
-	double error1 = 0.0;
-	double error2 = 0.0;
 
-	/*Find maximum safe timestep*/
-	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin(),pnp1.end(),
-		[](Particle p1, Particle p2){return p1.f.norm()< p2.f.norm();});
-	ldouble maxf = maxfi->f.norm();
-	ldouble dtf = sqrt(fvar.H/maxf);
-	ldouble dtcv = fvar.H/(fvar.Cs+svar.maxmu);
+	#if DEBUG 
+		dbout << "Starting first step. ";
+		dbout << "  Start index: " << start << "  End index: " << end << endl;
+	#endif
 
+	std::vector<std::vector<Part>> neighb;
+	neighb.reserve(end);
+	for(uint ii = 0; ii < start; ++ii)
+		neighb.emplace_back();
 
-	// if (std::isinf(maxf))
-	// {
-	// 	std::cerr << "Forces are quasi-infinite. Stopping..." << std::endl;
-	// 	exit(-1);
-	// }
-
-/***********************************************************************************/
-/***********************************************************************************/
-/***********************************************************************************/
-	svar.dt = 0.3*min(dtf,dtcv)/* dtf*/;
-/***********************************************************************************/
-/***********************************************************************************/
-/***********************************************************************************/
-
-	if (svar.dt > svar.framet)
-		svar.dt = svar.framet;
-
-
-	/*Check if the particle has moved to a new cell*/
-	if (svar.Bcase == 6)
-	{
-		FindCell(start,end,avar.nfull,pnp1,cells,outlist);
-	}
-	// cout << svar.Start(0) << "  " << svar.Start(1) << endl;
-	// cout << svar.Transp << endl;
 	/*Check if a particle is running low on neighbours, and add ficticious particles*/
-	std::vector<std::vector<Part>> air(start);
-	if(svar.ghost == 1 )
+	vector<vector<Part>> air;
+	#pragma omp parallel shared(svar, pnp1, outlist)
 	{
-		#pragma omp parallel shared(pnp1, outlist)
+		std::vector<std::vector<Part>> localN;
+		vector<vector<Part>> localA;
+		#pragma omp for schedule(static) nowait 
+		for (uint ii = start; ii < end; ++ii)
 		{
-			std::vector<std::vector<Part>> local;
-			#pragma omp for schedule(static) nowait
-			for (uint ii = start; ii < end; ++ii)
-			{
-				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
-				std::vector<Part> temp;
-				if(vec(1) > 0.0 && pnp1[ii].b == 2 &&
-				outlist[ii].size() > 0.4*avar.nfull && outlist[ii].size() < avar.nfull)
-				{
-					temp = PoissonSample::generatePoissonPoints(svar,fvar,ii,pnp1,outlist);
-				}
-				local.emplace_back(temp);
-			}
+			std::vector<Part> temp;
+			if(svar.ghost == 1 && pnp1[ii].b == 2 && outlist[ii].size() < avar.nfull &&
+				outlist[ii].size() > 0.4*avar.nfull)
+				temp = PoissonSample::generatePoissonPoints(svar,fvar,avar,ii,pnp1,outlist);
 
-			#pragma omp for schedule(static) ordered
-	    	for(int i=0; i<NTHREADS; i++)
-	    	{
-	    		#pragma omp ordered
-	    		air.insert(air.end(),local.begin(),local.end());
-	    	}
+			localA.emplace_back(temp);
+
+			for(auto j:outlist[ii])
+				temp.emplace_back(Part(pnp1[j]));
+
+			localN.emplace_back(temp);
 		}
+
+		#pragma omp for schedule(static) ordered
+    	for(int i=0; i<NTHREADS; i++)
+    	{
+    		#pragma omp ordered
+    		neighb.insert(neighb.end(),localN.begin(),localN.end());
+    		air.insert(air.end(),localA.begin(),localA.end());
+    	}
 	}
-	
+	airP.clear();
+
+	for(uint ii = 0; ii < air.size(); ++ii)
+		for(uint jj = 0; jj < air[ii].size(); ++jj)
+			airP.emplace_back(PartToParticle(air[ii][jj]));
 
 	#pragma omp parallel for shared(outlist)
-	for(uint ii = svar.bndPts; ii < svar.totPts; ++ii)
+	for(uint ii = start; ii < end; ++ii)
 	{
 		pnp1[ii].theta = outlist[ii].size(); 
 	}
-
-	vector<StateVecD> xih(svar.totPts);
-	const ldouble a = 1 - svar.gamma;
-	const ldouble b = svar.gamma;
-	const ldouble c = 0.5*(1-2*svar.beta);
-	const ldouble d = svar.beta;
-	const ldouble B = fvar.B;
-	const ldouble gam = fvar.gam;
-
-	// int RestartCount = 0;
-	while (log10(sqrt(errsum/(double(svar.totPts)))) - logbase > -7.0)
-	{
-		/****** UPDATE TREE ***********/
-		NP1_INDEX.index->buildIndex();
-		FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
-		
-		// airP.clear();
-		// cout << "Creating neighb list" << endl;
-		std::vector<std::vector<Part>> neighb;
-		neighb.reserve(end);
-		// for(uint ii = 0; ii < start; ++ii)
-		// {
-		// 	neighb.emplace_back();
-		// }
-
-		#pragma omp parallel shared(pnp1, outlist, air)
-		{
-			std::vector<std::vector<Part>> local;
-			#pragma omp for schedule(static) nowait
-			for (uint ii = 0; ii < end; ++ii)
-			{
-				std::vector<Part> temp;
-				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj])); 
-
-				if(air[ii].size()>0)
-				{
-					temp.insert(temp.end(), air[ii].begin(), air[ii].end());
-				}
-				local.push_back(temp);
-			}
-
-			#pragma omp for schedule(static) ordered
-	    	for(int i=0; i<NTHREADS; i++)
-	    	{
-	    		#pragma omp ordered
-	    		neighb.insert(neighb.end(),local.begin(),local.end());
-	    	}
-		}
-		
-
-		// for(uint ii = start; ii < end; ++ii)
-		// {
-		// 	std::vector<Part> temp;
-		// 	for(auto j:outlist[ii])
-		// 			temp.emplace_back(Part(pnp1[j])); 
-
-		// 	neighb.emplace_back(temp);
-		// }
-		
-		// cout << "K: " << k << endl;
-		// cout << "Calculating forces" << endl;
- 		Forces(svar,fvar,avar,pnp1,neighb,outlist); /*Guess force at time n+1*/
-
-		// #pragma omp parallel
 	
-		/*Previous State for error calc*/
-		#pragma omp parallel for shared(pnp1)
-		for (uint  ii=0; ii < svar.totPts; ++ii)
-			xih[ii] = pnp1[ii].xi;
+	vector<StateVecD> res(svar.totPts,StateVecD::Zero());
+	vector<ldouble> Rrho(svar.totPts,0.0);
+	Forces(svar,fvar,avar,pnp1,neighb,outlist,res,Rrho); /*Guess force at time n+1*/
 
-
-		const ldouble dt = svar.dt;
-		const ldouble dt2 = dt*dt;
-
-		/*Update the state at time n+1*/
-		#pragma omp parallel shared(pn)
-		{
-			// #pragma omp for
-			// for (uint ii = 0; ii < piston; ++ii)
-			// {	/****** PISTON PARTICLES *************/
-			// 	pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+pnp1[ii].Rrho);
-			// 	pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-			// 	pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-			// }
-
-
-			#pragma omp for 
-			for (uint ii=piston; ii < start; ++ii)
-			{	/****** BOUNDARY PARTICLES ***********/
-				pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+pnp1[ii].Rrho);
-				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-			}
-			
-
-			#pragma omp for
-			for (uint ii=start; ii < end; ++ii)
-			{	/****** FLUID PARTICLES **************/
-				
-				/*Check if the particle is clear of the starting area*/
-				if(pnp1[ii].b == 1)
-				{   /* boundary particle value of 1 means its a                    */
-					/* fluid particle that isn't clear of the starting area        */
-					/* 2 means it is clear, and can receive a force aerodynamically*/
-					/* 3 is an air particle. Stored only for one timestep at a time*/
-					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
-					if(vec(1) > svar.clear)
-					{	/*Tag it as clear if it's higher than the plane of the exit*/
-						pnp1[ii].b=2;
-						if(svar.Bcase == 6)
-						{
-							/*Search through the cells to find which cell it's in*/
-							if (outlist[ii].size() < avar.nfull)
-							{
-								#if SIMDIM == 3
-									uint found = 0;
-									uint jj = 0;
-									StateVecD testp = pnp1[ii].xi;
-									// cout << cells.cFaces.size() << endl;
-									for(std::vector<std::vector<StateVecD>> const& cell:cells.cFaces)
-									{
-										if(Crossings3D(cell,testp))
-										{
-											pnp1[ii].cellID = jj;
-											pnp1[ii].cellV = cells.cVel[jj];
-											pnp1[ii].cellP = cells.cellP[jj];
-											pnp1[ii].cellRho = cells.cellRho[jj];
-											found = 1;
-											// cout << "Cell found!" << endl;
-											break;
-											
-										}
-										++jj;
-									}
-
-									if(found != 1)
-									{
-										cout << "Containing cell not found. Something is wrong." << endl;
-										exit(-1);
-									}	
-								#else
-									uint found = 0;
-									uint jj = 0;
-									StateVecD testp = pnp1[ii].xi;
-									/*Do a cell containment*/
-									for(std::vector<StateVecD> const& cell:cells.cVerts)
-									{
-										if(Crossings2D(cell,testp))
-										{
-											pnp1[ii].cellID = jj;
-											pnp1[ii].cellV = cells.cVel[jj];
-											pnp1[ii].cellP = cells.cellP[jj];
-											pnp1[ii].cellRho = cells.cellRho[jj];
-											found = 1;
-											// cout << "Found the containing cell!" << endl;
-											// cout << jj << "  " << cells.cVel[jj][0] << endl;
-											break;
-											
-										}
-										++jj;
-									}
-
-									if(found != 1)
-									{
-										cout << "Containing cell not found. Something is wrong." << endl;
-										exit(-1);
-									}
-								#endif
-							}
-						}
-					}
-					else
-					{	
-						/*For the particles marked 1, perform a prescribed motion*/
-						pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-						pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
-						pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
-					}
-				}
-
-				if(pnp1[ii].b==2)
-				{	/*For the particles marked 2, intergrate as normal*/
-					pnp1[ii].v =  pn[ii].v +dt*(a*pn[ii].f+b*pnp1[ii].f);
-					pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(c*pn[ii].f+d*pnp1[ii].f);
-					pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
-					pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
-				}
-			} /*End fluid particles*/
-		
-		/****** FIND ERROR ***********/
-		errsum = 0.0;
-		#pragma omp parallel for reduction(+:errsum)
-		for (uint ii = start; ii < end; ++ii)
-		{
-			StateVecD r = pnp1[ii].xi-xih[ii];
-			errsum += r.squaredNorm();
-		}
-		
-		}/*End pragma omp parallel*/
-
-		if(k == 0)
-			logbase=log10(sqrt(errsum/(double(svar.totPts))));
-
-
-		error1 = log10(sqrt(errsum/(double(svar.totPts)))) - logbase;
-		// cout << RestartCount << "  " << k << "  " << error1  << "  " << svar.dt << endl;
-		// cout << k << "  " << error1 << "  " << svar.dt << endl;
-
-		if (error1-error2 > 0.0 || std::isnan(error1))
-		{	/*If simulation starts diverging, then reduce the timestep and try again.*/
-			// cout << "Unstable timestep. Reducing timestep..." << endl;
-			pnp1 = pn;
-			svar.dt = 0.5*svar.dt;
-			k = 0;
-			error1 = 0.0;
-			// RestartCount++;
-		}	/*Check if we've exceeded the maximum iteration count*/
-		else if (k > svar.subits)
-			break;
-		else
-		{	/*Otherwise, roll forwards*/
-			++k;
-		}
-
-		error2 = error1;
-		
-	} /*End of subits*/
-
-	// RestartCount = 0;
-	/*Add time to global*/
-	svar.t+=svar.dt;
-
-	// cout << "Timestep Params: " << maxf << " " << fvar.Cs + maxmu << " " << dtf << " " << dtcv << endl;
-	// cout << "New Time: " << svar.t << endl;
-	
-
-	/*Check if more particles need to be created*/
-	if(svar.Bcase >= 2 && svar.Bcase !=5)
+	#pragma omp parallel for shared(res, Rrho)
+	for(uint ii = 0; ii < end; ++ii)
 	{
-		switch(svar.Bclosed)
-		{
-			case 0:
-			{
-				int refresh = 1;
-				for (uint ii = svar.totPts-svar.nrefresh; ii<svar.totPts; ++ii)
-				{	/*Check that the starting area is clear first...*/
-					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
-					if(svar.Bcase == 2)
-					{
-						if(vec[1]< svar.dx-svar.Jet(1)*3)
-							refresh = 0;
-					}
-					else
-					{
-						if(vec[1]< svar.dx-svar.Jet(1))
-							refresh = 0;
-					}
-				}
-
-				if(refresh == 1)
-				{	/*...If it is, then check if we've exceeded the max points...*/
-					if (svar.addcount < svar.nmax)
-					{	/*...If we havent, then add points. */
-						// cout << "adding points..." << endl;
-						StateVecD vec = svar.Transp*(pnp1[svar.totPts-1].xi-svar.Start);
-						AddPoints(vec[1]-svar.dx, svar, fvar, avar, pn, pnp1);
-					}
-					else
-					{	/*...If we have, then check we're sufficiently
-						clear to close the boundary*/
-						cout << "End of adding particle rounds." << endl;
-						svar.Bclosed = 1;
-						
-					}
-					NP1_INDEX.index->buildIndex();
-					FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
-				}
-				break;
-			}
-			case 1:
-				break;
-		}
+		pnp1[ii].f = res[ii];
+		pnp1[ii].Rrho = Rrho[ii]; 
 	}
 
-	/****** UPDATE TIME N ***********/
-	if(svar.totPts != pnp1.size())
-	{
-		cout << "Size mismatch. Total points not equal to array size. Stopping" << endl;
-		exit(-1);
-	}
-
-	pn = pnp1;
-
-	return log10(sqrt(errsum/(double(svar.totPts))))-logbase;
+	#if DEBUG 
+		dbout << "Exiting first step." << endl;
+	#endif
 }
+
 
 int main(int argc, char *argv[])
 {
@@ -428,9 +122,13 @@ int main(int argc, char *argv[])
 	
 	if(svar.Bcase == 6)
 	{
+		#if SIMDIM == 3
+		Read_TAUMESH(svar,cells,fvar);
+		#else
 		string meshfile = svar.infolder;
 		meshfile.append(svar.meshfile);
-		Read_TAUMESH(meshfile,cells,fvar);
+		Read_TAUPLT(meshfile,cells,fvar);
+		#endif
 	}
 
 	/*Make a guess of how many there will be...*/
@@ -438,6 +136,7 @@ int main(int argc, char *argv[])
     ///****** Initialise the particles memory *********/
 	State pn;	    /*Particles at n   */
 	State pnp1; 	/*Particles at n+1 */
+	State airP;
 
 	cout << "Final particle count:  " << partCount << endl;
 	svar.finPts = partCount;
@@ -445,17 +144,32 @@ int main(int argc, char *argv[])
   	pnp1.reserve(partCount);
 	
 	MakeOutputDir(argc,argv,svar);
+	
 
-	if (svar.Bcase == 6)
-		Write_Mesh_Data(svar,cells);
+	// if (svar.Bcase == 6){
+	// 	Write_Mesh_Data(svar,cells);
+	// }	
 
 	InitSPH(svar,fvar,avar,pn,pnp1);
 
-	///********* Tree algorithm stuff ************/
-	Sim_Tree NP1_INDEX(SIMDIM,pnp1,20);
-	NP1_INDEX.index->buildIndex();
-	FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
+	// Check if cells have been initialsed before making a tree off it
+	if(cells.cCentre.size() == 0)
+		cells.cCentre.emplace_back(StateVecD::Zero());
 
+
+	///********* Tree algorithm stuff ************/
+	Vec_Tree CELL_INDEX(SIMDIM,cells.cCentre,20);
+	Sim_Tree NP1_INDEX(SIMDIM,pnp1,20);
+	CELL_INDEX.index->buildIndex();
+	NP1_INDEX.index->buildIndex();
+
+	FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
+	if(svar.Bcase == 6)
+	{
+		cout << "Building cell neighbours..." << endl;
+		FindCellNeighbours(CELL_INDEX, cells.cCentre, cells.cNeighb);
+	}
+		// cells.Build_cPolys();
 	///*** Perform an iteration to populate the vectors *****/
 	// std::vector<std::vector<uint>>::iterator nfull = 
 	// 	std::max_element(outlist.begin(),outlist.end(),
@@ -474,58 +188,7 @@ int main(int argc, char *argv[])
 
 	
 	// cout << avar.nfull << endl;
-
-	/*Check if a particle is running low on neighbours, and add ficticious particles*/
-	const uint start = svar.bndPts;
-	const uint end = svar.totPts;
-
-	std::vector<std::vector<Part>> neighb;
-	neighb.reserve(end);
-	for(uint ii = 0; ii < start; ++ii)
-		neighb.emplace_back();
-
-	#pragma omp parallel shared(svar, pnp1, outlist)
-	{
-		std::vector<std::vector<Part>> local;
-		#pragma omp for schedule(static) nowait 
-		for (uint ii = start; ii < end; ++ii)
-		{
-			std::vector<Part> temp;
-			if(svar.ghost == 1 && pnp1[ii].b == 2 && outlist[ii].size() < avar.nfull)
-				temp = PoissonSample::generatePoissonPoints(svar,fvar,ii,pnp1,outlist);
-
-			for(auto j:outlist[ii])
-				temp.emplace_back(Part(pnp1[j]));
-
-			local.emplace_back(temp);
-		}
-
-		#pragma omp for schedule(static) ordered
-    	for(int i=0; i<NTHREADS; i++)
-    	{
-    		#pragma omp ordered
-    		neighb.insert(neighb.end(),local.begin(),local.end());
-    	}
-	}
-	
-
-	// for(uint ii = start; ii < end; ++ii)
-	// {
-	// 	std::vector<Part> temp;
-	// 	for(auto j:outlist[ii])
-	// 			temp.emplace_back(Part(pnp1[j])); 
-
-	// 	neighb.emplace_back(temp);
-	// }
-
-	#pragma omp parallel for shared(outlist)
-	for(uint ii = svar.bndPts; ii < svar.totPts; ++ii)
-	{
-		pnp1[ii].theta = outlist[ii].size(); 
-	}
-
-
-	Forces(svar,fvar,avar,pnp1,neighb,outlist);
+	First_Step(svar,fvar,avar,outlist,pnp1,airP);
 
 	///*************** Open simulation files ***************/
 	std::ofstream f1,f2,f3,fb;
@@ -541,9 +204,9 @@ int main(int argc, char *argv[])
 	if(svar.frameout ==2)
 		f3.open("Crossflow.txt", std::ios::out);
 
-	f1 << std::scientific << setprecision(6);
-	f2 << std::scientific<< setw(10);
-	f3 << std::scientific << setw(10);
+	f1 << std::scientific << std::setprecision(6);
+	f2 << std::scientific << std::setw(10);
+	f3 << std::scientific << std::setw(10);
 
 	if(svar.outtype == 0 )
 	{
@@ -583,8 +246,9 @@ int main(int argc, char *argv[])
 				}
 				else
 				{
+					State empty;
 					Write_ASCII_header(fb,svar);
-					Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts);
+					Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,empty);
 				}
 			}
 			else
@@ -601,9 +265,9 @@ int main(int argc, char *argv[])
 		if(f1.is_open())
 		{
 			Write_ASCII_header(f1,svar);
-			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts);
+			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,airP);
 			if(svar.Bcase != 0 && svar.Bcase != 5 && svar.boutform == 1)
-				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts);
+				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,airP);
 
 		}
 		else
@@ -639,7 +303,7 @@ int main(int argc, char *argv[])
 		double stept=0.0;
 		while (stept<svar.framet)
 		{
-		    error = Newmark_Beta(NP1_INDEX,svar,fvar,avar,cells,pn,pnp1,outlist);
+		    error = Newmark_Beta(NP1_INDEX,CELL_INDEX,svar,fvar,avar,cells,pn,pnp1,airP,outlist);
 		    stept+=svar.dt;
 		    ++stepits;
 		    //cout << svar.t << "  " << svar.dt << endl;
@@ -674,9 +338,9 @@ int main(int argc, char *argv[])
 		} 
 		else if (svar.outtype == 1)
 		{
-			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts);
+			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,airP);
 			if(svar.Bcase != 0 && svar.Bcase != 5 && svar.boutform == 1)
-				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts);
+				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,airP);
 
 		}
 	}

@@ -23,9 +23,15 @@ enum fileType_e { FULL = 0, GRID = 1, SOLUTION = 2 };
 /*************************** BINARY OUTPUTS ******************************/
 /*************************************************************************/
 
-void Write_Binary_Timestep(SIM &svar, State &pnp1, uint start, uint end, uint zone)
+void Write_Binary_Timestep(const SIM &svar, const State &pnp1, 
+	const uint start, const uint end, const uint zone)
 {
-	int size = end - start;
+	uint size = end - start;
+
+	#ifdef DEBUG
+		cout << start << "  " << end << "  " << size << endl;
+		cout << svar.bndPts << "  " << svar.totPts << "  " << svar.simPts << endl;
+	#endif
 
     INTEGER4 IMax = size;
     INTEGER4 JMax = 1;
@@ -34,6 +40,9 @@ void Write_Binary_Timestep(SIM &svar, State &pnp1, uint start, uint end, uint zo
     INTEGER4 JCellMax                 = 0;
     INTEGER4 KCellMax                 = 0;
     INTEGER4 DIsDouble                = 0;
+    if(sizeof(ldouble) == 8)	/*If */
+		DIsDouble            = 1;
+
     double   SolTime                  = svar.t;
     INTEGER4 StrandID;      
     INTEGER4 ParentZn                 = 0;
@@ -84,46 +93,49 @@ void Write_Binary_Timestep(SIM &svar, State &pnp1, uint start, uint end, uint zo
     	exit(-1);
 
     /*Write the basic position data present for all outputs*/
-    float* x = new float[size];
+    double* x = new double[size];
     for(uint dim = 0; dim < SIMDIM; ++dim)
     {
-    	for(uint i = start; i < end; ++i)
-  			x[i-start] = pnp1[i].xi(dim);
+    	for(uint ii = start; ii < end; ++ii)
+  			x[ii-start] = pnp1[ii].xi(dim);
 
  		I   = TECDAT142(&IMax, x, &DIsDouble);
     }
     
     if(svar.outform == 1)
     {
-    	float* v = new float[size];
-	  	float* a = new float[size];
-	  	float* rho = new float[size];
-	  	for(uint i = start; i < end; ++i)
+    	double* v = new double[size];
+	  	double* a = new double[size];
+	  	double* rho = new double[size];
+	  	double* p = new double[size];
+	  	for(uint ii = start; ii < end; ++ii)
   		{
-	  		v[i-start] = pnp1[i].v.norm();
-	  		a[i-start] = pnp1[i].f.norm();
-	  		rho[i-start] = pnp1[i].rho;
+	  		v[ii-start] = pnp1[ii].v.norm();
+	  		a[ii-start] = pnp1[ii].f.norm();
+	  		rho[ii-start] = pnp1[ii].rho;
+	  		p[ii-start] = pnp1[ii].p;
 	  	}
 	  	I   = TECDAT142(&IMax, v, &DIsDouble);
 	    I   = TECDAT142(&IMax, a, &DIsDouble);
 	    I   = TECDAT142(&IMax, rho, &DIsDouble);
+	    I   = TECDAT142(&IMax, p, &DIsDouble);
     }
     else if (svar.outform == 2)
     {
-    	float* a = new float[size];
-	  	float* Af = new float[size];
-	  	float* Sf = new float[size];
-	  	float* ax = new float[size];
+    	double* a = new double[size];
+	  	double* Af = new double[size];
+	  	double* Sf = new double[size];
+	  	double* ax = new double[size];
 	  	int* b = new int[size];
-	  	float* theta = new float[size];
+	  	double* theta = new double[size];
 
-	  	for(uint i = start; i < end; ++i)
+	  	for(uint ii = start; ii < end; ++ii)
 	  	{
-	  		a[i-start] = pnp1[i].f.norm();
-	  		Af[i-start] = pnp1[i].Af.norm();
-	  		Sf[i-start] = pnp1[i].Sf.norm();
-	  		b[i-start] = pnp1[i].b;
-	  		theta[i-start] = pnp1[i].theta;
+	  		a[ii-start] = pnp1[ii].f.norm();
+	  		Af[ii-start] = pnp1[ii].Af.norm();
+	  		Sf[ii-start] = pnp1[ii].Sf.norm();
+	  		b[ii-start] = pnp1[ii].b;
+	  		theta[ii-start] = pnp1[ii].theta;
 	  	}
 
 	  	I   = TECDAT142(&IMax, a, &DIsDouble);
@@ -131,8 +143,8 @@ void Write_Binary_Timestep(SIM &svar, State &pnp1, uint start, uint end, uint zo
 	    I   = TECDAT142(&IMax, Sf, &DIsDouble);
 	    for(uint dim = 0; dim < SIMDIM; ++dim)
 	    {
-	    	for(uint i = start; i < end; ++i)
-  				ax[i-start] = pnp1[i].Af(dim);
+	    	for(uint ii = start; ii < end; ++ii)
+  				ax[ii-start] = pnp1[ii].Af(dim);
 	  			
 	 		I   = TECDAT142(&IMax, ax, &DIsDouble);
 	    }
@@ -141,7 +153,7 @@ void Write_Binary_Timestep(SIM &svar, State &pnp1, uint start, uint end, uint zo
     }
 }
 
-void Init_Binary_PLT(SIM &svar)
+void Init_Binary_PLT(const SIM &svar)
 {
 	INTEGER4 Debug      = 0;
     INTEGER4 VIsDouble  = 0;
@@ -155,44 +167,29 @@ void Init_Binary_PLT(SIM &svar)
      * Open the file and write the tecplot datafile
      * header information
      */
-    std::string variables = "x y";
-    switch(SIMDIM)
-    {
-    	case 2:
-    		if(svar.outform == 0)
-		    {
-			    break;
-			}
-			else if (svar.outform == 1)
-			{
-				variables = "x y v a rho P";
-				break;
+    #if SIMDIM == 2
+    	std::string variables = "x y";	
+		if (svar.outform == 1)
+		{
+			variables = "x y v a rho P";
+		}
+		else if (svar.outform == 2)
+		{
+			variables = "x y a Af Sf ax ay b theta";
+		}
+	#endif
 
-			}
-			else if (svar.outform == 2)
-			{
-				variables = "x y a Af Sf ax ay b theta";
-				break;
-			}
-			break;
-    	case 3:
-		    if(svar.outform == 0)
-		    {
-			    variables ="x y z";
-			    break;
-			}
-			else if (svar.outform == 1)
-			{
-				variables = "x y z v a rho P";
-				break;
-			}
-			else if (svar.outform == 2)
-			{
-				variables = "x y z a Af Sf ax ay az b theta";
-				break;
-			}
-			break;
-	}
+	#if SIMDIM == 3
+		std::string variables = "x y z";  
+		if (svar.outform == 1)
+		{
+			variables = "x y z v a rho P";
+		}
+		else if (svar.outform == 2)
+		{
+			variables = "x y z a Af Sf ax ay az b theta";
+		}
+	#endif
 
 	I = TECINI142((char*)"Simulation Particles", 
 						  variables.c_str(),  
@@ -207,7 +204,7 @@ void Init_Binary_PLT(SIM &svar)
     	exit(-1);
 }
 
-void Write_Boundary_Binary(SIM &svar, State &pnp1)
+void Write_Boundary_Binary(const SIM &svar, const State &pnp1)
 {
 	INTEGER4 Debug      = 0;
     INTEGER4 VIsDouble  = 0;
@@ -221,44 +218,29 @@ void Write_Boundary_Binary(SIM &svar, State &pnp1)
      * Open the file and write the tecplot datafile
      * header information
      */
-    std::string variables = "x y";
-    switch(SIMDIM)
-    {
-    	case 2:
-    		if(svar.outform == 0)
-		    {
-			    break;
-			}
-			else if (svar.outform == 1)
-			{
-				variables = "x y v a rho P";
-				break;
+    #if SIMDIM == 2
+    	std::string variables = "x y";	
+		if (svar.outform == 1)
+		{
+			variables = "x y v a rho P";
+		}
+		else if (svar.outform == 2)
+		{
+			variables = "x y a Af Sf ax ay b theta";
+		}
+	#endif
 
-			}
-			else if (svar.outform == 2)
-			{
-				variables = "x y a Af Sf ax ay b theta";
-				break;
-			}
-			break;
-    	case 3:
-		    if(svar.outform == 0)
-		    {
-			    variables ="x y z";
-			    break;
-			}
-			else if (svar.outform == 1)
-			{
-				variables = "x y z v a rho P";
-				break;
-			}
-			else if (svar.outform == 2)
-			{
-				variables = "x y z a Af Sf ax ay az b theta";
-				break;
-			}
-			break;
-	}
+	#if SIMDIM == 3
+		std::string variables = "x y z";  
+		if (svar.outform == 1)
+		{
+			variables = "x y z v a rho P";
+		}
+		else if (svar.outform == 2)
+		{
+			variables = "x y z a Af Sf ax ay az b theta";
+		}
+	#endif
 
 	I = TECINI142((char*)"Boundary Particles", 
 						  variables.c_str(),  

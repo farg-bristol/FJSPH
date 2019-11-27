@@ -75,7 +75,7 @@ std::vector<StateVecD> GetColourGrad(const SIM &svar, const FLUID &fvar, const S
 }
 
 StateVecD Base(const FLUID &fvar, const Part &pi, const Part &pj, 
-	const StateVecD &Rij, const StateVecD &Vij, const ldouble &r, 
+	const StateVecD &Rij, const StateVecD &Vij, const ldouble r, 
 	const StateVecD &Grad, std::vector<ldouble> &mu)
 {
 	/*Pressure and artificial viscosity - Monaghan (1994) p.400*/
@@ -133,31 +133,31 @@ StateVecD HuST(const FLUID &fvar, const Part &pi, const Part &pj,
 }
 
 ///**************** RESID calculation **************
-void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, State& pnp1/*, State& airP*/,
-	 const vector<vector<Part>>& neighb, const outl& outlist)
+void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*, State& airP*/,
+	 const vector<vector<Part>>& neighb, const outl& outlist,
+	 vector<StateVecD>& RV, vector<ldouble>& Rrho)
 {
-	svar.maxmu=0; 					/* CFL Parameter */
-	StateVecD g = StateVecD::Zero();	/*Gravity Vector*/
-	#if SIMDIM == 3
-		g(2) = -9.81;
-	#else
-		g(1) = -9.81;
-	#endif
+	svar.maxmu=0; 					    /* CFL Parameter */
 	const uint start = svar.bndPts;
 	const uint end = svar.totPts;
-	const uint piston = svar.psnPts;
+
+	/*Gravity Vector*/
+	#if SIMDIM == 3
+		const static StateVecD g = StateVecD(0.0,0.0,-9.81);
+	#else
+		const static StateVecD g = StateVecD(0.0,-9.81);
+	#endif
+	// const uint piston = svar.psnPts;
 
 	/********* LOOP 1 - all points: Calculate numpartdens ************/
-	ldouble numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
+	// ldouble numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
 	// std::vector<StateVecD> cgrad(svar.totPts,StateVecD::Zero());
 	// cgrad = GetColourGrad(svar,fvar,pnp1,outlist);
 
-	std::vector<ldouble> Rrhocontr(svar.totPts,0.0);
-	std::vector<StateVecD> RV(svar.totPts,StateVecD::Zero()); /*Residual force*/
-	std::vector<StateVecD> ST(svar.totPts,StateVecD::Zero()); /*Surface tension force*/		
-
-	#pragma omp parallel shared(g,numpartdens)
+	// std::vector<StateVecD> ST(svar.totPts,StateVecD::Zero()); /*Surface tension force*/		
+	#pragma omp parallel /*shared(numpartdens)*/
 	{
+
 /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
 		// #pragma omp for reduction(+:Rrhocontr)
 		// for (uint ii=0; ii < start; ++ii)
@@ -177,17 +177,16 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, State& pnp1/*, State
 		// }
 
 /******** LOOP 3 - Piston points: Calculate density and pressure. **********/		
-		#pragma omp for reduction(+:Rrhocontr, RV) /*Reduction defs in Aero.h*/
+		#pragma omp for reduction(+:RV, Rrho) /*Reduction defs in Aero.h*/
 		for (uint ii=0; ii < start; ++ii)
 		{
-			Part pi = pnp1[ii];
-			uint size = outlist[ii].size();
+			const Part pi = pnp1[ii];
+			const uint size = outlist[ii].size();
 			// pnp1[ii].theta = double(size);
 			// pnp1[ii].theta = 0.0;
 
 			std::vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
-			mu.reserve(size+1);
-			mu.emplace_back(0);	/*Avoid dereference of empty vector*/			
+			mu.reserve(size+1);			
 			if (ii > neighb.size())
 			{
 				cout << "neighb array smaller than totPts" << endl;
@@ -195,41 +194,39 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, State& pnp1/*, State
 			}
 			for (Part const& pj:neighb[ii])
 			{	/* Neighbour list loop. */
-				StateVecD contrib = StateVecD::Zero();
-
-				// Part pj(pnp1[j]);
 
 				/*Check if the position is the same, and skip the particle if yes*/
-				// #pragma omp critical
-				// cout << pi.partID << "  " << pj.partID << "  ";
 				if(pi.partID == pj.partID)
 					continue;
 
-				StateVecD Rij = pj.xi-pi.xi;
-				StateVecD Vij = pj.v-pi.v;
-				ldouble r = Rij.norm();
-				StateVecD Grad = W2GradK(Rij, r,fvar.H, fvar.correc);
+				const StateVecD Rij = pj.xi-pi.xi;
+				const StateVecD Vij = pj.v-pi.v;
+				const ldouble r = Rij.norm();
+				const StateVecD Grad = W2GradK(Rij, r,fvar.H, fvar.correc);
 
-				contrib = Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
+				StateVecD contrib = Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
 				/*drho/dt*/
-				Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
+				Rrho[ii] -= pj.m*(Vij.dot(Grad));
 				RV[ii] += pj.m*contrib;
 			}/*End of neighbours*/
 			
 		} /*End of boundary parts*/
 
+		
+
 /******* LOOP 4 - All simulation points: Calculate forces on the fluid. *********/
-		#pragma omp for reduction(+:Rrhocontr, RV, ST) /*Reduction defs in Aero.h*/
-		for (uint ii=start; ii < end; ++ii)
+		#pragma omp for reduction(+:Rrho, RV/*, ST*/)  /*Reduction defs in Aero.h*/
+		for (uint ii = start; ii < end; ++ii)
 		{
 			Part pi = pnp1[ii];
 			uint size = outlist[ii].size();
 			// pnp1[ii].theta = double(size);
 			// pnp1[ii].theta = 0.0;
 
-			std::vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
+			vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
 			mu.reserve(size+1);
-			mu.emplace_back(0);	/*Avoid dereference of empty vector*/			
+			mu.emplace_back(0);	/*Avoid dereference of empty vector*/		
+
 			if (ii > neighb.size())
 			{
 				cout << "neighb array smaller than totPts" << endl;
@@ -237,78 +234,73 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, State& pnp1/*, State
 			}
 			for (Part const& pj:neighb[ii])
 			{	/* Neighbour list loop. */
-				StateVecD contrib = StateVecD::Zero();
-				StateVecD visc = StateVecD::Zero();
-				StateVecD SurfC= StateVecD::Zero();
-
-				// Part pj(pnp1[j]);
 
 				/*Check if the position is the same, and skip the particle if yes*/
-				// #pragma omp critical
-				// cout << pi.partID << "  " << pj.partID << "  ";
 				if(pi.partID == pj.partID)
 					continue;
 
-				StateVecD Rij = pj.xi-pi.xi;
-				StateVecD Vij = pj.v-pi.v;
-				ldouble r = Rij.norm();
-				StateVecD Grad = W2GradK(Rij, r,fvar.H, fvar.correc);
+				const StateVecD Rij = pj.xi-pi.xi;
+				const StateVecD Vij = pj.v-pi.v;
+				const ldouble r = Rij.norm();
+				const StateVecD Grad = W2GradK(Rij, r,fvar.H, fvar.correc);
 
-				contrib = Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
+				/*Momentum contribution - Monaghan (1994)*/
+				const StateVecD contrib = Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
 				
+				/*Laminar Viscosity - Morris (2003)*/
+				const StateVecD visc    = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
+
 				if (pj.b != 3)
 				{
-					/*Laminar Viscosity - Morris (2003)*/
-					visc    = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
-				
 					/*Surface Tension - Nair & Poeschel (2017)*/
-					SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
+					// StateVecD SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
 					// SurfC = HuST(fvar,pi,pj,Rij,r,cgrad[ii],cgrad[jj]);
-				}
+				
 					/*drho/dt*/
-					Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
-				
-
-				
-
-				RV[ii] += pj.m*contrib + pj.m*visc + SurfC/pj.m;
-
-				if (pj.b == 3)
-				{
-					ST[ii] += pj.m*contrib + pj.m*visc;
+					Rrho[ii] -= pj.m*(Vij.dot(Grad));
 				}
+
+				RV[ii] += pj.m*contrib + pj.m*visc /*+ SurfC/pj.m*/;
+
+				// if (pj.b == 3)
+				// {
+				// 	ST[ii] += pj.m*contrib + pj.m*visc;
+				// }
 
 				// ST[ii] += SurfC/pj.m;
 			}/*End of neighbours*/
 			
+			RV[ii] += g;
 			//CFL f_cv Calc
-			ldouble it = *max_element(mu.begin(),mu.end());
-			if (it > svar.maxmu)
-				svar.maxmu=it;
+			double it = *max_element(mu.begin(),mu.end());
+			if(it > svar.maxmu)
+				svar.maxmu = it;
 		} /*End of sim parts*/
 
 		// cout << endl;
 		//Update the actual structure
-		StateVecD Force = StateVecD::Zero();
-		#pragma omp for
-		for (uint ii = 0; ii < piston; ++ii)
-		{
-			Force += RV[ii];
-		}
-		svar.Force = Force;
+		// StateVecD Force = StateVecD::Zero();
+		// #pragma omp for
+		// for (uint ii = 0; ii < piston; ++ii)
+		// {
+		// 	Force += RV[ii];
+		// }
+		// svar.Force = Force;
 
-		#pragma omp for
-		for(uint ii=0; ii < end; ++ii)
-		{
-			pnp1[ii].f = RV[ii] + g;
-			pnp1[ii].Rrho = Rrhocontr[ii]; /*drho/dt*/
-			pnp1[ii].Sf = ST[ii];			
-		}
+		// #pragma omp for
+		// for(uint ii=0; ii < end; ++ii)
+		// {
+		// 	pnp1[ii].f = RV[ii] + g;
+		// 	pnp1[ii].Rrho = Rrho[ii]; /*drho/dt*/
+		// 	// pnp1[ii].Sf = ST[ii];			
+		// }
+		
+	}	/*End of declare parallel */
+	
 
-	}
 		/*Aerodynamic force*/
 	if(svar.Bcase > 1)
-		ApplyAero(svar,fvar,avar,pnp1,outlist);
+		ApplyAero(svar,fvar,avar,pnp1,outlist,RV);
 	
 }
 

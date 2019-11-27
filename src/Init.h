@@ -9,8 +9,6 @@
 #include "IO.h"
 #include "Add.h"
 
-using namespace std;
-
 /*Make a guess on how big the array is going to be (doesn't need to be totally exact)*/
 int ParticleCount(SIM &svar)
 {
@@ -186,27 +184,31 @@ int ParticleCount(SIM &svar)
 		}
 		else if (svar.Bcase == 7) 
 		{	/*Piston driven flow*/
-			/*Create the reservoir tank*/
-			ldouble tankW = svar.Start(0);
-			ldouble tankD = svar.Start(1);
-			ldouble stepb = (svar.Pstep*svar.Bstep);
 
-			uint pisCnt = ceil((tankW -4*svar.Pstep)/stepb);
-			
-			/*Create the reservoir tank*/
-			uint wall = ceil((-svar.Jet(1)*2+(svar.Jet(1)*2+tankD+2*svar.dx)/stepb));
-			
-			/*Create the tapering section*/
-			uint taper = ceil((svar.Jet(1))/stepb);
+			#if SIMDIM == 2
+				/*Create the reservoir tank*/
+				ldouble tankW = svar.Start(0);
+				ldouble tankD = svar.Start(1);
+				ldouble stepb = (svar.Pstep*svar.Bstep);
 
-			/*Create the exit bit.*/
-			uint exit = ceil(svar.Jet(1)/stepb);
+				uint pisCnt = ceil((tankW + 8*svar.dx-4*svar.Pstep)/stepb);
+				
+				/*Create the reservoir tank*/
+				uint wall = ceil((tankD+4*svar.dx+6*svar.Pstep)/stepb);
+				
+				/*Create the tapering section*/
+				ldouble theta = atan(svar.Jet(1)/(0.5*tankW-0.5*svar.Jet(0)));
+				ldouble stepy = stepb*sin(theta);
+				uint taper = ceil((svar.Jet(1))/stepy);
 
-			/*Simulation Particles*/
-			uint simCount = floor(tankW/svar.dx)*floor(tankD/svar.dx);	
+				/*Create the exit bit.*/
+				uint exit = ceil(svar.Jet(1)/stepb);
 
-			partCount = pisCnt + 2*(wall+taper+exit) + simCount;
+				/*Simulation Particles*/
+				uint simCount = ceil(tankW/svar.dx)*ceil(tankD/svar.dx);	
 
+				partCount = pisCnt + 2*(wall+taper+exit) + simCount;
+			#endif
 		}	
 
 	return partCount;
@@ -216,7 +218,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 {
 	if (svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
 		cout << "Initialising simulation..." << endl;
-	else if (svar.Bcase == 5)
+	else if (svar.Bcase == 5 || svar.Bcase == 7)
 		cout << "Initialising simulation with " << svar.finPts << " points" << endl;
 	else
 		cout << "Initialising simulation with " << svar.simPts << " points" << endl;	
@@ -485,83 +487,182 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 		#endif
 	}
 	else if (svar.Bcase == 7) 
-	{	/*Piston driven flow*/
-		ldouble stepb = (svar.Pstep*svar.Bstep);
-		ldouble tankW = svar.Start(0)+8*svar.dx;
-		ldouble tankD = svar.Start(1);
+	{	
+		#if SIMDIM == 3
+			/*Piston driven flow*/
+			ldouble stepb = (svar.Pstep*svar.Bstep);
+			ldouble tankW = svar.Start(0)+8*svar.dx;
+			ldouble tankD = svar.Start(1);
 
-		ldouble jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Diameter of hole (or width)*/
-		ldouble resR = 0.5*tankW;
+			ldouble jetR = 0.5*(svar.Jet(0)+8*svar.dx); /*Diameter of hole (or width)*/
+			ldouble resR = 0.5*tankW;
+			v = (avar.vJet*pow(jetR,2))/(0.6*pow(resR,2));
+			
 
-		v = (avar.vJet*pow(jetR,2))/(0.6*pow(resR,2));
-		/*Create the piston*/
-		for(ldouble x = -(resR-fvar.H); x < (resR -fvar.H); x+=stepb)
-		{
-			StateVecD xi(-resR,-(2*svar.Jet(1)+tankD+fvar.H));
-			xi = svar.Rotate*xi;
-			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
-			pID++;
-			svar.psnPts = pID;
-		}
+			/*Create the piston*/
+			for (ldouble z = -resR; z <= resR; z+= svar.dx)
+			{ /*Do the centerline of points*/
+				ldouble y = -(2*svar.Jet(1)+tankD+fvar.H);
+				StateVecD xi(0.0,y,z);
+				xi = svar.Rotate*xi;
+				xi += svar.Start;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,0,pID));
+				++pID;
+			}
 
-		/*Create the reservoir tank*/
-		for (ldouble y = -(svar.Jet(1)*2+tankD+fvar.H); y <= -svar.Jet(1)*2; y+=stepb)
-		{
-			StateVecD xi(-resR,y);
-			xi = svar.Rotate*xi;
-			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
-			pID++;
-		}
+			for (ldouble x = svar.dx; x < resR ; x+=svar.dx)
+			{ /*Do the either side of the centerline*/
+				for (ldouble z = -resR; z <= resR; z+= svar.dx)
+				{
+					if(((x*x)/(resR*resR) + (z*z)/(resR*resR)) <= 1.0 )
+		    		{   /*If the point is inside the hole diameter, add it*/
+		    			ldouble y = -(2*svar.Jet(1)+tankD+fvar.H);
+						StateVecD temp(x,y,z);
+						StateVecD xi = svar.Rotate*temp;
+						xi+= svar.Start;
+						pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,0,pID));
+						++pID;
+						++svar.simPts;
+						++svar.nrefresh;
 
-		/*Create the tapering section*/
-		for (ldouble y = -svar.Jet(1)*2; y < -svar.Jet(1); y+=stepb)
-		{
-			/*Interpolate between resR and jetR*/
-			ldouble x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
-			StateVecD xi(-x,y);
-			xi = svar.Rotate*xi;
-			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
-			pID++;
-		}
+						temp(0) = -x;
+						xi = svar.Rotate*temp;
+						xi+= svar.Start;
+						pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,0,pID));
+						++pID;
+					}
+				}
+			}
 
-		/*Create the exit bit.*/
-		for (ldouble y = -svar.Jet(1); y < 0; y+=stepb)
-		{
-			StateVecD xi(-jetR,y);
-			xi = svar.Rotate*xi;
-			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
-			pID++;
-		}
 
-		/*Create the exit bit.*/
-		for (ldouble y = 0; y > -svar.Jet(1); y-=stepb)
-		{
-			StateVecD xi(jetR,y);
-			xi = svar.Rotate*xi;
-			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
-			pID++;
-		}
+			/*Create the reservior*/
+	    	ldouble dtheta = atan((stepb)/(resR));
+			for (ldouble y = (-svar.Jet(1)*2-tankW); y <= -svar.Jet(1)*2; y+=stepb)			
+			{	
+				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				{
+					StateVecD xi(resR*sin(theta), y, resR*cos(theta));
+					/*Apply Rotation...*/
+					xi = svar.Rotate*xi;
+					xi += svar.Start;
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
+				}	
+			}
 
-		/*Create the tapering section*/
-		for (ldouble y = -svar.Jet(1); y > -svar.Jet(1)*2; y-=stepb)
-		{
-			/*Interpolate between resR and jetR*/
-			ldouble x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
-			StateVecD xi(x,y);
-			xi = svar.Rotate*xi;
-			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
-			pID++;
-		}
+			/*Interpolate between the big and small diameters*/
+			for (ldouble y = -svar.Jet(1)*2; y < -svar.Jet(1)*1; y+=stepb)			
+			{	
+				ldouble x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
+				dtheta = atan((stepb)/(x));
+				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				{
+					StateVecD xi(x*sin(theta), y, x*cos(theta));
+					/*Apply Rotation...*/
+					xi = svar.Rotate*xi;
+					xi += svar.Start;
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
+				}	
+			}
 
-		/*Create the other wall.*/
-		for (ldouble y = -svar.Jet(1)*2; y >= -(svar.Jet(1)*2+tankD+fvar.H); y-=stepb)
-		{
-			StateVecD xi(resR,y);
-			xi = svar.Rotate*xi;
-			pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
-			pID++;
-		}
+			/*Create the exit section.*/
+			dtheta = atan((stepb)/(jetR));
+			for (ldouble y = -svar.Jet(1); y < 0; y+=stepb)			
+			{	
+				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				{
+					StateVecD xi(jetR*sin(theta), y, jetR*cos(theta));
+					/*Apply Rotation...*/
+					xi = svar.Rotate*xi;
+					xi += svar.Start;
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+					pID++;
+				}	
+			}
+		#endif
 
+		#if SIMDIM == 2
+			/*Piston driven flow*/
+			ldouble stepb = (svar.Pstep*svar.Bstep);
+			ldouble tankW = svar.Start(0)+8*svar.dx;
+			ldouble tankD = svar.Start(1)+4*svar.dx;
+
+			ldouble jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Diameter of hole (or width)*/
+			ldouble resR = 0.5*tankW;
+
+			v = (avar.vJet*pow(jetR,2))/(0.6*pow(resR,2));
+			/*Create the piston*/
+			for(ldouble x = -(resR-fvar.H); x < (resR -fvar.H); x+=stepb)
+			{
+				StateVecD xi(x,-(2*svar.Jet(1)+tankD+3*fvar.H));
+				xi = svar.Rotate*xi;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+				svar.psnPts = pID;
+			}
+
+			v=StateVecD::Zero();
+			/*Create the reservoir tank*/
+			for (ldouble y = -(svar.Jet(1)*2+tankD+3*fvar.H); y <= -svar.Jet(1)*2; y+=stepb)
+			{
+				StateVecD xi(-resR,y);
+				xi = svar.Rotate*xi;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+			}
+
+			ldouble theta = atan(svar.Jet(1)/(resR-jetR));
+			ldouble stepy = stepb*sin(theta);
+			/*Create the tapering section*/
+			for (ldouble y = -svar.Jet(1)*2; y < -svar.Jet(1); y+=stepy)
+			{
+				/*Interpolate between resR and jetR*/
+				ldouble x = resR - (y+2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
+				StateVecD xi(-x,y);
+				xi = svar.Rotate*xi;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+			}
+
+			/*Create the exit bit.*/
+			for (ldouble y = -svar.Jet(1); y < 0; y+=stepb)
+			{
+				StateVecD xi(-jetR,y);
+				xi = svar.Rotate*xi;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+			}
+
+			/*Create the exit bit.*/
+			for (ldouble y = 0; y > -svar.Jet(1); y-=stepb)
+			{
+				StateVecD xi(jetR,y);
+				xi = svar.Rotate*xi;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+			}
+
+			/*Create the tapering section*/
+			for (ldouble y = -svar.Jet(1); y > -svar.Jet(1)*2; y-=stepy)
+			{
+				/*Interpolate between resR and jetR*/
+				ldouble x = resR - (y+2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
+				StateVecD xi(x,y);
+				xi = svar.Rotate*xi;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+			}
+
+			/*Create the other wall.*/
+			for (ldouble y = -svar.Jet(1)*2; y >= -(svar.Jet(1)*2+tankD+3*fvar.H); y-=stepb)
+			{
+				StateVecD xi(resR,y);
+				xi = svar.Rotate*xi;
+				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,0,pID));
+				pID++;
+			}
+		#endif
 
 
 	}
@@ -620,26 +721,77 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 	}
 	else if (svar.Bcase == 7)
 	{
-		/*Create fluid in the reservoir*/
-		ldouble tankW = svar.Start(0);
-		ldouble tankD = svar.Start(1);
+		svar.simPts = 0;
+		#if SIMDIM == 3
+			/*Create fluid in the reservoir*/
+			ldouble tankW = svar.Start(0);
+			ldouble tankD = svar.Start(1);
 
-		press = fvar.pPress;
-		rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
+			press = fvar.pPress;
+			rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
 
-		/*Create the simulation pn*/
-		for(ldouble x = -(0.5*tankW); x < 0.5*tankW; x+=svar.dx) 
-		{
-			for(ldouble y = -(tankD + 2*svar.Jet(1)); y < 2*svar.Jet(1); y+=svar.dx)
-			{				
-				StateVecD xi(x,y);		
-				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,2,pID));
-				pn.back().cellRho = fvar.rhog;
-				pn.back().cellP = 20000-fvar.gasPress;
-				pID++;
+			/*Create the simulation pn*/
+			for (ldouble y = -(tankD + 2*svar.Jet(1)); y < 2*svar.Jet(1); y+=svar.dx)
+			{
+				for (ldouble z = -tankW; z <= tankW; z+= svar.dx)
+				{ /*Do the centerline of points*/
+					StateVecD xi(0.0,y,z);
+					xi = svar.Rotate*xi;
+					pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,0,pID));
+					++pID;
+					++svar.simPts;
+				}
+
+				for (ldouble x = svar.dx; x < tankW ; x+=svar.dx)
+				{ /*Do the either side of the centerline*/
+					for (ldouble z = -tankW; z <= tankW; z+= svar.dx)
+					{
+						if(((x*x)/(tankW*tankW) + (z*z)/(tankW*tankW)) <= 1.0 )
+			    		{   /*If the point is inside the hole diameter, add it*/
+							StateVecD temp(x,y,z);
+							StateVecD xi = svar.Rotate*temp;
+						
+							pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,0,pID));
+							++pID;
+							++svar.simPts;
+							temp(0) = -x;
+							xi = svar.Rotate*temp;
+							pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,0,pID));
+							++pID;
+							++svar.simPts;
+						}
+					}
+				}
 			}
-		}
 
+		#endif
+		#if SIMDIM == 2
+			/*Create fluid in the reservoir*/
+			ldouble tankW = svar.Start(0);
+			ldouble tankD = svar.Start(1);
+
+			press = fvar.pPress;
+			rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
+
+			/*Create the simulation pn*/
+			for(ldouble y = -(tankD + 2*svar.Jet(1)+4*svar.dx); y < -(2*svar.Jet(1)+4*svar.dx); y+=svar.dx)
+			{
+				for(ldouble x = -(0.5*tankW); x < 0.5*tankW; x+=svar.dx) 
+				{		
+					StateVecD xi(x,y);		
+					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,2,pID));
+					pn.back().cellRho = fvar.rhog;
+					pn.back().cellP = 20000-fvar.gasPress;
+					pID++;
+					++svar.simPts;
+				}
+			}
+		#endif
+
+		for (auto p: pn)
+			pnp1.emplace_back(p);
+
+		svar.clear = 0.0;
 	}
 	else
 	{	
