@@ -254,6 +254,113 @@ int Crossings3D(std::vector<std::vector<StateVecD>> const& pfaces,
 }
 #endif
 
+void FirstCell(const uint start, const uint end, const uint ii, Vec_Tree& CELL_INDEX,
+     const MESH& cells, const outl& outlist, State& pnp1)
+ {
+        #if SIMDIM == 3
+        uint found = 0;
+        StateVecD testp = pnp1[ii].xi;
+        const size_t num_results = 10;
+        vector<size_t> ret_indexes(num_results);
+        vector<double> out_dists_sqr(num_results);
+
+        nanoflann::KNNResultSet<double> resultSet(num_results);
+        resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
+        
+        CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
+
+        // cout << "Test Point: " << testp(0) << "  " << testp(1)  << "  " << testp(2) << endl;
+        // cout << cells.cFaces.size() << endl;
+        uint count = 0;
+        for(auto index:ret_indexes)
+
+        // for(uint jj = 0; jj < cells.cFaces.size(); ++jj)
+        {   
+            // cout << "Cell: " <<  index << "  Nfaces: " << cells.cFaces[static_cast<uint>(index)].size() << endl; 
+            // if (static_cast<uint>(index) >= cells.cFaces.size())
+            // {
+            //  cout << "Tried to access out of bounds. Stopping." << endl;
+            //  exit(-1);
+            // }
+
+            const std::vector<std::vector<StateVecD>> cell =
+                 cells.cFaces[/*jj*/index];
+
+            if(Crossings3D(cell,testp) /*cells.pointInside(static_cast<uint>(index),testP)*/)
+            {
+                uint jj =  static_cast<uint>(index);
+                pnp1[ii].cellID = jj;
+                pnp1[ii].cellV = cells.cVel[jj];
+                pnp1[ii].cellP = cells.cellP[jj];
+                pnp1[ii].cellRho = cells.cellRho[jj];
+                found = 1;
+                #ifdef DEBUG
+                    cout << "Cell found: " << jj << endl;
+                    cout << "Tries: " << count << endl;
+                    cout << "Test point: " << 
+                    testp[0] << "  " << testp[1] << "  " << testp[2] << endl;
+                    cout << "Containing cell vertices: " << endl;
+                    for(uint kk = 0; kk < cells.elems[jj].size(); ++kk)
+                    {
+                        uint index = cells.elems[jj][kk];
+                        cout << kk << "  " << cells.verts[index][0] << " " 
+                        << cells.verts[index][1] << " " << cells.verts[index][2] << endl;
+                    }
+                #endif
+                break;
+                
+            }
+            count++;
+        }
+
+        if(found != 1)
+        {
+            cout << "Containing cell not found. Something is wrong." << endl;
+            exit(-1);
+        }   
+    #else
+        uint found = 0;
+        StateVecD testp = pnp1[ii].xi;
+        /*Do a cell containment*/
+        const size_t num_results = 20;
+        vector<size_t> ret_indexes(num_results);
+        vector<double> out_dists_sqr(num_results);
+
+        nanoflann::KNNResultSet<double> resultSet(num_results);
+        resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
+        
+        CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
+
+        for(auto index:ret_indexes)
+        {   
+            // cout << "Cell: " << index << endl;
+        const std::vector<StateVecD> cell = 
+            cells.cVerts[static_cast<uint>(index)];
+            
+            if(Crossings2D(cell,testp))
+            {
+                uint jj =  static_cast<uint>(index);
+                pnp1[ii].cellID = jj;
+                pnp1[ii].cellV = cells.cVel[jj];
+                pnp1[ii].cellP = cells.cellP[jj];
+                pnp1[ii].cellRho = cells.cellRho[jj];
+                found = 1;
+                // cout << "Cell found: " << jj << endl;
+                // cout << "Found the containing cell!" << endl;
+                // cout << jj << "  " << cells.cVel[jj][0] << endl;
+                break;
+                
+            }
+        }
+
+        if(found != 1)
+        {
+        cout << "Containing cell not found. Something is wrong." << endl;
+            exit(-1);
+        }
+    #endif
+ }
+
 void FindCell(const uint start, const uint end, const ldouble nfull, Vec_Tree& CELL_INDEX,
      const MESH& cells, const outl& outlist, State& pnp1)
 {
@@ -273,7 +380,7 @@ void FindCell(const uint start, const uint end, const ldouble nfull, Vec_Tree& C
                 }
                 else
                 {
-                    for(auto cell:cells.cNeighb[pnp1[ii].cellID])
+                    for(const auto cell:cells.cNeighb[pnp1[ii].cellID])
                     {
 
                         if(Crossings3D(cells.cFaces[cell],testp))
