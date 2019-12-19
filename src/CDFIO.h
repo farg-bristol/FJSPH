@@ -9,7 +9,8 @@
 #include <string.h>
 #include <sstream>
 
-#include "NetCDF/netcdf"
+// #include <H5hut.h>
+#include <netcdf>
 using namespace netCDF;
 using namespace netCDF::exceptions;
 #define NC_ERR 2
@@ -450,7 +451,8 @@ void Read_TAUMESH(SIM& svar, MESH& cells, FLUID& fvar)
 		#ifdef DEBUG
 		dbout << "Getting prism cell faces." << endl;
 		#endif
-		facenum = {{1,4,5,2},{0,3,5,2},{0,3,4,1},{0,1,2},{5,4,3}};
+		facenum = {{1,4,5},{1,5,2},{0,3,5},{0,5,2},
+				   {0,3,4},{0,4,1},{0,1,2},{5,4,3}};
 		Get_Cell_Faces(cells.verts,prism,facenum,cFaces);
 		
 		cells.cFaces.insert(cells.cFaces.end(), cFaces.begin(), cFaces.end());
@@ -467,7 +469,7 @@ void Read_TAUMESH(SIM& svar, MESH& cells, FLUID& fvar)
 		#ifdef DEBUG
 		dbout << "Getting pyramid cell faces." << endl;
 		#endif
-		facenum = {{0,3,2,1},{0,1,4},{0,4,3},{1,4,2},{2,3,4}};
+		facenum = {{0,2,1},{0,3,2},{0,1,4},{0,4,3},{1,4,2},{2,3,4}};
 		Get_Cell_Faces(cells.verts,pyra,facenum,cFaces);
 		
 		cells.cFaces.insert(cells.cFaces.end(), cFaces.begin(), cFaces.end());
@@ -484,7 +486,8 @@ void Read_TAUMESH(SIM& svar, MESH& cells, FLUID& fvar)
 		#ifdef DEBUG
 		dbout << "Getting hexaeder cell faces." << endl;
 		#endif
-		facenum = {{1,5,6,2},{2,6,7,3},{0,3,7,4},{0,4,5,1},{0,1,2,3},{7,6,5,4}};
+		facenum = {{1,5,2},{6,2,5},{2,6,7},{7,3,2},{0,3,4},{3,7,4},
+				   {0,4,1},{5,1,4},{0,1,2},{0,2,3},{7,6,4},{6,5,4}};
 		Get_Cell_Faces(cells.verts,hex,facenum,cFaces);
 		
 		cells.cFaces.insert(cells.cFaces.end(), cFaces.begin(), cFaces.end());
@@ -591,4 +594,213 @@ void Read_TAUMESH(SIM& svar, MESH& cells, FLUID& fvar)
 	/*Find cell centres*/
 	Average_Point_to_Cell(cells.verts,cells.cCentre,cells.elems,zero);
 }
+
+
+void Write_Group(NcGroup &zone, const State &pnp1, 
+	const uint start, const uint end, const uint outform)
+{
+	/*Write the Particles group*/
+	
+	const uint size = end - start;
+	NcDim posDim = zone.addDim("Point",size);
+
+	NcVar xVar = zone.addVar("x",ncDouble,posDim);
+	NcVar yVar = zone.addVar("y",ncDouble,posDim);
+	NcVar zVar = zone.addVar("z",ncDouble,posDim);
+	NcVar idVar = zone.addVar("id",ncInt,posDim);
+
+	// xVar.putAtt("units","m");
+	// yVar.putAtt("units","m");
+	// zVar.putAtt("units","m");
+	double* x = new double[size];
+	double* y = new double[size];
+	double* z = new double[size];
+	int* id = new int[size];
+
+	for(uint i = start; i < end; ++i)
+	{
+		x[i-start] = pnp1[i].xi[0];
+		y[i-start] = pnp1[i].xi[1];	
+		#if SIMDIM == 3
+			z[i-start] = pnp1[i].xi[2];
+		#else
+			z[i-start] = 0.0;
+		#endif
+
+		id[i-start] = pnp1[i].partID;
+	}			
+
+	xVar.putVar(x);
+	yVar.putVar(y);
+	zVar.putVar(z);
+
+	idVar.putVar(id);
+
+	if(outform == 1)
+	{	/*Write fluid data*/
+		NcVar press = zone.addVar("Pressure", ncDouble,posDim);
+		NcVar dens = zone.addVar("Density",ncDouble,posDim);
+		NcVar acc = zone.addVar("Acceleration",ncDouble,posDim);
+		NcVar vel = zone.addVar("Velocity",ncDouble,posDim);
+
+		// press.putAtt("units","Pa");
+		// dens.putAtt("units","kg/m^3");
+		// acc.putAtt("units","m/s^2");
+		// vel.putAtt("units","m/s");
+
+		double* p = new double[size];
+		double* rho = new double[size];
+		double* f = new double[size];
+		double* v = new double[size];
+
+		for(uint i = start; i < end; ++i)
+		{
+			p[i-start] = pnp1[i].p;
+			rho[i-start] = pnp1[i].rho;
+			f[i-start] = pnp1[i].f.norm();
+			v[i-start] = pnp1[i].v.norm();
+		}	
+
+		press.putVar(p);
+		dens.putVar(rho);
+		acc.putVar(f);
+		vel.putVar(v);
+	}
+
+	if(outform == 2)
+	{	/*Write research data*/
+		NcVar aero = zone.addVar("Aerodynamic Force", ncDouble,posDim);
+		NcVar surf = zone.addVar("Surface Tension", ncDouble,posDim);
+		NcVar Sx = zone.addVar("S_x", ncDouble,posDim);
+		NcVar Sy = zone.addVar("S_y", ncDouble,posDim);
+		NcVar B = zone.addVar("Boundary",ncInt,posDim);
+		NcVar theta = zone.addVar("Theta",ncInt,posDim);
+
+		// aero.putAtt("units","N");
+		// surf.putAtt("units","N");
+		// Sx.putAtt("units","N");
+		// Sy.putAtt("units","N");
+	
+		double* af = new double[size]{0.0};
+		double* sf = new double[size]{0.0};
+		double* sx = new double[size]{0.0};
+		double* sy = new double[size]{0.0};
+		int* b = new int[size]{0};
+		int* t = new int[size]{0};
+
+		for(uint i = start; i < end; ++i)
+		{
+			af[i-start] = pnp1[i].Af.norm();
+			sf[i-start] = pnp1[i].Sf.norm();
+			sx[i-start] = pnp1[i].Sf(0);
+			sy[i-start] = pnp1[i].Sf(1);
+			b[i-start] = pnp1[i].b;
+			t[i-start] = pnp1[i].theta;
+		}		
+
+		aero.putVar(af);
+		surf.putVar(sf);
+		Sx.putVar(sx);
+		Sy.putVar(sy);
+		B.putVar(b);
+		theta.putVar(t);
+
+		if (SIMDIM == 3)
+		{
+			NcVar Sz = zone.addVar("S_z",ncDouble,posDim);
+			// Sz.putAtt("units","m");
+			double* sz = new double[size]{0.0};
+			for(uint i = start; i < end; ++i)
+				sz[i-start] = pnp1[i].Sf[2];
+
+			Sz.putVar(sz);
+		}
+	}	
+}
+
+// void Write_CDF_File(NcFile &nf, SIM &svar, State &pnp1)
+// {	/*Write the timestep to a group*/
+// 	string time = "Step #";
+// 	// time.append(std::to_string(svar.t));
+// 	time.append(std::to_string(svar.stepno));
+// 	NcGroup ts(nf.addGroup(time));
+
+// 	/*Write the Particles group*/
+// 	Write_Group(ts, pnp1, svar.bndPts, svar.totPts, svar.outform);
+// }
+
+
+void Write_CDF_File(NcFile &nd, SIM &svar, const State &pnp1)
+{	/*Write the timestep to a group*/
+	string timefile = svar.outfolder;
+	timefile.append("/h5/fuel_");
+	std::ostringstream step;
+	step << std::setfill('0') << std::setw(4);
+	step << svar.frame;
+	timefile.append(step.str());
+	timefile.append(".h5part");
+
+	NcFile nf(timefile, NcFile::replace);
+	string steps = "Step#";
+	steps.append(std::to_string(svar.frame));
+	NcGroup ts(nf.addGroup(steps));
+	NcDim tDim = ts.addDim("time",1);
+	NcVar tVar = ts.addVar("time",ncDouble,tDim);
+	tVar.putVar(&svar.t);
+
+	/*Write the Particles group*/
+	Write_Group(ts, pnp1, svar.bndPts, svar.totPts, svar.outform);
+
+}
+
+void Write_Boundary_CDF(const SIM &svar, const State &pnp1)
+{	
+	std::string file = svar.outfolder;
+	file.append("/h5/Boundary.h5part");
+	NcFile bound(file, NcFile::replace);
+	NcGroup part(bound.addGroup("Boundary"));
+	Write_Group(bound, pnp1, 0, svar.bndPts, svar.outform);
+}
+
+// void Write_H5_File(h5_file_t& fout, const SIM& svar, const State& pnp1)
+// {
+// 	const h5_id_t step = svar.stepno;
+// 	const h5_size_t numParts = svar.simPts;
+// 	const double* time = &svar.t;
+// 	H5SetStep(fout,step);
+// 	H5WriteStepAttribFloat64(fout, "Time", time, 1);
+// 	H5PartSetNumParticles(fout, numParts);
+// 	const uint start = svar.bndPts;
+// 	const uint end = svar.totPts;
+
+// 	const uint size = end - start;
+// 	if(size != svar.simPts)
+// 	{
+// 		cout << "Simulation point size mismatch when writing h5 file." << endl;
+// 		exit(-1);
+// 	}
+
+// 	double* x = new double[size];
+// 	double* y = new double[size];
+// 	double* z = new double[size];
+// 	int* id = new int[size];
+
+// 	for(uint i = start; i < end; ++i)
+// 	{
+// 		x[i-start] = pnp1[i].xi[0];
+// 		y[i-start] = pnp1[i].xi[1];	
+// 		#if SIMDIM == 3
+// 			z[i-start] = pnp1[i].xi[2];
+// 		#else
+// 			z[i-start] = 0.0;
+// 		#endif
+
+// 		id[i-start] = pnp1[i].partID;
+// 	}	
+
+// 	H5PartWriteDataFloat64(fout, "x", x);
+// 	H5PartWriteDataFloat64(fout, "y", y);
+// 	H5PartWriteDataFloat64(fout, "z", z);
+// 	H5PartWriteDataInt32(fout, "id", id);
+// }
 #endif

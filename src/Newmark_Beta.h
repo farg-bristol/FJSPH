@@ -48,8 +48,16 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 /***********************************************************************************/
 /***********************************************************************************/
 
+
 	if (svar.dt > svar.framet)
+	{
 		svar.dt = svar.framet;
+	}
+	else
+	{
+		uint frac = ceil(svar.framet/svar.dt);
+		svar.dt = svar.framet/frac;
+	}
 
 
 	/*Check if the particle has moved to a new cell*/
@@ -287,7 +295,6 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 	// RestartCount = 0;
 	/*Add time to global*/
 	svar.t+=svar.dt;
-
 	// cout << "Timestep Params: " << maxf << " " << fvar.Cs + maxmu << " " << dtf << " " << dtcv << endl;
 	// cout << "New Time: " << svar.t << endl;
 	

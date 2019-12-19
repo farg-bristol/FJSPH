@@ -17,12 +17,19 @@
 	#include "VLM.h"
 #endif
 
+
 #include <vector>
 #include "Eigen/Core"
 #include "Eigen/StdVector"
 #include "NanoFLANN/nanoflann.hpp"
 #include "NanoFLANN/utils.h"
 #include "NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
+
+#ifdef DEBUG
+	/*Open debug file to write to*/
+	#include <fstream>
+	std::ofstream dbout("WCSPH.log",std::ios::out);
+#endif
 
 // Define pi
 #ifndef M_PI
@@ -33,14 +40,14 @@ using std::vector;
 using std::cout;
 using std::endl;
 
-#ifdef DEBUG
-	/*Open debug file to write to*/
-	std::ofstream dbout("WCSPH.log",std::ios::out);
-#endif
-
 /* Define data type. */
 typedef double ldouble;
 typedef unsigned int uint;
+
+/*Get machine bit precision for Simulation of Simplicity*/
+#ifndef MEPSILON
+#define MEPSILON pow(2,-53) /*For  float, power is -24*/
+#endif
 
 /****** Eigen vector definitions ************/
 typedef Eigen::Matrix<ldouble,SIMDIM,1> StateVecD;
@@ -78,7 +85,6 @@ typedef struct SIM {
 	int Bcase, Bclosed, ghost;		/*What boundary shape to take*/
 	uint outtype;                   /*ASCII or binary output*/
 	uint outform, boutform;         /*Output type. Fluid properties or Research.*/
-	uint frameout;                  /**/
 	uint framecount;
 
 	std::string infolder, outfolder;
@@ -87,6 +93,15 @@ typedef struct SIM {
 		VLM vortex;
 	#endif
 	StateVecD Force;					/*Total Force*/
+
+	/*Post Processessing settings*/
+	uint afterSim;
+	uint sliceOrSet;
+	StateVecD planeOrigin, planeNorm; /*Plane conditions if in 3D*/
+	ldouble cellSize;				/*Size of each cell to make*/
+	StateVecD maxC, minC;			/*Max and min coords to make grid*/
+	uint numVars, wrongDim;
+	ldouble postRadius;
 } SIM;
 
 /*Fluid and smoothing parameters*/
@@ -186,11 +201,6 @@ typedef struct MESH
 	/*Cell containment classes*/
 	// std::unique_ptr<Tree> tree; 
 }MESH;
-
-typedef class RESID{
-	StateVecD f;
-	ldouble Rrho;
-}RESID;
 
 /*Particle data class*/
 typedef class Particle {

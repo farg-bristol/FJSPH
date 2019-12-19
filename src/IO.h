@@ -58,15 +58,13 @@ inline bool file_exists (const std::string& name) {
 void check_folder(string pathname)
 {	
 	struct stat info;
-	int sreturn=0;
 	if( stat( pathname.c_str(), &info ) != 0 )
   	{	/*Output directory doesn't exist, so create it*/
 		pathname.insert(0,"\"");
 		pathname.append("\"");
   		string cmd = "mkdir ";
 	  	cmd.append(pathname);
-	    sreturn = system(cmd.c_str());
-	    if(sreturn == -1)
+	    if(system(cmd.c_str()))
 	    {
 	    	cout << "System command failed to execute." << endl;
 	    	exit(-1);
@@ -118,6 +116,45 @@ int MakeOutputDir(int argc, char *argv[], SIM &svar)
 	}
 
   	svar.outfolder = pathname;
+
+  	/*Create h5 folder*/
+  	if(svar.outtype == 0)
+  	{
+  		string file = pathname;
+  		file.append("fuel.szplt.szdat");
+  		struct stat info;
+  		if(stat( file.c_str(), &info ) == 0)
+  		{
+	  		string cmd = "exec rm -r \"";
+	  		cmd.append(pathname);
+	  		cmd.append("\"*.szplt.sz*");
+	  		if(system(cmd.c_str()))
+	  		{
+		    	cout << "System command failed to execute." << endl;
+		    	exit(-1);
+		    }
+		}
+  	}
+  	else if(svar.outtype == 2)
+  	{
+  		pathname.append("h5/");
+  		check_folder(pathname);
+  		string file = pathname;
+  		file.append("fuel_0.00e+00.h5part");
+  		struct stat info;
+  		if(stat( file.c_str(), &info ) == 0)
+  		{
+	  		string cmd = "exec rm -r \"";
+	  		cmd.append(pathname);
+	  		cmd.append("\"*.h5part");
+	  		if(system(cmd.c_str()))
+	  		{
+		    	cout << "System command failed to execute." << endl;
+		    	exit(-1);
+		    }
+		}
+  	}
+
 	return 0;
 }
 
@@ -286,6 +323,7 @@ RotMat GetRotationMat(StateVecD &angles)
 
 void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
 {
+	uint justPost = 0;
 	if (argc > 3) 
 	{	/*Check number of input arguments*/
 		cout << "\tWARNING: only two input arguments accepted,\n";
@@ -302,6 +340,16 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
     {	/*Get parameters if it has been provided*/
     	// cout << argv[1] << endl;
     	string file = argv[1];
+    	
+    	
+    	if(file == "-post")
+    	{
+    		cout << "Post processing option selected." << endl;
+    		justPost = 1;
+    		file = argv[2];
+    	}
+
+
     	if(file.back() != '/')
 	    	file.append("/");
 
@@ -318,7 +366,6 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
 	  		svar.outtype = getInt(in, lineno);
 	  		svar.outform = getInt(in, lineno);
 	  		svar.boutform = getInt(in, lineno);
-	  		svar.frameout = getInt(in, lineno);
 	  		svar.subits = getInt(in, lineno);
 	  		svar.nmax = getInt(in, lineno);	
 	  		svar.xyPART = getIVector(in, lineno);
@@ -356,13 +403,6 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
 		  		avar.vJet(1) = getDouble(in, lineno);  
 		  		avar.vJet = svar.Rotate*avar.vJet;
 		  		avar.vInf = getDVector(in, lineno);
-		  		if(avar.acase >= 2)
-		  		{
-		  			avar.a = getDouble(in, lineno);
-		  			avar.h1 = getDouble(in, lineno);
-		  			avar.b = getDouble(in, lineno);
-		  			avar.h2 = getDouble(in, lineno);
-		  		}
 		  		
 		  		if(avar.acase > 5)
 		  		{
@@ -375,6 +415,11 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
 	  			cout << "Boundary case not within design. Stopping." << endl;
 	  			exit(-1);
 	  		}
+	  		/*Get post processing options*/
+	  		svar.afterSim = getInt(in, lineno);
+	  		svar.cellSize = getDouble(in, lineno);
+	  		svar.postRadius = getDouble(in, lineno);
+
 			in.close();
 	  	}
 	  	else {
@@ -436,52 +481,87 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
   		fvar.mug = 18.5E-06;
 	}
 
-  	/*Universal parameters based on input values*/
-  	svar.addcount = 0;
-  	svar.dt = 2E-010; 		/*Initial timestep*/
-  	svar.t = 0.0;				/*Total simulation time*/
-  	fvar.HSQ = fvar.H*fvar.H; 
+	
+	
+	  	/*Universal parameters based on input values*/
+	  	svar.addcount = 0;
+	  	svar.dt = 2E-010; 		/*Initial timestep*/
+	  	svar.t = 0.0;				/*Total simulation time*/
+	  	fvar.HSQ = fvar.H*fvar.H; 
 
-	fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
-	svar.Bclosed = 0; 		/*Boundary begins open*/
-	svar.psnPts = 0; 		/*Start with no pison points*/
-	switch(SIMDIM)
-	{
-		case 2:
-			fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
-			svar.simPts = svar.xyPART[0]*svar.xyPART[1];
-			break;
-		case 3:
-			fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
-			svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
-			break;
-		default:
-			cout << "Simulation Dimension mismatch. Stopping" << endl;
-	  		exit(-1);
-	  		break;
-	}
-  	
-  	/*Mass from spacing and density*/
-	fvar.Simmass = fvar.rho0*pow(svar.Pstep,SIMDIM); 
-	fvar.Boundmass = fvar.Simmass;
-	fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
-	fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
-	/*Pipe Pressure calc*/
-	ldouble rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
-	svar.dx = pow(fvar.Simmass/rho, 1.0/double(SIMDIM));
-	// cout << rho << "  " << svar.dx << endl;
-	fvar.gasDynamic = 0.5*fvar.rhog*fvar.gasVel;
-
-
-	#if SIMDIM == 3
-		if(svar.Bcase == 4)
+		fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
+		svar.Bclosed = 0; 		/*Boundary begins open*/
+		svar.psnPts = 0; 		/*Start with no pison points*/
+		switch(SIMDIM)
 		{
-			svar.vortex.Init(svar.infolder);	
-			svar.vortex.GetGamma(avar.vInf);	
+			case 2:
+				fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
+				svar.simPts = svar.xyPART[0]*svar.xyPART[1];
+				break;
+			case 3:
+				fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+				svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
+				break;
+			default:
+				cout << "Simulation Dimension mismatch. Stopping" << endl;
+		  		exit(-1);
+		  		break;
 		}
-	#endif
+	  	
+	  	/*Mass from spacing and density*/
+		fvar.Simmass = fvar.rho0*pow(svar.Pstep,SIMDIM); 
+		fvar.Boundmass = fvar.Simmass;
+		fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
+		fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
+		/*Pipe Pressure calc*/
+		ldouble rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
+		svar.dx = pow(fvar.Simmass/rho, 1.0/double(SIMDIM));
+		// cout << rho << "  " << svar.dx << endl;
+		fvar.gasDynamic = 0.5*fvar.rhog*fvar.gasVel;
 
-	GetAero(avar, fvar, fvar.H);
+
+		#if SIMDIM == 3
+			if(svar.Bcase == 4)
+			{
+				svar.vortex.Init(svar.infolder);	
+				svar.vortex.GetGamma(avar.vInf);	
+			}
+		#endif
+
+		GetAero(avar, fvar, fvar.H);
+	
+	if (justPost==1)
+	{
+		cout << "Starting post processing from output of the same case." << endl;
+	
+		svar.afterSim = 0;
+		/*Open an output directory in the name of the input file, under Outputs*/
+		char cCurrentPath[FILENAME_MAX];
+		if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
+			exit(-1);
+
+		/*Check the folder for the grid szplt files*/
+
+		string pathname = cCurrentPath;
+	  	string input = argv[2];
+	  	uint pos1 = input.find("/"); 	uint pos2 = input.find(".");
+	  	string file = input.substr(pos1+1,pos2-pos1-1);
+	  	pathname.append("/Outputs/");
+	  	pathname.append(file);
+	  	svar.outfolder = pathname;
+
+	  	fvar.H = svar.postRadius;
+	  	fvar.HSQ = fvar.H*fvar.H; 
+		fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
+
+	  	// cout << "Found path: " << pathname << endl;
+		TECMESH postgrid;
+
+		postgrid.DoPostProcessing(svar,fvar);
+
+		cout << "Post Processing complete!" << endl;
+		exit(0);
+	}
 }
 
 
@@ -625,7 +705,7 @@ void Write_settings(SIM &svar, FLUID &fvar)
 }
 
 void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1, 
-	const uint bwrite, const uint start, const uint end , State &airP )
+	const uint bwrite, const uint start, const uint end, const State &airP )
 {
 	if(bwrite == 1)
 	 	fp <<  "ZONE T=\"Boundary Data\"";
