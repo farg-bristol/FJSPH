@@ -421,8 +421,11 @@ void FindCell(const uint start, const uint end, const ldouble nfull, Vec_Tree& C
                     if(found == 0)
                     {   /*The containing cell wasn't found in the neighbours.*/
                         /*Scan through the whole list again*/
+                        #ifdef DEBUG
+                            cout << "Having to perform neighbour search again..." << endl;
+                        #endif
                         
-                        const size_t num_results = 30;
+                        const size_t num_results = 100;
                         vector<size_t> ret_indexes(num_results);
                         vector<double> out_dists_sqr(num_results);
 

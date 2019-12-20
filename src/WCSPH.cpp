@@ -142,15 +142,15 @@ int main(int argc, char *argv[])
 	write_header();
     
 
-    cout << MEPSILON << endl;
-    for(double ii = 1; ii < 200; ii++)
-    {
-    	if(double(1.0+pow(2.0,-ii)) == double(1.0))
-    	{
-    		cout << ii << "  " << pow(2.0,-ii) << endl;
-    		break;
-    	}
-    }
+    // cout << MEPSILON << endl;
+    // for(double ii = 1; ii < 200; ii++)
+    // {
+    // 	if(double(1.0+pow(2.0,-ii)) == double(1.0))
+    // 	{
+    // 		cout << ii << "  " << pow(2.0,-ii) << endl;
+    // 		break;
+    // 	}
+    // }
 
     /******* Define the global simulation parameters ******/
 	SIM svar;
