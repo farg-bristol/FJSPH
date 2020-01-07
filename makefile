@@ -37,6 +37,12 @@ debug2:
 debug3:
 	$(CXX) -g -DDEBUG -DSIMDIM=3 ${FLAGS} $(CFLAGS) $(INC) $(LLINK) $(SOURCE) $(LIBS) -o $(TARGET)
 
+c2f:
+	$(CXX) $(FLAGS) $(CFLAGS) $(INC) $(LLINK) src/Cell2Face.cpp $(LIBS) -o Cell2Face
+
+c2fD:
+	$(CXX) -g -DDEBUG $(FLAGS) $(CFLAGS) $(INC) $(LLINK) src/Cell2Face.cpp $(LIBS) -o Cell2Face
+
 clean:
 	$(RM) $(TARGET)
 

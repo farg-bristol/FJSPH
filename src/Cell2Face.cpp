@@ -7,6 +7,17 @@
 using namespace netCDF;
 using namespace netCDF::exceptions;
 #define NC_ERR 2
+#include <fstream>
+#include <iomanip>
+
+#ifdef DEBUG
+	/*Open debug file to write to*/
+	std::ofstream dbout("Cell2Face.log",std::ios::out);
+#endif
+
+#ifndef NTHREADS
+#define NTHREADS 6
+#endif
 
 /*Define Simulation Dimension*/
 #ifndef SIMDIM
@@ -25,7 +36,7 @@ using std::vector;
 using std::cout;
 using std::endl;
 using std::string; 
-
+using std::setw;
 typedef struct CELL
 {
 	/*Standard contructor*/
@@ -38,24 +49,44 @@ typedef struct CELL
 	}
 	
 	/*Zone info*/
-	uint numPoint, numElem;
+	uint numElem, numPoint;
 
 	/*Point based data*/
 	vector<StateVecD> verts;
 
 	/*Cell based data*/
 	vector<vector<uint>> elems;
+
+	/*Surface faces*/
+	vector<vector<uint>> sfaces;
 }CELL;
 
-typedef struct FACE
+typedef class FACE
 {
-	FACE(const vector<StateVecD>& cverts)
+	public:
+	FACE(const CELL& cdata): numElem(cdata.numElem), numPoint(cdata.numPoint)
 	{
-		verts = cverts;
-		numPoint = cverts.size();
+		verts = cdata.verts;
+		// numElem = cdata.numElem;
+		// numPoint = cdata.numPoint;
+		numFaces = 0; nFar = 0; nWall = 0;
 	}	
 
-	uint numElem, numPoint, nfaces;
+	FACE() : numElem(0), numPoint(0)
+	{
+		numFaces = 0; nFar = 0; nWall = 0;
+	};
+
+	void insert(const FACE& flocal)
+	{
+		faces.insert(faces.end(),flocal.faces.begin(),flocal.faces.end());
+		celllr.insert(celllr.end(),flocal.celllr.begin(),flocal.celllr.end());
+		numFaces += flocal.numFaces;
+		nFar += flocal.nFar;
+		nWall += flocal.nWall;
+	}
+
+	uint numFaces, nFar, nWall;
 	vector<StateVecD> verts;
 	vector<vector<uint>> faces; /*Face indexes*/
 	vector<std::pair<int,int>> celllr; /*Cell left and right of the face*/
@@ -66,11 +97,258 @@ typedef struct FACE
 	int* left;
 	int* right;
 	int** faceindex;
+
+	const uint numElem, numPoint;
 }FACE;
 
 uint index(uint ii, uint jj, uint nPts)
 {
 	return(ii*nPts + jj);
+}
+
+std::ifstream& GotoLine(std::ifstream& file, unsigned int num)
+{
+    file.seekg(std::ios::beg);
+    for(uint ii=0; ii < num - 1; ++ii){
+        file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+    }
+    return file;
+}
+
+vector<int> Find_Bmap_Markers(const string& bmapIn)
+{
+	#ifdef DEBUG
+	dbout << "Entering Find_Bmap_Markers..." << endl;
+	#endif
+
+	std::ifstream fin(bmapIn,std::ios::in);
+
+	if(!fin.is_open())
+	{
+		cout << "Couldn't open the boundary map file." << endl;
+		cout << "Attempted path: " << bmapIn << endl;
+		exit(-1);
+	}
+
+	vector<int> markers;
+	/*Search for the markers that have either farfield or symmetry plane*/
+	uint lineno = 0;
+	string line;
+
+	uint blockno = 0;
+	uint blockstart = 1; /*A store of when this block starts to search through*/
+
+	while(getline(fin,line))
+	{
+
+		// cout << line << endl;
+		if(line.find("Type: symmetry plane")!=string::npos || 
+			line.find("Type: farfield")!=string::npos)
+		{
+			
+			/*This marker is a far field, so store it.*/
+			/*Go to the start of the block, and search for the marker ID*/
+			GotoLine(fin,blockstart);
+			while(getline(fin,line))
+			{	
+				// cout << "inner:\t" << line << endl;
+				if(line.find("Markers:")!=string::npos)
+				{
+					cout << "Found a boundary marker" << endl;
+					std::stringstream sstr;
+
+					sstr << line;
+
+					string temp;
+					int found;
+
+					while(!sstr.eof())
+					{
+						sstr >> temp;
+						if(std::stringstream(temp) >> found)
+						{
+							markers.emplace_back(found);
+						}
+
+						temp = "";
+					}
+
+					/*Go back to where we were*/
+					blockstart = lineno+2;
+					GotoLine(fin,lineno+2);
+					break;
+				}
+			}
+		}
+
+		if(line.find("block end")!= string::npos)
+		{	/*We're on a new block*/
+			blockno++;
+			blockstart = lineno+1;
+		}
+
+		lineno++;
+	}
+
+	cout << "Far field markers:" << endl;
+
+	for(auto mark:markers)
+	{
+		cout << mark << "  " ;
+	}
+	cout << endl;
+
+	#ifdef DEBUG
+	dbout << "Exiting Find_Bmap_Markers..." << endl;
+	#endif
+
+	return markers;
+}
+
+vector<vector<uint>> Get_Surface(NcFile& fin, const vector<int>& markers)
+{
+	#ifdef DEBUG
+	dbout << "Entering Get_Surface..." << endl;
+	#endif
+	vector<vector<uint>> faceVec;
+
+	NcVar sTria = fin.getVar("points_of_surfacetriangles");	
+	if(sTria.isNull()) 
+	{
+		cout << "No triangle surfaces." << endl;
+		#ifdef DEBUG
+		dbout  << "No triangle surfaces." << endl;
+		#endif
+	}
+	else
+	{
+		NcDim nTriD = sTria.getDim(0);
+		uint nTri = static_cast<uint>(nTriD.getSize());
+
+		#ifdef DEBUG
+			dbout << "Number of triangles: " << nTri << endl;
+		#endif
+
+		int* tris = new int[nTri*3];
+
+		/*Get the actual data from the file*/
+		vector<size_t> startp,countp;
+		startp.push_back(0);
+		startp.push_back(0);
+		countp.push_back(nTri);
+		countp.push_back(3);
+
+		#ifdef DEBUG
+		dbout << "Attempting to read NetCDF surface triangles." << endl;
+		#endif
+
+		sTria.getVar(startp,countp,tris);
+
+		#ifdef DEBUG
+		dbout << "Putting surface faces into a vector." << endl;
+		#endif
+
+		vector<vector<uint>> localVec(nTri,vector<uint>());
+		for (uint ii = 0; ii < nTri; ++ii)
+		{
+			for(uint jj = 0; jj < 3; ++jj)
+				localVec[ii].emplace_back(static_cast<uint>(tris[index(ii,jj,3)]));
+		}
+
+		faceVec.insert(faceVec.end(),localVec.begin(),localVec.end());
+	}
+
+	NcVar sQuad = fin.getVar("points_of_surfacequadrilaterals");	
+	if(sQuad.isNull()) 
+	{
+		cout << "No quadrilateral surfaces." << endl;
+		#ifdef DEBUG
+		dbout  << "No quadrilateral surfaces." << endl;
+		#endif
+
+
+	}
+	else
+	{
+		NcDim nQuadD = sQuad.getDim(0);
+		uint nQuad = static_cast<uint>(nQuadD.getSize());
+		
+		#ifdef DEBUG
+			dbout << "Number of quadrilaterals: " << nQuad << endl;
+		#endif
+
+		/*Allocate on the heap (can be big datasets)*/
+		
+		int* quads = new int[nQuad*4];
+
+		vector<size_t> startp,countp;
+		startp.push_back(0);
+		startp.push_back(0);
+		countp.push_back(nQuad);
+		countp.push_back(4);
+
+		#ifdef DEBUG
+		dbout << "Attempting to read NetCDF surface quadrilaterals." << endl;
+		#endif
+
+		sQuad.getVar(startp,countp,quads);
+
+		#ifdef DEBUG
+		dbout << "Putting surface faces into a vector." << endl;
+		#endif
+		/*Convert it to a vector to store*/
+		vector<vector<uint>> localVec(nQuad,vector<uint>());
+
+		for (uint ii = 0; ii < nQuad; ++ii)
+		{
+			for(uint jj = 0; jj < 4; ++jj)
+				localVec[ii].emplace_back(static_cast<uint>(quads[index(ii,jj,4)]));
+		}
+
+		faceVec.insert(faceVec.end(),localVec.begin(),localVec.end());
+	}
+
+	/*Get the boundarymarkers*/
+	NcVar surfaceMarkers = fin.getVar("boundarymarker_of_surfaces");
+	if(surfaceMarkers.isNull())
+	{
+		cout << "No data available on surface markers..." << endl;
+	}
+	
+	NcDim nMarkersD = surfaceMarkers.getDim(0);
+	uint nMarkers = static_cast<uint>(nMarkersD.getSize());
+	if(faceVec.size() != nMarkers)
+	{
+		cout << "Mismatch of number of surface elements defined and number ingested." << endl;
+		cout << "Number of surface elements: " << nMarkers << 
+		"  Number in vector: " << faceVec.size() << endl;
+	}
+
+	int* faceMarkers = new int[nMarkers];
+
+	surfaceMarkers.getVar(faceMarkers);
+
+	vector<vector<uint>> farVec;
+
+	/*Want to find which surfaces are the ones I want to look for*/
+	for(uint ii = 0; ii < nMarkers; ++ii)
+	{
+		if(std::find(markers.begin(),markers.end(),faceMarkers[ii])!= markers.end())
+		{	/*The face is a far-field boundary*/
+			/*Pre sort to save time in the loop*/
+			vector<uint> v = faceVec[ii];
+			std::sort(v.begin(),v.end());
+			farVec.emplace_back(v);
+		}
+	}
+
+	cout << farVec.size() << endl;
+
+	#ifdef DEBUG
+	dbout << "Exiting Get_Surface..." << endl;
+	#endif
+
+	return farVec;
 }
 
 /*To run on the mesh file*/
@@ -109,7 +387,7 @@ vector<vector<uint>> Get_Element(NcFile& fin, string variable)
 		elemData.getVar(startp,countp,elemArray);
 
 		cout << "Successfully read: " << variable << endl;
-		cout << "Number of cdata: " << nElem << endl;
+		cout << "Number of elements: " << nElem << endl;
 
 		#ifdef DEBUG
 		dbout << "Successfully read elements" << endl;
@@ -180,209 +458,675 @@ vector<StateVecD> Get_Coordinates(NcFile& fin)
 	return coordVec;	
 }
 
-void CheckFaces(const vector<uint>& vertmentions, const vector<vector<uint>>& vertincells,
-	vector<vector<uint>>& colour, vector<vector<uint>>& lfaces, uint lindex, 
-	const CELL& cdata, FACE& fdata)
+void CheckFaces(const vector<vector<uint>>& vertincells,
+	 const vector<vector<uint>>& lfaces, const uint lindex, const uint lgeom, 
+	const CELL& cdata, vector<vector<uint>>& colour, FACE& fdata)
 {
 	uint lfaceindex = 0;
 	for(auto const& face:lfaces)
-	{	
+	{	/*Define that the cell of the top-level cell search is on the 'left'*/
+		// if(colour[lindex][lfaceindex] == 1)
+		// {	face has already been identified...
+		// 	continue;
+		// }
+
 		uint match = 0;
-/*Search through the cells where the first vertex is mentioned, and see if this face exists*/
-		for (uint jj = 0; jj < vertmentions[face[0]]; ++jj)
-		{	/*If the cell is the current cell, ignore*/
-			uint rindex = vertincells[face[0]][jj];
-			if(rindex!=lindex)
+
+		/*Create an ordered list of the left side of the face*/
+		vector<uint> lface = face;
+		std::sort(lface.begin(),lface.end());
+
+		/* Search through each vertex of the face, and see if this face exists*/
+		for(auto const& vert:face)
+		{	/*Search through the cells where the vertex is mentioned*/
+			for (auto const& rindex:vertincells[vert])
 			{	
+				/*If the cell is the current cell, ignore*/
+				if(rindex==lindex)
+					continue;	
+
+				/*Define that the cell of the inner search is on the 'right'*/
 				vector<uint> rcell = cdata.elems[rindex];
-
-				/*Create an ordered list of the left side of the face*/
-				vector<uint> lface = face;
-				std::sort(lface.begin(),lface.end());
-
-				uint rfaceindex = 0;
+				vector<vector<uint>> rfaces;
 
 				if(rcell.size() == 4)
-				{	/*Check if cell is a tet, since it cant share a face*/
-					break;
+				{	/*Tetraeder*/
+					/*If left cell is a hex, they can't share a face*/
+					if(lgeom == 3)
+						continue;
+
+					rfaces = {{rcell[0],rcell[1],rcell[2]},
+							  {rcell[1],rcell[0],rcell[3]},
+					   		  {rcell[2],rcell[3],rcell[0]},
+					   		  {rcell[3],rcell[1],rcell[2]}};
 				}
-
-				if(rcell.size() == 6)
-				{	/*Prism*/
-					vector<vector<uint>> rfaces = {{rcell[1],rcell[4],rcell[5],rcell[2]},
-										   		   {rcell[0],rcell[1],rcell[4],rcell[3]},
-										   		   {rcell[0],rcell[3],rcell[5],rcell[2]}};
-
-					for(auto rface:rfaces)
-					{	
-						std::sort(rface.begin(),rface.end());
-						if(lface == rface)
-						{
-							match = 1;
-							break;
-						}
-						rfaceindex++;
-					}
-				}
-
-				if(rcell.size() == 5)
+				else if(rcell.size() == 5)
 				{	/*Pyra*/
-					vector<uint> rface = {rcell[0],rcell[3],rcell[2],rcell[1]};
-										  
+					rfaces = {{rcell[0],rcell[3],rcell[2],rcell[1]},
+					   		  {rcell[1],rcell[4],rcell[0]},
+					   		  {rcell[2],rcell[4],rcell[1]},
+					   		  {rcell[3],rcell[4],rcell[2]},
+					   		  {rcell[4],rcell[3],rcell[0]}};						
+				}
+				else if(rcell.size() == 6)
+				{	/*Prism*/
+					rfaces = {{rcell[1],rcell[2],rcell[5],rcell[4]},
+					   		  {rcell[4],rcell[3],rcell[0],rcell[1]},
+					   		  {rcell[3],rcell[5],rcell[2],rcell[0]},
+					   		  {rcell[2],rcell[0],rcell[1]},
+					   		  {rcell[5],rcell[3],rcell[4]}};
+				}
+				else if(rcell.size() == 8)
+				{	/*Hexaeder*/
+
+					/*If left cell is a tet, they can't share a face*/
+					if(lgeom == 0)
+						continue;
+
+					rfaces = {{rcell[0],rcell[1],rcell[2],rcell[3]},
+							  {rcell[4],rcell[0],rcell[3],rcell[7]},
+							  {rcell[1],rcell[0],rcell[4],rcell[5]},
+							  {rcell[2],rcell[1],rcell[5],rcell[6]},
+							  {rcell[3],rcell[2],rcell[6],rcell[7]},
+							  {rcell[7],rcell[6],rcell[5],rcell[4]}};				 
+				}
+
+				uint rfaceindex = 0;
+				for(auto& rface:rfaces)
+				{
+					// if(colour[rindex][rfaceindex] == 1)
+					// {	face has already been identified...
+					// 	continue;
+					// }
+
 					std::sort(rface.begin(),rface.end());
 					if(lface == rface)
 					{
-						match = 1;
-					}							
-				}
-
-				if(rcell.size() == 8)
-				{
-					vector<vector<uint>> rfaces ={{rcell[0],rcell[1],rcell[2],rcell[3]},
-												  {rcell[4],rcell[0],rcell[3],rcell[7]},
-												  {rcell[1],rcell[0],rcell[4],rcell[5]},
-												  {rcell[2],rcell[1],rcell[5],rcell[6]},
-												  {rcell[3],rcell[2],rcell[6],rcell[7]},
-												  {rcell[7],rcell[6],rcell[5],rcell[4]}};
-
-					for(auto rface:rfaces)
-					{
-						std::sort(rface.begin(),rface.end());
-						if(lface == rface)
-						{
-							match = 1;
-							break;
+						/*Then the face is a match*/
+						
+						if(face.size() == 4)
+						{	/*Break the face down into two triangles*/
+							fdata.celllr.emplace_back(std::pair<int,int>(lindex,rindex));
+							fdata.celllr.emplace_back(std::pair<int,int>(lindex,rindex));
+							vector<uint> face1 = {face[0],face[1],face[2]};
+							vector<uint> face2 = {face[0],face[2],face[3]};
+							fdata.faces.emplace_back(face1);
+							fdata.faces.emplace_back(face2);
+							fdata.numFaces+=2;
 						}
-						rfaceindex++;
-					}						 
-				}
-
-
-				if(match == 1)
-				{	/*Then the face is a match*/
-					fdata.nfaces++;
-					fdata.celllr.emplace_back(std::pair<int,int>(lindex,rindex));
-					fdata.celllr.emplace_back(std::pair<int,int>(lindex,rindex));
-					/*Break the face down into two triangles*/
-					vector<uint> face1 = {face[0],face[1],face[2]};
-					vector<uint> face2 = {face[0],face[2],face[3]};
-					fdata.faces.emplace_back(face1);
-					fdata.faces.emplace_back(face2);
-					colour[lindex][lfaceindex] = 1;
-					colour[rindex][rfaceindex] = 1;
-				}
+						else
+						{	/*Face is already a triangle. No work to be done*/
+							fdata.celllr.emplace_back(std::pair<int,int>(lindex,rindex));
+							fdata.faces.emplace_back(face);
+							fdata.numFaces++;
+						}
+						
+						colour[lindex][lfaceindex] = 1;
+						colour[rindex][rfaceindex] = 1;
+						goto matchfound;
+					}
+					rfaceindex++;
+				}	
 			}
 		}
 		
-
+		/*If a match has not been found, the face must be a boundary face*/
 		if(match==0)
-		{
+		{				
+			for (auto sface:cdata.sfaces)
+			{	/*Search through the surface faces to identify */
+				/*if the face is an internal face or not*/
+				if(sface == lface)
+				{	/*Face is an external face*/
+					if (lface.size() == 4)
+					{
+						fdata.celllr.emplace_back(std::pair<int,int>(lindex,-2));
+						fdata.celllr.emplace_back(std::pair<int,int>(lindex,-2));
+						fdata.nFar+=2;
+					}
+					else
+					{
+						fdata.celllr.emplace_back(std::pair<int,int>(lindex,-2));
+						fdata.nFar++;
+					}
+					colour[lindex][lfaceindex] = 1;
+					break;
+				}
+			}
+
 			if(colour[lindex][lfaceindex] == 0)
-			{
-				fdata.nfaces++;
-				/*Break the face down into two triangles*/
+			{	/*If still uncoloured, then face is an internal boundary*/
+				if (lface.size() == 4)
+				{
+					fdata.celllr.emplace_back(std::pair<int,int>(lindex,-1));
+					fdata.celllr.emplace_back(std::pair<int,int>(lindex,-1));
+					fdata.nWall += 2;
+				}
+				else
+				{
+					fdata.celllr.emplace_back(std::pair<int,int>(lindex,-1));
+					fdata.nWall++;
+				}
+				colour[lindex][lfaceindex] = 1;
+			}
+				
+			/*Break the face down into two triangles*/
+			if(face.size() == 4)
+			{	/*Break the face down into two triangles*/
 				vector<uint> face1 = {face[0],face[1],face[2]};
 				vector<uint> face2 = {face[0],face[2],face[3]};
 				fdata.faces.emplace_back(face1);
 				fdata.faces.emplace_back(face2);
-				colour[lindex][lfaceindex] = 1;
-				/*Hexes will always be next to the surface geometry...*/
-				fdata.celllr.emplace_back(std::pair<int,int>(lindex,-1));
-				fdata.celllr.emplace_back(std::pair<int,int>(lindex,-1));
+				fdata.numFaces+=2;
+			}
+			else
+			{	/*Face is already a triangle. No work to be done*/
+				fdata.faces.emplace_back(face);
+				fdata.numFaces++;
 			}
 		}
 
+matchfound:
 		lfaceindex++;
 	}
 }
 
-vector<vector<uint>> BuildFaces(const CELL& cdata, FACE& fdata)
+void BuildFaces(const CELL& cdata, FACE& fdata)
 {
+	#ifdef DEBUG
+	dbout << "Entering BuildFaces..." << endl;
+	#endif
 	uint nElem = cdata.numElem;
 	uint nPts = cdata.numPoint;
-	/*Build the faces, and check there are no duplicate faces*/
-	/*Have a list of cells that have unidentified faces, that could have this face*/
+	uint unmfaces=0;
 
-	/*Vector of how many times a vertex has been mentioned (ie how many cells is it in)*/
-	vector<uint> vertmentions(nPts,0); 
+	// for(auto const& vert:cdata.elems[33])
+	// 	cout << vert << "  ";
+
+	// cout << endl;
 
 	/*Vector of which cells the vertex is referenced in*/
 	vector<vector<uint>> vertincells(nPts);
 
 	for(uint ii = 0; ii < nElem; ++ii)
 	{
-		auto const& cell = cdata.elems[ii];
-		for(auto const& vert:cell)
+		for(auto const& vert:cdata.elems[ii])
 		{	/*Add count for every mention of the vertex, and push back the cell id*/
-			vertmentions[vert] +=1;
 			vertincells[vert].emplace_back(ii);
 		}
 	}
 
-	uint nfaces = 0;
+	// uint numFaces = 0;
+	// cout << vertmentions[0] << endl;
+	// for(auto const& vert:vertincells[0])
+	// 	cout << vert << "  ";
+	
+	// cout << endl;
 
+	/*Create a colour vector to identify if a face has been identified*/
 	vector<vector<uint>> colour(cdata.elems.size());
 	for(uint ii = 0; ii < nElem; ++ii)
-		colour[ii].emplace_back(vector<uint>(cdata.elems[ii].size(),0));
-
-
-	for(uint lindex = 0; lindex < nElem; ++lindex)
-	{	
-		vector<uint> lcell = cdata.elems[lindex];
-
-		/*Check size of the inner vector, as that will show which geometry it is*/
-		if(lcell.size() == 8)
-		{	/*Hex*/
-			/*Create faces*/
-			
-			vector<vector<uint>> faces = {{lcell[0],lcell[1],lcell[2],lcell[3]},
-										  {lcell[4],lcell[0],lcell[3],lcell[7]},
-										  {lcell[1],lcell[0],lcell[4],lcell[5]},
-										  {lcell[2],lcell[1],lcell[5],lcell[6]},
-										  {lcell[3],lcell[2],lcell[6],lcell[7]},
-										  {lcell[7],lcell[6],lcell[5],lcell[4]}};
-
-			CheckFaces(vertmentions, vertincells, colour, faces, lindex, cdata, fdata);
-		}	/*End of hex check*/
-
-		if(lcell.size() == 6)
-		{	/*Prism*/
-			vector<vector<uint>> faces = {{lcell[1],lcell[4],lcell[5],lcell[2]},
-								   		  {lcell[0],lcell[1],lcell[4],lcell[3]},
-								   		  {lcell[0],lcell[3],lcell[5],lcell[2]},
-								   		  {lcell[0],lcell[1],lcell[2]},
-								   		  {lcell[5],lcell[4],lcell[3]}};
-
-			CheckFaces(vertmentions, vertincells, colour, faces, lindex, cdata, fdata);
+	{
+		if(cdata.elems[ii].size() == 8)
+		{
+			colour[ii] = vector<uint>(6,0);
 		}
-		if(lcell.size() == 5)
-		{	/*Pyra*/
-			vector<vector<uint>> faces = {{lcell[0],lcell[3],lcell[2],lcell[1]},
-								   		  {lcell[0],lcell[1],lcell[4]},
-								   		  {lcell[2],lcell[4],lcell[1]},
-								   		  {lcell[3],lcell[4],lcell[2]},
-								   		  {lcell[0],lcell[4],lcell[3]}};
-
-			CheckFaces(vertmentions, vertincells, colour, faces, lindex, cdata, fdata);
+		else if(cdata.elems[ii].size() == 6)
+		{
+			colour[ii] = vector<uint>(5,0);
 		}
-		if(lcell.size() == 4)
-		{	/*Tet*/
-			vector<vector<uint>> faces = {{lcell[0],lcell[1],lcell[2]},
-								   		  {lcell[0],lcell[2],lcell[3]},
-								   		  {lcell[0],lcell[3],lcell[1]},
-								   		  {lcell[3],lcell[2],lcell[1]}};
-
-			CheckFaces(vertmentions, vertincells, colour, faces, lindex, cdata, fdata);
+		else if(cdata.elems[ii].size() == 5)
+		{
+			colour[ii] = vector<uint>(5,0);
+		}
+		else if(cdata.elems[ii].size() == 4)
+		{
+			colour[ii] = vector<uint>(4,0);
 		}
 	}
 
-	return vector<vector<uint>>(0);
+	#ifdef DEBUG
+	dbout << "Starting main loop..." << endl;
+	#endif
+
+	uint cellSum=0;
+	#pragma omp parallel shared(vertincells)
+	{
+		/*Create local copy of the face data*/
+		FACE flocal;
+		uint cellCount = 0;
+		uint reported_Count = 0;
+
+		#pragma omp for schedule(static) nowait 
+		for(uint lindex = 0; lindex < nElem; ++lindex)
+		{	
+			vector<uint> lcell = cdata.elems[lindex];
+			vector<vector<uint>> lfaces;
+			uint lgeom=0;
+			/*Check size of the inner vector, as that will show which geometry it is*/
+			if(lcell.size() == 4)
+			{	/*Tetraeder*/
+				lgeom = 0;
+
+				lfaces = {{lcell[0],lcell[1],lcell[2]},
+						  {lcell[1],lcell[0],lcell[3]},
+				   		  {lcell[2],lcell[3],lcell[0]},
+				   		  {lcell[3],lcell[1],lcell[2]}};
+			}
+			else if(lcell.size() == 5)
+			{	/*Pyra*/
+				lgeom = 1;
+				lfaces = {{lcell[0],lcell[3],lcell[2],lcell[1]},
+				   		  {lcell[1],lcell[4],lcell[0]},
+				   		  {lcell[2],lcell[4],lcell[1]},
+				   		  {lcell[3],lcell[4],lcell[2]},
+				   		  {lcell[4],lcell[3],lcell[0]}};						
+			}
+			else if(lcell.size() == 6)
+			{	/*Prism*/
+				lgeom = 2;
+				lfaces = {{lcell[1],lcell[2],lcell[5],lcell[4]},
+				   		  {lcell[4],lcell[3],lcell[0],lcell[1]},
+				   		  {lcell[3],lcell[5],lcell[2],lcell[0]},
+				   		  {lcell[2],lcell[0],lcell[1]},
+				   		  {lcell[5],lcell[3],lcell[4]}};
+			}
+			
+			else if(lcell.size() == 8)
+			{	/*Hexaeder*/
+				lgeom = 3;
+
+				lfaces = {{lcell[0],lcell[1],lcell[2],lcell[3]},
+						  {lcell[4],lcell[0],lcell[3],lcell[7]},
+						  {lcell[1],lcell[0],lcell[4],lcell[5]},
+						  {lcell[2],lcell[1],lcell[5],lcell[6]},
+						  {lcell[3],lcell[2],lcell[6],lcell[7]},
+						  {lcell[7],lcell[6],lcell[5],lcell[4]}};
+			}
+
+			CheckFaces(vertincells, lfaces, lindex, lgeom, cdata, colour, flocal);
+			
+			if (cellCount >= 25000)
+		    {
+		      #pragma omp atomic
+		      cellSum += 25000;
+		      cellCount = 0;
+		    }
+		    else
+		    {
+		      ++cellCount;
+		    }
+
+		    // size_t tid = 0;
+			size_t tid = omp_get_thread_num();
+			if(tid == 0)
+			{
+				if(cellSum - reported_Count >= 100000)
+				{
+					cout << "Processed cells: " << cellSum << " (" << 
+						100.0 * float(cellSum)/(float(cdata.numElem))  << "%)" <<  endl; 
+
+					reported_Count = cellSum;
+				}
+			}
+		}
+
+		#pragma omp for schedule(static) ordered
+		for(int ii=0; ii<NTHREADS; ii++)
+		{
+			#pragma omp ordered
+			fdata.insert(flocal);
+		}
+
+		
+		#pragma omp for schedule(static) nowait
+		for (auto cell:colour)
+			for (auto face:cell)
+			{
+				if(face!=1)
+				{
+					unmfaces++;
+				}
+			}
+	}
+
+	if(unmfaces != 0)
+	cout << "There are " << unmfaces << " unmatched faces." << endl;
+
+	if (fdata.faces.size() != fdata.numFaces)
+	{
+		cout << "numFaces is not being measured correctly." << endl;
+		cout << "faces vector size: "<< fdata.faces.size() << "  numFaces: " << fdata.numFaces << endl;
+	}
+
+	if(fdata.celllr.size() != fdata.numFaces)
+	{
+		cout << "Not all faces have left and right cells identified." << endl;
+		cout << "Celllr size: " << fdata.celllr.size();
+		cout << "  N_Faces: " << fdata.numFaces << endl;
+	}
+
+	#ifdef DEBUG
+	dbout << "Exiting BuildFaces..." << endl;
+	#endif
+}
+
+void Write_Face_Data(const string& meshIn, const FACE& fdata)
+{
+	string meshOut = meshIn;
+	meshOut.append(".faces");
+
+	#ifdef DEBUG
+	dbout << "Entering Write_Face_Data..." << endl;
+	dbout << "Output file: " << meshOut << endl;
+	#endif
+
+	#ifdef DEBUG 
+	cout << "Attempting write output file." << endl;
+	cout << "File: " << meshOut << endl;
+	#endif
+
+	NcFile fout(meshOut, NcFile::replace);
+
+	/*Dimensions needed*/
+	NcDim nElems = fout.addDim("no_of_elements",fdata.numElem);
+	NcDim nFaces = fout.addDim("no_of_faces",fdata.numFaces);
+	NcDim ppFace = fout.addDim("points_per_face",3);
+	NcDim nWall = fout.addDim("no_of_wall_faces",fdata.nWall);
+	NcDim nFar = fout.addDim("no_of_farfield_faces",fdata.nFar);
+	NcDim nPoint = fout.addDim("no_of_points",fdata.numPoint);
+	
+	/*Define the faces*/
+	vector<NcDim> faceVar;
+	faceVar.emplace_back(nFaces);
+	faceVar.emplace_back(ppFace);
+	NcVar elemFaces = fout.addVar("points_of_element_faces",ncInt,faceVar);
+	NcVar leftElems = fout.addVar("left_element_of_faces",ncInt,nFaces);
+	NcVar rightElems = fout.addVar("right_element_of_faces",ncInt,nFaces);
+	
+	/*Define the points*/
+	NcVar vertsX = fout.addVar("points_xc",ncDouble,nPoint);
+	NcVar vertsY = fout.addVar("points_yc",ncDouble,nPoint);
+	NcVar vertsZ = fout.addVar("points_zc",ncDouble,nPoint);
+
+	/*Create the C array for the faces*/
+	int* faces = new int[fdata.numFaces*3];
+	for(uint ii = 0; ii < fdata.numFaces; ++ii)
+		for(uint jj = 0; jj < 3; ++jj)
+		{
+			faces[index(ii,jj,3)] = static_cast<int>(fdata.faces[ii][jj]);
+		}
+
+	/*Put faces into the file*/
+	elemFaces.putVar(faces);
+
+	/*Put face left and right into the file*/
+	int* left = new int[fdata.numFaces];
+	int* right = new int[fdata.numFaces];
+
+	for(uint ii = 0; ii < fdata.numFaces; ++ii)
+	{
+		left[ii] = fdata.celllr[ii].first;
+		right[ii] = fdata.celllr[ii].second;
+	}
+
+	leftElems.putVar(left);
+	rightElems.putVar(right);
+
+	/*Create the C arrays for the vertices*/
+	double* x = new double[fdata.numPoint];
+	double* y = new double[fdata.numPoint];
+	double* z = new double[fdata.numPoint];
+
+	for(uint ii = 0; ii < fdata.numPoint; ++ii)
+	{
+		x[ii] = fdata.verts[ii](0);
+		y[ii] = fdata.verts[ii](1);
+		z[ii] = fdata.verts[ii](2);
+	}
+
+	/*Put them in the file*/
+	vertsX.putVar(x);
+	vertsY.putVar(y);
+	vertsZ.putVar(z);
+
+}
+
+void Write_ASCII_Face_Data(const FACE& fdata)
+{
+	#ifdef DEBUG
+	dbout << "Entering Write_ASCII_Face_Data..." << endl;
+	cout << "Attempting write output file." << endl;
+	cout << "File: " << "Test.dat" << endl;
+	#endif
+	std::ofstream fout("Test.dat",std::ios::out);
+	if(!fout.is_open())
+	{
+		cout << "Couldn't open the output file." << endl;
+		exit(-1);
+	}
+
+	uint TotalNumFaceNodes = 0;
+	for(uint ii = 0; ii < fdata.faces.size(); ++ii)
+	{
+		TotalNumFaceNodes += fdata.faces[ii].size();
+	}
+
+	fout << "VARIABLES= \"X\" \"Y\" \"Z\" " << endl;
+	fout << "ZONE T=\"FEPOLYGON Test\"" << endl;
+	fout << "ZONETYPE=FEPOLYHEDRON" << endl;
+	fout << "NODES=" << fdata.numPoint << " ELEMENTS=" << fdata.numElem << " FACES=" << fdata.numFaces << endl;
+	fout << "TotalNumFaceNodes=" << TotalNumFaceNodes << endl;
+	fout << "NumConnectedBoundaryFaces=0 TotalNumBoundaryConnections=0" << endl;
+
+	uint w = 15;
+	uint preci = 6;
+	fout << std::left << std::scientific << std::setprecision(preci);
+	// fout << fdata.numElem << " " << fdata.numFaces << "  " <<  fdata.numPoint << endl;
+	
+	/*Write vertices in block format (Each dimension in turn)*/
+	uint newl = 0;
+	fout << std::setw(1);
+	for(uint DIM = 0; DIM < SIMDIM; ++DIM)
+	{
+		for(uint ii = 0; ii < fdata.verts.size(); ++ii)
+		{
+			fout << std::setw(w) << fdata.verts[ii](DIM);
+			newl++;
+
+			if(newl>4)
+			{
+				fout << endl;
+				fout << " ";
+				newl=0;
+			}
+		}
+	}
+	fout << endl;
+	
+
+	fout << std::left << std::fixed;
+	w = 9;
+	/*Inform of how many vertices in each face*/
+	fout << "#node count per face" << endl;
+	newl = 0;
+	for (uint ii = 0; ii < fdata.faces.size(); ++ii)
+	{
+		fout << std::setw(w) << fdata.faces[ii].size();
+		newl++;
+
+		if(newl>4)
+		{
+			fout << endl;
+			newl=0;
+		}
+	}
+	fout << endl;
+	/*Write the face data*/
+	fout << "#face nodes" << endl;
+	for (uint ii = 0; ii < fdata.faces.size(); ++ii)
+	{
+		for(auto const& vertex:fdata.faces[ii])
+		{	/*Write face vertex indexes*/
+			fout << std::setw(w) << vertex+1;
+			if (vertex > fdata.numPoint)
+			{
+				cout << "Trying to write a vertex outside of the number of points." << endl;
+			}
+		}
+		fout << endl;
+	}
+
+	/*Write face left and right*/
+	newl = 0;
+	fout << "#left elements" << endl;
+	for (uint ii = 0; ii < fdata.celllr.size(); ++ii)
+	{
+		fout << std::setw(w) << fdata.celllr[ii].first+1 ;
+		newl++;
+
+		if(newl>4)
+		{
+			fout << endl;
+			newl=0;
+		}
+	}
+	fout << endl;
+
+	fout << "#right elements" << endl;
+	newl = 0;
+	for (uint ii = 0; ii < fdata.celllr.size(); ++ii)
+	{
+		if(fdata.celllr[ii].second < 0)
+			fout<< std::setw(w) << 0 ;
+		else
+			fout << std::setw(w) << fdata.celllr[ii].second+1;
+
+
+		newl++;
+
+		if(newl>4)
+		{
+			fout << endl;
+			newl=0;
+		}
+	}
+
+	fout.close();
+
+	#ifdef DEBUG
+	dbout << "Exiting Write_Face_Data..." << endl;
+	#endif
+}
+
+void Write_Cell_Data(const CELL& cdata)
+{
+	#ifdef DEBUG
+	dbout << "Entering Write_Cell_Data..." << endl;
+	#endif
+
+	cout << "Writing cell based data." << endl;
+
+	std::ofstream fout("Cell.dat",std::ios::out);
+	if (!fout.is_open())
+	{
+		cout << "Failed to open data file for writing mesh." << endl;
+		exit(-1);
+	}
+
+	fout << "TITLE = \"3D TAU Solution\"\n";
+	fout << "VARIABLES = \"x (m)\" \"y (m)\" \"z (m)\"\n";
+	fout << "ZONE T=\"Cell Data\"" << endl;
+	fout << "N=" << cdata.numPoint << ", E=" << cdata.numElem << 
+	", F=FEBLOCK, ET=BRICK"  << endl << endl;
+
+	/*Write vertices*/
+	fout << std::left << std::scientific << std::setprecision(6);
+	fout << std::setw(1);
+	for(uint ii = 0; ii < SIMDIM; ++ii)
+	{	
+		uint kk = 0;
+		for(uint jj = 0; jj < cdata.verts.size(); ++jj)
+		{
+			fout << std::setw(15) << cdata.verts[jj][ii];
+			kk++;
+
+			if(kk == 5)
+			{
+				fout << endl;
+				fout << std::setw(1);
+				kk = 0;
+			}
+		}
+
+		if(kk % 5 != 0)
+			fout << "\n";
+	}
+
+	/*Write element indexing*/
+	fout << std::fixed;
+	for(uint ii = 0; ii < cdata.elems.size(); ++ii)
+	{	
+		for(auto elem:cdata.elems[ii])
+		{
+			fout << std::setw(6) << elem+1;
+		}
+		fout << "\n";
+	}
+
+	fout.close();
+
+	#ifdef DEBUG
+	dbout << "Exiting Write_Cell_Data..." << endl;
+	#endif
+
+}
+
+void Write_Griduns(const FACE& fdata)
+{
+	std::ofstream fout("griduns",std::ios::out);
+
+	if(!fout.is_open())
+	{
+		cout << "Couldn't open griduns." << endl;
+		exit(-1);
+	}
+
+	uint w = 12;
+	fout << std::left << std::fixed;
+	fout << setw(w) << fdata.numElem << setw(w) << 
+		fdata.numFaces << setw(w) << fdata.numPoint << endl;
+
+	for(uint ii = 0; ii < fdata.numFaces; ++ii)
+	{
+		for(auto const& vert:fdata.faces[ii])
+			fout << setw(w) << vert;
+
+		fout << setw(w) << fdata.celllr[ii].first << setw(w) << fdata.celllr[ii].second << endl;
+	}
+
+	fout << std::scientific << std::setprecision(6);
+	w = 15;
+	for(uint ii = 0; ii < fdata.numPoint; ++ii)
+	{
+		fout << setw(w) << ii;
+		for(uint jj = 0; jj < SIMDIM; ++jj)
+		{
+			fout << setw(w) << fdata.verts[ii](jj);
+		}
+		fout << endl;
+	}
+
+	fout.close();
 }
 
 int main (int argc, char** argv)
 {
+	omp_set_num_threads(NTHREADS);
+
 	/*Idea: Take TAU cell based mesh, and convert to a face based data in NetCDF or TECIO*/
 	string meshIn = argv[1];
+	string bmapIn = argv[2];
 
 	#ifdef DEBUG 
 		cout << "Attempting read of NetCDF file." << endl;
@@ -425,13 +1169,15 @@ int main (int argc, char** argv)
 
 	/*Get the coordinates of the mesh*/
 	cdata.verts = Get_Coordinates(fin);
+
 	if(cdata.verts.size()!= nPts)
 	{
 		cout << "Some data has been missed.\nPlease check how many points." << endl;
 	}
 
-	
-	
+	/*Get surface faces*/
+	vector<int> markers = Find_Bmap_Markers(bmapIn);
+	cdata.sfaces = Get_Surface(fin, markers);	
 
 	/*Put data into cell structure, and generate face based data*/
 	if(tets.size()!=0)
@@ -453,22 +1199,15 @@ int main (int argc, char** argv)
 	else
 		cout << "All element data ingested" << endl;
 
-	uint nfaces = 0;
-	for(auto const& cell: cdata.elems)
-	{
-		if(cell.size() == 8)
-			nfaces+=12; /*Hex*/
-		if(cell.size() == 6)
-			nfaces+=8;	/*Prism*/
-		if(cell.size() == 5)
-			nfaces+=6;	/*Pyra*/
-		if(cell.size() == 4)
-			nfaces+=4;	/*Tet*/
-	}
+
+	// Write_Cell_Data(cdata);
 
 	/*Now build the face based data*/
-	FACE fdata(cdata.verts);
+	cout << "Building the face-based data..." << endl;
+	FACE fdata(cdata);
+	BuildFaces(cdata,fdata);
 
-
+	Write_Face_Data(meshIn, fdata);
+	// Write_Griduns(fdata);
 	return 0;
 }

@@ -68,12 +68,12 @@ void Write_Zone(string input, ZONE& zn, MESH& cells)
 	fout << " N=" << zn.nP << ", E=" << zn.nE << 
 	", F=FEBLOCK, ET=" 	<< zn.ETtype << endl << endl;
 
-	fout << std::setw(10) << std::scientific;
+	fout << std::left << std::scientific << std::setprecision(6);
 	for(uint ii = 0; ii < SIMDIM; ++ii)
 	{	uint kk = 0;
 		for(uint jj = cells.verts.size() - zn.nP; jj < cells.verts.size(); ++jj)
 		{
-			fout << cells.verts[jj][ii] << " ";
+			fout << cells.verts[jj][ii] << std::setw(15);
 			kk++;
 
 			if(kk == 5)
@@ -91,7 +91,7 @@ void Write_Zone(string input, ZONE& zn, MESH& cells)
 	{	uint kk = 0;
 		for(uint jj = cells.pVel.size() - zn.nP; jj < cells.pVel.size(); ++jj)
 		{
-			fout << cells.pVel[jj][ii] << " ";
+			fout << cells.pVel[jj][ii] << std::setw(15);
 			kk++;
 
 			if(kk == 5)
@@ -106,14 +106,14 @@ void Write_Zone(string input, ZONE& zn, MESH& cells)
 	}
 
 	// cout << "Velocitices written" << endl;
-
+	fout << std::fixed;
 	if (zn.ctype == 1 || zn.ctype == 2)
 	{
 		for(uint ii = cells.elems.size()-zn.nE; ii < cells.elems.size(); ++ii)
 		{	
 			for(auto elem:cells.elems[ii])
 			{
-				fout << elem+1 << " ";
+				fout << elem+1 << std::setw(15);
 			}
 			fout << "\n";
 		}
