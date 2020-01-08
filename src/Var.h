@@ -188,18 +188,18 @@ typedef struct MESH
 	std::vector<std::vector<StateVecD>> cVerts;
 	std::vector<StateVecD> cCentre;
 	/*Yep... a quad layered vector... I don't like it any more than you*/
-	#if SIMDIM == 3
-		std::vector<std::vector<std::vector<StateVecD>>> cFaces; 
-		// std::vector<Polyhedron> cPolys;
-	#endif
-	std::vector<StateVecD> cVel;
+	std::vector<std::vector<std::vector<StateVecD>>> cFaces; 
 	std::vector<std::vector<uint>> cNeighb;
+	
+	/*Surface data*/
+	vector<vector<StateVecD>> farfield;
+	vector<vector<StateVecD>> surface;
+
+	/*Solution vectors*/
+	std::vector<StateVecD> cVel;
 	std::vector<double> cellCp;
 	std::vector<double> cellP;
 	std::vector<double> cellRho;
-
-	/*Cell containment classes*/
-	// std::unique_ptr<Tree> tree; 
 }MESH;
 
 /*Particle data class*/

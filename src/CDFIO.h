@@ -177,6 +177,9 @@ void Average_Point_to_Cell(const vector<T>& pData, vector<T>& cData,
 	cData = sum; 
 }
 
+/*****************************************************************************/
+/*************** READING NETCDF CELL BASED DATA FUNCTIONS ********************/
+/*****************************************************************************/
 
 vector<ldouble> CpToPressure(const vector<ldouble>& Cp, const FLUID& fvar)
 {
@@ -360,13 +363,109 @@ void Get_Cell_Faces(const vector<StateVecD>& verts, const vector<vector<uint>>& 
 	}
 }
 
-void Read_TAUMESH(SIM& svar, MESH& cells, FLUID& fvar)
+/*****************************************************************************/
+/***************** READING NETCDF SOLUTION DATA FUNCTIONS ********************/
+/*****************************************************************************/
+
+void Read_SOLUTION(const string& solIn, const FLUID& fvar, MESH& cells)
+{
+	NcFile sol(solIn, NcFile::read);
+
+	NcDim solPN = sol.getDim("no_of_points");
+	uint solPts = static_cast<uint>(solPN.getSize());
+
+	#ifdef DEBUG
+	dbout << "Solution points: " << solPts << endl;
+	#endif
+
+	if(solPts!=cells.numPoint)
+	{
+		cout << "Solution file does not have the same number of vertices as the mesh." << endl;
+		cout << "Please check again." << endl;
+		exit(-1);
+	}
+
+	/*Get the velocities*/
+	vector<double> xvel, yvel, zvel;
+	Get_Scalar_Property(sol, "x_velocity", xvel);
+	#if SIMDIM == 3
+	Get_Scalar_Property(sol, "y_velocity", yvel);
+	#endif
+	Get_Scalar_Property(sol, "z_velocity", zvel);
+
+	/*Test for size*/
+	if(xvel.size() == solPts)
+	{	/*Turn the arrays into a state vector*/
+		vector<StateVecD> vel(solPts);
+		
+		for(uint ii = 0; ii < solPts; ++ii)
+		{
+			#if SIMDIM == 3
+			vel[ii] = StateVecD(xvel[ii],yvel[ii],zvel[ii]);
+			#else
+			vel[ii] = StateVecD(xvel[ii],zvel[ii]);
+			#endif
+		}
+		cells.pVel = vel;
+	}
+	else 
+	{
+		cout << "velocities do not have the same number of vertices as the mesh." << endl;
+		cout << xvel.size() << "  " << solPts << endl;
+		cout << "Please check again." << endl;
+		exit(-1);
+	}
+
+	/*Get other scalar data that may or may not exist*/
+	vector<double> press;
+	Get_Scalar_Property(sol,"pressure",press);
+	if(press.size()==0)
+	{
+		/*Pressure data doesn't exist, so go to cp*/
+		vector<double> cp;
+		Get_Scalar_Property(sol,"cp",cp);
+
+		/*Then convert cp to pressure. can get global attributes from sol file.. Maybe...*/
+		press = CpToPressure(cp, fvar);
+	}
+	else
+	{
+		for(uint ii = 0; ii < cells.pointP.size(); ++ii)
+			press[ii] -= fvar.gasPress;
+	}
+
+	vector<double> dens(solPts);
+
+	for(uint ii = 0; ii < cells.pointP.size(); ++ii)
+	{
+		dens[ii] = fvar.rho0 * pow((press[ii]/fvar.B + 1),1/fvar.gam);
+	}	
+
+	/*Update the point arrays with the actual stuff*/
+	cells.pointP = press;
+	cells.pointRho = dens;	
+
+	/*Average the data to a the cell*/
+	cells.SetCells();
+	StateVecD zero = StateVecD::Zero();
+	Average_Point_to_Cell(cells.pVel,cells.cVel, cells.elems, zero);
+	Average_Point_to_Cell(cells.pointRho,cells.cellRho,cells.elems,0.0);
+	Average_Point_to_Cell(cells.pointP,cells.cellP,cells.elems,0.0);
+	
+	/*Find cell centres*/
+	Average_Point_to_Cell(cells.verts,cells.cCentre,cells.elems,zero);
+}
+
+
+/*****************************************************************************/
+/*************** READING NETCDF CELL BASED DATA FUNCTION *********************/
+/*****************************************************************************/
+
+void Read_TAUMESH(const SIM& svar, MESH& cells, const FLUID& fvar)
 {
 	
 	string meshIn = svar.infolder;
 	string solIn = svar.infolder;
-
-
 
 	meshIn.append(svar.meshfile);
 	solIn.append(svar.solfile);
@@ -389,6 +488,9 @@ void Read_TAUMESH(SIM& svar, MESH& cells, FLUID& fvar)
 	#ifdef DEBUG
 		dbout << "nElem : " << nElem << " nPts: " << nPts << endl;
 	#endif
+
+	cells.numPoint = nPts;
+	cells.numElem = nElem;
 
 	/*Retrieve the cells*/
 	vector<vector<uint>> tets = Get_Element(fin,"points_of_tetraeders");
@@ -506,95 +608,240 @@ void Read_TAUMESH(SIM& svar, MESH& cells, FLUID& fvar)
 	#endif
 	// /*End of reading the mesh file.*/
 	// cout << "Trying solution file: " << solIn << endl;
-	NcFile sol(solIn, NcFile::read);
-
-	NcDim solPN = sol.getDim("no_of_points");
-	uint solPts = static_cast<uint>(solPN.getSize());
-
-	#ifdef DEBUG
-	dbout << "Solution points: " << solPts << endl;
-	#endif
-
-	if(solPts!=nPts)
-	{
-		cout << "Solution file does not have the same number of vertices as the mesh." << endl;
-		cout << "Please check again." << endl;
-		exit(-1);
-	}
-
-	/*Get the velocities*/
-	vector<double> xvel, yvel, zvel;
-	Get_Scalar_Property(sol, "x_velocity", xvel);
-	#if SIMDIM == 3
-	Get_Scalar_Property(sol, "y_velocity", yvel);
-	#endif
-	Get_Scalar_Property(sol, "z_velocity", zvel);
-
-	/*Test for size*/
-	if(xvel.size() == solPts)
-	{	/*Turn the arrays into a state vector*/
-		vector<StateVecD> vel(solPts);
-		
-		for(uint ii = 0; ii < solPts; ++ii)
-		{
-			#if SIMDIM == 3
-			vel[ii] = StateVecD(xvel[ii],yvel[ii],zvel[ii]);
-			#else
-			vel[ii] = StateVecD(xvel[ii],zvel[ii]);
-			#endif
-		}
-		cells.pVel = vel;
-	}
-	else 
-	{
-		cout << "velocities do not have the same number of vertices as the mesh." << endl;
-		cout << xvel.size() << "  " << solPts << endl;
-		cout << "Please check again." << endl;
-		exit(-1);
-	}
-
-	/*Get other scalar data that may or may not exist*/
-	vector<double> press;
-	Get_Scalar_Property(sol,"pressure",press);
-	if(press.size()==0)
-	{
-		/*Pressure data doesn't exist, so go to cp*/
-		vector<double> cp;
-		Get_Scalar_Property(sol,"cp",cp);
-
-		/*Then convert cp to pressure. can get global attributes from sol file.. Maybe...*/
-		press = CpToPressure(cp, fvar);
-	}
-	else
-	{
-		for(uint ii = 0; ii < cells.pointP.size(); ++ii)
-			press[ii] -= fvar.gasPress;
-	}
-
-	vector<double> dens(solPts);
-
-	for(uint ii = 0; ii < cells.pointP.size(); ++ii)
-	{
-		dens[ii] = fvar.rho0 * pow((press[ii]/fvar.B + 1),1/fvar.gam);
-	}	
-
-	/*Update the point arrays with the actual stuff*/
-	cells.pointP = press;
-	cells.pointRho = dens;
-	cells.numPoint = solPts;
-	cells.numElem = nElem;
-
-	/*Average the data to a the cell*/
-	cells.SetCells();
-	StateVecD zero = StateVecD::Zero();
-	Average_Point_to_Cell(cells.pVel,cells.cVel, cells.elems, zero);
-	Average_Point_to_Cell(cells.pointRho,cells.cellRho,cells.elems,0.0);
-	Average_Point_to_Cell(cells.pointP,cells.cellP,cells.elems,0.0);
-	
-	/*Find cell centres*/
-	Average_Point_to_Cell(cells.verts,cells.cCentre,cells.elems,zero);
+	Read_SOLUTION(solIn,fvar,cells);
 }
 
+/*****************************************************************************/
+/*************** READING NETCDF FACE BASED DATA FUNCTIONS ********************/
+/*****************************************************************************/
+vector<vector<uint>> Get_Faces(NcFile& fin)
+{
+	#ifdef DEBUG
+		dbout << "Reading face data" << endl;
+	#endif
+
+	NcVar faceData = fin.getVar("points_of_element_faces");	
+	if(faceData.isNull())
+	{	/*No data is available*/
+		return vector<vector<uint>>(0);
+	}
+
+	NcDim dim = faceData.getDim(0);
+	size_t nFace = dim.getSize();
+
+	dim = faceData.getDim(1);
+	size_t nPnts = dim.getSize();
+	// cout << nElem << "  " << nPoints << endl;
+	#ifdef DEBUG
+	dbout << "Allocating array of: " << nFace << " by " << nPnts << endl;
+	#endif
+
+	/*Allocate on the heap (can be big datasets)*/		
+	int* faceArray = new int[nFace*nPnts];
+			
+	/*Get the actual data from the file*/
+	vector<size_t> startp,countp;
+	startp.push_back(0);
+	startp.push_back(0);
+	countp.push_back(nFace);
+	countp.push_back(nPnts);
+	
+	#ifdef DEBUG
+	dbout << "Attempting to read NetCDF faces." << endl;
+	#endif
+
+	faceData.getVar(startp,countp,faceArray);
+
+	cout << "Successfully read face data." << endl;
+
+	#ifdef DEBUG
+	dbout << "Successfully read face data." << endl;
+	#endif
+
+	/*Convert it to a vector to store*/
+	uint ii,jj;
+	vector<vector<uint>> faceVec(nFace,vector<uint>(nPnts));
+	for (ii = 0; ii < nFace; ++ii)
+	{
+		for(jj = 0; jj < nPnts; ++jj)
+			faceVec[ii][jj] = static_cast<uint>(faceArray[index(ii,jj,nPnts)]);
+	}
+
+	#ifdef DEBUG
+	dbout << "Returning vector" << endl;
+	#endif
+	return faceVec;
+	
+}
+
+void Place_Faces(NcFile& fin, const vector<vector<uint>> faces, MESH& cells)
+{
+	#ifdef DEBUG
+		dbout << "Reading element left/right and placing faces" << endl;
+	#endif
+
+	NcVar leftData = fin.getVar("left_element_of_faces");	
+	if(leftData.isNull())
+	{	/*No data is available*/
+		cout << "No cell left data. Stopping" << endl;
+		exit(-1);
+	}
+
+	NcDim dim = leftData.getDim(0);
+	size_t nLeft = dim.getSize();
+
+	int* left = new int[nLeft];
+	
+	#ifdef DEBUG
+	dbout << "Attempting to read NetCDF left elements." << endl;
+	#endif
+
+	leftData.getVar(left);
+
+	cout << "Successfully read left element data." << endl;
+
+	#ifdef DEBUG
+	dbout << "Successfully read left element data." << endl;
+	#endif
+
+	NcVar rightData = fin.getVar("right_element_of_faces");	
+	if(leftData.isNull())
+	{	/*No data is available*/
+		cout << "No cell left data. Stopping" << endl;
+		exit(-1);
+	}
+
+	dim = rightData.getDim(0);
+	size_t nRight = dim.getSize();
+
+	int* right = new int[nRight];
+	
+	#ifdef DEBUG
+	dbout << "Attempting to read NetCDF right elements." << endl;
+	#endif
+
+	rightData.getVar(right);
+
+	cout << "Successfully read right element data." << endl;
+
+	#ifdef DEBUG
+	dbout << "Successfully read right element data." << endl;
+	#endif
+
+	vector<vector<vector<uint>>> cFaces(nLeft);
+
+	for(uint ii = 0; ii < nLeft; ++ii)
+	{
+		int lindex = left[ii];
+		int rindex = right[ii];
+
+		/*Create an array of face indexes to create element arrays*/
+		cFaces[lindex].emplace_back(faces[ii]);
+
+		vector<StateVecD> fVerts;
+		for(auto const& vertex:faces[ii])
+			fVerts.emplace_back(cells.verts[vertex]);
+
+		cells.cFaces[lindex].emplace_back(fVerts);
+
+		if(rindex == -2)
+		{	/*Farfield face*/
+			cells.farfield.emplace_back(fVerts);
+		}
+		else if (rindex == -1)
+		{	/*Surface face*/
+			cells.surface.emplace_back(fVerts);
+		}
+	}
+
+	#ifdef DEBUG
+		dbout << "End of placing faces in elements." << endl;
+	#endif
+
+	/*Now go through the faces and see which vertices are unique, to get element data*/
+	for(uint ii = 0; ii < cFaces.size(); ++ii)
+	{
+		for(auto const& faces:cFaces[ii])
+		{
+			for(auto const& vert:faces)
+			{
+				if(std::find(cells.elems[ii].begin(),cells.elems[ii].end(),vert)
+					==cells.elems[ii].end())
+				{	/*Vertex doesn't exist in the elems vector yet.*/
+					cells.elems[ii].emplace_back(vert);
+				}
+			}
+		}
+	}
+
+	#ifdef DEBUG
+	dbout << "All elements defined." << endl << endl;
+	#endif
+	
+
+}
+
+void Read_TAUMESH_FACE(SIM& svar, MESH& cells, FLUID& fvar)
+{
+	string meshIn = svar.infolder;
+	string solIn = svar.infolder;
+	meshIn.append(svar.meshfile);
+	solIn.append(svar.solfile);
+	
+	#ifdef DEBUG 
+		dbout << "Attempting read of NetCDF file." << endl;
+		dbout << "Mesh file: " << meshIn << endl;
+		dbout << "Solution file: " << solIn << endl;
+	#endif
+	/*Read the mesh data*/
+	NcFile fin(meshIn, NcFile::read);
+	cout << "Mesh file open. Reading face data..." << endl;
+
+	// Retrieve how many elements there are.
+	NcDim elemNo = fin.getDim("no_of_elements");
+	NcDim pointNo = fin.getDim("no_of_points");
+	NcDim faceNo = fin.getDim("no_of_faces");
+	uint nElem = static_cast<uint>(elemNo.getSize());
+	uint nPnts = static_cast<uint>(pointNo.getSize());
+	uint nFace = static_cast<uint>(faceNo.getSize());
+
+	#ifdef DEBUG
+		dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << endl;
+	#endif
+
+	cout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << endl;
+	
+	cells.numPoint = nPnts;
+	cells.numElem = nElem;
+
+	cells.elems = vector<vector<uint>>(nElem);
+	cells.cFaces = vector<vector<vector<StateVecD>>>(nElem);
+	cells.verts = vector<StateVecD>(nPnts);
+
+	vector<vector<uint>> faces = Get_Faces(fin);
+
+	/*Get the coordinates of the mesh*/
+	cells.verts = Get_Coordinates(fin);
+	if(cells.verts.size()!= nPnts)
+	{
+		cout << "Some data has been missed.\nPlease check how many points." << endl;
+	}
+
+	/*Get face left and right, and put the faces in the elements*/
+	Place_Faces(fin, faces, cells);
+
+	#ifdef DEBUG
+	dbout << "End of interaction with mesh file and ingested data." << endl << endl;
+	dbout << "Opening solultion file." << endl;
+	#endif
+
+	Read_SOLUTION(solIn,fvar,cells);
+}
+
+
+/*****************************************************************************/
+/****************** WRITING NETCDF DATA FUNCTIONS ****************************/
+/*****************************************************************************/
 
 void Write_Group(NcGroup &zone, const State &pnp1, 
 	const uint start, const uint end, const uint outform)
@@ -762,45 +1009,4 @@ void Write_Boundary_CDF(const SIM &svar, const State &pnp1)
 	Write_Group(bound, pnp1, 0, svar.bndPts, svar.outform);
 }
 
-// void Write_H5_File(h5_file_t& fout, const SIM& svar, const State& pnp1)
-// {
-// 	const h5_id_t step = svar.stepno;
-// 	const h5_size_t numParts = svar.simPts;
-// 	const double* time = &svar.t;
-// 	H5SetStep(fout,step);
-// 	H5WriteStepAttribFloat64(fout, "Time", time, 1);
-// 	H5PartSetNumParticles(fout, numParts);
-// 	const uint start = svar.bndPts;
-// 	const uint end = svar.totPts;
-
-// 	const uint size = end - start;
-// 	if(size != svar.simPts)
-// 	{
-// 		cout << "Simulation point size mismatch when writing h5 file." << endl;
-// 		exit(-1);
-// 	}
-
-// 	double* x = new double[size];
-// 	double* y = new double[size];
-// 	double* z = new double[size];
-// 	int* id = new int[size];
-
-// 	for(uint i = start; i < end; ++i)
-// 	{
-// 		x[i-start] = pnp1[i].xi[0];
-// 		y[i-start] = pnp1[i].xi[1];	
-// 		#if SIMDIM == 3
-// 			z[i-start] = pnp1[i].xi[2];
-// 		#else
-// 			z[i-start] = 0.0;
-// 		#endif
-
-// 		id[i-start] = pnp1[i].partID;
-// 	}	
-
-// 	H5PartWriteDataFloat64(fout, "x", x);
-// 	H5PartWriteDataFloat64(fout, "y", y);
-// 	H5PartWriteDataFloat64(fout, "z", z);
-// 	H5PartWriteDataInt32(fout, "id", id);
-// }
 #endif

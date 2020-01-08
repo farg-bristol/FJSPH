@@ -164,7 +164,7 @@ int main(int argc, char *argv[])
 	if(svar.Bcase == 6)
 	{
 		#if SIMDIM == 3
-		Read_TAUMESH(svar,cells,fvar);
+		Read_TAUMESH_FACE(svar,cells,fvar);
 		#else
 		string meshfile = svar.infolder;
 		meshfile.append(svar.meshfile);
