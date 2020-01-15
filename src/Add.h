@@ -12,13 +12,26 @@
 using std::cout;
 using std::endl;
 
-void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const CROSS &cvar, State &pn, State &pnp1)
+void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const AERO &avar, State &pn, State &pnp1)
 {	
 	// cout << "Adding points..." << endl;
-	StateVecD v = cvar.vJet;  /*Jet velocity*/
+	uint pID = svar.totPts;
+	
 	svar.nrefresh = 0;	
 	ldouble jetR = 0.5*(svar.Jet(0));
-	uint pID = svar.totPts;
+	ldouble resR = 2*jetR;
+	
+	StateVecD v;
+	if(svar.Bcase == 2)
+	{
+		v = (avar.vJet*pow(jetR,2))/(0.6*pow(resR,2));
+		jetR *= 2;
+	}
+	else
+	{
+		v = avar.vJet;  /*Jet velocity*/
+	}
+	
 
 	/*Squeeze particles together to emulate increased pressure*/
 	ldouble press =fvar.pPress;
@@ -91,10 +104,10 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 	StateVecD v = StateVecD::Zero();
 	ldouble rho = fvar.Simmass/pow(svar.dx,SIMDIM);
 	// ldouble rho = fvar.rho0;
-	ldouble press = fvar.B*(pow(rho/fvar.rho0,fvar.gam)-1);
+	ldouble press = fvar.pPress;
 	// ldouble press = 0.0;
 	svar.nrefresh = 0;	
-	ldouble radius = 0.5*svar.Start(1);
+	ldouble radius = 0.5*svar.Start(0);
 
 	#if SIMDIM == 3
 		
@@ -149,14 +162,14 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 				if(((x*x) + (y*y)) <= (radius*radius) )
 	    		{   /*If the point is inside the hole diameter, add it*/
 					StateVecD xi2(x,y);
-					pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,2,pID));
-					pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,2,pID));
+					pn.emplace_back(Particle(xi2,v,rho,fvar.Simmass,press,2,pID));
+					pnp1.emplace_back(Particle(xi2,v,rho,fvar.Simmass,press,2,pID));
 					++pID;
 					++svar.simPts;
 					++svar.nrefresh;
 					xi2(0) = -x;
-					pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,2,pID));
-					pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,2,pID));
+					pn.emplace_back(Particle(xi2,v,rho,fvar.Simmass,press,2,pID));
+					pnp1.emplace_back(Particle(xi2,v,rho,fvar.Simmass,press,2,pID));
 					++pID;
 					++svar.simPts;
 					++svar.nrefresh;
@@ -208,7 +221,7 @@ namespace PoissonSample
 		return f.squaredNorm() <= radius;
 	}
 
-	StateVecI imageToGrid(const StateVecD& P, ldouble cellSize )
+	StateVecI imageToGrid(const StateVecD& P, const ldouble cellSize )
 	{
 		#if SIMDIM == 2
 		return StateVecI( (int)(P(0)/cellSize), (int)(P(1)/cellSize));
@@ -226,17 +239,20 @@ namespace PoissonSample
 		#endif
 		{
 			#if SIMDIM == 2
-				grid_ = std::vector<std::vector<StateVecD>>(w,std::vector<StateVecD>(w));
+				grid_ = std::vector<std::vector<StateVecD>>(w,std::vector<StateVecD>(w,StateVecD::Zero()));
 			#endif
 			#if SIMDIM == 3
 				grid_ = std::vector<std::vector<std::vector<StateVecD>>>
-				(w,std::vector<std::vector<StateVecD>>(w,std::vector<StateVecD>(w)));
+				(w,std::vector<std::vector<StateVecD>>(w,std::vector<StateVecD>(w,StateVecD::Zero())));
 			#endif
 		}
 
 		void insert(const StateVecD& p)
 		{
 			const StateVecI g = imageToGrid(p, cellSize_);
+			// std::cout << g(0) << "  " << g(1)  << endl;
+			// cout << p(0) << "  " << p(0) << endl << endl;
+			// cout << grid_.size() << endl;
 
 			// if(g(0) >  static_cast<int>(grid_.size()))
 			// {
@@ -250,7 +266,7 @@ namespace PoissonSample
 			// 	exit(-1);
 			// }
 
-			// std::cout << g(0) << "  " << g(1) << std::endl << endl;
+
 			#if SIMDIM == 2
 				grid_[g(0)][g(1)] = p;
 			#endif
@@ -267,26 +283,26 @@ namespace PoissonSample
 			const int D = 5;
 
 			// scan the neighbourhood of the point in the grid
-			for ( int i = g(0) - D; i < g(0) + D; i++ )
+			for ( int ii = g(0) - D; ii < g(0) + D; ii++ )
 			{
-				for ( int j = g.y() - D; j < g.y() + D; j++ )
+				for ( int jj = g.y() - D; jj < g.y() + D; jj++ )
 				{	
 					#if SIMDIM == 2
-						if ( i >= 0 && i < int(w_) && j >= 0 && j < int(h_) )
+						if ( ii >= 0 && ii < int(w_) && jj >= 0 && jj < int(h_) )
 						{
-							const StateVecD P = grid_[i][j];
+							const StateVecD P = grid_[ii][jj];
 
 							if ( (P-point).norm() < minDist_ ) { return true; }
 						}
 					#endif
 
 					#if SIMDIM == 3
-						for (int k = g.z() - D; k < g.z() + D; k++)
+						for (int kk = g.z() - D; kk < g.z() + D; kk++)
 						{
-							if ( i >= 0 && i < int(w_) && j >= 0 && j < int(h_)
-							&& k >= 0 && k < int(d_) )
+							if ( ii >= 0 && ii < int(w_) && jj >= 0 && jj < int(h_)
+							&& kk >= 0 && kk < int(d_) )
 							{
-								const StateVecD P = grid_[i][j][k];
+								const StateVecD P = grid_[ii][jj][kk];
 
 								if ( (P-point).norm() < minDist_ ) { return true; }
 							}
@@ -355,11 +371,10 @@ namespace PoissonSample
 		Return a vector of generated points
 		sampleLimit - refer to bridson-siggraph07-poissondisk.pdf for details (the value 'k')
 	**/
-	std::vector<Part> generatePoissonPoints(const SIM& svar, const FLUID& fvar, const uint& host, 
+	std::vector<Part> generatePoissonPoints(SIM& svar, const FLUID& fvar, const AERO& avar, const uint& host, 
 			State& pnp1, const outl& outlist)
 	{
 		/*Variables for the poisson disk sampling*/
-		ldouble minDist = svar.Pstep;
 		ldouble radius = fvar.sr;
 		uint sampleLimit = 30;
 		PRNG generator;
@@ -367,14 +382,40 @@ namespace PoissonSample
 		uint pID = svar.totPts;
 
 		/*Properties for new particles*/
-		const StateVecD vel = pnp1[host].cellV;
-		const ldouble press = fvar.gasPress - pnp1[host].cellP;
-		// const ldouble press = -100000;
+		StateVecD vel= avar.vInf;
+		ldouble press = 0;
+		ldouble rho = fvar.rho0;
+		if(svar.Bcase == 6)
+		{
+			press = pnp1[host].cellP;
+			vel = pnp1[host].cellV;
+			rho = pnp1[host].cellRho;
+		}
+		#if SIMDIM == 3
+			else if(svar.Bcase == 4)
+			{	
+				ldouble Vel = svar.vortex.getVelocity(pnp1[host].xi).norm();
+				press = 0.5*fvar.rhog*
+					(pow(fvar.gasVel,2.0)-pow(Vel,2.0));
+				rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
+			}
+		#endif
+		else
+		{
+			press = /*fvar.gasPress +*/0.5*fvar.rhog*(vel.squaredNorm()-pnp1[host].v.squaredNorm());
+			rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
+		}
+
 		// const ldouble rho = pnp1[host].cellRho;
 		// const ldouble mass = fvar.rhog* pow(svar.Pstep, SIMDIM);
-		const ldouble rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
+		
 		const ldouble mass = pnp1[host].m;
+		const ldouble deltax = pow(mass/rho, 1.0/double(SIMDIM));
+		
+		// #pragma omp critical
+		// cout << press << "  " << rho << "  " << mass << "  " << deltax << endl;
 
+ 		const ldouble minDist = /*svar.Pstep*/ deltax;
 		std::vector<Part> samplePoints;
 		std::vector<StateVecD> processList;
 		std::vector<Part> airP;

@@ -43,8 +43,8 @@ StateVecD AeroForce(const StateVecD &Vdiff, const SIM &svar, const FLUID &fvar)
 }
 
 
-StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar, 
-	const Part &pi, const StateVecD &SurfC, const uint size, const ldouble woccl)
+StateVecD CalcForce(SIM& svar, const FLUID& fvar, const AERO& avar, 
+	const Part &pi, const StateVecD& SurfC, const uint size, const ldouble woccl)
 {
 	StateVecD Fd= StateVecD::Zero();
 	
@@ -62,19 +62,19 @@ StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 	}
 	else 
 	{
-		Vdiff = cvar.vInf - pi.v;
+		Vdiff = avar.vInf - pi.v;
 	}
 	
-	const double nfull = fvar.avar.nfull;
+	const double nfull = avar.nfull;
 	
 	if(pi.b ==2)
 	{
-		switch(cvar.acase)
+		switch(avar.acase)
 		{
 			case 0: /*No aero force*/
 				break;
 			case 1:	{ /* All upstream particles */
-				Fd = woccl*cvar.Acorrect*AeroForce(Vdiff, svar, fvar);
+				Fd = woccl*avar.Acorrect*AeroForce(Vdiff, svar, fvar);
 				break;
 			}
 			case 2:	{ /*Surface particles, with correction based on surface normal*/
@@ -86,17 +86,17 @@ StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 					ldouble correc = 1.0;
 					if(size > 0.1 * nfull)
 					{
-						ldouble num = SurfC.dot(cvar.vInf-pi.v);
-						ldouble denom = SurfC.norm()*(cvar.vInf-pi.v).norm();
+						ldouble num = SurfC.dot(Vdiff);
+						ldouble denom = SurfC.norm()*(Vdiff).norm();
 						ldouble theta = num/denom;
 						
 						if (theta <= 1.0  && theta >= -1.0)
 						{
-							correc = cvar.a*W2Kernel(1-theta,cvar.h1,1)+
-								cvar.b*W2Kernel(1-theta,cvar.h2,1);
+							correc = avar.a*W2Kernel(1-theta,avar.h1,1)+
+								avar.b*W2Kernel(1-theta,avar.h2,1);
 						}
 					}
-					Fd = cvar.Acorrect*correc*Fd;
+					Fd = avar.Acorrect*correc*Fd;
 				}
 				break;
 			}
@@ -104,21 +104,21 @@ StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 			{
 				if (size < nfull)
 				{
-					// StateVecD Vdiff = cvar.vInf-pi.v;
+					// StateVecD Vdiff = avar.vInf-pi.v;
 
 					Fd = AeroForce(Vdiff, svar, fvar);
 					ldouble correc = 1.0;
 					double Acorrect = 0.0;
 
 					/*Correction based on surface normal*/
-					ldouble num = SurfC.dot(cvar.vInf-pi.v);
-					ldouble denom = SurfC.norm()*(cvar.vInf-pi.v).norm();
+					ldouble num = SurfC.dot(Vdiff);
+					ldouble denom = SurfC.norm()*(Vdiff).norm();
 					ldouble theta = num/denom;
 					
 					if (theta <= 1.0  && theta >= -1.0)
 					{
-						correc = cvar.a*W2Kernel(1-theta,cvar.h1,1)+
-							cvar.b*W2Kernel(1-theta,cvar.h2,1);
+						correc = avar.a*W2Kernel(1-theta,avar.h1,1)+
+							avar.b*W2Kernel(1-theta,avar.h2,1);
 					}
 					
 					/*Correct based on the number of neighbours*/
@@ -131,15 +131,15 @@ StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 			}
 			case 4:
 			{	/*Gissler et al (2017)*/
-				if(size < nfull)
-				{	
-					ldouble ymax = Vdiff.squaredNorm()*fvar.avar.ycoef;
-					ldouble Re = 2.0*fvar.rhog*Vdiff.norm()*fvar.avar.L/fvar.mug;
+				// if(size < nfull)
+				// {	
+					const ldouble ymax = Vdiff.squaredNorm()*avar.ycoef;
+					const ldouble Re = 2.0*fvar.rhog*Vdiff.norm()*avar.L/fvar.mug;
 					ldouble Cds;
 
-					ldouble frac2 = std::min((2.0/3.0)*nfull,double(size))
-									/((2.0/3.0)*nfull);
-					ldouble frac1 = (1.0 - frac2);
+					const ldouble frac2 = std::min(nfull,double(size))
+									/(nfull);
+					const ldouble frac1 = (1.0 - frac2);
 
 					// if (Re < 3500)
 					//  	Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
@@ -151,25 +151,23 @@ StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 					else 
 						Cds = 0.424;
 
-					ldouble Cdl = Cds*(1+2.632*ymax);
-					ldouble	Cdi = frac1*Cdl + /*0.8**/frac2;
+					const ldouble Cdl = Cds*(1+2.632*ymax);
+					const ldouble	Cdi = frac1*Cdl + /*0.8**/frac2;
 
-					ldouble Adrop = M_PI*pow((fvar.avar.L + fvar.avar.Cb*fvar.avar.L*ymax),2);
-					ldouble Aunocc = frac1*Adrop + frac2*fvar.HSQ;
+					#if SIMDIM == 3 
+						const ldouble Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
+						const ldouble Aunocc = frac1*Adrop + frac2*fvar.HSQ;
+					#endif
+					#if SIMDIM == 2
+						const ldouble Adrop = M_PI*(avar.L + avar.Cb*avar.L*ymax);
+						const ldouble Aunocc = frac1*Adrop + frac2*fvar.H;
+					#endif
 
-					// ldouble num = SurfC.dot(Vdiff);
-					// ldouble denom = SurfC.norm()*cvar.vInf.norm();
-					// ldouble theta = acos(num/denom)/M_PI;
-					// pi.theta = theta;
-					// ldouble correc = 0.0;
 
-					// if (theta <= 1.0 )
-					// 	correc = cvar.a*W2Kernel(2*theta,cvar.h1,1)+cvar.b*W2Kernel(2*theta,cvar.h2,1);
-
-					ldouble Ai = (1-woccl)/*correc*/*Aunocc;
+					const ldouble Ai = (1-woccl)/*correc*/*Aunocc;
 
 					Fd = 0.5*fvar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai/pi.m;
-				}
+				// }
 			}
 		}
 	}
@@ -177,31 +175,31 @@ StateVecD CalcForce(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 	return Fd;
 }
 
-void ApplyAero(SIM &svar, const FLUID &fvar, const CROSS &cvar, 
-	State &pnp1, const outl &outlist)
+void ApplyAero(SIM &svar, const FLUID &fvar, const AERO &avar, 
+	const State &pnp1, const outl &outlist, vector<StateVecD>& res)
 {
-	std::vector<StateVecD> Af(svar.totPts,StateVecD::Zero());
-	const uint start = svar.bndPts;
-	const uint end = svar.totPts;
+	// std::vector<StateVecD> Af(svar.totPts,StateVecD::Zero());
+	const static uint start = svar.bndPts;
+	const static uint end = svar.totPts;
 
-	#pragma omp parallel for reduction(+:Af) shared(svar)
-	for (uint i=start; i < end; ++i)
+	#pragma omp parallel for reduction(+:res) shared(svar)
+	for (uint ii=start; ii < end; ++ii)
 	{
-		uint size = outlist[i].size();
+		uint size = outlist[ii].size();
 		
-		if (size < fvar.avar.nfull)
-		{	
-			Part pi(pnp1[i]);
+		// if (size < avar.nfull)
+		// {	
+			Part pi(pnp1[ii]);
 			pi.normal = StateVecD::Zero();
 			ldouble kernsum = 0.0;
 			ldouble woccl = 0.0;
-			for (auto j:outlist[i])
+			for (auto const jj:outlist[ii])
 			{	/* Neighbour list loop. */
-				const Part pj(pnp1[i]);
+				const Part pj(pnp1[jj]);
 
-				if(i == j)
+				if(pi.partID == pj.partID)
 				{
-					kernsum += W2Kernel(0,fvar.H,fvar.correc);
+					kernsum += fvar.correc;
 					continue;
 				}
 
@@ -212,7 +210,7 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 				kernsum += W2Kernel(r,fvar.H,fvar.correc);
 
 				/*Occlusion for Gissler Aero Method*/
-				if (svar.Bcase > 2 && (cvar.acase == 4 || cvar.acase == 1))
+				if (svar.Bcase > 2 && (avar.acase == 4 || avar.acase == 1))
 				{
 					StateVecD Vdiff;
 	
@@ -229,7 +227,7 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 					}
 					else 
 					{
-						Vdiff = cvar.vInf - pi.v;
+						Vdiff = avar.vInf - pi.v;
 					}
 
 					ldouble frac = -Vdiff.normalized().dot(Rij.normalized());
@@ -243,21 +241,20 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 			} /*End of neighbours*/
 
 			/*Find the aero force*/
-			StateVecD Fd = CalcForce(svar,fvar,cvar,pi,pi.normal,size,woccl);
+			StateVecD Fd = CalcForce(svar,fvar,avar,pi,pi.normal,size,woccl);
 			// pnp1[i].theta = woccl;
-			// if(size > 1.0/3.0 *fvar.avar.nfull)
+			// if(size > 1.0/3.0 *avar.nfull)
 			// {
-			for (auto j:outlist[i])
+			for (auto jj:outlist[ii])
 			{	/* Neighbour list loop. */
-				const Part pj = pnp1[j];
+				const Part pj = pnp1[jj];
 
 				if(pj.b == 0)
 					continue;
 				
 				ldouble r = (pj.xi-pi.xi).norm();
 				ldouble kern = W2Kernel(r,fvar.H,fvar.correc);
-				// #pragma omp critical
-				Af[j] += Fd*kern/kernsum;
+				res[jj] += Fd*kern/kernsum;
 			}
 			// }
 			// else 
@@ -265,19 +262,19 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const CROSS &cvar,
 			// 	pnp1[i].Af += Fd;
 			// }
 
-		}/*End of if*/
+		// }/*End of if*/
 
-	}/*End of particles*/
+	}/*End of ii particles*/
 
-	StateVecD Force = StateVecD::Zero();
-	#pragma omp parallel for reduction(+:Force)
-	for (uint i = start; i < end; ++i)
-	{
-		pnp1[i].f += Af[i];
-		pnp1[i].Af = Af[i];
-		Force +=Af[i];
-	}
-	svar.Force = Force;
+	// StateVecD Force = StateVecD::Zero();
+	// #pragma omp parallel for/* reduction(+:Force)*/
+	// for (uint ii = start; ii < end; ++ii)
+	// {
+	// 	res[ii] += Af[ii];
+	// 	// pnp1[ii].Af = Af[ii];
+	// 	// Force += Af[ii];
+	// }
+	// svar.Force = Force;
 	
 
 }

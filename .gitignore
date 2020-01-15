@@ -54,3 +54,8 @@ Test_Settings.txt
 Crossflow.txt
 WCXSPH
 WCSPH
+WCSPH.log
+testfile.h5part
+test.cdl
+FailedCellContainment.dat
+*.dat

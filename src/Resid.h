@@ -22,12 +22,12 @@ ldouble GetNumpartdens(const SIM &svar, const FLUID &fvar, const State &pnp1, co
 	ldouble npd = 0.0;
 	const uint end = svar.totPts;
 	#pragma omp parallel for reduction(+:npd) shared(outlist)
-	for (uint i=0; i< end; ++i)
+	for (uint ii=0; ii< end; ++ii)
 	{
-		StateVecD pi = pnp1[i].xi;
-		for (uint j=0; j<outlist[i].size(); ++j)
+		StateVecD pi = pnp1[ii].xi;
+		for (auto jj:outlist[ii])
 		{ /* Surface Tension calcs */
-			StateVecD pj = pnp1[outlist[i][j]].xi;
+			StateVecD pj = pnp1[jj].xi;
 			ldouble r = (pj-pi).norm();
 			npd += W2Kernel(r,fvar.H,fvar.correc);
 		}
@@ -43,31 +43,31 @@ std::vector<StateVecD> GetColourGrad(const SIM &svar, const FLUID &fvar, const S
 	const uint end = svar.totPts;
 
 	#pragma omp parallel for shared(outlist)
-	for(uint i=start; i < end; ++i)
+	for(uint ii=start; ii < end; ++ii)
 	{
-		StateVecD pi = pnp1[i].xi;
+		StateVecD pi = pnp1[ii].xi;
 		// StateVecD top = StateVecD::Zero();
 		ldouble bottom = 0.0;
-		// pnp1[i].normal = StateVecD::Zero();
+		// pnp1[ii].normal = StateVecD::Zero();
 		
-		for(auto j:outlist[i])
+		for(auto jj:outlist[ii])
 		{	/*Find the denominator to correct absence of second phase*/
-			Part pj = pnp1[j];
+			Part pj = pnp1[jj];
 			ldouble r = (pj.xi-pi).norm();
 			bottom +=(pj.m/pj.rho)*W2Kernel(r,fvar.H,fvar.correc);
 
 		}
 
-		for(auto j:outlist[i])
+		for(auto jj:outlist[ii])
 		{	/*Find the numerator and sum*/
-			Part pj = pnp1[j];
+			Part pj = pnp1[jj];
 			StateVecD Rij = pj.xi-pi;
 			ldouble r = Rij.norm();
-			cgrad[i] += (pj.m/pj.rho)*W2GradK(Rij,r,fvar.H,fvar.correc);
-			// pnp1[i].normal += Rij;
+			cgrad[ii] += (pj.m/pj.rho)*W2GradK(Rij,r,fvar.H,fvar.correc);
+			// pnp1[ii].normal += Rij;
 		}
 		
-		cgrad[i] = cgrad[i]/bottom;
+		cgrad[ii] = cgrad[ii]/bottom;
 
 	}
 
@@ -75,14 +75,14 @@ std::vector<StateVecD> GetColourGrad(const SIM &svar, const FLUID &fvar, const S
 }
 
 StateVecD Base(const FLUID &fvar, const Part &pi, const Part &pj, 
-	const StateVecD &Rij, const StateVecD &Vij, const ldouble &r, 
+	const StateVecD &Rij, const StateVecD &Vij, const ldouble r, 
 	const StateVecD &Grad, std::vector<ldouble> &mu)
 {
 	/*Pressure and artificial viscosity - Monaghan (1994) p.400*/
 	ldouble pifac;
 	ldouble vdotr = Vij.dot(Rij);
 	ldouble muij= fvar.H*vdotr/(r*r+0.01*fvar.HSQ);
-	if (vdotr > 0.0) 
+	if (vdotr > 0.0 || pj.b == 3) 
 	{
 		pifac = 0.0;
 	}
@@ -133,61 +133,60 @@ StateVecD HuST(const FLUID &fvar, const Part &pi, const Part &pj,
 }
 
 ///**************** RESID calculation **************
-void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, State& airP*/,
-	 const vector<vector<Part>>& neighb, const outl& outlist)
+void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*, State& airP*/,
+	 const vector<vector<Part>>& neighb, const outl& outlist,
+	 vector<StateVecD>& RV, vector<ldouble>& Rrho)
 {
-	svar.maxmu=0; 					/* CFL Parameter */
-	StateVecD g = StateVecD::Zero();	/*Gravity Vector*/
-	#if SIMDIM == 3
-		g(2) = -9.81;
-	#else
-		g(1) = -9.81;
-	#endif
+	svar.maxmu=0; 					    /* CFL Parameter */
 	const uint start = svar.bndPts;
 	const uint end = svar.totPts;
+
+	/*Gravity Vector*/
+	#if SIMDIM == 3
+		const static StateVecD g = StateVecD(0.0,0.0,-9.81);
+	#else
+		const static StateVecD g = StateVecD(0.0,-9.81);
+	#endif
+	// const uint piston = svar.psnPts;
 
 	/********* LOOP 1 - all points: Calculate numpartdens ************/
 	// ldouble numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
 	// std::vector<StateVecD> cgrad(svar.totPts,StateVecD::Zero());
 	// cgrad = GetColourGrad(svar,fvar,pnp1,outlist);
 
-	std::vector<ldouble> Rrhocontr(svar.totPts,0.0);
-	std::vector<StateVecD> RV(svar.totPts,StateVecD::Zero()); /*Residual force*/
-	std::vector<StateVecD> ST(svar.totPts,StateVecD::Zero()); /*Surface tension force*/		
-
-	#pragma omp parallel shared(g)
+	// std::vector<StateVecD> ST(svar.totPts,StateVecD::Zero()); /*Surface tension force*/		
+	#pragma omp parallel /*shared(numpartdens)*/
 	{
+
 /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
-		#pragma omp for reduction(+:Rrhocontr)
+		// #pragma omp for reduction(+:Rrhocontr)
+		// for (uint ii=0; ii < start; ++ii)
+		// {
+		// 	Part pi = pnp1[ii];
+
+		// 	for(auto j:outlist[ii])
+		// 	{
+		// 		Part pj = pnp1[j];
+		// 		StateVecD Rij = pj.xi-pi.xi;
+		// 		StateVecD Vij = pj.v-pi.v;
+		// 		ldouble r = Rij.norm();
+		// 		StateVecD Grad = W2GradK(Rij, r,fvar.H,fvar.correc);
+		// 		Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
+		// 	}
+		// 	pnp1[ii].Rrho = Rrhocontr[ii]; /*drho/dt*/
+		// }
+
+/******** LOOP 3 - Piston points: Calculate density and pressure. **********/		
+		#pragma omp for reduction(+:RV, Rrho) /*Reduction defs in Aero.h*/
 		for (uint ii=0; ii < start; ++ii)
 		{
-			Part pi = pnp1[ii];
-
-			for(auto j:outlist[ii])
-			{
-				Part pj = pnp1[j];
-				StateVecD Rij = pj.xi-pi.xi;
-				StateVecD Vij = pj.v-pi.v;
-				ldouble r = Rij.norm();
-				StateVecD Grad = W2GradK(Rij, r,fvar.H,fvar.correc);
-				Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
-			}
-			pnp1[ii].Rrho = Rrhocontr[ii]; /*drho/dt*/
-		}
-
-		
-/******* LOOP 3 - All simulation points: Calculate forces on the fluid. *********/
-		#pragma omp for reduction(+:Rrhocontr, RV, ST) /*Reduction defs in Aero.h*/
-		for (uint ii=start; ii < end; ++ii)
-		{
-			Part pi = pnp1[ii];
-			uint size = outlist[ii].size();
-			// pnp1[i].theta = double(size);
+			const Part pi = pnp1[ii];
+			const uint size = outlist[ii].size();
+			// pnp1[ii].theta = double(size);
 			// pnp1[ii].theta = 0.0;
 
 			std::vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
-			mu.reserve(size+1);
-			mu.emplace_back(0);	/*Avoid dereference of empty vector*/			
+			mu.reserve(size+1);			
 			if (ii > neighb.size())
 			{
 				cout << "neighb array smaller than totPts" << endl;
@@ -195,72 +194,113 @@ void Forces(SIM& svar, const FLUID& fvar, const CROSS& cvar, State& pnp1/*, Stat
 			}
 			for (Part const& pj:neighb[ii])
 			{	/* Neighbour list loop. */
-				StateVecD contrib = StateVecD::Zero();
-				StateVecD visc = StateVecD::Zero();
-				// StateVecD SurfC= StateVecD::Zero();
-
-				// Part pj(pnp1[j]);
 
 				/*Check if the position is the same, and skip the particle if yes*/
-				// #pragma omp critical
-				// cout << pi.partID << "  " << pj.partID << "  ";
 				if(pi.partID == pj.partID)
 					continue;
 
-				StateVecD Rij = pj.xi-pi.xi;
-				StateVecD Vij = pj.v-pi.v;
-				ldouble r = Rij.norm();
-				StateVecD Grad = W2GradK(Rij, r,fvar.H, fvar.correc);
+				const StateVecD Rij = pj.xi-pi.xi;
+				const StateVecD Vij = pj.v-pi.v;
+				const ldouble r = Rij.norm();
+				const StateVecD Grad = W2GradK(Rij, r,fvar.H, fvar.correc);
 
-				contrib = Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
+				StateVecD contrib = Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
+				/*drho/dt*/
+				Rrho[ii] -= pj.m*(Vij.dot(Grad));
+				RV[ii] += pj.m*contrib;
+			}/*End of neighbours*/
+			
+		} /*End of boundary parts*/
+
+		
+
+/******* LOOP 4 - All simulation points: Calculate forces on the fluid. *********/
+		#pragma omp for reduction(+:Rrho, RV/*, ST*/)  /*Reduction defs in Aero.h*/
+		for (uint ii = start; ii < end; ++ii)
+		{
+			Part pi = pnp1[ii];
+			uint size = outlist[ii].size();
+			// pnp1[ii].theta = double(size);
+			// pnp1[ii].theta = 0.0;
+
+			vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
+			mu.reserve(size+1);
+			mu.emplace_back(0);	/*Avoid dereference of empty vector*/		
+
+			if (ii > neighb.size())
+			{
+				cout << "neighb array smaller than totPts" << endl;
+				exit(-1);
+			}
+			for (Part const& pj:neighb[ii])
+			{	/* Neighbour list loop. */
+
+				/*Check if the position is the same, and skip the particle if yes*/
+				if(pi.partID == pj.partID)
+					continue;
+
+				const StateVecD Rij = pj.xi-pi.xi;
+				const StateVecD Vij = pj.v-pi.v;
+				const ldouble r = Rij.norm();
+				const StateVecD Grad = W2GradK(Rij, r,fvar.H, fvar.correc);
+
+				/*Momentum contribution - Monaghan (1994)*/
+				const StateVecD contrib = Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
 				
 				/*Laminar Viscosity - Morris (2003)*/
-				visc    = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
+				const StateVecD visc    = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
 
-				/*Surface Tension - Nair & Poeschel (2017)*/
-				// SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
-				// SurfC = HuST(fvar,pi,pj,Rij,r,cgrad[i],cgrad[j]);
-
-				/*drho/dt*/
-				Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
+				if (pj.b != 3)
+				{
+					/*Surface Tension - Nair & Poeschel (2017)*/
+					// StateVecD SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
+					// SurfC = HuST(fvar,pi,pj,Rij,r,cgrad[ii],cgrad[jj]);
+				
+					/*drho/dt*/
+					Rrho[ii] -= pj.m*(Vij.dot(Grad));
+				}
 
 				RV[ii] += pj.m*contrib + pj.m*visc /*+ SurfC/pj.m*/;
 
-				if (pj.b == 3)
-				{
-					// cout << "Interacting with an air particle" << endl;
-					ST[ii] += pj.m*contrib + pj.m*visc;
-					// contrib *= 0.01;
-					// #pragma omp critical
-					// cout << pj.m*contrib(0) << "  " << pj.m*contrib(1) << 
-					//  "  " << pj.m*visc(0) << "  " << pj.m*visc(1) << "  " << pj.m*(Vij.dot(Grad)) <<  endl;
-				}
+				// if (pj.b == 3)
+				// {
+				// 	ST[ii] += pj.m*contrib + pj.m*visc;
+				// }
 
 				// ST[ii] += SurfC/pj.m;
 			}/*End of neighbours*/
 			
-			
-			// cout << RV[ii](0) << "  " << RV[ii](1) << "  " << Rrhocontr[ii] << endl;
+			RV[ii] += g;
 			//CFL f_cv Calc
-			ldouble it = *max_element(mu.begin(),mu.end());
-			if (it > svar.maxmu)
-				svar.maxmu=it;
+			double it = *max_element(mu.begin(),mu.end());
+			if(it > svar.maxmu)
+				svar.maxmu = it;
 		} /*End of sim parts*/
 
 		// cout << endl;
 		//Update the actual structure
-		#pragma omp for
-		for(uint ii=0; ii < end; ++ii)
-		{
-			pnp1[ii].f = RV[ii] + g;
-			pnp1[ii].Rrho = Rrhocontr[ii]; /*drho/dt*/
-			pnp1[ii].Sf = ST[ii];			
-		}
+		// StateVecD Force = StateVecD::Zero();
+		// #pragma omp for
+		// for (uint ii = 0; ii < piston; ++ii)
+		// {
+		// 	Force += RV[ii];
+		// }
+		// svar.Force = Force;
 
-	}
+		// #pragma omp for
+		// for(uint ii=0; ii < end; ++ii)
+		// {
+		// 	pnp1[ii].f = RV[ii] + g;
+		// 	pnp1[ii].Rrho = Rrho[ii]; /*drho/dt*/
+		// 	// pnp1[ii].Sf = ST[ii];			
+		// }
+		
+	}	/*End of declare parallel */
+	
+
 		/*Aerodynamic force*/
-	if(svar.Bcase >= 3)
-		ApplyAero(svar,fvar,cvar,pnp1,outlist);
+	if(svar.Bcase > 1)
+		ApplyAero(svar,fvar,avar,pnp1,outlist,RV);
 	
 }
 

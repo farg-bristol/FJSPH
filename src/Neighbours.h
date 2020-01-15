@@ -17,28 +17,70 @@ void FindNeighbours(const Sim_Tree& NP1_INDEX, const FLUID& fvar, const State& p
 	{	/*Find neighbour list*/
 		outl local; /*Local processor copy*/
 		#pragma omp for schedule(static) nowait 
-		for(uint i=0; i < pnp1.size(); ++i)
+		for(uint ii=0; ii < pnp1.size(); ++ii)
 		{
 			// std::cout << pnp1[i].list.size();
 			std::vector<std::pair<size_t, ldouble>> matches; /* Nearest Neighbour Search*/
-			NP1_INDEX.index->radiusSearch(&pnp1[i].xi[0], search_radius, matches, params);
+			NP1_INDEX.index->radiusSearch(&pnp1[ii].xi[0], search_radius, matches, params);
 			
 			std::vector<uint> temp;
-			for (auto &j:matches)
+			for (auto &jj:matches)
 			{
-				temp.emplace_back(static_cast<uint>(j.first));
+				temp.emplace_back(static_cast<uint>(jj.first));
 			}
 			local.emplace_back(temp);
 			// std::cout << "  " << pnp1[i].list.size() << std::endl;
 		}
 
 		#pragma omp for schedule(static) ordered
-    	for(int i=0; i<NTHREADS; i++)
+    	for(int ii=0; ii<omp_get_num_threads(); ii++)
     	{
     		#pragma omp ordered
     		outlist.insert(outlist.end(),local.begin(),local.end());
     	}
 	}
 }
+
+void FindCellNeighbours(const Vec_Tree& CELL_INDEX, const vector<StateVecD>& cells, outl& outlist)
+{
+	outlist.clear();
+	#if SIMDIM == 3
+	const size_t num_results = 100;
+	#else
+	const size_t num_results = 40;
+	#endif
+	#pragma omp parallel
+	{	/*Find neighbour list*/
+		outl local; /*Local processor copy*/
+		#pragma omp for schedule(static) nowait 
+		for(uint ii=0; ii < cells.size(); ++ii)
+		{
+			StateVecD testp = cells[ii];
+			vector<size_t> ret_indexes(num_results);
+			vector<double> out_dists_sqr(num_results);
+
+			nanoflann::KNNResultSet<double> resultSet(num_results);
+			resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
+			
+			CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
+			
+			std::vector<uint> temp;
+			for (auto jj:ret_indexes)
+			{
+				temp.emplace_back(static_cast<uint>(jj));
+			}
+			local.emplace_back(temp);
+			// std::cout << "  " << pnp1[i].list.size() << std::endl;
+		}
+
+		#pragma omp for schedule(static) ordered
+    	for(int ii=0; ii<omp_get_num_threads(); ii++)
+    	{
+    		#pragma omp ordered
+    		outlist.insert(outlist.end(),local.begin(),local.end());
+    	}
+	}
+}
+
 
 #endif
