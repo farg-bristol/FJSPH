@@ -33,7 +33,7 @@ void FindNeighbours(const Sim_Tree& NP1_INDEX, const FLUID& fvar, const State& p
 		}
 
 		#pragma omp for schedule(static) ordered
-    	for(int ii=0; ii<NTHREADS; ii++)
+    	for(int ii=0; ii<omp_get_num_threads(); ii++)
     	{
     		#pragma omp ordered
     		outlist.insert(outlist.end(),local.begin(),local.end());
@@ -45,7 +45,7 @@ void FindCellNeighbours(const Vec_Tree& CELL_INDEX, const vector<StateVecD>& cel
 {
 	outlist.clear();
 	#if SIMDIM == 3
-	const size_t num_results = 80;
+	const size_t num_results = 100;
 	#else
 	const size_t num_results = 40;
 	#endif
@@ -74,7 +74,7 @@ void FindCellNeighbours(const Vec_Tree& CELL_INDEX, const vector<StateVecD>& cel
 		}
 
 		#pragma omp for schedule(static) ordered
-    	for(int ii=0; ii<NTHREADS; ii++)
+    	for(int ii=0; ii<omp_get_num_threads(); ii++)
     	{
     		#pragma omp ordered
     		outlist.insert(outlist.end(),local.begin(),local.end());

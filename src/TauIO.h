@@ -22,7 +22,7 @@ void Check_if_convex(MESH& cells)
 		StateVecD testp = cells.cCentre[ii];
 
 		#if SIMDIM == 3
-		if(!Crossings3D(cells.cFaces[ii],testp))
+		if(!Crossings3D(cells.verts,cells.cFaces[ii],testp))
 		{
 			cout << "Cell is not defined as convex. Please check the cell definition" << endl;
 			cout << "Cell ID: " << ii << " No Faces: " << cells.cFaces[ii].size() << 
@@ -32,7 +32,7 @@ void Check_if_convex(MESH& cells)
 
 		#endif
 		#if SIMDIM == 2
-		if(!Crossings2D(cells.cVerts[ii],testp))
+		if(!Crossings2D(cells.verts, cells.elems[ii],testp))
 		{
 			cout << "Cell is not defined as convex. Please check the cell definition" << endl;
 			cout << "Cell ID: " << ii << " No vertices: " << cells.cVerts[ii].size() << endl;
@@ -248,13 +248,13 @@ uint Get_Zone_Info(ifstream& fin, ZONE& zn)
 	return endof3D;
 }
 
-std::ifstream& GotoLine(std::ifstream& file, unsigned int num){
-    file.seekg(std::ios::beg);
-    for(uint ii=0; ii < num - 1; ++ii){
-        file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
-    }
-    return file;
-}
+// std::ifstream& GotoLine(std::ifstream& file, unsigned int num){
+//     file.seekg(std::ios::beg);
+//     for(uint ii=0; ii < num - 1; ++ii){
+//         file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+//     }
+//     return file;
+// }
 
 void Skip_Variable(ifstream& fin, const int np)
 {
@@ -354,8 +354,8 @@ void Get_Scalar_Data(ifstream& fin, ZONE& zn, T& var)
 	}
 }
 
-void Get_3DCells(ifstream& fin, const vector<StateVecD> verts, ZONE& zn,
- 		std::vector<std::vector<std::vector<StateVecD>>>& cFaces, 
+void Get_3DCells(ifstream& fin, /*const vector<StateVecD> verts,*/ ZONE& zn,
+ 		std::vector<std::vector<std::vector<uint>>>& cFaces, 
  		std::vector<std::vector<uint>>& cell, vector<vector<StateVecD>>& cVerts)
 {
 	string line;
@@ -373,7 +373,7 @@ void Get_3DCells(ifstream& fin, const vector<StateVecD> verts, ZONE& zn,
 				uint temp;
 				sline >> temp;
 				cell[ii][jj] = (temp-1);
-				cVerts[ii].emplace_back(verts[temp-1]);								
+				// cVerts[ii].emplace_back(verts[temp-1]);								
 			}
 		}
 
@@ -395,7 +395,7 @@ void Get_3DCells(ifstream& fin, const vector<StateVecD> verts, ZONE& zn,
 			// 			std::vector<StateVecD>(4)));	    /*Number of vertices per face*/			
 		}
 
-		Get_Cell_Faces(verts,cell,facenum,cFaces);
+		Get_Cell_Faces(cell,facenum,cFaces);
 	}
 	else if (zn.ctype == 3)
 	{	/*Prism*/
@@ -411,7 +411,7 @@ void Get_3DCells(ifstream& fin, const vector<StateVecD> verts, ZONE& zn,
 				uint temp;
 				sline >> temp;
 				cell[ii][jj] = (temp-1);
-				cVerts[ii].emplace_back(verts[temp-1]);
+				// cVerts[ii].emplace_back(verts[temp-1]);
 
 				if(count == 2 || count ==  5)
 				{
@@ -422,7 +422,7 @@ void Get_3DCells(ifstream& fin, const vector<StateVecD> verts, ZONE& zn,
 		}
 
 		std::vector<std::vector<uint>> facenum = {{1,4,5,2},{0,3,5,2},{0,3,4,1},{0,1,2},{5,4,3}};
-		Get_Cell_Faces(verts,cell,facenum,cFaces);
+		Get_Cell_Faces(cell,facenum,cFaces);
 	}	
 	else if (zn.ctype == 4)
 	{	/*Pyramid*/
@@ -437,12 +437,12 @@ void Get_3DCells(ifstream& fin, const vector<StateVecD> verts, ZONE& zn,
 				uint temp;
 				sline >> temp;
 				cell[ii][jj] = (temp-1);
-				cVerts[ii].emplace_back(verts[temp-1]);
+				// cVerts[ii].emplace_back(verts[temp-1]);
 			}
 		}
 
 		std::vector<std::vector<uint>> facenum = {{0,3,2,1},{0,1,4},{0,4,3},{1,4,2},{2,3,4}};
-		Get_Cell_Faces(verts,cell,facenum,cFaces);
+		Get_Cell_Faces(cell,facenum,cFaces);
 	}	
 }
 
@@ -620,11 +620,11 @@ uint Get_Zone(ifstream& fin, string input, MESH& cells, ZONE& zone)
 	/************ BEGINNING OF CELL CONNECTIVITY ******************/
 	#if SIMDIM == 3
 		vector<vector<uint>> celldata(zone.nE,vector<uint>(zone.nCverts));
-		vector<vector<vector<StateVecD>>> cFaces;
+		vector<vector<vector<uint>>> cFaces;
 		vector<vector<StateVecD>> cVerts;
 
 
-		Get_3DCells(fin,verts,zone,cFaces,celldata,cVerts);
+		Get_3DCells(fin,/*verts,*/zone,cFaces,celldata,cVerts);
 
 		cells.elems.insert(cells.elems.end(),celldata.begin(),celldata.end());
 		cells.cFaces.insert(cells.cFaces.end(), cFaces.begin(), cFaces.end());

@@ -48,7 +48,6 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 /***********************************************************************************/
 /***********************************************************************************/
 
-
 	if (svar.dt > svar.framet)
 	{
 		svar.dt = svar.framet;
@@ -58,7 +57,6 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 		uint frac = ceil(svar.framet/svar.dt);
 		svar.dt = svar.framet/frac;
 	}
-
 
 	/*Check if the particle has moved to a new cell*/
 	if (svar.Bcase == 6)
@@ -87,7 +85,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 			}
 
 			#pragma omp for schedule(static) ordered
-	    	for(int i=0; i<NTHREADS; i++)
+	    	for(int i=0; i<omp_get_num_threads(); i++)
 	    	{
 	    		#pragma omp ordered
 	    		air.insert(air.end(),local.begin(),local.end());
@@ -100,7 +98,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 		for(uint jj = 0; jj < air[ii].size(); ++jj)
 			airP.emplace_back(PartToParticle(air[ii][jj]));
 
-	#pragma omp parallel for shared(outlist)
+	#pragma omp parallel for shared(outlist) schedule(static)
 	for(uint ii = start; ii < end; ++ii)
 	{
 		pnp1[ii].theta = outlist[ii].size(); 
@@ -158,7 +156,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 			}
 
 			#pragma omp for schedule(static) ordered
-	    	for(int i=0; i<NTHREADS; i++)
+	    	for(int i=0; i<omp_get_num_threads(); i++)
 	    	{
 	    		#pragma omp ordered
 	    		neighb.insert(neighb.end(),local.begin(),local.end());
@@ -185,7 +183,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 		/*Update the state at time n+1*/
 		#pragma omp parallel shared(pn,res,Rrho,svar,fvar)
 		{
-			#pragma omp for
+			#pragma omp for schedule(static) nowait
 			for (uint ii = 0; ii < piston; ++ii)
 			{	/****** PISTON PARTICLES *************/
 				pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+Rrho[ii]);
@@ -196,7 +194,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 			}
 
 
-			#pragma omp for 
+			#pragma omp for schedule(static) nowait
 			for (uint ii=piston; ii < start; ++ii)
 			{	/****** BOUNDARY PARTICLES ***********/
 				// pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+pnp1[ii].Rrho);
@@ -208,7 +206,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 			}
 			
 
-			#pragma omp for
+			#pragma omp for schedule(static) nowait
 			for (uint ii=start; ii < end; ++ii)
 			{	/****** FLUID PARTICLES **************/
 				
@@ -255,7 +253,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 		
 		/****** FIND ERROR ***********/
 		errsum = 0.0;
-		#pragma omp parallel for reduction(+:errsum) shared(pnp1,xih)
+		#pragma omp parallel for reduction(+:errsum) shared(pnp1,xih) schedule(static)
 		for (uint ii = start; ii < end; ++ii)
 		{
 			StateVecD r = pnp1[ii].xi-xih[ii];
@@ -302,48 +300,41 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 	/*Check if more particles need to be created*/
 	if(svar.Bcase >= 2 && svar.Bcase !=5)
 	{
-		switch(svar.Bclosed)
+		if(svar.Bclosed == 0)
 		{
-			case 0:
-			{
-				int refresh = 1;
-				for (uint ii = svar.totPts-svar.nrefresh; ii<svar.totPts; ++ii)
-				{	/*Check that the starting area is clear first...*/
-					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
-					if(svar.Bcase == 2)
-					{
-						if(vec[1]< svar.dx-svar.Jet(1)*3)
-							refresh = 0;
-					}
-					else
-					{
-						if(vec[1]< svar.dx-svar.Jet(1))
-							refresh = 0;
-					}
+			uint refresh = 1;
+			
+			for (uint ii = svar.totPts-svar.nrefresh; ii<svar.totPts; ++ii)
+			{	/*Check that the starting area is clear first...*/
+				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
+				if(svar.Bcase == 2)
+				{
+					if(vec[1]< svar.dx-svar.Jet(1)*3)
+						refresh = 0;
 				}
-
-				if(refresh == 1)
-				{	/*...If it is, then check if we've exceeded the max points...*/
-					if (svar.addcount < svar.nmax)
-					{	/*...If we havent, then add points. */
-						// cout << "adding points..." << endl;
-						StateVecD vec = svar.Transp*(pnp1[svar.totPts-1].xi-svar.Start);
-						AddPoints(vec[1]-svar.dx, svar, fvar, avar, pn, pnp1);
-					}
-					else
-					{	/*...If we have, then check we're sufficiently
-						clear to close the boundary*/
-						cout << "End of adding particle rounds." << endl;
-						svar.Bclosed = 1;
-						
-					}
-					NP1_INDEX.index->buildIndex();
-					FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
+				else
+				{
+					if(vec[1]< svar.dx-svar.Jet(1))
+						refresh = 0;
 				}
-				break;
 			}
-			case 1:
-				break;
+			
+			if(refresh == 1)
+			{	/*...If it is, then check if we've exceeded the max points...*/
+				if (svar.addcount < svar.nmax)
+				{	/*...If we havent, then add points. */
+					// cout << "adding points..." << endl;
+					StateVecD vec = svar.Transp*(pnp1[svar.totPts-1].xi-svar.Start);
+					AddPoints(vec[1]-svar.dx, svar, fvar, avar, pn, pnp1);
+				}
+				else
+				{	
+					cout << "End of adding particle rounds." << endl;
+					svar.Bclosed = 1;	
+				}
+				NP1_INDEX.index->buildIndex();
+				FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
+			}
 		}
 	}
 

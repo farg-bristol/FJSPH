@@ -250,6 +250,9 @@ namespace PoissonSample
 		void insert(const StateVecD& p)
 		{
 			const StateVecI g = imageToGrid(p, cellSize_);
+			// std::cout << g(0) << "  " << g(1)  << endl;
+			// cout << p(0) << "  " << p(0) << endl << endl;
+			// cout << grid_.size() << endl;
 
 			// if(g(0) >  static_cast<int>(grid_.size()))
 			// {
@@ -263,7 +266,7 @@ namespace PoissonSample
 			// 	exit(-1);
 			// }
 
-			// std::cout << g(0) << "  " << g(1) << std::endl << endl;
+
 			#if SIMDIM == 2
 				grid_[g(0)][g(1)] = p;
 			#endif
@@ -408,7 +411,7 @@ namespace PoissonSample
 		
 		const ldouble mass = pnp1[host].m;
 		const ldouble deltax = pow(mass/rho, 1.0/double(SIMDIM));
-
+		
 		// #pragma omp critical
 		// cout << press << "  " << rho << "  " << mass << "  " << deltax << endl;
 

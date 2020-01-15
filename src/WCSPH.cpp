@@ -62,7 +62,7 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 		}
 
 		#pragma omp for schedule(static) ordered
-    	for(int i=0; i<NTHREADS; i++)
+    	for(int i=0; i<omp_get_num_threads(); i++)
     	{
     		#pragma omp ordered
     		neighb.insert(neighb.end(),localN.begin(),localN.end());
@@ -80,21 +80,46 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 	{
 		pnp1[ii].theta = outlist[ii].size(); 
 	}
+
+	/*Previous State for error calc*/
+	vector<StateVecD> xih(svar.totPts);
+	#pragma omp parallel for shared(pnp1)
+	for (uint  ii=0; ii < end; ++ii)
+		xih[ii] = pnp1[ii].xi;
 	
 	vector<StateVecD> res(svar.totPts,StateVecD::Zero());
 	vector<ldouble> Rrho(svar.totPts,0.0);
 	Forces(svar,fvar,avar,pnp1,neighb,outlist,res,Rrho); /*Guess force at time n+1*/
+
+	/*Find maximum safe timestep*/
+	vector<StateVecD>::iterator maxfi = std::max_element(res.begin(),res.end(),
+		[](StateVecD p1, StateVecD p2){return p1.norm() < p2.norm();});
+	ldouble maxf = maxfi->norm();
+	ldouble dtf = sqrt(fvar.H/maxf);
+	ldouble dtcv = fvar.H/(fvar.Cs+svar.maxmu);
+	const ldouble dt = 0.3*std::min(dtf,dtcv);
 
 	#pragma omp parallel for shared(res, Rrho)
 	for(uint ii = 0; ii < end; ++ii)
 	{
 		pnp1[ii].f = res[ii];
 		pnp1[ii].Rrho = Rrho[ii]; 
+		xih[ii] = pnp1[ii].xi + dt*pnp1[ii].v;
+	}
+#if DEBUG 
+	ldouble errsum = 0.0;
+
+	for (uint ii = start; ii < end; ++ii)
+	{
+		StateVecD r = xih[ii]-pnp1[ii].xi;
+		errsum += r.squaredNorm();
 	}
 
-	#if DEBUG 
-		dbout << "Exiting first step." << endl;
-	#endif
+	ldouble error=log10(sqrt(errsum/(double(svar.totPts))));
+
+	
+		dbout << "Exiting first step. Error: " << error << endl;
+#endif
 }
 
 void Find_MinMax(SIM& svar, const State& pnp1)
@@ -132,7 +157,7 @@ int main(int argc, char *argv[])
 	high_resolution_clock::time_point t1 = high_resolution_clock::now();
 	high_resolution_clock::time_point t2;
 	Eigen::initParallel();
-	omp_set_num_threads(NTHREADS);
+	// omp_set_num_threads(NTHREADS);
 
     double duration;
     double error = 0;
@@ -165,12 +190,15 @@ int main(int argc, char *argv[])
 	{
 		#if SIMDIM == 3
 		Read_TAUMESH_FACE(svar,cells,fvar);
+		// Read_TAUMESH(svar,cells,fvar);
 		#else
-		string meshfile = svar.infolder;
-		meshfile.append(svar.meshfile);
-		Read_TAUPLT(meshfile,cells,fvar);
+		Read_TAUMESH(svar,cells,fvar);
 		#endif
-	}
+	}	
+
+	// Check if cells have been initialsed before making a tree off it
+	if(cells.cCentre.size() == 0)
+		cells.cCentre.emplace_back(StateVecD::Zero());
 
 	Vec_Tree CELL_INDEX(SIMDIM,cells.cCentre,20);
 	CELL_INDEX.index->buildIndex();
@@ -204,10 +232,6 @@ int main(int argc, char *argv[])
 	// }	
 
 	InitSPH(svar,fvar,avar,pn,pnp1);
-
-	// Check if cells have been initialsed before making a tree off it
-	if(cells.cCentre.size() == 0)
-		cells.cCentre.emplace_back(StateVecD::Zero());
 
 	///********* Tree algorithm stuff ************/
 	Sim_Tree NP1_INDEX(SIMDIM,pnp1,20);

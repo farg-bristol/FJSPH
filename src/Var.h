@@ -9,9 +9,9 @@
 #define SIMDIM 2
 #endif
 
-#ifndef NTHREADS
-#define NTHREADS 4
-#endif
+// #ifndef NTHREADS
+// #define NTHREADS 4
+// #endif
 
 #if SIMDIM == 3
 	#include "VLM.h"
@@ -88,7 +88,7 @@ typedef struct SIM {
 	uint framecount;
 
 	std::string infolder, outfolder;
-	std::string meshfile, solfile;			
+	std::string meshfile, bmapfile, solfile;			
 	#if SIMDIM == 3
 		VLM vortex;
 	#endif
@@ -188,12 +188,12 @@ typedef struct MESH
 	std::vector<std::vector<StateVecD>> cVerts;
 	std::vector<StateVecD> cCentre;
 	/*Yep... a quad layered vector... I don't like it any more than you*/
-	std::vector<std::vector<std::vector<StateVecD>>> cFaces; 
+	std::vector<std::vector<std::vector<uint>>> cFaces; 
 	std::vector<std::vector<uint>> cNeighb;
 	
 	/*Surface data*/
-	vector<vector<StateVecD>> farfield;
-	vector<vector<StateVecD>> surface;
+	vector<vector<uint>> farfield;
+	vector<vector<uint>> surface;
 
 	/*Solution vectors*/
 	std::vector<StateVecD> cVel;

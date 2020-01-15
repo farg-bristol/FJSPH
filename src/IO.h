@@ -57,6 +57,10 @@ inline bool file_exists (const std::string& name) {
 
 void check_folder(string pathname)
 {	
+#ifdef DEBUG
+	dbout << "Checking existence of folder:" << pathname << endl;
+#endif
+
 	struct stat info;
 	if( stat( pathname.c_str(), &info ) != 0 )
   	{	/*Output directory doesn't exist, so create it*/
@@ -64,9 +68,14 @@ void check_folder(string pathname)
 		pathname.append("\"");
   		string cmd = "mkdir ";
 	  	cmd.append(pathname);
+#ifdef DEBUG
+		dbout << "Folder doesn't exist. Trying to create folder. Command:" << endl;
+		dbout << cmd << endl;
+#endif
 	    if(system(cmd.c_str()))
 	    {
 	    	cout << "System command failed to execute." << endl;
+	    	cout << "Command: " << cmd << endl;
 	    	exit(-1);
 	    }
   	}
@@ -95,6 +104,7 @@ int MakeOutputDir(int argc, char *argv[], SIM &svar)
   	uint pos1 = input.find("/"); 	uint pos2 = input.find(".");
   	string file = input.substr(pos1+1,pos2-pos1-1);
   	pathname.append("/Outputs/");
+
   
   	/*Check for output file name*/
 	if(argc == 2)
@@ -115,28 +125,44 @@ int MakeOutputDir(int argc, char *argv[], SIM &svar)
 		exit(-1);
 	}
 
+	/*Check if there is a slash at the end.*/
+
+  	if (pathname.back() != '/')
+  	{
+  		pathname.append("/");
+  	}
+
   	svar.outfolder = pathname;
 
-  	/*Create h5 folder*/
+  	/*Check output folder for any prexisting files*/
   	if(svar.outtype == 0)
   	{
   		string file = pathname;
-  		file.append("fuel.szplt.szdat");
+  		file.append("Fuel.szplt.szdat");
+#ifdef DEBUG
+  		dbout << "Checking for existence of previous szplt files." << endl;
+  		dbout << "Path: " << file << endl;
+#endif
   		struct stat info;
   		if(stat( file.c_str(), &info ) == 0)
   		{
 	  		string cmd = "exec rm -r \"";
 	  		cmd.append(pathname);
 	  		cmd.append("\"*.szplt.sz*");
+#ifdef DEBUG
+  		dbout << "Files found. Attempting to remove." << endl;
+  		dbout << "Command: " << cmd << endl;
+#endif
 	  		if(system(cmd.c_str()))
 	  		{
 		    	cout << "System command failed to execute." << endl;
+		    	cout << "Command: " << cmd << endl;
 		    	exit(-1);
 		    }
 		}
   	}
   	else if(svar.outtype == 2)
-  	{
+  	{	/*Create h5 folder*/
   		pathname.append("h5/");
   		check_folder(pathname);
   		string file = pathname;
@@ -150,6 +176,7 @@ int MakeOutputDir(int argc, char *argv[], SIM &svar)
 	  		if(system(cmd.c_str()))
 	  		{
 		    	cout << "System command failed to execute." << endl;
+		    	cout << "Command: " << cmd << endl;
 		    	exit(-1);
 		    }
 		}
@@ -158,38 +185,48 @@ int MakeOutputDir(int argc, char *argv[], SIM &svar)
 	return 0;
 }
 
-int getInt(ifstream& In, uint& lineno)
+int getInt(ifstream& In, uint& lineno, const string& name)
 {
 	string line;
 	getline(In,line);
 	lineno++;
 	int i = stoi(line);
+#ifdef DEBUG
+	dbout << name << ": " << i << endl;
+#endif	
 	return i;
 }
 
-double getDouble(ifstream& In, uint& lineno)
+double getDouble(ifstream& In, uint& lineno, const string& name)
 {
 	string line;
 	getline(In,line);
 	lineno++;
 	double d = stod(line);
+#ifdef DEBUG
+	dbout << name << ": " << d << endl;
+#endif	
 	return d; 
 }
 
-std::string getString(ifstream& In, uint& lineno)
+std::string getString(ifstream& In, uint& lineno, const string& name)
 {
 	string line;
 	getline(In,line);
 	lineno++;
 	size_t ptr = line.find_first_of(' ');
 	string result = line.substr(0,ptr);
+#ifdef DEBUG
+	dbout << name << ": " << result << endl;
+#endif	
 	return result; 
 }
 
-StateVecI getIVector(ifstream& In, uint& lineno)
+StateVecI getIVector(ifstream& In, uint& lineno, const string& name)
 {
 	string line;
 	getline(In,line);
+
 	lineno++;
 	std::istringstream sline(line);
 	// cout << sline.str() << endl;
@@ -205,21 +242,28 @@ StateVecI getIVector(ifstream& In, uint& lineno)
 			cout << "\tLine " << lineno << ": " << endl;
 			cout << "\t" << sline.str() << endl;
 		}
-	#endif
-	#if SIMDIM == 3
-		sline >> x(2);
-		if (!sline)
-		{	
-			cout << "2D input provided. Please provide a 3D file." << endl;
-			cout << "Incorrect line " << lineno << ": " << endl;
-			cout << sline.str() << endl;
-			exit(-1);
-		}
-	#endif
+#ifdef DEBUG
+	dbout << name << ": " << x(0) << "  " << x(1) << endl;
+#endif	
+#endif
+#if SIMDIM == 3
+	sline >> x(2);
+	if (!sline)
+	{	
+		cout << "2D input provided. Please provide a 3D file." << endl;
+		cout << "Incorrect line " << lineno << ": " << endl;
+		cout << sline.str() << endl;
+		exit(-1);
+	}
+#ifdef DEBUG
+	dbout << name << ": " << x(0) << "  " << x(1) << "  " << x(2) << endl;
+#endif	
+#endif
+
 	return x;
 }
 
-StateVecD getDVector(ifstream& In, uint& lineno)
+StateVecD getDVector(ifstream& In, uint& lineno, const string& name)
 {
 	string line;
 	getline(In,line);
@@ -229,32 +273,38 @@ StateVecD getDVector(ifstream& In, uint& lineno)
 	StateVecD x;
 	sline >> x(0); sline >> x(1);
 
-	#if SIMDIM == 2
-		double temp;
-		if(sline >> temp)
-		{
-			cout << "\tWARNING: 3D Input provided for a 2D Simulation." << endl;
-			cout << "\t         The third dimension shall be ignored." << endl;
-			cout << "\tLine " << lineno << ": " << endl;
-			cout << "\t" << sline.str() << endl;
-		}
-	#endif
-	#if (SIMDIM == 3)
-		sline >> x(2);
-		if (!sline)
-		{	
-			cout << "2D input provided. Please provide a 3D file." << endl;
-			cout << "Incorrect line " << lineno << ": " << endl;
-			cout << sline.str() << endl;
-			exit(-1);
-		}
-	#endif	
+#if SIMDIM == 2
+	double temp;
+	if(sline >> temp)
+	{
+		cout << "\tWARNING: 3D Input provided for a 2D Simulation." << endl;
+		cout << "\t         The third dimension shall be ignored." << endl;
+		cout << "\tLine " << lineno << ": " << endl;
+		cout << "\t" << sline.str() << endl;
+	}
+#ifdef DEBUG
+	dbout << name << ": " << x(0) << "  " << x(1) << endl;
+#endif	
+#endif
+#if (SIMDIM == 3)
+	sline >> x(2);
+	if (!sline)
+	{	
+		cout << "2D input provided. Please provide a 3D file." << endl;
+		cout << "Incorrect line " << lineno << ": " << endl;
+		cout << sline.str() << endl;
+		exit(-1);
+	}
+#ifdef DEBUG
+	dbout << name << ": " << x(0) << "  " << x(1) << "  " << x(2) << endl;
+#endif	
+#endif	
 
 	return x;
 }
 
 /*Function for a 2D Vector (e.g. Newmark Beta parameters)*/
-Eigen::Vector2d getvector(ifstream& In, uint& lineno)
+Eigen::Vector2d getvector(ifstream& In, uint& lineno, const string& name)
 {
 	string line;
 	getline(In,line);
@@ -263,11 +313,13 @@ Eigen::Vector2d getvector(ifstream& In, uint& lineno)
 	
 	Eigen::Vector2d x;
 	sline >> x[0]; sline >> x[1]; 
-		
+#ifdef DEBUG
+	dbout << name << ": " << x(0) << "  " << x(1) << endl;
+#endif	
 	return x;
 }
 
-void GetAero(AERO &avar, const FLUID& fvar, const ldouble rad)
+void GetAero(AERO& avar, const FLUID& fvar, const ldouble rad)
 {
 	#if SIMDIM == 3
 		avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
@@ -289,7 +341,7 @@ void GetAero(AERO &avar, const FLUID& fvar, const ldouble rad)
 	//cout << avar.ycoef << "  " << avar.Cdef << "  " << avar.tmax << "  " << endl;
 }
 
-RotMat GetRotationMat(StateVecD &angles)
+RotMat GetRotationMat(StateVecD& angles)
 {
 	if (SIMDIM == 3)
 	{
@@ -321,7 +373,7 @@ RotMat GetRotationMat(StateVecD &angles)
 
 }
 
-void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
+void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 {
 	uint justPost = 0;
 	if (argc > 3) 
@@ -355,31 +407,34 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
 
 	    svar.infolder = file;
 		file.append("Settings.dat");
+#ifdef DEBUG
+		dbout << "Reading settings file. Path:" << endl << file << endl;
+#endif
     	std::ifstream in(file);
 	  	if(in.is_open()) 
 	  	{	/*Simulation parameters*/
 	  		cout << "Input file opened. Reading settings..." << endl;
 		  	uint lineno = 0;
-	  		svar.framet = getDouble(in, lineno);
-	  		svar.Nframe = getInt(in, lineno);
-	  		svar.outframe = getInt(in, lineno);
-	  		svar.outtype = getInt(in, lineno);
-	  		svar.outform = getInt(in, lineno);
-	  		svar.boutform = getInt(in, lineno);
-	  		svar.subits = getInt(in, lineno);
-	  		svar.nmax = getInt(in, lineno);	
-	  		svar.xyPART = getIVector(in, lineno);
-	  		svar.Pstep = getDouble(in, lineno);
-	  		svar.Bstep = getDouble(in, lineno);
-	  		svar.Bcase = getInt(in, lineno);
-	  		avar.acase = getInt(in, lineno);
-	  		svar.ghost = getInt(in, lineno);
-	  		svar.Start = getDVector(in, lineno);
+	  		svar.framet = getDouble(in, lineno, "Frame time");
+	  		svar.Nframe = getInt(in, lineno, "Number of frames");
+	  		svar.outframe = getInt(in, lineno, "Output frame info");
+	  		svar.outtype = getInt(in, lineno, "Output data type");
+	  		svar.outform = getInt(in, lineno, "Output contents");
+	  		svar.boutform = getInt(in, lineno, "Boundary time output");
+	  		svar.subits = getInt(in, lineno, "Max sub iterations");
+	  		svar.nmax = getInt(in, lineno, "Max particle add rounds");	
+	  		svar.xyPART = getIVector(in, lineno, "Particles in each coordinate");
+	  		svar.Pstep = getDouble(in, lineno, "Particle initial spacing");
+	  		svar.Bstep = getDouble(in, lineno, "Boundary spacing factor");
+	  		svar.Bcase = getInt(in, lineno, "Simulation boundary case");
+	  		avar.acase = getInt(in, lineno, "Simulation Aerodynamic case");
+	  		svar.ghost = getInt(in, lineno, "Ghost particles?");
+	  		svar.Start = getDVector(in, lineno, "Starting position");
 	  		if(svar.Bcase < 2)
 	  		{
-	  			svar.Box= getDVector(in, lineno);
-	  			(void)getDouble(in, lineno);
-	  			fvar.pPress = getDouble(in, lineno);
+	  			svar.Box= getDVector(in, lineno, "Box dimensions");
+	  			(void)getDouble(in, lineno, "Skip");
+	  			fvar.pPress = getDouble(in, lineno, "Pipe pressure");
 	  			if(svar.Box(0) < 0 || svar.Box(1) < 0 
 	  			#if SIMDIM == 3
 	  				|| svar.Box(2) < 0
@@ -393,16 +448,16 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
 	  		}
 	  		else if(svar.Bcase > 1 && svar.Bcase < 8)
 	  		{	
-	  			StateVecD angles = getDVector(in, lineno);
+	  			StateVecD angles = getDVector(in, lineno, "Starting angle");
 	  			angles = angles *M_PI/180;
 	  			svar.Rotate = GetRotationMat(angles);
 	  			svar.Transp = svar.Rotate.transpose();
-		  		svar.Jet = getvector(in, lineno); /*Defined in VLM.h. Reused here*/
-		  		fvar.pPress = getDouble(in, lineno);
+		  		svar.Jet = getvector(in, lineno, "Jet dimensions");
+		  		fvar.pPress = getDouble(in, lineno, "Pipe pressure");
 		  		avar.vJet = StateVecD::Zero(); avar.vInf = StateVecD::Zero();
-		  		avar.vJet(1) = getDouble(in, lineno);  
+		  		avar.vJet(1) = getDouble(in, lineno, "Jet velocity");  
 		  		avar.vJet = svar.Rotate*avar.vJet;
-		  		avar.vInf = getDVector(in, lineno);
+		  		avar.vInf = getDVector(in, lineno, "Freestream velocity");
 		  		
 		  		if(avar.acase > 5)
 		  		{
@@ -416,10 +471,13 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
 	  			exit(-1);
 	  		}
 	  		/*Get post processing options*/
-	  		svar.afterSim = getInt(in, lineno);
-	  		svar.cellSize = getDouble(in, lineno);
-	  		svar.postRadius = getDouble(in, lineno);
+	  		svar.afterSim = getInt(in, lineno, "Post processing");
+	  		svar.cellSize = getDouble(in, lineno, "Post processing mesh size");
+	  		svar.postRadius = getDouble(in, lineno, "Post processing support radius");
 
+#ifdef DEBUG
+			dbout << "Closing settings file"  << endl;
+#endif
 			in.close();
 	  	}
 	  	else {
@@ -429,36 +487,46 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
 	}
 
 	/*Get fluid properties from fluid.dat*/
+
 	string file = svar.infolder;
 	file.append("Fluid.dat");
+#ifdef DEBUG
+	dbout << "Reading fluid file. Path:" << endl << file << endl;
+#endif
 	std::ifstream fluid(file);
 	if (fluid.is_open())
 	{	/*Fluid parameters read*/
 		uint lineno = 0;
-		Eigen::Vector2d nb = getvector(fluid, lineno);
+		Eigen::Vector2d nb = getvector(fluid, lineno, "Newmark-Beta terms");
 		svar.beta = nb[0];	svar.gamma = nb[1];
-		double Hfac = getDouble(fluid, lineno); /*End of state read*/
+		double Hfac = getDouble(fluid, lineno, "Smoothing length factor"); /*End of state read*/
 	  	fvar.H= Hfac*svar.Pstep;
-	  	fvar.alpha = getDouble(fluid, lineno);
-  		fvar.contangb = getDouble(fluid, lineno);
-  		fvar.rho0 = getDouble(fluid, lineno);
-  		fvar.rhog = getDouble(fluid, lineno);
-  		fvar.Cs = getDouble(fluid, lineno);
-  		fvar.mu = getDouble(fluid, lineno);
-  		fvar.mug = getDouble(fluid, lineno);
-  		fvar.sig = getDouble(fluid, lineno);
+	  	fvar.alpha = getDouble(fluid, lineno, "artificial visc");
+  		fvar.contangb = getDouble(fluid, lineno, "contact angle");
+  		fvar.rho0 = getDouble(fluid, lineno, "Fluid density rho0");
+  		fvar.rhog = getDouble(fluid, lineno, "Air density rhog");
+  		fvar.Cs = getDouble(fluid, lineno, "Speed of sound");
+  		fvar.mu = getDouble(fluid, lineno, "Fluid viscosity");
+  		fvar.mug = getDouble(fluid, lineno, "Air viscosity");
+  		fvar.sig = getDouble(fluid, lineno, "Surface Tension");
   		if(svar.Bcase == 6 || svar.Bcase == 4)
   		{
-	  		fvar.gasVel = getDouble(fluid, lineno);
-	  		fvar.gasPress = getDouble(fluid, lineno);
-	  		fvar.T = getDouble(fluid, lineno);
+	  		fvar.gasVel = getDouble(fluid, lineno, "Gas ref Vel");
+	  		fvar.gasPress = getDouble(fluid, lineno, "Get ref Press");
+	  		fvar.T = getDouble(fluid, lineno, "Gas ref Temp");
 
 	  		if(svar.Bcase == 6)
 	  		{
-		  		svar.meshfile = getString(fluid, lineno);
-		  		svar.solfile = getString(fluid,lineno);
+		  		svar.meshfile = getString(fluid, lineno, "Mesh input file");
+		  		#if SIMDIM == 2
+		  		svar.bmapfile = getString(fluid, lineno, "Mesh bmap file");
+		  		#endif
+		  		svar.solfile = getString(fluid,lineno, "Mesh solution file");
 	  		}
   		}
+#ifdef DEBUG
+		dbout << "Closing fluid file"  << endl;
+#endif
   		fluid.close();
 
   		if(svar.Bcase == 4)
@@ -563,115 +631,6 @@ void GetInput(int argc, char **argv, SIM &svar, FLUID &fvar, AERO& avar)
 		exit(0);
 	}
 }
-
-
-// #if SIMDIM == 2
-// void Read_Radial(string input, MESH &cells)
-// {
-// 	input.append("O_Mesh.plt");
-// 	std::ifstream fin(input, std::ios::in);
-// 	ZONE zone;
-
-// 	if(!fin.is_open())
-// 	{
-// 		cout << "Couldn't open O_Mesh.plt. Stopping." << endl;
-// 		cout << "Path attempted: " << input << endl;
-// 		exit(-1);
-// 	}
-// 	else 
-// 	{
-// 		cout << "Mesh file open, reading data..." << endl;
-// 	}
-// 	std::string line;
-// 	getline(fin,line);
-// 	getline(fin,line);
-
-// 	/*If 2D, skip this and read the symmetry plane data.*/
-
-// 	getline(fin, line); /*Get Zone line data. Tells which type of volume*/
-// 	uint nF, nCverts, nFverts;
-
-// 	nCverts = 4;
-// 	nF = 0;
-// 	nFverts = 0;
-
-// 	getline(fin, line); /*Get numbers*/
-	
-// 	std::size_t ptr2;
-// 	std::size_t ptr = line.find("N=");
-// 	if(ptr!=string::npos)
-// 	{
-// 		ptr2 = line.find_first_not_of("0123456789",ptr+2);
-// 		string temp = line.substr(ptr+2,ptr2-(ptr+2));
-		
-// 		zone.nP = stoi(temp);
-// 	}
-// 	ptr = line.find("E=");
-// 	if(ptr!=string::npos)
-// 	{
-// 		ptr2 = line.find_first_not_of("0123456789",ptr+2);
-// 		string temp = line.substr(ptr+2,ptr2-(ptr+2));
-		
-// 		zone.nE = stoi(temp);
-// 	}
-
-// 	// cout << cells.numPoint << "  " << cells.numElem << endl;
-// 	// cells.reserve(zone.nP,zone.nE,nCverts,nF,nFverts);
-	
-// 	getline(fin,line);
-
-// 	cells.verts = Get_Vector(fin, zone, 0);
-
-// 	cells.cVel = Get_Vector(fin, zone, 0); 
-
-// 	Get_2DCells(fin,cells.verts,zone,cells.elems, cells.cVerts);
-
-// 	// getline(fin,line);
-// 	// cout << line << endl;
-// 	fin.close(); 
-
-// 	cout << "Building cell neighbours..." << endl;
-	
-// 	#pragma omp parallel 
-// 	{
-// 		std::vector<std::vector<uint>> cNeighb = std::vector<std::vector<uint>>(zone.nE,std::vector<uint>());
-// 	    #pragma omp for schedule(static) nowait
-// 		for (uint ii = 0; ii < zone.nE; ++ii)
-// 		{
-// 			for (uint jj = 0; jj < zone.nE; ++jj)
-// 			{
-// 				if (jj == ii)
-// 					continue;
-
-// 				uint count = 0;
-// 				for (uint kk = 0; kk < cells.elems[ii].size(); ++kk)
-// 				{
-// 					if(std::find(cells.elems[jj].begin(),cells.elems[jj].end(),cells.elems[ii][kk])!=cells.elems[jj].end())
-// 						count++;
-// 				}
-
-// 				uint thresh;
-// 				#if SIMDIM == 2
-// 					thresh = 1;
-// 				#else
-// 					thresh = 2;
-// 				#endif
-
-// 				if(count >=thresh)
-// 					cNeighb[ii].push_back(jj);
-// 			}
-// 		}
-		
-// 		#pragma omp for schedule(static) ordered
-//     	for(int i=0; i<NTHREADS; i++)
-//     	{
-//     		#pragma omp ordered
-//     		cells.cNeighb.insert(cells.cNeighb.end(), cNeighb.begin(), cNeighb.end());
-//     	}
-	       
-// 	}
-// }
-// #endif
 
 /*************************************************************************/
 /**************************** ASCII OUTPUTS ******************************/
