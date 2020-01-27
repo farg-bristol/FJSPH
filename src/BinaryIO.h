@@ -1019,8 +1019,7 @@ typedef class TECMESH {
 void Write_Binary_Timestep(const SIM& svar, const State& pnp1, 
 	const uint start, const uint end, const char* group, const INTEGER4 StrandID)
 {
-	if(svar.Bcase != 0 && svar.Bcase != 5 && svar.boutform == 1)
-		TECFIL142(&StrandID);
+	TECFIL142(&StrandID);
 
 	uint size = end - start;
 
@@ -1082,27 +1081,29 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
     {
     	#pragma omp parallel for
     	for(uint ii = start; ii < end; ++ii)
-  			x[ii-start] = pnp1[ii].xi(dim);
+  			x[ii-start] = pnp1[ii].xi(dim)/svar.scale;
 
  		I   = TECDAT142(&IMax, x, &DIsDouble);
     }
 
-	double* rho = new double[size];
-    double* p = new double[size];
-	double* m = new double[size];
-
-	#pragma omp parallel for
-  	for(uint ii = start; ii < end; ++ii)
+	if(svar.outform != 0)
 	{
-		rho[ii-start] = pnp1[ii].rho;
-  		p[ii-start] = pnp1[ii].p;
-  		m[ii-start] = pnp1[ii].m;
-	}
+		double* rho = new double[size];
+	    double* p = new double[size];
+		double* m = new double[size];
 
-    I   = TECDAT142(&IMax, rho, &DIsDouble);
-	I   = TECDAT142(&IMax, p, &DIsDouble);
-	I   = TECDAT142(&IMax, m, &DIsDouble);
-    
+		#pragma omp parallel for
+	  	for(uint ii = start; ii < end; ++ii)
+		{
+			rho[ii-start] = pnp1[ii].rho;
+	  		p[ii-start] = pnp1[ii].p;
+	  		m[ii-start] = pnp1[ii].m;
+		}
+
+	    I   = TECDAT142(&IMax, rho, &DIsDouble);
+		I   = TECDAT142(&IMax, p, &DIsDouble);
+		I   = TECDAT142(&IMax, m, &DIsDouble);
+    }
 
     if(svar.outform == 1)
     {
@@ -1190,7 +1191,35 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 		    I   = TECDAT142(&IMax, cP, &DIsDouble);
 		    I   = TECDAT142(&IMax, cID, &DIsDouble);
 	    }
+	    
 	}
+	else if (svar.outform == 4)
+		{
+			// variables = "x y z rho P m v a b Neighbours Aero";
+
+			double* v = new double[size];
+		  	double* a = new double[size];
+			float* b = new float[size];
+			float* nNb = new float[size];
+			double* aF = new double[size];
+
+			#pragma omp parallel for
+		  	for(uint ii = start; ii < end; ++ii)
+		  	{
+		  		v[ii-start] = pnp1[ii].v.norm();
+		  		a[ii-start] = pnp1[ii].f.norm();
+				b[ii-start] = pnp1[ii].b;
+		  		nNb[ii-start] = pnp1[ii].theta;
+		  		aF[ii-start] = pnp1[ii].Af.norm();
+	  		}
+
+	  		INTEGER4 IsFloat = 0;
+			I   = TECDAT142(&IMax, v, &DIsDouble);
+		    I   = TECDAT142(&IMax, a, &DIsDouble);
+	  		I   = TECDAT142(&IMax, b, &IsFloat);
+		    I   = TECDAT142(&IMax, nNb, &IsFloat);
+		    I   = TECDAT142(&IMax, aF, &DIsDouble);
+		}
     // cout << "Flushing results." << endl;
     INTEGER4 numZonesToRetain = 0;
     I = TECFLUSH142(&numZonesToRetain,NULL);
@@ -1231,6 +1260,11 @@ void Init_Binary_PLT(const SIM &svar, const string& filename, const string& zone
 		{
 			variables = "x y rho P m v_x v_y a_x a_y Cell_Vx Cell_Vy Cell_Rho Cell_P Cell_ID";
 		}
+		else if (svar.outform == 4)
+		{
+			variables = "x y rho P m v a b Neighbours Aero";
+		}
+
 	#endif
 
 	#if SIMDIM == 3
@@ -1247,6 +1281,10 @@ void Init_Binary_PLT(const SIM &svar, const string& filename, const string& zone
 		{
 			variables = 
 		"x y z rho P m v_x v_y v_z a_x a_y a_z Cell_Vx Cell_Vy Cell_Vz Cell_Rho Cell_P Cell_ID";
+		}
+		else if (svar.outform == 4)
+		{
+			variables = "x y z rho P m v a b Neighbours Aero";
 		}
 
 	#endif

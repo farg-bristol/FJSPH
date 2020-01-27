@@ -689,7 +689,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			// cout << "In add points for-loop" << endl;
 			AddPoints(y, svar, fvar, avar, pn, pnp1);
 		}
-		svar.clear = -svar.Jet[1]*2;
+		svar.clear = -svar.Jet[1] + 4*svar.dx;
 	}
 	else if (svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
 	{
@@ -706,7 +706,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			AddPoints(y, svar, fvar, avar, pn, pnp1);
 		}
 
-		svar.clear = 0.0;
+		svar.clear = -svar.Jet[1] + 4*svar.dx;
 	}
 	else if(svar.Bcase == 5)
 	{
@@ -838,6 +838,12 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 	// cout << "Boundary pn: " << svar.bndPts << endl;
 	// cout << "Sim pn:" << svar.simPts << endl;
  // 	cout << "Total Points: " << svar.totPts << endl;
+#ifdef DEBUG
+	dbout << "Initialising simulation complete." << endl;
+	dbout<< "Total Points: " << svar.totPts << endl;
+	dbout << "Boundary Points: " << svar.bndPts << endl;
+	dbout << "Simulation Points: " << svar.simPts << endl;
+#endif
 	
 	if(svar.totPts!=svar.bndPts+svar.simPts)
 	{
@@ -845,7 +851,6 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 		cerr<< "Particle array size doesn't match defined values." << endl;
 		cerr<< "Total Points: " << svar.totPts << "  Boundary Points: " << svar.bndPts
 			<< "  Simulation Points: " << svar.simPts << endl;
-		Write_settings(svar,fvar);
 		exit(-1);
 	}
 	// cout << "Total pn: " << svar.totPts << endl;

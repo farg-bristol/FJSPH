@@ -33,6 +33,7 @@ using std::ifstream;
 using std::ofstream;
 using std::endl;
 using std::string; 
+using std::setw;
 
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
@@ -190,11 +191,23 @@ int getInt(ifstream& In, uint& lineno, const string& name)
 	string line;
 	getline(In,line);
 	lineno++;
-	int i = stoi(line);
+	std::stringstream sstr;
+	sstr << line;
+	int i;
+	if(sstr >> i)
+	{
 #ifdef DEBUG
-	dbout << name << ": " << i << endl;
+		dbout << name << ": " << i << endl;
 #endif	
-	return i;
+		return i; 
+	}
+	else
+	{
+		cout << "Line does not contain a value. Please check your input." << endl;
+		cout << "Expecting: " << name << endl;
+	}
+		
+	return 0;
 }
 
 double getDouble(ifstream& In, uint& lineno, const string& name)
@@ -202,11 +215,23 @@ double getDouble(ifstream& In, uint& lineno, const string& name)
 	string line;
 	getline(In,line);
 	lineno++;
-	double d = stod(line);
+	std::stringstream sstr;
+	sstr << line;
+	double d;
+	if(sstr >> d)
+	{
 #ifdef DEBUG
-	dbout << name << ": " << d << endl;
+		dbout << name << ": " << d << endl;
 #endif	
-	return d; 
+		return d; 
+	}
+	else
+	{
+		cout << "Line does not contain a value. Please check your input." << endl;
+		cout << "Expecting: " << name << endl;
+	}
+		
+	return 0;
 }
 
 std::string getString(ifstream& In, uint& lineno, const string& name)
@@ -376,6 +401,7 @@ RotMat GetRotationMat(StateVecD& angles)
 void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 {
 	uint justPost = 0;
+	double Hfac = 0;
 	if (argc > 3) 
 	{	/*Check number of input arguments*/
 		cout << "\tWARNING: only two input arguments accepted,\n";
@@ -421,6 +447,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	  		svar.outtype = getInt(in, lineno, "Output data type");
 	  		svar.outform = getInt(in, lineno, "Output contents");
 	  		svar.boutform = getInt(in, lineno, "Boundary time output");
+	  		svar.gout = getInt(in, lineno, "Output ghost particles to file");
 	  		svar.subits = getInt(in, lineno, "Max sub iterations");
 	  		svar.nmax = getInt(in, lineno, "Max particle add rounds");	
 	  		svar.xyPART = getIVector(in, lineno, "Particles in each coordinate");
@@ -458,7 +485,14 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		  		avar.vJet(1) = getDouble(in, lineno, "Jet velocity");  
 		  		avar.vJet = svar.Rotate*avar.vJet;
 		  		avar.vInf = getDVector(in, lineno, "Freestream velocity");
-		  		
+		  		if(avar.acase == 2 || avar.acase == 3)
+		  		{
+		  			avar.a = getDouble(in, lineno, "a");
+		  			avar.h1 = getDouble(in, lineno, "h1");
+		  			avar.b = getDouble(in, lineno, "b");
+		  			avar.h2 = getDouble(in, lineno, "h2");
+		  			
+		  		}
 		  		if(avar.acase > 5)
 		  		{
 		  			cout << "Aerodynamic case is not in design. Stopping..." << endl;
@@ -487,7 +521,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	}
 
 	/*Get fluid properties from fluid.dat*/
-
+	svar.scale = 1.0;
 	string file = svar.infolder;
 	file.append("Fluid.dat");
 #ifdef DEBUG
@@ -499,9 +533,9 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		uint lineno = 0;
 		Eigen::Vector2d nb = getvector(fluid, lineno, "Newmark-Beta terms");
 		svar.beta = nb[0];	svar.gamma = nb[1];
-		double Hfac = getDouble(fluid, lineno, "Smoothing length factor"); /*End of state read*/
-	  	fvar.H= Hfac*svar.Pstep;
-	  	fvar.alpha = getDouble(fluid, lineno, "artificial visc");
+		Hfac = getDouble(fluid, lineno, "Smoothing length factor"); /*End of state read*/
+
+	  	fvar.alpha = getDouble(fluid, lineno, "Artificial visc");
   		fvar.contangb = getDouble(fluid, lineno, "contact angle");
   		fvar.rho0 = getDouble(fluid, lineno, "Fluid density rho0");
   		fvar.rhog = getDouble(fluid, lineno, "Air density rhog");
@@ -522,6 +556,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		  		svar.bmapfile = getString(fluid, lineno, "Mesh bmap file");
 		  		#endif
 		  		svar.solfile = getString(fluid,lineno, "Mesh solution file");
+		  		svar.scale = getDouble(fluid,lineno, "Mesh scale");
 	  		}
   		}
 #ifdef DEBUG
@@ -549,34 +584,25 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   		fvar.mug = 18.5E-06;
 	}
 
-	
-	
 	  	/*Universal parameters based on input values*/
 	  	svar.addcount = 0;
 	  	svar.dt = 2E-010; 		/*Initial timestep*/
 	  	svar.t = 0.0;				/*Total simulation time*/
+	  	fvar.H= Hfac*svar.Pstep;
 	  	fvar.HSQ = fvar.H*fvar.H; 
 
 		fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
 		svar.Bclosed = 0; 		/*Boundary begins open*/
 		svar.psnPts = 0; 		/*Start with no pison points*/
-		switch(SIMDIM)
-		{
-			case 2:
+#if SIMDIM == 2
 				fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
 				svar.simPts = svar.xyPART[0]*svar.xyPART[1];
-				break;
-			case 3:
+#endif
+#if SIMDIM == 3
 				fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
 				svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
-				break;
-			default:
-				cout << "Simulation Dimension mismatch. Stopping" << endl;
-		  		exit(-1);
-		  		break;
-		}
+#endif
 	  	
-	  	/*Mass from spacing and density*/
 		fvar.Simmass = fvar.rho0*pow(svar.Pstep,SIMDIM); 
 		fvar.Boundmass = fvar.Simmass;
 		fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
@@ -586,6 +612,39 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		svar.dx = pow(fvar.Simmass/rho, 1.0/double(SIMDIM));
 		// cout << rho << "  " << svar.dx << endl;
 		fvar.gasDynamic = 0.5*fvar.rhog*fvar.gasVel;
+
+
+
+		// fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
+		// fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
+		// /*Pipe Pressure calc*/
+		// ldouble rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
+
+	 //  	Make sure that the fuel fits the pipe perfectly
+		// uint ndiam = ceil(abs(svar.Jet(0)/svar.dx));
+		// svar.dx = svar.Jet(0)/ldouble(ndiam);
+
+	 // 	/*Mass from spacing and density*/
+		// fvar.Simmass = rho*pow(svar.dx,SIMDIM); 
+		// fvar.Boundmass = fvar.Simmass;
+		
+		// svar.Pstep = pow(fvar.Simmass/fvar.rho0,1/SIMDIM);
+		
+
+
+		// cout << rho << "  " << svar.dx << endl;
+		fvar.gasDynamic = 0.5*fvar.rhog*fvar.gasVel;
+
+#ifdef DEBUG
+		dbout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
+		dbout << "Pipe rho: " << rho << endl;
+		// dbout << "Number of fluid particles along diameter: " << ndiam << endl;
+		dbout << "Pipe step (dx): " << svar.dx << endl;
+		dbout << "Particle mass: " << fvar.Simmass << endl;
+		dbout << "Freestream initial spacing: " << svar.Pstep << endl;
+		dbout << "Support Radius: " << fvar.H << endl;
+		dbout << "Gas Dynamic pressure: " << fvar.gasDynamic << endl << endl;
+#endif
 
 
 		#if SIMDIM == 3
@@ -635,44 +694,17 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 /*************************************************************************/
 /**************************** ASCII OUTPUTS ******************************/
 /*************************************************************************/
-
-void Write_settings(SIM &svar, FLUID &fvar)
-{
-	string sett = svar.outfolder;
-	sett.append("/Test_Settings.txt");
-	std::ofstream fp(sett, std::ios::out);
-
-  if(fp.is_open()) {
-    //fp << "VERSION: " << VERSION_TAG << std::endl << std::endl; //Write version
-    fp << "SIMULATION PARAMETERS:" << std::endl; //State the system parameters.
-    fp << "\tNumber of frames (" << svar.Nframe <<")" << std::endl;
-    fp << "\tParticle Spacing ("<< svar.Pstep << ")" << std::endl;
-    fp << "\tParticle Mass ("<< fvar.Simmass << ")" << std::endl;
-    fp << "\tReference density ("<< fvar.rho0 << ")" << std::endl;
-    fp << "\tSupport Radius ("<< fvar.H << ")" << std::endl;
-    fp << "\tGravitational strength ("<< 9.81 << ")" << std::endl;
-    fp << "\tNumber of boundary points (" << svar.bndPts << ")" << std::endl;
-    fp << "\tNumber of simulation points (" << svar.simPts << ")" << std::endl;
-    fp << "\tIntegrator type (Newmark_Beta)" << std::endl;
-
-    fp.close();
-  }
-  else {
-    cerr << "Error opening the settings output file." << endl;
-    exit(-1);
-  }
-}
-
 void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1, 
-	const uint bwrite, const uint start, const uint end, const State &airP )
+	const uint bwrite, const uint start, const uint end, const string& name)
 {
 	if(bwrite == 1)
-	 	fp <<  "ZONE T=\"Boundary Data\"";
+	 	fp <<  "ZONE T=\"" << name << "\"";
 	else
-		fp <<  "ZONE T=\"Particle Data\"";
+		fp <<  "ZONE T=\"" << name << "\"";
 
     fp <<", I=" << end - start << ", F=POINT" <<", STRANDID=1, SOLUTIONTIME=" << svar.t  << "\n";
-
+    fp << std::left << std::scientific << std::setprecision(6);
+    const static uint width = 10;
     switch(svar.outform)
     {
     	case 0:
@@ -680,21 +712,21 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1,
     		for (auto p=std::next(pnp1.begin(),start); p!=std::next(pnp1.begin(),end); ++p)
 			{
 				for(uint i = 0; i < SIMDIM; ++i)
-		        	fp << p->xi(i) << " "; 
+		        	fp << setw(width) << p->xi(i)/svar.scale; 
 				fp << "\n";  
 		  	}
 
-		  	if (airP.size() > 0 )
-		  	{
-			  	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
-			    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
-			  	for(auto p:airP)
-			  	{
-			  		for(uint i = 0; i < SIMDIM; ++i)
-			        	fp << p.xi(i) << " "; 
-					fp << "\n"; 
-			  	}
-		  	}
+		  	// if (airP.size() > 0 )
+		  	// {
+			  // 	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
+			  //   ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
+			  // 	for(auto p:airP)
+			  // 	{
+			  // 		for(uint i = 0; i < SIMDIM; ++i)
+			  //       	fp << p.xi(i) << " "; 
+					// fp << "\n"; 
+			  // 	}
+		  	// }
 		  	fp << std::flush;
 		  	break;
     	}
@@ -703,28 +735,28 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1,
     		for (auto p=std::next(pnp1.begin(),start); p!=std::next(pnp1.begin(),end); ++p)
 			{	
 				for(uint i = 0; i < SIMDIM; ++i)
-		        	fp << p->xi(i) << " ";
+		        	fp << setw(width) << p->xi(i)/svar.scale;
 
-		        fp << p->v.norm() << " ";
-		        fp << p->f.norm() << " ";
-		        fp << p->rho << " "  << p->p  << "\n";
+		        fp << setw(width) << p->v.norm();
+		        fp << setw(width) << p->f.norm();
+		        fp << setw(width) << p->rho << setw(width) << p->p  << "\n";
 		  	}
 
-		  	if (airP.size() > 0 )
-		  	{
-			  	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
-			    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
+		  // 	if (airP.size() > 0 )
+		  // 	{
+			 //  	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
+			 //    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
 
-			  	for(auto p:airP)
-			  	{
-			  		for(uint i = 0; i < SIMDIM; ++i)
-			        	fp << p.xi(i) << " "; 
+			 //  	for(auto p:airP)
+			 //  	{
+			 //  		for(uint i = 0; i < SIMDIM; ++i)
+			 //        	fp << p.xi(i) << " "; 
 
-			        fp << p.v.norm() << " ";
-			        fp << p.f.norm() << " ";
-			        fp << p.rho << " "  << p.p  << "\n";
-			  	}
-		 	}
+			 //        fp << p.v.norm() << " ";
+			 //        fp << p.f.norm() << " ";
+			 //        fp << p.rho << " "  << p.p  << "\n";
+			 //  	}
+		 	// }
 		  	fp << std::flush;
 		  	break;
     	}
@@ -733,32 +765,32 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1,
     		for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
 			{
 				for(uint i = 0; i < SIMDIM; ++i)
-		        	fp << p->xi(i) << " ";
+		        	fp << setw(width) << p->xi(i)/svar.scale;
 		        
-		        fp << p->f.norm() << " " << p->Af.norm() << " " << p->cellP << " ";
+		        fp << setw(width) << p->f.norm() << setw(width) << p->Af.norm() << setw(width) << p->cellP;
 		        for(uint i = 0; i < SIMDIM; ++i)
-		        	fp << p->cellV(i) << " "; 
+		        	fp << setw(width) << p->cellV(i); 
 
-		        fp << p->b << " " << p->theta  << "\n"; 
+		        fp << setw(width) << p->b << setw(width) << p->theta  << "\n"; 
 		  	}  
 
-		  	if (airP.size() > 0 )
-		  	{
-			  	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
-			    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
+		  	// if (airP.size() > 0 )
+		  	// {
+			  // 	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
+			  //   ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
 			    
-			  	for(auto p:airP)
-			  	{
-			  		for(uint i = 0; i < SIMDIM; ++i)
-			        	fp << p.xi(i) << " "; 
+			  // 	for(auto p:airP)
+			  // 	{
+			  // 		for(uint i = 0; i < SIMDIM; ++i)
+			  //       	fp << p.xi(i) << " "; 
 
-			      	fp << p.f.norm() << " " << p.Af.norm() << " " << p.Sf.norm() << " ";
-			        for(uint i = 0; i < SIMDIM; ++i)
-			        	fp << p.cellV(i) << " "; 
+			  //     	fp << p.f.norm() << " " << p.Af.norm() << " " << p.Sf.norm() << " ";
+			  //       for(uint i = 0; i < SIMDIM; ++i)
+			  //       	fp << p.cellV(i) << " "; 
 
-			        fp << p.b << " " << p.theta  << "\n"; 
-			  	}
-		  	}	
+			  //       fp << p.b << " " << p.theta  << "\n"; 
+			  // 	}
+		  	// }	
 		  	fp << std::flush;
 		  	break;
     	}

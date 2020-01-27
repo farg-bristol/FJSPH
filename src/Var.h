@@ -84,11 +84,12 @@ typedef struct SIM {
 	double maxmu;                   /*Maximum viscosity component (CFL)*/
 	int Bcase, Bclosed, ghost;		/*What boundary shape to take*/
 	uint outtype;                   /*ASCII or binary output*/
-	uint outform, boutform;         /*Output type. Fluid properties or Research.*/
+	uint outform, boutform, gout;   /*Output type. Fluid properties or Research.*/
 	uint framecount;
 
 	std::string infolder, outfolder;
-	std::string meshfile, bmapfile, solfile;			
+	std::string meshfile, bmapfile, solfile;
+	ldouble scale;			
 	#if SIMDIM == 3
 		VLM vortex;
 	#endif
@@ -175,6 +176,7 @@ typedef struct MESH
 	/*Zone info*/
 	std::string zone;
 	uint numPoint, numElem;
+	ldouble scale;
 
 	/*Point based data*/
 	std::vector<StateVecD> verts;
@@ -189,7 +191,7 @@ typedef struct MESH
 	std::vector<StateVecD> cCentre;
 	/*Yep... a quad layered vector... I don't like it any more than you*/
 	std::vector<std::vector<std::vector<uint>>> cFaces; 
-	std::vector<std::vector<uint>> cNeighb;
+	std::vector<std::vector<size_t>> cNeighb;
 	
 	/*Surface data*/
 	vector<vector<uint>> farfield;
@@ -346,7 +348,7 @@ Particle PartToParticle(Part& pj)
 typedef std::vector<Particle> State;
 
 /* Neighbour search tree containers */
-typedef std::vector<std::vector<uint>> outl;
-typedef KDTreeVectorOfVectorsAdaptor<State, ldouble> Sim_Tree;
-typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,ldouble> Vec_Tree;
+typedef std::vector<std::vector<size_t>> outl;
+typedef KDTreeVectorOfVectorsAdaptor<State,ldouble,SIMDIM,nanoflann::metric_L2_Simple,size_t> Sim_Tree;
+typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,ldouble,SIMDIM,nanoflann::metric_L2_Simple,size_t> Vec_Tree;
 #endif /* VAR_H */

@@ -80,9 +80,9 @@ StateVecD Base(const FLUID &fvar, const Part &pi, const Part &pj,
 {
 	/*Pressure and artificial viscosity - Monaghan (1994) p.400*/
 	ldouble pifac;
-	ldouble vdotr = Vij.dot(Rij);
-	ldouble muij= fvar.H*vdotr/(r*r+0.01*fvar.HSQ);
-	if (vdotr > 0.0 || pj.b == 3) 
+	const ldouble vdotr = Vij.dot(Rij);
+	const ldouble muij= fvar.H*vdotr/(r*r+0.01*fvar.HSQ);
+	if (vdotr > 0.0 || pj.b == 4) 
 	{
 		pifac = 0.0;
 	}
@@ -135,7 +135,7 @@ StateVecD HuST(const FLUID &fvar, const Part &pi, const Part &pj,
 ///**************** RESID calculation **************
 void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*, State& airP*/,
 	 const vector<vector<Part>>& neighb, const outl& outlist,
-	 vector<StateVecD>& RV, vector<ldouble>& Rrho)
+	 vector<StateVecD>& RV, vector<ldouble>& Rrho, std::vector<StateVecD> Af)
 {
 	svar.maxmu=0; 					    /* CFL Parameter */
 	const uint start = svar.bndPts;
@@ -250,7 +250,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 				/*Laminar Viscosity - Morris (2003)*/
 				const StateVecD visc    = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
 
-				if (pj.b != 3)
+				if (pj.b != 4)
 				{
 					/*Surface Tension - Nair & Poeschel (2017)*/
 					// StateVecD SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
@@ -262,7 +262,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 
 				RV[ii] += pj.m*contrib + pj.m*visc /*+ SurfC/pj.m*/;
 
-				// if (pj.b == 3)
+				// if (pj.b == 4)
 				// {
 				// 	ST[ii] += pj.m*contrib + pj.m*visc;
 				// }
@@ -300,7 +300,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 
 		/*Aerodynamic force*/
 	if(svar.Bcase > 1)
-		ApplyAero(svar,fvar,avar,pnp1,outlist,RV);
+		ApplyAero(svar,fvar,avar,pnp1,outlist,RV,Af);
 	
 }
 

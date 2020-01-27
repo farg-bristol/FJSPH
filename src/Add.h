@@ -36,6 +36,7 @@ void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const AERO &avar, 
 	/*Squeeze particles together to emulate increased pressure*/
 	ldouble press =fvar.pPress;
 	ldouble rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
+
 	#if SIMDIM == 3
 		/*Create the simulation particles*/
 		for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
@@ -481,8 +482,8 @@ namespace PoissonSample
 				{
 					processList.push_back(newPoint);
 					// StateVecD Point = newPoint+origin;
-					samplePoints.push_back(Part(newPoint+origin,StateVecD::Zero(),0.0,0.0,0.0,3,0));
-					airP.emplace_back(Part(newPoint+origin,vel,press,rho,mass,3,pID));
+					samplePoints.push_back(Part(newPoint+origin,StateVecD::Zero(),0.0,0.0,0.0,4,0));
+					airP.emplace_back(Part(newPoint+origin,vel,press,rho,mass,4,pID));
 					pID++;
 					grid.insert(newPoint);
 					// cout << "New Point: " << point(0) << " " << point(1) << endl;

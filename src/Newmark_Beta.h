@@ -105,12 +105,12 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 	}
 
 	vector<StateVecD> xih(svar.totPts);
-	const static ldouble a = 1 - svar.gamma;
-	const static ldouble b = svar.gamma;
-	const static ldouble c = 0.5*(1-2*svar.beta);
-	const static ldouble d = svar.beta;
-	const static ldouble B = fvar.B;
-	const static ldouble gam = fvar.gam;
+	const ldouble a = 1 - svar.gamma;
+	const ldouble b = svar.gamma;
+	const ldouble c = 0.5*(1-2*svar.beta);
+	const ldouble d = svar.beta;
+	const ldouble B = fvar.B;
+	const ldouble gam = fvar.gam;
 
 	while (log10(sqrt(errsum/(double(svar.totPts)))) - logbase > -7.0)
 	{
@@ -166,8 +166,10 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 		// cout << "K: " << k << endl;
 		// cout << "Calculating forces" << endl;
 		vector<StateVecD> res(end,StateVecD::Zero());
+		vector<StateVecD> Af(end,StateVecD::Zero());
 		vector<ldouble> Rrho(end,0.0);
- 		Forces(svar,fvar,avar,pnp1,neighb,outlist,res,Rrho); /*Guess force at time n+1*/
+
+ 		Forces(svar,fvar,avar,pnp1,neighb,outlist,res,Rrho,Af); /*Guess force at time n+1*/
 
 		// #pragma omp parallel
 	
@@ -175,7 +177,6 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 		#pragma omp parallel for shared(pnp1)
 		for (uint  ii=0; ii < end; ++ii)
 			xih[ii] = pnp1[ii].xi;
-
 
 		const ldouble dt = svar.dt;
 		const ldouble dt2 = dt*dt;
@@ -199,8 +200,8 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 			{	/****** BOUNDARY PARTICLES ***********/
 				// pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+pnp1[ii].Rrho);
 				// pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-				pnp1[ii].p = fvar.pPress;
-				pnp1[ii].rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
+				// pnp1[ii].p = fvar.pPress;
+				// pnp1[ii].rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
 				pnp1[ii].f = res[ii];
 				pnp1[ii].Rrho = Rrho[ii];
 			}
@@ -220,18 +221,9 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 					if(vec(1) > svar.clear)
 					{	/*Tag it as clear if it's higher than the plane of the exit*/
 						pnp1[ii].b=2;
-						if(svar.Bcase == 6)
-						{
-							/*Search through the cells to find which cell it's in*/
-							if (outlist[ii].size() < avar.nfull)
-							{
-								FirstCell(start,end,ii, CELL_INDEX, cells, outlist, pnp1);
-							}
-						}
 					}
 					else
-					{	
-						/*For the particles marked 1, perform a prescribed motion*/
+					{	/*For the particles marked 1, perform a prescribed motion*/
 						pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
 						pnp1[ii].f = res[ii];
 						pnp1[ii].Rrho = Rrho[ii];
@@ -239,16 +231,37 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 						// pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
 					}
 				}
+				else if(pnp1[ii].b == 2)
+				{	/*Do a check to see if it needs to be given an aero force*/
+					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
+					if(vec(1) > 0.0)
+					{
+						pnp1[ii].b = 3;
+						if(svar.Bcase == 6)
+						{
+							/*retrieve the cell it's in*/
+							if (outlist[ii].size() < avar.nfull)
+							{
+								FirstCell(start,end,ii, CELL_INDEX, cells, outlist, pnp1);
+							}
+						}
+					}	
+				}
 
-				if(pnp1[ii].b==2)
-				{	/*For the particles marked 2, intergrate as normal*/
+				if(pnp1[ii].b != 1)
+				{	/*For any other particles, intergrate as normal*/
 					pnp1[ii].v =  pn[ii].v +dt*(a*pn[ii].f+b*res[ii]);
 					pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(c*pn[ii].f+d*res[ii]);
-					pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
-					pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
 					pnp1[ii].f = res[ii];
 					pnp1[ii].Rrho = Rrho[ii];
+					pnp1[ii].Af = Af[ii];
+					if(pnp1[ii].b == 3)
+					{
+						pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
+						pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
+					}
 				}
+				
 			} /*End fluid particles*/
 		
 		/****** FIND ERROR ***********/
@@ -326,6 +339,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 					// cout << "adding points..." << endl;
 					StateVecD vec = svar.Transp*(pnp1[svar.totPts-1].xi-svar.Start);
 					AddPoints(vec[1]-svar.dx, svar, fvar, avar, pn, pnp1);
+					// cout << "total points: " << svar.totPts << endl;
 				}
 				else
 				{	

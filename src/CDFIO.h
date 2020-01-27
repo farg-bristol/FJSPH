@@ -1040,29 +1040,29 @@ void Place_Faces(NcFile& fin, const vector<vector<uint>> faces, MESH& cells)
 	#endif
 
 	/*Read how many faces there should be per element/cell*/
-	NcVar nFaceElems = fin.getVar("faces_per_element");
-	if(nFaceElems.isNull())
-	{	/*No data is available*/
-		cout << "No data on how many faces per cell. Stopping" << endl;
-		exit(-1);
-	}
+	// NcVar nFaceElems = fin.getVar("faces_per_element");
+	// if(nFaceElems.isNull())
+	// {	/*No data is available*/
+	// 	cout << "No data on how many faces per cell. Stopping" << endl;
+	// 	exit(-1);
+	// }
 
-	NcDim dim = nFaceElems.getDim(0);
-	size_t nElems = dim.getSize();
+	// NcDim dim = nFaceElems.getDim(0);
+	// size_t nElems = dim.getSize();
 
-	uint* elemFaceNo = new uint[nElems];
+	// uint* elemFaceNo = new uint[nElems];
 	
-	#ifdef DEBUG
-	dbout << "Attempting to read NetCDF element face count." << endl;
-	#endif
+	// #ifdef DEBUG
+	// dbout << "Attempting to read NetCDF element face count." << endl;
+	// #endif
 
-	nFaceElems.getVar(elemFaceNo);
+	// nFaceElems.getVar(elemFaceNo);
 
-	cout << "Successfully read element face count data." << endl;
+	// cout << "Successfully read element face count data." << endl;
 
-	#ifdef DEBUG
-	dbout << "Successfully read element face count data." << endl;
-	#endif
+	// #ifdef DEBUG
+	// dbout << "Successfully read element face count data." << endl;
+	// #endif
 
 	NcVar leftData = fin.getVar("left_element_of_faces");	
 	if(leftData.isNull())
@@ -1071,7 +1071,7 @@ void Place_Faces(NcFile& fin, const vector<vector<uint>> faces, MESH& cells)
 		exit(-1);
 	}
 
-	dim = leftData.getDim(0);
+	NcDim dim = leftData.getDim(0);
 	size_t nLeft = dim.getSize();
 
 	int* left = new int[nLeft];
@@ -1136,22 +1136,27 @@ void Place_Faces(NcFile& fin, const vector<vector<uint>> faces, MESH& cells)
 	}
 
 	/*Check if each element has the correct number of faces*/
-	for(uint ii = 0; ii < nElems; ++ii)
-	{
-		if(cells.cFaces[ii].size() != elemFaceNo[ii])
-		{
-			cout << "Mismatch of number of faces in an element. " <<
-				"Element " << ii <<  " should have " << elemFaceNo[ii] << "  but has " 
-				<< cells.cFaces[ii].size() << " faces." << endl;
-			exit(-1);
-		}
-	}
+	// for(uint ii = 0; ii < nElems; ++ii)
+	// {
+	// 	if(cells.cFaces[ii].size() != elemFaceNo[ii])
+	// 	{
+	// 		cout << "Mismatch of number of faces in an element. " <<
+	// 			"Element " << ii <<  " should have " << elemFaceNo[ii] << "  but has " 
+	// 			<< cells.cFaces[ii].size() << " faces." << endl;
+	// 		exit(-1);
+	// 	}
+	// }
 
 	#ifdef DEBUG
 		dbout << "End of placing faces in elements." << endl;
 	#endif
 
 	/*Now go through the faces and see which vertices are unique, to get element data*/
+	cout << "Building elements..." << endl;
+#pragma omp parallel
+{
+	// vector<vector<uint>> local;
+	#pragma omp for schedule(static) nowait
 	for(uint ii = 0; ii < cells.cFaces.size(); ++ii)
 	{
 		for(auto const& faces:cells.cFaces[ii])
@@ -1161,11 +1166,14 @@ void Place_Faces(NcFile& fin, const vector<vector<uint>> faces, MESH& cells)
 				if(std::find(cells.elems[ii].begin(),cells.elems[ii].end(),vert)
 					==cells.elems[ii].end())
 				{	/*Vertex doesn't exist in the elems vector yet.*/
+					// #pragma omp critical
 					cells.elems[ii].emplace_back(vert);
 				}
 			}
 		}
 	}
+}
+	cout << "Elements built." << endl;
 
 	#ifdef DEBUG
 	dbout << "All elements defined." << endl << endl;
@@ -1174,7 +1182,7 @@ void Place_Faces(NcFile& fin, const vector<vector<uint>> faces, MESH& cells)
 
 }
 
-void Read_TAUMESH_FACE(SIM& svar, MESH& cells, FLUID& fvar)
+void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
 {
 	string meshIn = svar.infolder;
 	string solIn = svar.infolder;
@@ -1219,6 +1227,15 @@ void Read_TAUMESH_FACE(SIM& svar, MESH& cells, FLUID& fvar)
 	{
 		cout << "Some data has been missed.\nPlease check how many points." << endl;
 	}
+
+	/*Adjust the scale*/
+	cells.scale = svar.scale;
+	for(auto& vert:cells.verts)
+	{
+		vert/=cells.scale;
+	}
+	svar.Start/=cells.scale;
+	// svar.Jet/=cells.scale;
 
 	/*Get face left and right, and put the faces in the elements*/
 	Place_Faces(fin, faces, cells);
