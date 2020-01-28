@@ -44,8 +44,8 @@ void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const AERO &avar, 
 			StateVecD xi(0.0,y,z);
 			xi = svar.Rotate*xi;
 			xi += svar.Start;
-			pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,1,pID));
-			pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,1,pID));
+			pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
+			pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
 			++pID;
 			++svar.simPts;
 			++svar.nrefresh;
@@ -60,8 +60,8 @@ void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const AERO &avar, 
 					StateVecD temp(x,y,z);
 					StateVecD xi = svar.Rotate*temp;
 					xi+= svar.Start;
-					pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,1,pID));
-					pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,1,pID));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
+					pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
 					++pID;
 					++svar.simPts;
 					++svar.nrefresh;
@@ -69,8 +69,8 @@ void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const AERO &avar, 
 					temp(0) = -x;
 					xi = svar.Rotate*temp;
 					xi+= svar.Start;
-					pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,1,pID));
-					pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,1,pID));
+					pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
+					pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
 					++pID;
 					++svar.simPts;
 					++svar.nrefresh;
@@ -85,8 +85,8 @@ void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const AERO &avar, 
 			StateVecD xi(x,y);
 			xi = svar.Rotate*xi;
 			xi += svar.Start;
-			pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,1,pID));
-			pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,1,pID));
+			pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
+			pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
 			++pID;
 			++svar.simPts;
 			++svar.nrefresh;
@@ -118,8 +118,8 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 			for (ldouble z = -xradius; z <= xradius; z+= svar.dx)
 			{ /*Do the centerline of points*/
 				StateVecD xi(0.0,y,z);
-				pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,2,pID));
-				pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,2,pID));
+				pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,FREE,pID));
+				pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,FREE,pID));
 				++pID;
 				++svar.simPts;
 				++svar.nrefresh;
@@ -132,14 +132,14 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 					if(((x*x) + (z*z) + (y*y)) <= (radius*radius) )
 		    		{   /*If the point is inside the hole diameter, add it*/
 						StateVecD xi(x,y,z);
-						pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,2,pID));
-						pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,2,pID));
+						pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,FREE,pID));
+						pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,FREE,pID));
 						++pID;
 						++svar.simPts;
 						++svar.nrefresh;
 						xi(0) = -x;
-						pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,2,pID));
-						pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,2,pID));
+						pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,FREE,pID));
+						pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,FREE,pID));
 						++pID;
 						++svar.simPts;
 						++svar.nrefresh;
@@ -152,8 +152,8 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 		{	
 			/*Do the centerline of points*/
 			StateVecD xi(0.0,y);
-			pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,2,pID));
-			pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,2,pID));
+			pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,FREE,pID));
+			pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,FREE,pID));
 			++pID;
 			++svar.simPts;
 			++svar.nrefresh;
@@ -163,14 +163,14 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 				if(((x*x) + (y*y)) <= (radius*radius) )
 	    		{   /*If the point is inside the hole diameter, add it*/
 					StateVecD xi2(x,y);
-					pn.emplace_back(Particle(xi2,v,rho,fvar.Simmass,press,2,pID));
-					pnp1.emplace_back(Particle(xi2,v,rho,fvar.Simmass,press,2,pID));
+					pn.emplace_back(Particle(xi2,v,rho,fvar.Simmass,press,FREE,pID));
+					pnp1.emplace_back(Particle(xi2,v,rho,fvar.Simmass,press,FREE,pID));
 					++pID;
 					++svar.simPts;
 					++svar.nrefresh;
 					xi2(0) = -x;
-					pn.emplace_back(Particle(xi2,v,rho,fvar.Simmass,press,2,pID));
-					pnp1.emplace_back(Particle(xi2,v,rho,fvar.Simmass,press,2,pID));
+					pn.emplace_back(Particle(xi2,v,rho,fvar.Simmass,press,FREE,pID));
+					pnp1.emplace_back(Particle(xi2,v,rho,fvar.Simmass,press,FREE,pID));
 					++pID;
 					++svar.simPts;
 					++svar.nrefresh;
@@ -482,8 +482,8 @@ namespace PoissonSample
 				{
 					processList.push_back(newPoint);
 					// StateVecD Point = newPoint+origin;
-					samplePoints.push_back(Part(newPoint+origin,StateVecD::Zero(),0.0,0.0,0.0,4,0));
-					airP.emplace_back(Part(newPoint+origin,vel,press,rho,mass,4,pID));
+					samplePoints.push_back(Part(newPoint+origin,StateVecD::Zero(),0.0,0.0,0.0,GHOST,0));
+					airP.emplace_back(Part(newPoint+origin,vel,press,rho,mass,GHOST,pID));
 					pID++;
 					grid.insert(newPoint);
 					// cout << "New Point: " << point(0) << " " << point(1) << endl;

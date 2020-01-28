@@ -13,36 +13,6 @@ using std::endl;
 using std::string;
 
 
-void Check_if_convex(MESH& cells)
-{
-	/*Perform a check using the cell centre to test if a cell is defined as convex*/
-	#pragma omp parallel for
-	for(uint ii = 0; ii < cells.elems.size(); ++ii)
-	{
-		StateVecD testp = cells.cCentre[ii];
-
-		#if SIMDIM == 3
-		if(!Crossings3D(cells.verts,cells.cFaces[ii],testp))
-		{
-			cout << "Cell is not defined as convex. Please check the cell definition" << endl;
-			cout << "Cell ID: " << ii << " No Faces: " << cells.cFaces[ii].size() << 
-			 " No vertices: " << cells.elems[ii].size() << endl;
-			exit(-1); 
-		}
-
-		#endif
-		#if SIMDIM == 2
-		if(!Crossings2D(cells.verts, cells.elems[ii],testp))
-		{
-			cout << "Cell is not defined as convex. Please check the cell definition" << endl;
-			cout << "Cell ID: " << ii << " No vertices: " << cells.cVerts[ii].size() << endl;
-			exit(-1); 
-		}
-		#endif
-
-	}
-}
-
 void Write_Mesh_Data(SIM &svar, MESH &cells)
 {
 	string mesh = svar.outfolder;

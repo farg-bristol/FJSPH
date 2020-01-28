@@ -164,7 +164,7 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const AERO &avar,
 	#pragma omp parallel for reduction(+:Af) shared(svar)
 	for (uint ii=start; ii < end; ++ii)
 	{
-		if(pnp1[ii].b ==3)
+		if(pnp1[ii].b == FREE)
 		{	
 			uint size = outlist[ii].size();
 			Part pi(pnp1[ii]);
@@ -227,7 +227,7 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const AERO &avar,
 			{	/* Neighbour list loop. */
 				const Part pj = pnp1[jj];
 
-				if(pj.b == 0)
+				if(pj.b == BOUND)
 					continue;
 				
 				ldouble r = (pj.xi-pi.xi).norm();

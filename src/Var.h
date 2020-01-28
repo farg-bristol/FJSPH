@@ -19,6 +19,7 @@
 
 
 #include <vector>
+#include <fstream>
 #include "Eigen/Core"
 #include "Eigen/StdVector"
 #include "NanoFLANN/nanoflann.hpp"
@@ -26,8 +27,7 @@
 #include "NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 
 #ifdef DEBUG
-	/*Open debug file to write to*/
-	#include <fstream>
+	/*Open debug file to write to*/	
 	std::ofstream dbout("WCSPH.log",std::ios::out);
 #endif
 
@@ -58,6 +58,13 @@ typedef Eigen::Matrix<ldouble,SIMDIM,SIMDIM> RotMat;
 typedef Eigen::Matrix<ldouble, SIMDIM+1,1> DensVecD;
 typedef Eigen::Matrix<ldouble, SIMDIM+1, SIMDIM+1> DensMatD;
 
+/*Define particle type indexes*/
+#define BOUND 0
+#define START 1
+#define PIPE 2
+#define FREE 3
+#define GHOST 4
+#define PISTON 5
 
 /*Simulation parameters*/
 typedef struct SIM {
@@ -185,23 +192,22 @@ typedef struct MESH
 	std::vector<double> pointP;
 	std::vector<double> pointRho;
 
+	/*Face based data*/
+	vector<vector<uint>> faces;
+	vector<std::pair<int,int>> leftright;
+
 	/*Cell based data*/
-	std::vector<std::vector<uint>> elems;
-	std::vector<std::vector<StateVecD>> cVerts;
-	std::vector<StateVecD> cCentre;
-	/*Yep... a quad layered vector... I don't like it any more than you*/
-	std::vector<std::vector<std::vector<uint>>> cFaces; 
-	std::vector<std::vector<size_t>> cNeighb;
-	
-	/*Surface data*/
-	vector<vector<uint>> farfield;
-	vector<vector<uint>> surface;
+	vector<vector<uint>> elems;
+	vector<vector<StateVecD>> cVerts;
+	vector<StateVecD> cCentre;
+	vector<vector<uint>> cFaces;
+	vector<vector<size_t>> cNeighb;
 
 	/*Solution vectors*/
-	std::vector<StateVecD> cVel;
-	std::vector<double> cellCp;
-	std::vector<double> cellP;
-	std::vector<double> cellRho;
+	vector<StateVecD> cVel;
+	vector<double> cellCp;
+	vector<double> cellP;
+	vector<double> cellRho;
 }MESH;
 
 /*Particle data class*/

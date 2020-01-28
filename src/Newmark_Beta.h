@@ -212,7 +212,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 			{	/****** FLUID PARTICLES **************/
 				
 				/*Check if the particle is clear of the starting area*/
-				if(pnp1[ii].b == 1)
+				if(pnp1[ii].b == START)
 				{   /* boundary particle value of 1 means its a                    */
 					/* fluid particle that isn't clear of the starting area        */
 					/* 2 means it is clear, and can receive a force aerodynamically*/
@@ -220,7 +220,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
 					if(vec(1) > svar.clear)
 					{	/*Tag it as clear if it's higher than the plane of the exit*/
-						pnp1[ii].b=2;
+						pnp1[ii].b=PIPE;
 					}
 					else
 					{	/*For the particles marked 1, perform a prescribed motion*/
@@ -231,12 +231,12 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 						// pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
 					}
 				}
-				else if(pnp1[ii].b == 2)
+				else if(pnp1[ii].b == PIPE)
 				{	/*Do a check to see if it needs to be given an aero force*/
 					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
 					if(vec(1) > 0.0)
 					{
-						pnp1[ii].b = 3;
+						pnp1[ii].b = FREE;
 						if(svar.Bcase == 6)
 						{
 							/*retrieve the cell it's in*/
@@ -248,18 +248,18 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 					}	
 				}
 
-				if(pnp1[ii].b != 1)
+				if(pnp1[ii].b != START)
 				{	/*For any other particles, intergrate as normal*/
 					pnp1[ii].v =  pn[ii].v +dt*(a*pn[ii].f+b*res[ii]);
 					pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(c*pn[ii].f+d*res[ii]);
 					pnp1[ii].f = res[ii];
 					pnp1[ii].Rrho = Rrho[ii];
 					pnp1[ii].Af = Af[ii];
-					if(pnp1[ii].b == 3)
-					{
+					// if(pnp1[ii].b == FREE)
+					// {
 						pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
 						pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
-					}
+					// }
 				}
 				
 			} /*End fluid particles*/

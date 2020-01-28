@@ -13,7 +13,8 @@
 #include "Eigen/LU"
 #include "Var.h"
 #include "BinaryIO.h"
-#include "TauIO.h"
+#include "CDFIO.h"
+// #include "TauIO.h"
 
 #ifdef WINDOWS
     #include <direct.h>
@@ -491,7 +492,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		  			avar.h1 = getDouble(in, lineno, "h1");
 		  			avar.b = getDouble(in, lineno, "b");
 		  			avar.h2 = getDouble(in, lineno, "h2");
-		  			
 		  		}
 		  		if(avar.acase > 5)
 		  		{
@@ -583,6 +583,9 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   		fvar.rhog = 1.225;
   		fvar.mug = 18.5E-06;
 	}
+
+
+
 
 	  	/*Universal parameters based on input values*/
 	  	svar.addcount = 0;
@@ -704,137 +707,186 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1,
 
     fp <<", I=" << end - start << ", F=POINT" <<", STRANDID=1, SOLUTIONTIME=" << svar.t  << "\n";
     fp << std::left << std::scientific << std::setprecision(6);
-    const static uint width = 10;
-    switch(svar.outform)
+    const static uint width = 15;
+    
+    if(svar.outform == 0)
     {
-    	case 0:
-    	{
-    		for (auto p=std::next(pnp1.begin(),start); p!=std::next(pnp1.begin(),end); ++p)
-			{
-				for(uint i = 0; i < SIMDIM; ++i)
-		        	fp << setw(width) << p->xi(i)/svar.scale; 
-				fp << "\n";  
-		  	}
+		for (auto p=std::next(pnp1.begin(),start); p!=std::next(pnp1.begin(),end); ++p)
+		{
+			for(uint i = 0; i < SIMDIM; ++i)
+	        	fp << setw(width) << p->xi(i)/svar.scale; 
+			fp << "\n";  
+	  	}
 
-		  	// if (airP.size() > 0 )
-		  	// {
-			  // 	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
-			  //   ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
-			  // 	for(auto p:airP)
-			  // 	{
-			  // 		for(uint i = 0; i < SIMDIM; ++i)
-			  //       	fp << p.xi(i) << " "; 
-					// fp << "\n"; 
-			  // 	}
-		  	// }
-		  	fp << std::flush;
-		  	break;
-    	}
-    	case 1:
-    	{
-    		for (auto p=std::next(pnp1.begin(),start); p!=std::next(pnp1.begin(),end); ++p)
-			{	
-				for(uint i = 0; i < SIMDIM; ++i)
-		        	fp << setw(width) << p->xi(i)/svar.scale;
-
-		        fp << setw(width) << p->v.norm();
-		        fp << setw(width) << p->f.norm();
-		        fp << setw(width) << p->rho << setw(width) << p->p  << "\n";
-		  	}
-
-		  // 	if (airP.size() > 0 )
+	  	// if (airP.size() > 0 )
+	  	// {
+		  // 	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
+		  //   ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
+		  // 	for(auto p:airP)
 		  // 	{
-			 //  	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
-			 //    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
+		  // 		for(uint i = 0; i < SIMDIM; ++i)
+		  //       	fp << p.xi(i) << " "; 
+				// fp << "\n"; 
+		  // 	}
+	  	// }
+	}	
+    if(svar.outform == 1)
+    {
+		for (auto p=std::next(pnp1.begin(),start); p!=std::next(pnp1.begin(),end); ++p)
+		{	
+			for(uint i = 0; i < SIMDIM; ++i)
+	        	fp << setw(width) << p->xi(i)/svar.scale;
 
-			 //  	for(auto p:airP)
-			 //  	{
-			 //  		for(uint i = 0; i < SIMDIM; ++i)
-			 //        	fp << p.xi(i) << " "; 
+			fp << setw(width) << p->rho << setw(width) << p->p;
+			fp << setw(width) << p->m;
+	        fp << setw(width) << p->v.norm();
+	        fp << setw(width) << p->f.norm() << "\n";
+	  	}
 
-			 //        fp << p.v.norm() << " ";
-			 //        fp << p.f.norm() << " ";
-			 //        fp << p.rho << " "  << p.p  << "\n";
-			 //  	}
-		 	// }
-		  	fp << std::flush;
-		  	break;
-    	}
-    	case 2:
-    	{
-    		for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
-			{
-				for(uint i = 0; i < SIMDIM; ++i)
-		        	fp << setw(width) << p->xi(i)/svar.scale;
-		        
-		        fp << setw(width) << p->f.norm() << setw(width) << p->Af.norm() << setw(width) << p->cellP;
-		        for(uint i = 0; i < SIMDIM; ++i)
-		        	fp << setw(width) << p->cellV(i); 
+	  // 	if (airP.size() > 0 )
+	  // 	{
+		 //  	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
+		 //    ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
 
-		        fp << setw(width) << p->b << setw(width) << p->theta  << "\n"; 
-		  	}  
+		 //  	for(auto p:airP)
+		 //  	{
+		 //  		for(uint i = 0; i < SIMDIM; ++i)
+		 //        	fp << p.xi(i) << " "; 
 
-		  	// if (airP.size() > 0 )
-		  	// {
-			  // 	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
-			  //   ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
-			    
-			  // 	for(auto p:airP)
-			  // 	{
-			  // 		for(uint i = 0; i < SIMDIM; ++i)
-			  //       	fp << p.xi(i) << " "; 
+		 //        fp << p.v.norm() << " ";
+		 //        fp << p.f.norm() << " ";
+		 //        fp << p.rho << " "  << p.p  << "\n";
+		 //  	}
+	 	// }
+	  	fp << std::flush; 	
+    }
+    else if (svar.outform == 2)
+	{
+		for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
+		{
+			for(uint i = 0; i < SIMDIM; ++i)
+	        	fp << setw(width) << p->xi(i)/svar.scale;
+	        
+	        fp << setw(width) << p->rho << setw(width) << p->p;
+			fp << setw(width) << p->m;
 
-			  //     	fp << p.f.norm() << " " << p.Af.norm() << " " << p.Sf.norm() << " ";
-			  //       for(uint i = 0; i < SIMDIM; ++i)
-			  //       	fp << p.cellV(i) << " "; 
+	        for(uint i = 0; i < SIMDIM; ++i)
+	        	fp << setw(width) << p->v(i); 
 
-			  //       fp << p.b << " " << p.theta  << "\n"; 
-			  // 	}
-		  	// }	
-		  	fp << std::flush;
-		  	break;
-    	}
+	        for(uint i = 0; i < SIMDIM; ++i)
+	        	fp << setw(width) << p->f(i); 
+
+			fp << "\n";
+	  	}  
+
+	  	// if (airP.size() > 0 )
+	  	// {
+		  // 	fp <<  "ZONE T=\"Air Data\"" <<", I=" << airP.size() << ", F=POINT" <<
+		  //   ", STRANDID=2, SOLUTIONTIME=" << svar.t  << "\n";
+		    
+		  // 	for(auto p:airP)
+		  // 	{
+		  // 		for(uint i = 0; i < SIMDIM; ++i)
+		  //       	fp << p.xi(i) << " "; 
+
+		  //     	fp << p.f.norm() << " " << p.Af.norm() << " " << p.Sf.norm() << " ";
+		  //       for(uint i = 0; i < SIMDIM; ++i)
+		  //       	fp << p.cellV(i) << " "; 
+
+		  //       fp << p.b << " " << p.theta  << "\n"; 
+		  // 	}
+	  	// }	
+	  	fp << std::flush;
+    }
+    else if (svar.outform == 3)
+    {
+    	for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
+		{
+			for(uint i = 0; i < SIMDIM; ++i)
+	        	fp << setw(width) << p->xi(i)/svar.scale;
+	        
+	        fp << setw(width) << p->rho << setw(width) << p->p;
+			fp << setw(width) << p->m;
+
+	        for(uint i = 0; i < SIMDIM; ++i)
+	        	fp << setw(width) << p->v(i); 
+
+	        for(uint i = 0; i < SIMDIM; ++i)
+	        	fp << setw(width) << p->f(i); 
+
+	         for(uint i = 0; i < SIMDIM; ++i)
+				fp << setw(width) << p->cellV(i);
+
+			fp << setw(width) << p->cellRho << setw(width) << p->cellP;
+	        fp << setw(width) << p->cellID << "\n"; 
+	  	}
+    }
+    else if (svar.outform == 4)
+    {
+    	for (auto p=std::next(pnp1.begin(),start); p!=std::next(pnp1.begin(),end); ++p)
+		{	
+			for(uint i = 0; i < SIMDIM; ++i)
+	        	fp << setw(width) << p->xi(i)/svar.scale;
+
+			fp << setw(width) << p->rho << setw(width) << p->p;
+			fp << setw(width) << p->m;
+	        fp << setw(width) << p->v.norm();
+	        fp << setw(width) << p->f.norm();
+	        fp << setw(width) << p->b << setw(width) << p->theta;
+	        fp << setw(width) << p->Af.norm() << "\n";
+	  	}
+
     }
 }
 
 void Write_ASCII_header(std::ofstream& fp, SIM &svar)
 {
-	switch (SIMDIM)
-	{
-	case 3:
-		switch (svar.outform)
-		{	
-			case 0:
-				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\""<< "\n";
-				break;
-			case 1:
-				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\", \"v (m/s)\", \"a (m/s<sup>-1</sup>)\", " << 
-			"\"<greek>r</greek> (kg/m<sup>-3</sup>)\", \"P (Pa)\"" << "\n";
-				break;
-			case 2:
-				fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\", \"a (m/s<sup>-1</sup>)\", " << 
-			"\"A<sub>f</sub>\", \"S<sub>f</sub>\", \"S<sub>fx</sub>\", \"S<sub>fy</sub>\", \"S<sub>fz</sub>\", \"B\", \"Theta\"" << "\n";	
-				break;
-		}
-		break;
+	string variables;
 
-	case 2:
-		switch (svar.outform)
-		{	
-			case 0:
-				fp << "VARIABLES = \"x (m)\", \"z (m)\""<< "\n";
-				break;
-			case 1:
-				fp << "VARIABLES = \"x (m)\", \"z (m)\", \"v (m/s)\", \"a (m/s<sup>-1</sup>)\", " << 
-			"\"<greek>r</greek> (kg/m<sup>-3</sup>)\", \"P (Pa)\"" << "\n";
-				break;
-			case 2:
-				fp << "VARIABLES = \"x (m)\", \"z (m)\", \"a (m/s<sup>-1</sup>)\", " << 
-			"\"A<sub>f</sub>\", \"S<sub>f</sub>\", \"S<sub>fx</sub>\", \"S<sub>fz</sub>\", \"B\", \"Theta\"" << "\n";
-				break;
-		}
-		break;
+#if SIMDIM == 2
+	variables = "X Z";	
+	if (svar.outform == 1)
+	{
+		variables = "X Z rho P m v a";
 	}
+	else if (svar.outform == 2)
+	{
+		variables = "X Z rho P m v_x v_y a_x a_y";
+	}
+	else if (svar.outform == 3)
+	{
+		variables = "X Z rho P m v_x v_y a_x a_y Cell_Vx Cell_Vy Cell_Rho Cell_P Cell_ID";
+	}
+	else if (svar.outform == 4)
+	{
+		variables = "X Z rho P m v a b Neighbours Aero";
+	}
+
+#endif
+
+#if SIMDIM == 3
+	variables = "X Y Z";  
+	if (svar.outform == 1)
+	{
+		variables = "X Y Z rho P m v a";
+	}
+	else if (svar.outform == 2)
+	{
+		variables = "X Y Z rho P m v_x v_y v_z a_x a_y a_z";
+	}
+	else if (svar.outform == 3)
+	{
+		variables = 
+	"X Y Z rho P m v_x v_y v_z a_x a_y a_z Cell_Vx Cell_Vy Cell_Vz Cell_Rho Cell_P Cell_ID";
+	}
+	else if (svar.outform == 4)
+	{
+		variables = "X Y Z rho P m v a b Neighbours Aero";
+	}
+
+#endif
+
+	fp << variables << "\n";
 }
 
 void Write_Boundary_ASCII(std::ofstream& fp, SIM &svar, State &pnp1)
