@@ -19,17 +19,18 @@ void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const AERO &avar, 
 	
 	svar.nrefresh = 0;	
 	ldouble jetR = 0.5*(svar.Jet(0));
+	ldouble r = jetR + 2*svar.dx;
 	ldouble resR = 2*jetR;
 	
-	StateVecD v;
+	StateVecD vavg;
 	if(svar.Bcase == 2)
 	{
-		v = (avar.vJet*pow(jetR,2))/(0.6*pow(resR,2));
+		vavg = (avar.vJet*pow(jetR,2))/(0.6*pow(resR,2));
 		jetR *= 2;
 	}
 	else
 	{
-		v = avar.vJet;  /*Jet velocity*/
+		vavg = avar.vJet;  /*Jet velocity*/
 	}
 	
 
@@ -44,6 +45,7 @@ void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const AERO &avar, 
 			StateVecD xi(0.0,y,z);
 			xi = svar.Rotate*xi;
 			xi += svar.Start;
+			StateVecD v = vavg*2*(1-(z*z)/(r*r));
 			pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
 			pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
 			++pID;
@@ -55,11 +57,12 @@ void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const AERO &avar, 
 		{ /*Do the either side of the centerline*/
 			for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
 			{
-				if(((x*x)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
+				if(((x*x)/(jetR*jetR) + (z*z)/(r*r)) <= 1.0 )
 	    		{   /*If the point is inside the hole diameter, add it*/
 					StateVecD temp(x,y,z);
 					StateVecD xi = svar.Rotate*temp;
 					xi+= svar.Start;
+					StateVecD v = vavg*2*(1-(z*z+x*x)/(r*r));
 					pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
 					pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
 					++pID;
@@ -85,6 +88,7 @@ void AddPoints(const ldouble y, SIM &svar, const FLUID &fvar, const AERO &avar, 
 			StateVecD xi(x,y);
 			xi = svar.Rotate*xi;
 			xi += svar.Start;
+			StateVecD v = vavg*2*(1-(x*x)/(r*r));
 			pn.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
 			pnp1.emplace_back(Particle(xi,v,rho,fvar.Simmass,press,START,pID));
 			++pID;

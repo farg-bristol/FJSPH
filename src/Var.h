@@ -17,7 +17,7 @@
 	#include "VLM.h"
 #endif
 
-
+#include <limits>
 #include <vector>
 #include <fstream>
 #include "Eigen/Core"
@@ -46,7 +46,11 @@ typedef unsigned int uint;
 
 /*Get machine bit precision for Simulation of Simplicity*/
 #ifndef MEPSILON
-#define MEPSILON pow(2,-53) /*For  float, power is -24*/
+#define MEPSILON std::numeric_limits<ldouble>::epsilon() /*For  float, power is -24*/
+#endif
+
+#ifndef MERROR
+#define MERROR (7*MEPSILON + 56*MEPSILON*MEPSILON)
 #endif
 
 /****** Eigen vector definitions ************/
@@ -69,11 +73,11 @@ typedef Eigen::Matrix<ldouble, SIMDIM+1, SIMDIM+1> DensMatD;
 /*Simulation parameters*/
 typedef struct SIM {
 	StateVecI xyPART; 				/*Starting sim particles in x and y box*/
-	uint simPts,bndPts,totPts;	    /*Simulation particles, Boundary particles, total particles*/
-	uint finPts;					/*How many points there will be at simulation end*/
-	uint psnPts;					/*Piston Points*/
-	uint nrefresh; 					/*Crossflow refresh particle number*/
-	uint nmax;                      /*Max add-particle calls*/
+	size_t simPts,bndPts,totPts;	    /*Simulation particles, Boundary particles, total particles*/
+	size_t finPts;					/*How many points there will be at simulation end*/
+	size_t psnPts;					/*Piston Points*/
+	size_t nrefresh; 					/*Crossflow refresh particle number*/
+	uint nmax;                      /*Max number of particles*/
 	uint outframe;	                /*Terminal output frame interval*/
 	uint addcount;					/*Current Number of add-particle calls*/
 	double Pstep,Bstep, dx, clear;	/*Initial spacings for particles and boundary*/
@@ -93,6 +97,7 @@ typedef struct SIM {
 	uint outtype;                   /*ASCII or binary output*/
 	uint outform, boutform, gout;   /*Output type. Fluid properties or Research.*/
 	uint framecount;
+	vector<size_t> back;            /*Particles at the back of the pipe*/
 
 	std::string infolder, outfolder;
 	std::string meshfile, bmapfile, solfile;
@@ -115,7 +120,7 @@ typedef struct SIM {
 /*Fluid and smoothing parameters*/
 typedef struct FLUID {
 	ldouble H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
-	ldouble rho0; 					/*Resting Fluid density*/
+	ldouble rho0, rhoJ; 					/*Resting Fluid density*/
 	ldouble pPress, gasPress;		/*Starting pressure in pipe*/
 	ldouble gasDynamic, gasVel;     /*Reference gas velocity*/
 	ldouble Simmass, Boundmass;		/*Particle and boundary masses*/
@@ -193,14 +198,14 @@ typedef struct MESH
 	std::vector<double> pointRho;
 
 	/*Face based data*/
-	vector<vector<uint>> faces;
+	vector<vector<size_t>> faces;
 	vector<std::pair<int,int>> leftright;
 
 	/*Cell based data*/
-	vector<vector<uint>> elems;
+	vector<vector<size_t>> elems;
 	vector<vector<StateVecD>> cVerts;
 	vector<StateVecD> cCentre;
-	vector<vector<uint>> cFaces;
+	vector<vector<size_t>> cFaces;
 	vector<vector<size_t>> cNeighb;
 
 	/*Solution vectors*/
@@ -214,7 +219,7 @@ typedef struct MESH
 typedef class Particle {
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-		Particle(const StateVecD X, const StateVecD& Vi, const ldouble Rhoi, const ldouble Mi, 
+		Particle(const StateVecD& X, const StateVecD& Vi, const ldouble Rhoi, const ldouble Mi, 
 			const ldouble press, const int bound, const uint pID)
 		{
 			xi = X;	v = Vi; 
@@ -225,6 +230,25 @@ typedef class Particle {
 			Af = StateVecD::Zero();
 			normal = StateVecD::Zero();
 			p = press;
+			Rrho = 0.0;
+			theta = 0.0;
+			cellV = StateVecD::Zero();
+			cellID = 0;
+			cellP = 0.0;
+			cellRho = 0.0;
+		}
+
+		/*To add particles dynamically for boundary layer*/
+		Particle(const StateVecD& X,  const Particle& pj, const size_t pID)
+		{
+			xi = X;	v = pj.v; 
+			rho = pj.rho; m = pj.m; b = pj.b;
+			partID = pID;
+			f = StateVecD::Zero();
+			Sf = StateVecD::Zero(); 
+			Af = StateVecD::Zero();
+			normal = StateVecD::Zero();
+			p = pj.p;
 			Rrho = 0.0;
 			theta = 0.0;
 			cellV = StateVecD::Zero();
@@ -255,7 +279,7 @@ typedef class Particle {
 		ldouble Rrho, rho, p, m, theta;
 		uint b; //What state is a particle. Boundary, forced particle or unforced
 		StateVecD cellV;
-		uint partID, cellID;
+		size_t partID, cellID;
 		ldouble cellP, cellRho;
 }Particle;
 

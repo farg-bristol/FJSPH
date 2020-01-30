@@ -167,7 +167,7 @@ void Write_Zone(string input, ZONE& zn, MESH& cells)
 
 template <class T>
 void Average_Point_to_Cell(const vector<T>& pData, vector<T>& cData,
-							const vector<vector<uint>>& elems, const T zero)
+							const vector<vector<size_t>>& elems, const T zero)
 {
 	vector<T> sum(elems.size(),zero);
 
@@ -795,18 +795,18 @@ vector<vector<uint>> Get_Symmetry_Plane(NcFile& fin, const int marker)
 
 	/*Now compare against the marker for the symmetry plane, */ 
 	/*and add index to a vector to retrieve the faces*/
-	vector<uint> symPlaneM;
+	vector<size_t> symPlaneM;
 
-	for(uint ii = 0; ii < nMarkers; ++ii)
+	for(size_t ii = 0; ii < nMarkers; ++ii)
 	{
 		if(markers[ii] == marker)
 			symPlaneM.emplace_back(ii);
 	}
 
 	/*Get the surface indexes*/
-	vector<vector<uint>> temp;
-	uint nQuads = 0;
-	uint nTris = 0;
+	vector<vector<size_t>> temp;
+	size_t nQuads = 0;
+	size_t nTris = 0;
 	/*Start with surface quadrilaterals*/
 #ifdef DEBUG
 	dbout << "Attempting to read surface quadrilaterals." << endl;
@@ -835,11 +835,11 @@ vector<vector<uint>> Get_Symmetry_Plane(NcFile& fin, const int marker)
 		dbout << "Successfully read surface quadrilaterals." << endl;
 #endif
 		/*Create the vector of surfaces*/
-		for (uint ii = 0; ii < nQuads; ++ii)
+		for (size_t ii = 0; ii < nQuads; ++ii)
 		{
 			temp.emplace_back();
-			for(uint jj = 0; jj < nPPQuad; ++jj)
-				temp[ii].emplace_back(static_cast<uint>(quads[index(ii,jj,nPPQuad)]));
+			for(size_t jj = 0; jj < nPPQuad; ++jj)
+				temp[ii].emplace_back(static_cast<size_t>(quads[index(ii,jj,nPPQuad)]));
 		}
 	}
 	else 
@@ -878,11 +878,11 @@ vector<vector<uint>> Get_Symmetry_Plane(NcFile& fin, const int marker)
 #endif
 
 		/*Create the vector of surfaces*/
-		for (uint ii = nQuads; ii < nQuads + nTris; ++ii)
+		for (size_t ii = nQuads; ii < nQuads + nTris; ++ii)
 		{
 			temp.emplace_back();
-			for(uint jj = 0; jj < nPPTri; ++jj)
-				temp[ii].emplace_back(static_cast<uint>(tris[index(ii,jj,nPPTri)]));
+			for(size_t jj = 0; jj < nPPTri; ++jj)
+				temp[ii].emplace_back(static_cast<size_t>(tris[index(ii,jj,nPPTri)]));
 		}
 	}
 	else 
@@ -898,7 +898,7 @@ vector<vector<uint>> Get_Symmetry_Plane(NcFile& fin, const int marker)
 		exit(-1);
 	}
 
-	vector<vector<uint>> symPlane;
+	vector<vector<size_t>> symPlane;
 	for(auto const& index:symPlaneM)
 	{
 		symPlane.emplace_back(temp[index]);
@@ -973,7 +973,7 @@ void Read_TAUMESH(const SIM& svar, MESH& cells, const FLUID& fvar)
 /*****************************************************************************/
 /*************** READING NETCDF FACE BASED DATA FUNCTIONS ********************/
 /*****************************************************************************/
-vector<vector<uint>> Get_Faces(NcFile& fin)
+vector<vector<size_t>> Get_Faces(NcFile& fin)
 {
 #ifdef DEBUG
 		dbout << "Reading face data" << endl;
@@ -982,7 +982,8 @@ vector<vector<uint>> Get_Faces(NcFile& fin)
 	NcVar faceData = fin.getVar("points_of_element_faces");	
 	if(faceData.isNull())
 	{	/*No data is available*/
-		return vector<vector<uint>>(0);
+		cout << "No face data. Stopping." << endl;
+		exit(-1);
 	}
 
 	NcDim dim = faceData.getDim(0);
@@ -1018,12 +1019,12 @@ vector<vector<uint>> Get_Faces(NcFile& fin)
 #endif
 
 	/*Convert it to a vector to store*/
-	uint ii,jj;
-	vector<vector<uint>> faceVec(nFace,vector<uint>(nPnts));
+	size_t ii,jj;
+	vector<vector<size_t>> faceVec(nFace,vector<size_t>(nPnts));
 	for (ii = 0; ii < nFace; ++ii)
 	{
 		for(jj = 0; jj < nPnts; ++jj)
-			faceVec[ii][jj] = static_cast<uint>(faceArray[index(ii,jj,nPnts)]);
+			faceVec[ii][jj] = static_cast<size_t>(faceArray[index(ii,jj,nPnts)]);
 	}
 
 #ifdef DEBUG
@@ -1111,18 +1112,29 @@ void Place_Faces(NcFile& fin, MESH& cells)
 	#ifdef DEBUG
 	dbout << "Successfully read right element data." << endl;
 	#endif
+	vector<std::pair<int,int>> leftright(nLeft);
 
+	#pragma omp parallel shared(leftright)
+	{ 
+		/*Create local of */
+		
 
-	#pragma omp parallel for
-	for(uint ii = 0; ii < nLeft; ++ii)
-	{
-		int lindex = left[ii];
-		int rindex = right[ii];
-		cells.leftright[ii] = std::pair<int,int>(lindex,rindex);
-		cells.cFaces[lindex].emplace_back(ii);
-		if(rindex >=0)
-			cells.cFaces[rindex].emplace_back(ii);
+		#pragma omp for schedule(static) nowait
+		for(size_t ii = 0; ii < nLeft; ++ii)
+		{
+			int lindex = left[ii];
+			int rindex = right[ii];
+			leftright[ii] = std::pair<int,int>(lindex,rindex);
+			#pragma omp critical
+			{
+				cells.cFaces[lindex].emplace_back(ii);
+				if(rindex >=0)
+					cells.cFaces[rindex].emplace_back(ii);
+			}
+		}
 	}
+
+	cells.leftright = leftright;
 
 	/*Check if each element has the correct number of faces*/
 	// for(uint ii = 0; ii < nElems; ++ii)
@@ -1150,14 +1162,16 @@ void Place_Faces(NcFile& fin, MESH& cells)
 	{
 		for(auto const& index:cells.cFaces[ii])
 		{
-			const vector<uint> face = cells.faces[index];
+			const vector<size_t> face = cells.faces[index];
 			for(auto const& vert:face)
 			{
 				if(std::find(cells.elems[ii].begin(),cells.elems[ii].end(),vert)
 					==cells.elems[ii].end())
 				{	/*Vertex doesn't exist in the elems vector yet.*/
-					// #pragma omp critical
-					cells.elems[ii].emplace_back(vert);
+					#pragma omp critical
+					{
+						cells.elems[ii].emplace_back(vert);
+					}
 				}
 			}
 		}
@@ -1205,10 +1219,10 @@ void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
 	cells.numPoint = nPnts;
 	cells.numElem = nElem;
 
-	cells.elems = vector<vector<uint>>(nElem);
-	cells.cFaces = vector<vector<uint>>(nElem);
+	cells.elems = vector<vector<size_t>>(nElem);
+	cells.cFaces = vector<vector<size_t>>(nElem);
 	cells.verts = vector<StateVecD>(nPnts);
-	cells.leftright = vector<std::pair<int,int>>(nFace);
+	// cells.leftright = vector<std::pair<int,int>>(nFace);
 
 	/*Get the faces of the mesh*/
 	cells.faces = Get_Faces(fin);
@@ -1224,10 +1238,11 @@ void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
 	cells.scale = svar.scale;
 	for(auto& vert:cells.verts)
 	{
-		vert/=cells.scale;
+		vert*=cells.scale;
 	}
-	svar.Start/=cells.scale;
+	svar.Start*=cells.scale;
 	// svar.Jet/=cells.scale;
+	
 
 	/*Get face left and right, and put the faces in the elements*/
 	Place_Faces(fin, cells);

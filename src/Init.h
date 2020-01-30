@@ -706,6 +706,11 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			AddPoints(y, svar, fvar, avar, pn, pnp1);
 		}
 
+		for(size_t ii = svar.totPts-svar.nrefresh; ii < svar.totPts; ++ii)
+		{	/*Fill the vector of the last particles*/
+			svar.back.emplace_back(ii);
+		}
+
 		svar.clear = -svar.Jet[1] + 4*svar.dx;
 	}
 	else if(svar.Bcase == 5)

@@ -138,8 +138,8 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 	 vector<StateVecD>& RV, vector<ldouble>& Rrho, std::vector<StateVecD> Af)
 {
 	svar.maxmu=0; 					    /* CFL Parameter */
-	const uint start = svar.bndPts;
-	const uint end = svar.totPts;
+	const size_t start = svar.bndPts;
+	const size_t end = svar.totPts;
 
 	/*Gravity Vector*/
 	#if SIMDIM == 3
@@ -178,7 +178,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 
 /******** LOOP 3 - Piston points: Calculate density and pressure. **********/		
 		#pragma omp for reduction(+:RV, Rrho) /*Reduction defs in Aero.h*/
-		for (uint ii=0; ii < start; ++ii)
+		for (size_t ii=0; ii < start; ++ii)
 		{
 			const Part pi = pnp1[ii];
 			const uint size = outlist[ii].size();
@@ -216,10 +216,10 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 
 /******* LOOP 4 - All simulation points: Calculate forces on the fluid. *********/
 		#pragma omp for reduction(+:Rrho, RV/*, ST*/)  /*Reduction defs in Aero.h*/
-		for (uint ii = start; ii < end; ++ii)
+		for (size_t ii = start; ii < end; ++ii)
 		{
 			Part pi = pnp1[ii];
-			uint size = outlist[ii].size();
+			size_t size = outlist[ii].size();
 			// pnp1[ii].theta = double(size);
 			// pnp1[ii].theta = 0.0;
 

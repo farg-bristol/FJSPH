@@ -584,19 +584,43 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   		fvar.mug = 18.5E-06;
 	}
 
-
-
-
 	  	/*Universal parameters based on input values*/
-	  	svar.addcount = 0;
-	  	svar.dt = 2E-010; 		/*Initial timestep*/
+	  	
+
+	  	
+		fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
+		fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
+
+		/*Pipe Pressure calc*/
+		ldouble rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
+
+		/*Defining pstep then finding dx*/
+		// fvar.Simmass = fvar.rho0*pow(svar.Pstep,SIMDIM);
+		// svar.dx = pow(fvar.Simmass/rho, 1.0/double(SIMDIM));
+		
+
+		// Defining dx to fit the pipe, then find rest spacing
+		uint ndiam = ceil(abs(svar.Jet(0)/svar.Pstep));
+		svar.dx = 0.999*svar.Jet(0)/ldouble(ndiam);	
+
+	 	svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/3.0);
+
+	 	/*Mass from spacing and density*/
+		fvar.Simmass = fvar.rho0*pow(svar.Pstep,SIMDIM); 
+		fvar.Boundmass = fvar.Simmass;
+		fvar.gasDynamic = 0.5*fvar.rhog*fvar.gasVel;
+
+		svar.addcount = 0;
+	  	svar.dt = 2E-010; 			/*Initial timestep*/
 	  	svar.t = 0.0;				/*Total simulation time*/
-	  	fvar.H= Hfac*svar.Pstep;
+	  	fvar.H = Hfac*svar.Pstep;
 	  	fvar.HSQ = fvar.H*fvar.H; 
 
 		fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
 		svar.Bclosed = 0; 		/*Boundary begins open*/
-		svar.psnPts = 0; 		/*Start with no pison points*/
+		svar.psnPts = 0; 		/*Start with no pitson points*/
+
+
 #if SIMDIM == 2
 				fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
 				svar.simPts = svar.xyPART[0]*svar.xyPART[1];
@@ -605,38 +629,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 				fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
 				svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
 #endif
-	  	
-		fvar.Simmass = fvar.rho0*pow(svar.Pstep,SIMDIM); 
-		fvar.Boundmass = fvar.Simmass;
-		fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
-		fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
-		/*Pipe Pressure calc*/
-		ldouble rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
-		svar.dx = pow(fvar.Simmass/rho, 1.0/double(SIMDIM));
-		// cout << rho << "  " << svar.dx << endl;
-		fvar.gasDynamic = 0.5*fvar.rhog*fvar.gasVel;
-
-
-
-		// fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
-		// fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
-		// /*Pipe Pressure calc*/
-		// ldouble rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
-
-	 //  	Make sure that the fuel fits the pipe perfectly
-		// uint ndiam = ceil(abs(svar.Jet(0)/svar.dx));
-		// svar.dx = svar.Jet(0)/ldouble(ndiam);
-
-	 // 	/*Mass from spacing and density*/
-		// fvar.Simmass = rho*pow(svar.dx,SIMDIM); 
-		// fvar.Boundmass = fvar.Simmass;
-		
-		// svar.Pstep = pow(fvar.Simmass/fvar.rho0,1/SIMDIM);
-		
-
-
-		// cout << rho << "  " << svar.dx << endl;
-		fvar.gasDynamic = 0.5*fvar.rhog*fvar.gasVel;
 
 #ifdef DEBUG
 		dbout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
@@ -649,6 +641,14 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		dbout << "Gas Dynamic pressure: " << fvar.gasDynamic << endl << endl;
 #endif
 
+		cout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
+		cout << "Pipe rho: " << rho << endl;
+		// dbout << "Number of fluid particles along diameter: " << ndiam << endl;
+		cout << "Pipe step (dx): " << svar.dx << endl;
+		cout << "Particle mass: " << fvar.Simmass << endl;
+		cout << "Freestream initial spacing: " << svar.Pstep << endl;
+		cout << "Support Radius: " << fvar.H << endl;
+		cout << "Gas Dynamic pressure: " << fvar.gasDynamic << endl << endl;
 
 		#if SIMDIM == 3
 			if(svar.Bcase == 4)
@@ -774,7 +774,7 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1,
 	        	fp << setw(width) << p->v(i); 
 
 	        for(uint i = 0; i < SIMDIM; ++i)
-	        	fp << setw(width) << p->f(i); 
+				fp << setw(width) << p->f(i); 
 
 			fp << "\n";
 	  	}  
@@ -814,7 +814,7 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1,
 	        for(uint i = 0; i < SIMDIM; ++i)
 	        	fp << setw(width) << p->f(i); 
 
-	         for(uint i = 0; i < SIMDIM; ++i)
+	        for(uint i = 0; i < SIMDIM; ++i)
 				fp << setw(width) << p->cellV(i);
 
 			fp << setw(width) << p->cellRho << setw(width) << p->cellP;
@@ -844,44 +844,45 @@ void Write_ASCII_header(std::ofstream& fp, SIM &svar)
 	string variables;
 
 #if SIMDIM == 2
-	variables = "X Z";	
+	variables = "\"X\" \"Z\"";  
 	if (svar.outform == 1)
 	{
-		variables = "X Z rho P m v a";
+		variables = "\"X\" \"Z\" \"rho\" \"P\" \"m\" \"v\" \"a\"";
 	}
 	else if (svar.outform == 2)
 	{
-		variables = "X Z rho P m v_x v_y a_x a_y";
+		variables = "\"X\" \"Z\" \"rho\" \"P\" \"m\" \"v_x\" \"v_z\" \"a_x\" \"a_z\"";
 	}
 	else if (svar.outform == 3)
 	{
-		variables = "X Z rho P m v_x v_y a_x a_y Cell_Vx Cell_Vy Cell_Rho Cell_P Cell_ID";
+		variables = 
+"\"X\" \"Z\" \"rho\" \"P\" \"m\" \"v_x\" \"v_z\" \"a_x\" \"a_z\" \"Cell_Vx\" \"Cell_Vz\" \"Cell_Rho\" \"Cell_P\" \"Cell_ID\"";
 	}
 	else if (svar.outform == 4)
 	{
-		variables = "X Z rho P m v a b Neighbours Aero";
+		variables = "\"X\" \"Z\" \"rho\" \"P\" \"m\" \"v\" \"a\" \"b\" \"Neighbours\" \"Aero\"";
 	}
 
 #endif
 
 #if SIMDIM == 3
-	variables = "X Y Z";  
+	variables = "\"X\" \"Y\" \"Z\"";  
 	if (svar.outform == 1)
 	{
-		variables = "X Y Z rho P m v a";
+		variables = "\"X\" \"Y\" \"Z\" \"rho\" \"P\" \"m\" \"v\" \"a\"";
 	}
 	else if (svar.outform == 2)
 	{
-		variables = "X Y Z rho P m v_x v_y v_z a_x a_y a_z";
+		variables = "\"X\" \"Y\" \"Z\" \"rho\" \"P\" \"m\" \"v_x\" \"v_y\" \"v_z\" \"a_x\" \"a_y\" \"a_z\"";
 	}
 	else if (svar.outform == 3)
 	{
 		variables = 
-	"X Y Z rho P m v_x v_y v_z a_x a_y a_z Cell_Vx Cell_Vy Cell_Vz Cell_Rho Cell_P Cell_ID";
+"\"X\" \"Y\" \"Z\" \"rho\" \"P\" \"m\" \"v_x\" \"v_y\" \"v_z\" \"a_x\" \"a_y\" \"a_z\" \"Cell_Vx\" \"Cell_Vy\" \"Cell_Vz\" \"Cell_Rho\" \"Cell_P\" \"Cell_ID\"";
 	}
 	else if (svar.outform == 4)
 	{
-		variables = "X Y Z rho P m v a b Neighbours Aero";
+		variables = "\"X\" \"Y\" \"Z\" \"rho\" \"P\" \"m\" \"v\" \"a\" \"b\" \"Neighbours\" \"Aero\"";
 	}
 
 #endif

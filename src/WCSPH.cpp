@@ -26,8 +26,8 @@ using namespace nanoflann;
 
 void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outlist, State& pnp1, State& airP)
 {
-	const uint start = svar.bndPts;
-	const uint end = svar.totPts;
+	const size_t start = svar.bndPts;
+	const size_t end = svar.totPts;
 
 	#if DEBUG 
 		dbout << "Starting first step. ";
@@ -36,7 +36,7 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 
 	std::vector<std::vector<Part>> neighb;
 	neighb.reserve(end);
-	for(uint ii = 0; ii < start; ++ii)
+	for(size_t ii = 0; ii < start; ++ii)
 		neighb.emplace_back();
 
 	/*Check if a particle is running low on neighbours, and add ficticious particles*/
@@ -46,7 +46,7 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 		std::vector<std::vector<Part>> localN;
 		vector<vector<Part>> localA;
 		#pragma omp for schedule(static) nowait 
-		for (uint ii = start; ii < end; ++ii)
+		for (size_t ii = start; ii < end; ++ii)
 		{
 			std::vector<Part> temp;
 			if(svar.ghost == 1 && pnp1[ii].b == 2 && outlist[ii].size() < avar.nfull &&
@@ -71,12 +71,12 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 	}
 	airP.clear();
 
-	for(uint ii = 0; ii < air.size(); ++ii)
-		for(uint jj = 0; jj < air[ii].size(); ++jj)
+	for(size_t ii = 0; ii < air.size(); ++ii)
+		for(size_t jj = 0; jj < air[ii].size(); ++jj)
 			airP.emplace_back(PartToParticle(air[ii][jj]));
 
 	#pragma omp parallel for shared(outlist)
-	for(uint ii = start; ii < end; ++ii)
+	for(size_t ii = start; ii < end; ++ii)
 	{
 		pnp1[ii].theta = outlist[ii].size(); 
 	}
@@ -84,7 +84,7 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 	/*Previous State for error calc*/
 	vector<StateVecD> xih(svar.totPts);
 	#pragma omp parallel for shared(pnp1)
-	for (uint  ii=0; ii < end; ++ii)
+	for (size_t  ii=0; ii < end; ++ii)
 		xih[ii] = pnp1[ii].xi;
 	
 	vector<StateVecD> res(svar.totPts,StateVecD::Zero());
@@ -101,7 +101,7 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 	const ldouble dt = 0.3*std::min(dtf,dtcv);
 
 	#pragma omp parallel for shared(res, Rrho)
-	for(uint ii = 0; ii < end; ++ii)
+	for(size_t ii = 0; ii < end; ++ii)
 	{
 		pnp1[ii].f = res[ii];
 		pnp1[ii].Rrho = Rrho[ii];
@@ -111,7 +111,7 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 #if DEBUG 
 	ldouble errsum = 0.0;
 
-	for (uint ii = start; ii < end; ++ii)
+	for (size_t ii = start; ii < end; ++ii)
 	{
 		StateVecD r = xih[ii]-pnp1[ii].xi;
 		errsum += r.squaredNorm();
@@ -143,7 +143,7 @@ void Find_MinMax(SIM& svar, const State& pnp1)
 		#endif
 
 		/*Check if they are more than the previous step*/
-		for (uint dim = 0; dim < SIMDIM; ++dim)
+		for (size_t dim = 0; dim < SIMDIM; ++dim)
 		{
 			if(minC(dim) < svar.minC(dim))
 				svar.minC(dim) = minC(dim);
@@ -193,6 +193,12 @@ int main(int argc, char *argv[])
 		#endif
 	}	
 
+	cout << "Adjusted Start Coordinates: " << endl;
+	cout << svar.Start(0) << "  " << svar.Start(1);
+#if SIMDIM == 3
+	cout << "  " << svar.Start(2) << endl;
+#endif
+
 	// Check if cells have been initialsed before making a tree off it
 	if(cells.cCentre.size() == 0)
 		cells.cCentre.emplace_back(StateVecD::Zero());
@@ -207,16 +213,16 @@ int main(int argc, char *argv[])
 
 
 	/*Make a guess of how many there will be...*/
-	int partCount = ParticleCount(svar);
+	// int partCount = ParticleCount(svar);
     ///****** Initialise the particles memory *********/
 	State pn;	    /*Particles at n   */
 	State pnp1; 	/*Particles at n+1 */
 	State airP;
 
-	cout << "Final particle count:  " << partCount << endl;
-	svar.finPts = partCount;
-	pn.reserve(partCount);
-  	pnp1.reserve(partCount);
+	cout << "Final particle count:  " << svar.nmax << endl;
+	svar.finPts = svar.nmax;
+	pn.reserve(svar.nmax);
+  	pnp1.reserve(svar.nmax);
 	
 	
 	// if (svar.Bcase == 6){
@@ -224,6 +230,10 @@ int main(int argc, char *argv[])
 	// }	
 
 	InitSPH(svar,fvar,avar,pn,pnp1);
+
+	cout << "Starting counts: " << endl;
+	cout << "Boundary: " << svar.bndPts << "  Sim: " << svar.simPts << endl;
+	 
 
 	///********* Tree algorithm stuff ************/
 	Sim_Tree NP1_INDEX(SIMDIM,pnp1,20);
