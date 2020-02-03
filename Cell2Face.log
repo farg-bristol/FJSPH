@@ -1,0 +1,40 @@
+Reading Element: points_of_tetraeders
+Allocating array of: 1067927 by 4
+Attempting to read NetCDF elements.
+Successfully read elements
+Returning vector
+Reading Element: points_of_prisms
+Allocating array of: 5344 by 6
+Attempting to read NetCDF elements.
+Successfully read elements
+Returning vector
+Reading Element: points_of_pyramids
+Allocating array of: 29365 by 5
+Attempting to read NetCDF elements.
+Successfully read elements
+Returning vector
+Reading Element: points_of_hexaeders
+Allocating array of: 1170348 by 8
+Attempting to read NetCDF elements.
+Successfully read elements
+Returning vector
+Reading coordinates.
+Number of points: 1384282
+Returning coordinates.
+Entering Find_Bmap_Markers...
+Exiting Find_Bmap_Markers...
+Entering Get_Surface...
+Number of triangles: 20484
+Attempting to read NetCDF surface triangles.
+Putting surface faces into a vector.
+Number of quadrilaterals: 38581
+Attempting to read NetCDF surface quadrilaterals.
+Putting surface faces into a vector.
+Exiting Get_Surface...
+Entering BuildFaces...
+Starting main loop...
+Building faces complete. Number of faces: 9316236
+Average number of faces per element:4.09868
+Exiting BuildFaces...
+Entering Write_Face_Data...
+Output file: Inputs/TAU3D/M6.taumesh.faces
