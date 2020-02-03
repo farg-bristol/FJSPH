@@ -189,7 +189,7 @@ int main(int argc, char *argv[])
 		Read_TAUMESH_FACE(svar,cells,fvar);
 		// Read_TAUMESH(svar,cells,fvar);
 		#else
-		Read_TAUMESH(svar,cells,fvar);
+		Read_TAUMESH_EDGE(svar,cells,fvar);
 		#endif
 	}	
 

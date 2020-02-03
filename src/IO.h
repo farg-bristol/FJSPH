@@ -552,9 +552,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	  		if(svar.Bcase == 6)
 	  		{
 		  		svar.meshfile = getString(fluid, lineno, "Mesh input file");
-		  		#if SIMDIM == 2
-		  		svar.bmapfile = getString(fluid, lineno, "Mesh bmap file");
-		  		#endif
 		  		svar.solfile = getString(fluid,lineno, "Mesh solution file");
 		  		svar.scale = getDouble(fluid,lineno, "Mesh scale");
 	  		}

@@ -43,6 +43,12 @@ c2f:
 c2fD:
 	$(CXX) -g -DDEBUG $(FLAGS) $(CFLAGS) $(INC) $(LLINK) src/Cell2Face.cpp $(LIBS) -o Cell2Face
 
+c2e:
+	$(CXX) $(FLAGS) $(CFLAGS) $(INC) $(LLINK) src/Cell2Edge.cpp $(LIBS) -o Cell2Edge
+
+c2eD:
+	$(CXX) -g -DDEBUG $(FLAGS) $(CFLAGS) $(INC) $(LLINK) src/Cell2Edge.cpp $(LIBS) -o Cell2Edge
+
 clean:
 	$(RM) $(TARGET)
 

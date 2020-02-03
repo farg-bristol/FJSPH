@@ -138,8 +138,9 @@ vector<int> Find_Bmap_Markers(const string& bmapIn)
 	{
 
 		// cout << line << endl;
-		if(line.find("Type: symmetry plane")!=string::npos || 
-			line.find("Type: farfield")!=string::npos)
+		if(line.find("Type: euler wall")!=string::npos || 
+			line.find("Type: viscous wall")!=string::npos ||
+			line.find("Type: sharp edge")!=string::npos)
 		{
 			
 			/*This marker is a far field, so store it.*/
@@ -186,7 +187,7 @@ vector<int> Find_Bmap_Markers(const string& bmapIn)
 		lineno++;
 	}
 
-	cout << "Far field markers:" << endl;
+	cout << "Wall markers:" << endl;
 
 	for(auto mark:markers)
 	{
@@ -330,7 +331,7 @@ vector<vector<uint>> Get_Surface(NcFile& fin, const vector<int>& markers)
 	for(uint ii = 0; ii < nMarkers; ++ii)
 	{
 		if(std::find(markers.begin(),markers.end(),faceMarkers[ii])!= markers.end())
-		{	/*The face is a far-field boundary*/
+		{	/*The face is an inner boundary*/
 			/*Pre sort to save time in the loop*/
 			vector<uint> v = faceVec[ii];
 			std::sort(v.begin(),v.end());
@@ -571,26 +572,26 @@ void CheckFaces(const vector<vector<uint>>& vertincells,
 			{	/*Search through the surface faces to identify */
 				/*if the face is an internal face or not*/
 				if(sface == lface)
-				{	/*Face is an external face*/
+				{	/*Face is an internal face*/
 					if (lface.size() == 4)
 						fdata.nFar+=2;
 					else
 						fdata.nFar++;
 					
-					leftright = std::pair<int,int>(lindex,-2);
+					leftright = std::pair<int,int>(lindex,-1);
 					colour[lindex][lfaceindex] = 1;
 					Add_Face(face,leftright,fdata);
 					goto matchfound;
 				}
 			}
 
-			/*If still uncoloured, then face is an internal boundary*/
+			/*If still uncoloured, then face is an external boundary*/
 			if (lface.size() == 4)
 				fdata.nWall += 2;
 			else
 				fdata.nWall++;
 
-			leftright = std::pair<int,int>(lindex,-1);
+			leftright = std::pair<int,int>(lindex,-2);
 			colour[lindex][lfaceindex] = 1;
 			Add_Face(face,leftright,fdata);
 			

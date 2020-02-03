@@ -266,15 +266,48 @@ vector<StateVecD> Get_Coordinates(NcFile& fin)
 	#ifdef DEBUG
 		dbout << "Reading coordinates." << endl;
 	#endif
-
-	NcVar coordXD = fin.getVar("points_xc");	
-	if(coordXD.isNull()) exit(NC_ERR);
-
-	NcVar coordYD = fin.getVar("points_yc");	
-	if(coordYD.isNull()) exit(NC_ERR);
-
+	// uint counts[3] = {0};
+	uint ignore=0;
+	NcVar coordXD = fin.getVar("points_xc");
+	NcVar coordYD = fin.getVar("points_yc");
 	NcVar coordZD = fin.getVar("points_zc");	
-	if(coordZD.isNull()) exit(NC_ERR);
+
+	if(coordXD.isNull()) 
+	{
+#if SIMDIM == 3
+		cout << "Missing x coordinate dimension!" << endl;
+		exit(NC_ERR);
+#else
+		ignore = 1;
+#endif
+	}
+
+	if(coordYD.isNull()) 
+	{
+#if SIMDIM == 3
+		cout << "Missing y coordinate dimension!" << endl;
+		exit(NC_ERR);
+#else
+		ignore = 2;
+#endif
+	}
+
+	if(coordZD.isNull()) 
+	{
+#if SIMDIM == 3
+		cout << "Missing z coordinate dimension!" << endl;
+		exit(NC_ERR);
+#else
+		ignore = 3;
+#endif
+	}
+
+
+#ifdef DEBUG
+	dbout << "Ignored dimension: " << ignore << endl;
+#endif
+	cout << "Ignored dimension: " << ignore << endl;
+
 	
 	NcDim dim = coordXD.getDim(0);
 	size_t nPts = dim.getSize();
@@ -285,71 +318,50 @@ vector<StateVecD> Get_Coordinates(NcFile& fin)
 	/*Allocate on the heap (can be big datasets)*/
 	double* coordX = new double[nPts];
 	double* coordY = new double[nPts];
-	double* coordZ = new double[nPts];
 
-	/*Get the actual data from the file*/
-	coordXD.getVar(coordX);
-	coordYD.getVar(coordY);
-	coordZD.getVar(coordZ);
-
-	/*Convert it to a vector to store*/
 	vector<StateVecD> coordVec(nPts);
-#if SIMDIM == 3
-	for (uint ii = 0; ii < nPts; ++ii)
+#if SIMDIM == 2	
+	/*Get the actual data from the file*/
+	if(ignore == 1)
 	{
+		coordYD.getVar(coordX);
+		coordZD.getVar(coordY);
+	}
+	else if (ignore == 2)
+	{
+		coordXD.getVar(coordX);
+		coordZD.getVar(coordY);
+	}
+	else if (ignore == 3)
+	{
+		coordXD.getVar(coordX);
+		coordYD.getVar(coordY);
+	}
+	else 
+	{
+		cout << "The ignored dimension was not found." << endl;
+		exit(-1);
+	}
+
+	for (uint ii = 0; ii < nPts; ++ii)
+	{	/*Convert it to a vector to store*/
+		coordVec[ii] = StateVecD(coordX[ii],coordY[ii]);
+	}
+	
+#else
+	double* coordZ = new double[nPts];	
+	coordZD.getVar(coordZ);
+	
+	for (uint ii = 0; ii < nPts; ++ii)
+	{	/*Convert it to a vector to store*/
 		coordVec[ii] = StateVecD(coordX[ii],coordY[ii],coordZ[ii]);
 	}
-#else
-	/*Need to find which coordinate to ignore*/
-#ifdef DEBUG
-	dbout << "Checking which dimension to ignore" << endl;
 #endif
-	uint counts[3] = {0};
-	for(uint ii = 0; ii < nPts; ++ii)
-	{
-		if(coordX[ii] == 0 || coordX[ii] == -1)
-		{
-			counts[0]++;
-		}
-
-		if(coordY[ii] == 0 || coordY[ii] == -1)
-		{
-			counts[1]++;
-		}
-
-		if(coordZ[ii] == 0 || coordZ[ii] == -1)
-		{
-			counts[2]++;
-		}
-	}
-	uint ignore=0;
-	if (counts[0] == nPts)
-		ignore = 1;
-	else if (counts[1] == nPts)
-		ignore = 2;
-	else if (counts[2] == nPts)
-		ignore = 3;
-	else
-		cout << "Couldn't determine which dimension is false." << endl;
 
 #ifdef DEBUG
-	dbout << "Ignored dimension: " << ignore << endl;
+	dbout << "Returning coordinates." << endl;
 #endif
-	cout << "Ignored dimension: " << ignore << endl;
 
-	for (uint ii = 0; ii < nPts; ++ii)
-	{
-		if(ignore == 1)
-			coordVec[ii] = StateVecD(coordY[ii],coordZ[ii]);
-		else if(ignore == 2)
-			coordVec[ii] = StateVecD(coordX[ii],coordZ[ii]);
-		else if(ignore == 3)
-			coordVec[ii] = StateVecD(coordX[ii],coordY[ii]);
-	}
-#endif
-#ifdef DEBUG
-		dbout << "Returning coordinates." << endl;
-#endif
 	return coordVec;	
 }
 
@@ -414,7 +426,7 @@ void Get_Cell_Faces(const vector<vector<uint>>& cell,
 /***************** READING NETCDF SOLUTION DATA FUNCTIONS ********************/
 /*****************************************************************************/
 
-void Read_SOLUTION(const string& solIn, const FLUID& fvar, MESH& cells)
+void Read_SOLUTION(const string& solIn, const FLUID& fvar, MESH& cells, vector<uint> usedVerts)
 {
 	NcFile sol(solIn, NcFile::read);
 
@@ -453,7 +465,26 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, MESH& cells)
 			vel[ii] = StateVecD(xvel[ii],zvel[ii]);
 			#endif
 		}
-		cells.pVel = vel;
+
+
+		if(usedVerts.size()!=0)
+		{	/*Get the used vertices*/
+			vector<StateVecD> newVel;
+			for(auto index:usedVerts)
+			{
+				newVel.emplace_back(vel[index]);
+				cells.pVel = newVel;
+			}
+		}
+		else if (cells.verts.size() == solPts)
+		{
+			cells.pVel = vel;
+		}
+		else
+		{
+			cout << "Don't know which values to use!" << endl;
+			exit(-1);
+		}
 	}
 	else 
 	{
@@ -494,10 +525,29 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, MESH& cells)
 	}
 
 	/*Update the point arrays with the actual stuff*/
-	cells.pointP = press;
-	cells.pointRho = dens;	
+	if(usedVerts.size()!=0)
+	{	/*Get the used vertices*/
+		vector<ldouble> newP;
+		vector<ldouble> newR;
+		for(auto index:usedVerts)
+		{
+			newP.emplace_back(press[index]);
+			newR.emplace_back(dens[index]);
+			cells.pointP = newP;
+			cells.pointRho = newR;	
+		}
+	}
+	else if (cells.verts.size() == solPts)
+	{
+		cells.pointP = press;
+		cells.pointRho = dens;	
+	}
+	else
+	{
+		cout << "Don't know which values to use!" << endl;
+		exit(-1);
+	}
 
-	
 	/*Average the data to a the cell*/
 	cells.SetCells();
 	StateVecD zero = StateVecD::Zero();
@@ -763,7 +813,7 @@ markerfound:
 	return marker;
 }
 
-vector<vector<uint>> Get_Symmetry_Plane(NcFile& fin, const int marker)
+vector<vector<size_t>> Get_Symmetry_Plane(NcFile& fin, const int marker)
 {
 
 #ifdef DEBUG
@@ -965,8 +1015,314 @@ void Read_TAUMESH(const SIM& svar, MESH& cells, const FLUID& fvar)
 	#endif
 	// /*End of reading the mesh file.*/
 	// cout << "Trying solution file: " << solIn << endl;
-	Read_SOLUTION(solIn,fvar,cells);
+	vector<uint> empty;
+	Read_SOLUTION(solIn,fvar,cells, empty);
 }
+
+/*****************************************************************************/
+/*************** READING NETCDF EDGE BASED DATA FUNCTIONS ********************/
+/*****************************************************************************/
+
+vector<vector<size_t>> Get_Edges(NcFile& fin)
+{
+	#ifdef DEBUG
+		dbout << "Reading edge data" << endl;
+#endif
+
+	NcVar edgeData = fin.getVar("points_of_element_edges");	
+	if(edgeData.isNull())
+	{	/*No data is available*/
+		cout << "No edge data. Stopping." << endl;
+		exit(-1);
+	}
+
+	NcDim dim = edgeData.getDim(0);
+	size_t nEdge = dim.getSize();
+
+	dim = edgeData.getDim(1);
+	size_t nPnts = dim.getSize();
+	// cout << nElem << "  " << nPoints << endl;
+#ifdef DEBUG
+	dbout << "Allocating array of: " << nEdge << " by " << nPnts << endl;
+#endif
+
+	/*Allocate on the heap (can be big datasets)*/		
+	int* edgeArray = new int[nEdge*nPnts];
+			
+	/*Get the actual data from the file*/
+	vector<size_t> startp,countp;
+	startp.push_back(0);
+	startp.push_back(0);
+	countp.push_back(nEdge);
+	countp.push_back(nPnts);
+	
+#ifdef DEBUG
+	dbout << "Attempting to read NetCDF faces." << endl;
+#endif
+
+	edgeData.getVar(startp,countp,edgeArray);
+
+	cout << "Successfully read face data." << endl;
+
+#ifdef DEBUG
+	dbout << "Successfully read face data." << endl;
+#endif
+
+	/*Convert it to a vector to store*/
+	size_t ii,jj;
+	vector<vector<size_t>> edgeVec(nEdge,vector<size_t>(nPnts));
+	for (ii = 0; ii < nEdge; ++ii)
+	{
+		for(jj = 0; jj < nPnts; ++jj)
+			edgeVec[ii][jj] = static_cast<size_t>(edgeArray[index(ii,jj,nPnts)]);
+	}
+
+#ifdef DEBUG
+	dbout << "Returning vector" << endl;
+#endif
+	return edgeVec;
+	
+}
+
+void Place_Edges(NcFile& fin, MESH& cells)
+{
+	#ifdef DEBUG
+		dbout << "Reading element left/right and placing faces" << endl;
+	#endif
+
+	/*Read how many faces there should be per element/cell*/
+	// NcVar nFaceElems = fin.getVar("faces_per_element");
+	// if(nFaceElems.isNull())
+	// {	/*No data is available*/
+	// 	cout << "No data on how many faces per cell. Stopping" << endl;
+	// 	exit(-1);
+	// }
+
+	// NcDim dim = nFaceElems.getDim(0);
+	// size_t nElems = dim.getSize();
+
+	// uint* elemFaceNo = new uint[nElems];
+	
+	// #ifdef DEBUG
+	// dbout << "Attempting to read NetCDF element face count." << endl;
+	// #endif
+
+	// nFaceElems.getVar(elemFaceNo);
+
+	// cout << "Successfully read element face count data." << endl;
+
+	// #ifdef DEBUG
+	// dbout << "Successfully read element face count data." << endl;
+	// #endif
+
+	NcVar leftData = fin.getVar("left_element_of_edges");	
+	if(leftData.isNull())
+	{	/*No data is available*/
+		cout << "No cell left data. Stopping" << endl;
+		exit(-1);
+	}
+
+	NcDim dim = leftData.getDim(0);
+	size_t nLeft = dim.getSize();
+
+	int* left = new int[nLeft];
+	
+	#ifdef DEBUG
+	dbout << "Attempting to read NetCDF left elements." << endl;
+	#endif
+
+	leftData.getVar(left);
+
+	cout << "Successfully read left element data." << endl;
+
+	#ifdef DEBUG
+	dbout << "Successfully read left element data." << endl;
+	#endif
+
+	NcVar rightData = fin.getVar("right_element_of_edges");	
+	if(leftData.isNull())
+	{	/*No data is available*/
+		cout << "No cell right data. Stopping" << endl;
+		exit(-1);
+	}
+
+	dim = rightData.getDim(0);
+	size_t nRight = dim.getSize();
+
+	int* right = new int[nRight];
+	
+	#ifdef DEBUG
+	dbout << "Attempting to read NetCDF right elements." << endl;
+	#endif
+
+	rightData.getVar(right);
+
+	cout << "Successfully read right element data." << endl;
+
+	#ifdef DEBUG
+	dbout << "Successfully read right element data." << endl;
+	#endif
+	vector<std::pair<int,int>> leftright(nLeft);
+
+	#pragma omp parallel shared(leftright)
+	{ 
+		/*Create local of */
+		
+
+		#pragma omp for schedule(static) nowait
+		for(size_t ii = 0; ii < nLeft; ++ii)
+		{
+			int lindex = left[ii];
+			int rindex = right[ii];
+			leftright[ii] = std::pair<int,int>(lindex,rindex);
+			#pragma omp critical
+			{
+				cells.cFaces[lindex].emplace_back(ii);
+				if(rindex >=0)
+					cells.cFaces[rindex].emplace_back(ii);
+			}
+		}
+	}
+
+	cells.leftright = leftright;
+
+	/*Check if each element has the correct number of faces*/
+	// for(uint ii = 0; ii < nElems; ++ii)
+	// {
+	// 	if(cells.cFaces[ii].size() != elemFaceNo[ii])
+	// 	{
+	// 		cout << "Mismatch of number of faces in an element. " <<
+	// 			"Element " << ii <<  " should have " << elemFaceNo[ii] << "  but has " 
+	// 			<< cells.cFaces[ii].size() << " faces." << endl;
+	// 		exit(-1);
+	// 	}
+	// }
+
+	#ifdef DEBUG
+		dbout << "End of placing edges in elements." << endl;
+	#endif
+
+	/*Now go through the faces and see which vertices are unique, to get element data*/
+	cout << "Building elements..." << endl;
+#pragma omp parallel
+{
+	// vector<vector<uint>> local;
+	#pragma omp for schedule(static) nowait
+	for(uint ii = 0; ii < cells.cFaces.size(); ++ii)
+	{
+		for(auto const& index:cells.cFaces[ii])
+		{
+			const vector<size_t> face = cells.faces[index];
+			for(auto const& vert:face)
+			{
+				if(std::find(cells.elems[ii].begin(),cells.elems[ii].end(),vert)
+					==cells.elems[ii].end())
+				{	/*Vertex doesn't exist in the elems vector yet.*/
+					#pragma omp critical
+					{
+						cells.elems[ii].emplace_back(vert);
+					}
+				}
+			}
+		}
+	}
+}
+	cout << "Elements built." << endl;
+
+	#ifdef DEBUG
+	dbout << "All elements defined." << endl << endl;
+	#endif
+	
+
+}
+
+void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, const FLUID& fvar)
+{
+	string meshIn = svar.infolder;
+	string solIn = svar.infolder;
+	meshIn.append(svar.meshfile);
+	solIn.append(svar.solfile);
+	
+	#ifdef DEBUG 
+		dbout << "Attempting read of NetCDF file." << endl;
+		dbout << "Mesh file: " << meshIn << endl;
+		dbout << "Solution file: " << solIn << endl;
+	#endif
+	/*Read the mesh data*/
+	NcFile fin(meshIn, NcFile::read);
+	cout << "Mesh file open. Reading face data..." << endl;
+
+	// Retrieve how many elements there are.
+	NcDim elemNo = fin.getDim("no_of_elements");
+	NcDim pointNo = fin.getDim("no_of_points");
+	NcDim faceNo = fin.getDim("no_of_edges");
+	uint nElem = static_cast<uint>(elemNo.getSize());
+	uint nPnts = static_cast<uint>(pointNo.getSize());
+	uint nEdge = static_cast<uint>(faceNo.getSize());
+
+	#ifdef DEBUG
+		dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << endl;
+	#endif
+
+	cout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << endl;
+	
+	cells.numPoint = nPnts;
+	cells.numElem = nElem;
+
+	cells.elems = vector<vector<size_t>>(nElem);
+	cells.cFaces = vector<vector<size_t>>(nElem);
+	cells.verts = vector<StateVecD>(nPnts);
+	// cells.leftright = vector<std::pair<int,int>>(nFace);
+
+	/*Get the faces of the mesh*/
+	cells.faces = Get_Edges(fin);
+
+	/*Get the coordinates of the mesh*/
+	cells.verts = Get_Coordinates(fin);
+	if(cells.verts.size()!= nPnts)
+	{
+		cout << "Some data has been missed.\nPlease check how many points." << endl;
+	}
+
+	/*Adjust the scale*/
+	cells.scale = svar.scale;
+	for(auto& vert:cells.verts)
+	{
+		vert*=cells.scale;
+	}
+	svar.Start*=cells.scale;
+	// svar.Jet/=cells.scale;
+	
+
+	/*Get face left and right, and put the faces in the elements*/
+	Place_Edges(fin, cells);
+
+
+	/*Get the vertices that are in use to take the values from the solution file*/
+	int* usedVerts = new int[nPnts];
+
+	NcVar uVar = fin.getVar("vertices_in_use");
+	if(!uVar.isNull())
+		uVar.putVar(usedVerts);
+	else
+	{
+		cout << "No information of which vertices have been used. Stopping." << endl;
+		exit(-1);
+	}
+	
+	vector<uint> uVerts(nPnts);
+	for(size_t ii = 0; ii < nPnts;)
+		uVerts[ii] = usedVerts[ii];
+
+
+	#ifdef DEBUG
+	dbout << "End of interaction with mesh file and ingested data." << endl << endl;
+	dbout << "Opening solultion file." << endl;
+	#endif
+
+	Read_SOLUTION(solIn,fvar,cells, uVerts);
+}
+
 #endif
 
 
@@ -1251,8 +1607,8 @@ void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
 	dbout << "End of interaction with mesh file and ingested data." << endl << endl;
 	dbout << "Opening solultion file." << endl;
 	#endif
-
-	Read_SOLUTION(solIn,fvar,cells);
+	vector<uint> empty;
+	Read_SOLUTION(solIn,fvar,cells,empty);
 }
 
 

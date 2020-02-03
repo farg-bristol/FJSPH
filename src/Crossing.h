@@ -141,9 +141,11 @@ void Write_Containment(const vector<size_t>& ret_indexes, const MESH& cells, con
 
 // Returns 1 if the lines intersect, otherwise 0. In addition, if the lines 
 // intersect the intersection point may be stored in the floats i_x and i_y.
-bool get_line_intersection(const StateVecD& e1, const StateVecD& e2, 
+bool get_line_intersection(vector<StateVecD> const& verts, vector<size_t> const& edge, 
     const StateVecD& p1, const StateVecD& cellC)
 {
+    const StateVecD& e1 = verts[edge[0]];
+    const StateVecD& e2 = verts[edge[1]];
     StateVecD s,r;
     s = cellC - p1; r = e2 - e1;
 
@@ -179,64 +181,51 @@ bool get_line_intersection(const StateVecD& e1, const StateVecD& e2,
 /* _point_, returns 1 if inside, 0 if outside.  WINDING and CONVEX can be    */
 /* defined for this test.                                                    */
 #if SIMDIM == 2
-    int Crossings2D(vector<StateVecD> const& verts, vector<size_t> const& pgon, StateVecD const& point)
+    int Crossings2D(vector<StateVecD> const& verts, vector<size_t> const& edge, StateVecD const& point)
     {
-        
-        int numverts = pgon.size();
-        int  yflag0, yflag1, inside_flag, line_flag;
+        int  yflag0, yflag1, inside_flag;
         double  ty, tx;
         StateVecD vtx0, vtx1;
 
         tx = point[X];
         ty = point[Y];
 
-        vtx0 = verts[pgon[numverts-1]];
-        /* get test bit for above/below X axis */
-        yflag0 = ( vtx0[Y] >= ty );
-        // i = 0;
-        vtx1 = verts[pgon[0]];
-
         inside_flag = 0;
-        line_flag = 0;
 
-        for (auto const& index:pgon) 
+
+        
+        vtx0 = verts[edge[0]];
+        vtx1 = verts[edge[1]];
+        /* Move to the next pair of vertices, retaining info as possible. */
+        yflag0 = ( vtx0[Y] >= ty );
+        yflag1 = ( vtx1[Y] >= ty );
+
+        /* Check if endpoints straddle (are on opposite sides) of X axis
+         * (i.e. the Y's differ); if so, +X ray could intersect this edge.
+         * Credit to Joseph Samosky to try dropping
+         * the "both left or both right" part of my code.
+         */
+        if ( yflag0 != yflag1 ) 
         {
-            /* Move to the next pair of vertices, retaining info as possible. */
-            vtx1 = verts[index];
-
-            yflag1 = ( vtx1[Y] >= ty );
-            /* Check if endpoints straddle (are on opposite sides) of X axis
-             * (i.e. the Y's differ); if so, +X ray could intersect this edge.
-             * Credit to Joseph Samosky to try dropping
-             * the "both left or both right" part of my code.
+            /* Check intersection of pgon segment with +X ray.
+             * Note if >= point's X; if so, the ray hits it.
+             * The division operation is avoided for the ">=" test by checking
+             * the sign of the first vertex wrto the test point; idea inspired
+             * by Joseph Samosky's and Mark Haigh-Hutchinson's different
+             * polygon inclusion tests.
              */
-            if ( yflag0 != yflag1 ) 
+            if ( ((vtx1[Y]-ty) * (vtx1[X]-vtx0[X]) >=
+              (vtx1[X]-tx) * (vtx1[Y]-vtx0[Y])) == yflag1 )
             {
-                /* Check intersection of pgon segment with +X ray.
-                 * Note if >= point's X; if so, the ray hits it.
-                 * The division operation is avoided for the ">=" test by checking
-                 * the sign of the first vertex wrto the test point; idea inspired
-                 * by Joseph Samosky's and Mark Haigh-Hutchinson's different
-                 * polygon inclusion tests.
-                 */
-                if ( ((vtx1[Y]-ty) * (vtx1[X]-vtx0[X]) >=
-                  (vtx1[X]-tx) * (vtx1[Y]-vtx0[Y])) == yflag1 )
-                {
-                  inside_flag = !inside_flag;
-                }
+              inside_flag = !inside_flag;
+            }
 
-                /* For convex cells, further optimisation can be done: */
-                /* A ray can only pass through a maximum of two faces.*/
-                /* If this is second edge hit, then done testing. */
-                if ( line_flag ) return inside_flag;
-
-                /* note that one edge has been hit by the ray's line */
-                line_flag = TRUE;
-
-                yflag0 = yflag1;
-                vtx0 = vtx1;
-            }            
-        }
+            /* For convex cells, further optimisation can be done: */
+            /* A ray can only pass through a maximum of two faces.*/
+            /* If this is second edge hit, then done testing. */
+            
+        }            
+        
         
         return( inside_flag );
     }
@@ -344,9 +333,9 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
 
     uint found = 0;
     StateVecD testp = pnp1[ii].xi;
-
+    StateVecD rayp;
 #if SIMDIM == 3    
-    StateVecD rayp = testp;
+    rayp = testp;
     rayp(0) += 50000;
     const size_t num_results = 40;
 #else
@@ -367,7 +356,7 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
     for(auto index:ret_indexes)
     {   
         uint inside_flag = 0;
-
+        uint line_flag = 0;
 #if SIMDIM == 3
         for (uint const& findex:cells.cFaces[index] ) 
         {
@@ -375,15 +364,26 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
             if(Crossings3D(cells.verts,face,testp,rayp))
             {
                 inside_flag=!inside_flag;
+                if ( line_flag ) goto wrongcell;
+
+                /* note that one edge has been hit by the ray's line */
+                line_flag = TRUE;
             }
         }
 #else
-        const std::vector<size_t> cell = 
-        cells.elems[index];
-        
-        if(Crossings2D(cells.verts,cell,testp))
+        for (uint const& findex:cells.cFaces[index] ) 
         {
-            inside_flag = !inside_flag; 
+            const std::vector<size_t>& edge = 
+            cells.faces[findex];
+            
+            if(Crossings2D(cells.verts,edge,testp))
+            {
+                inside_flag = !inside_flag; 
+                if ( line_flag ) goto wrongcell;
+
+                /* note that one edge has been hit by the ray's line */
+                line_flag = TRUE;
+            } 
         }
 
 #endif
@@ -412,6 +412,7 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
 #endif
             break;
         }
+wrongcell:
         count++;
     }
 
@@ -423,15 +424,19 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
         uint cross = 0;
         for(auto index:ret_indexes)
         {
-#if SIMDIM == 3
-            rayp = cells.cCentre[index];
+            rayp = cells.cCentre[index];            
             for (size_t const& findex:cells.cFaces[index] ) 
             {   /*If its a boundary face, check if the point crosses it*/
                 if(cells.leftright[findex].second < 0)
                 {
                     const vector<size_t>& face = cells.faces[findex];
-
-                    if(Crossings3D(cells.verts,face,testp,rayp))
+                    int ints;
+#if SIMDIM == 3                   
+                    ints = Crossings3D(cells.verts,face,testp,rayp);
+#else               /*2D line intersection*/
+                    ints = get_line_intersection(cells.verts,face,testp,rayp);
+#endif
+                    if(ints)
                     {
                         cross=!cross;
 #ifdef DEBUG
@@ -440,13 +445,19 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
                         if(cells.leftright[findex].second == -1)
                         {
                             cout << "Particle has crossed an inner boundary!" << endl;
+                            StateVecD norm;
+#if SIMDIM == 3
                             /*Get the face normal*/
                             StateVecD r1 = cells.verts[face[1]]- cells.verts[face[0]];
                             StateVecD r2 = cells.verts[face[2]]- cells.verts[face[0]];
 
-                            StateVecD norm = r1.cross(r2);
+                            norm = r1.cross(r2);
                             norm = norm.normalized();
-
+#else
+                            StateVecD r1 = cells.verts[face[1]]-cells.verts[face[0]];
+                            norm = StateVecD(-r1(1),r1(0)); 
+                            norm = norm.normalized();
+#endif
                             /*Reflect the velocity away from the surface*/
                             pnp1[ii].v = pnp1[ii].v - 2*(pnp1[ii].v.dot(norm))*norm;
 
@@ -469,14 +480,6 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
                     }  
                 }
             }
-#else
-        /*Need to implement check in 2D*/
-        /*2D line intersection*/
-            // StateVecD rayp = cells.cCentre[index];
-
-
-#endif
-
         }
 
         if(cross == 0)
@@ -501,10 +504,10 @@ void FindCell(SIM& svar, const ldouble nfull, Vec_Tree& CELL_INDEX,
         {   
             uint inside_flag = 0;
             StateVecD testp = pnp1[ii].xi;
-
+            StateVecD rayp;
 #if SIMDIM == 3
                 
-            StateVecD rayp = testp;
+            rayp = testp;
             rayp(0) = 1e+100;
             /*Test the cell it is already in first*/
             for (size_t const& findex:cells.cFaces[pnp1[ii].cellID] ) 
@@ -535,21 +538,38 @@ void FindCell(SIM& svar, const ldouble nfull, Vec_Tree& CELL_INDEX,
             {
                 for(const auto cell:cells.cNeighb[pnp1[ii].cellID])
                 {
-#if SIMDIM == 3
-                    for (size_t const& findex:cells.cFaces[cell]) 
-                    {   /*Check each face of the cell*/
+                    uint inside_flag = 0;
+                    uint line_flag = 0;
+            #if SIMDIM == 3
+                    for (uint const& findex:cells.cFaces[cell] ) 
+                    {
                         const vector<size_t>& face = cells.faces[findex];
                         if(Crossings3D(cells.verts,face,testp,rayp))
                         {
-                            inside_flag = !inside_flag;
-                        }     
+                            inside_flag=!inside_flag;
+                            if ( line_flag ) break;
+
+                            /* note that one edge has been hit by the ray's line */
+                            line_flag = TRUE;
+                        }
                     }
-#else
-                    if(Crossings2D(cells.verts,cells.elems[cell],testp))
+            #else
+                    for (uint const& findex:cells.cFaces[cell] ) 
                     {
-                        inside_flag = !inside_flag;
+                        const std::vector<size_t>& edge = 
+                        cells.faces[findex];
+                        
+                        if(Crossings2D(cells.verts,edge,testp))
+                        {
+                            inside_flag = !inside_flag; 
+                            if ( line_flag ) break;
+
+                            /* note that one edge has been hit by the ray's line */
+                            line_flag = TRUE;
+                        } 
                     }
-#endif
+
+            #endif
 
                     if(inside_flag == 1)
                     {
@@ -584,21 +604,37 @@ CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10
 
                 for(auto const& index:ret_indexes)
                 {   
+                    uint inside_flag = 0;
+                    uint line_flag = 0;
 #if SIMDIM == 3
-                    for (size_t const& findex:cells.cFaces[index]) 
-                    {   /*Check each face of the cell*/
+                    for (uint const& findex:cells.cFaces[index] ) 
+                    {
                         const vector<size_t>& face = cells.faces[findex];
                         if(Crossings3D(cells.verts,face,testp,rayp))
                         {
-                            inside_flag = !inside_flag;
-                        }     
+                            inside_flag=!inside_flag;
+                            if ( line_flag ) break;
+
+                            /* note that one edge has been hit by the ray's line */
+                            line_flag = TRUE;
+                        }
                     }
 #else
-                    auto cell = cells.elems[index];
-                    if(Crossings2D(cells.verts,cells.elems[index],testp))
+                    for (uint const& findex:cells.cFaces[index] ) 
                     {
-                        inside_flag = !inside_flag;
+                        const std::vector<size_t>& edge = 
+                        cells.faces[findex];
+                        
+                        if(Crossings2D(cells.verts,edge,testp))
+                        {
+                            inside_flag = !inside_flag; 
+                            if ( line_flag ) break;
+
+                            /* note that one edge has been hit by the ray's line */
+                            line_flag = TRUE;
+                        } 
                     }
+
 #endif
 
                     if(inside_flag == 1)
@@ -619,31 +655,40 @@ CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10
                 uint cross = 0;
                 for(auto index:ret_indexes)
                 {
-#if SIMDIM == 3
-                    rayp = cells.cCentre[index];
+                    rayp = cells.cCentre[index];            
                     for (size_t const& findex:cells.cFaces[index] ) 
                     {   /*If its a boundary face, check if the point crosses it*/
                         if(cells.leftright[findex].second < 0)
                         {
                             const vector<size_t>& face = cells.faces[findex];
-
-                            if(Crossings3D(cells.verts,face,testp,rayp))
+                            int ints;
+        #if SIMDIM == 3                   
+                            ints = Crossings3D(cells.verts,face,testp,rayp);
+        #else               /*2D line intersection*/
+                            ints = get_line_intersection(cells.verts,face,testp,rayp);
+        #endif
+                            if(ints)
                             {
                                 cross=!cross;
-#ifdef DEBUG
+        #ifdef DEBUG
                                 cout << "Particle has crossed a boundary!" << endl;
-#endif
+        #endif
                                 if(cells.leftright[findex].second == -1)
                                 {
                                     cout << "Particle has crossed an inner boundary!" << endl;
-                                        
+                                    StateVecD norm;
+        #if SIMDIM == 3
                                     /*Get the face normal*/
                                     StateVecD r1 = cells.verts[face[1]]- cells.verts[face[0]];
                                     StateVecD r2 = cells.verts[face[2]]- cells.verts[face[0]];
 
-                                    StateVecD norm = r1.cross(r2);
+                                    norm = r1.cross(r2);
                                     norm = norm.normalized();
-
+        #else
+                                    StateVecD r1 = cells.verts[face[1]]-cells.verts[face[0]];
+                                    norm = StateVecD(-r1(1),r1(0)); 
+                                    norm = norm.normalized();
+        #endif
                                     /*Reflect the velocity away from the surface*/
                                     pnp1[ii].v = pnp1[ii].v - 2*(pnp1[ii].v.dot(norm))*norm;
 
@@ -661,18 +706,11 @@ CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10
                                         svar.totPts--;
                                     #pragma omp atomic
                                         end--;
+                                    
                                 }
                             }  
                         }
                     }
-#else
-                /*Need to implement check in 2D*/
-                /*2D line intersection*/
-                    // StateVecD rayp = cells.cCentre[index];
-
-
-#endif
-
                 }
 
                 if(cross == 0)
