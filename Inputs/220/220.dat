@@ -1,0 +1,21 @@
+0.00001      #Frame output timestep
+600          #number of frames
+20            #Output Frame Interval (if 0, suppresses framewise output)
+1             #Output format (1 = fluid properties, 2 = debug/research, 3 = basic data)
+0             #Output frame info to file? (0 = no, 1 = yes)
+15            #Max Sub-iterations
+5000          #Max Add particle rounds
+50 50         #No particles in x-dir, y-dir, z-dir (optional) (Not used)
+0.0003 0.0008   #Jet starting x-position,  Jet diameter x-direction
+0.0016 0.00012    #Boundary x-dim end (from origin), Jet y-dim (in negative dir)
+0.00004       #Initial Particle spacing
+0.7           #Boundary particle spacing factor (of part spacing)
+3             #Boundary case (0 = none, 1= Rectangle, 2 = Bowl, 3= transverse jet)
+4             #Crossflow force case (0 = none, 1 = left half, 2 = left surface, 3 = prop to ST-Aero angle, 5 = Point Vortex)
+0 33.6          #Jet Velocity
+128.5 0      #Freestream Velocity
+0.003          #Aerodynamic correction factor
+3             #CF Case 6 parameters. 
+0.80          #
+-2            #
+0.75          #

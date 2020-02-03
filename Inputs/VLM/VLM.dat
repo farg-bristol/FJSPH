@@ -1,0 +1,7 @@
+5 2  #Wing dimensions
+20 10 #Number of panels
+12   #Angle of Attack
+30   #Sweep angle
+0.4  #Taper ratio
+4 7 4 #Flap Begin (in panels) #Flap width (in panels) #Flap panel depth
+30   #Flap angle

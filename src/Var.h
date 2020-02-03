@@ -17,8 +17,9 @@
 	#include "VLM.h"
 #endif
 
-
+#include <limits>
 #include <vector>
+#include <fstream>
 #include "Eigen/Core"
 #include "Eigen/StdVector"
 #include "NanoFLANN/nanoflann.hpp"
@@ -26,8 +27,7 @@
 #include "NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 
 #ifdef DEBUG
-	/*Open debug file to write to*/
-	#include <fstream>
+	/*Open debug file to write to*/	
 	std::ofstream dbout("WCSPH.log",std::ios::out);
 #endif
 
@@ -46,7 +46,11 @@ typedef unsigned int uint;
 
 /*Get machine bit precision for Simulation of Simplicity*/
 #ifndef MEPSILON
-#define MEPSILON pow(2,-53) /*For  float, power is -24*/
+#define MEPSILON std::numeric_limits<ldouble>::epsilon() /*For  float, power is -24*/
+#endif
+
+#ifndef MERROR
+#define MERROR (7*MEPSILON + 56*MEPSILON*MEPSILON)
 #endif
 
 /****** Eigen vector definitions ************/
@@ -58,15 +62,22 @@ typedef Eigen::Matrix<ldouble,SIMDIM,SIMDIM> RotMat;
 typedef Eigen::Matrix<ldouble, SIMDIM+1,1> DensVecD;
 typedef Eigen::Matrix<ldouble, SIMDIM+1, SIMDIM+1> DensMatD;
 
+/*Define particle type indexes*/
+#define BOUND 0
+#define START 1
+#define PIPE 2
+#define FREE 3
+#define GHOST 4
+#define PISTON 5
 
 /*Simulation parameters*/
 typedef struct SIM {
 	StateVecI xyPART; 				/*Starting sim particles in x and y box*/
-	uint simPts,bndPts,totPts;	    /*Simulation particles, Boundary particles, total particles*/
-	uint finPts;					/*How many points there will be at simulation end*/
-	uint psnPts;					/*Piston Points*/
-	uint nrefresh; 					/*Crossflow refresh particle number*/
-	uint nmax;                      /*Max add-particle calls*/
+	size_t simPts,bndPts,totPts;	    /*Simulation particles, Boundary particles, total particles*/
+	size_t finPts;					/*How many points there will be at simulation end*/
+	size_t psnPts;					/*Piston Points*/
+	size_t nrefresh; 					/*Crossflow refresh particle number*/
+	uint nmax;                      /*Max number of particles*/
 	uint outframe;	                /*Terminal output frame interval*/
 	uint addcount;					/*Current Number of add-particle calls*/
 	double Pstep,Bstep, dx, clear;	/*Initial spacings for particles and boundary*/
@@ -84,11 +95,13 @@ typedef struct SIM {
 	double maxmu;                   /*Maximum viscosity component (CFL)*/
 	int Bcase, Bclosed, ghost;		/*What boundary shape to take*/
 	uint outtype;                   /*ASCII or binary output*/
-	uint outform, boutform;         /*Output type. Fluid properties or Research.*/
+	uint outform, boutform, gout;   /*Output type. Fluid properties or Research.*/
 	uint framecount;
+	vector<size_t> back;            /*Particles at the back of the pipe*/
 
 	std::string infolder, outfolder;
-	std::string meshfile, bmapfile, solfile;			
+	std::string meshfile, bmapfile, solfile;
+	ldouble scale;			
 	#if SIMDIM == 3
 		VLM vortex;
 	#endif
@@ -107,7 +120,7 @@ typedef struct SIM {
 /*Fluid and smoothing parameters*/
 typedef struct FLUID {
 	ldouble H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
-	ldouble rho0; 					/*Resting Fluid density*/
+	ldouble rho0, rhoJ; 					/*Resting Fluid density*/
 	ldouble pPress, gasPress;		/*Starting pressure in pipe*/
 	ldouble gasDynamic, gasVel;     /*Reference gas velocity*/
 	ldouble Simmass, Boundmass;		/*Particle and boundary masses*/
@@ -175,6 +188,7 @@ typedef struct MESH
 	/*Zone info*/
 	std::string zone;
 	uint numPoint, numElem;
+	ldouble scale;
 
 	/*Point based data*/
 	std::vector<StateVecD> verts;
@@ -183,30 +197,29 @@ typedef struct MESH
 	std::vector<double> pointP;
 	std::vector<double> pointRho;
 
+	/*Face based data*/
+	vector<vector<size_t>> faces;
+	vector<std::pair<int,int>> leftright;
+
 	/*Cell based data*/
-	std::vector<std::vector<uint>> elems;
-	std::vector<std::vector<StateVecD>> cVerts;
-	std::vector<StateVecD> cCentre;
-	/*Yep... a quad layered vector... I don't like it any more than you*/
-	std::vector<std::vector<std::vector<uint>>> cFaces; 
-	std::vector<std::vector<uint>> cNeighb;
-	
-	/*Surface data*/
-	vector<vector<uint>> farfield;
-	vector<vector<uint>> surface;
+	vector<vector<size_t>> elems;
+	vector<vector<StateVecD>> cVerts;
+	vector<StateVecD> cCentre;
+	vector<vector<size_t>> cFaces;
+	vector<vector<size_t>> cNeighb;
 
 	/*Solution vectors*/
-	std::vector<StateVecD> cVel;
-	std::vector<double> cellCp;
-	std::vector<double> cellP;
-	std::vector<double> cellRho;
+	vector<StateVecD> cVel;
+	vector<double> cellCp;
+	vector<double> cellP;
+	vector<double> cellRho;
 }MESH;
 
 /*Particle data class*/
 typedef class Particle {
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-		Particle(const StateVecD X, const StateVecD& Vi, const ldouble Rhoi, const ldouble Mi, 
+		Particle(const StateVecD& X, const StateVecD& Vi, const ldouble Rhoi, const ldouble Mi, 
 			const ldouble press, const int bound, const uint pID)
 		{
 			xi = X;	v = Vi; 
@@ -217,6 +230,25 @@ typedef class Particle {
 			Af = StateVecD::Zero();
 			normal = StateVecD::Zero();
 			p = press;
+			Rrho = 0.0;
+			theta = 0.0;
+			cellV = StateVecD::Zero();
+			cellID = 0;
+			cellP = 0.0;
+			cellRho = 0.0;
+		}
+
+		/*To add particles dynamically for boundary layer*/
+		Particle(const StateVecD& X,  const Particle& pj, const size_t pID)
+		{
+			xi = X;	v = pj.v; 
+			rho = pj.rho; m = pj.m; b = pj.b;
+			partID = pID;
+			f = StateVecD::Zero();
+			Sf = StateVecD::Zero(); 
+			Af = StateVecD::Zero();
+			normal = StateVecD::Zero();
+			p = pj.p;
 			Rrho = 0.0;
 			theta = 0.0;
 			cellV = StateVecD::Zero();
@@ -247,7 +279,7 @@ typedef class Particle {
 		ldouble Rrho, rho, p, m, theta;
 		uint b; //What state is a particle. Boundary, forced particle or unforced
 		StateVecD cellV;
-		uint partID, cellID;
+		size_t partID, cellID;
 		ldouble cellP, cellRho;
 }Particle;
 
@@ -346,7 +378,7 @@ Particle PartToParticle(Part& pj)
 typedef std::vector<Particle> State;
 
 /* Neighbour search tree containers */
-typedef std::vector<std::vector<uint>> outl;
-typedef KDTreeVectorOfVectorsAdaptor<State, ldouble> Sim_Tree;
-typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,ldouble> Vec_Tree;
+typedef std::vector<std::vector<size_t>> outl;
+typedef KDTreeVectorOfVectorsAdaptor<State,ldouble,SIMDIM,nanoflann::metric_L2_Simple,size_t> Sim_Tree;
+typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,ldouble,SIMDIM,nanoflann::metric_L2_Simple,size_t> Vec_Tree;
 #endif /* VAR_H */
