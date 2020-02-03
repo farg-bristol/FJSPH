@@ -80,9 +80,9 @@ StateVecD Base(const FLUID &fvar, const Part &pi, const Part &pj,
 {
 	/*Pressure and artificial viscosity - Monaghan (1994) p.400*/
 	ldouble pifac;
-	ldouble vdotr = Vij.dot(Rij);
-	ldouble muij= fvar.H*vdotr/(r*r+0.01*fvar.HSQ);
-	if (vdotr > 0.0 || pj.b == 3) 
+	const ldouble vdotr = Vij.dot(Rij);
+	const ldouble muij= fvar.H*vdotr/(r*r+0.01*fvar.HSQ);
+	if (vdotr > 0.0 || pj.b == GHOST) 
 	{
 		pifac = 0.0;
 	}
@@ -113,7 +113,7 @@ StateVecD SurfaceTens(const FLUID &fvar, const Part &pj, const StateVecD &Rij,
 							(9.0/4.0*pow(M_PI,3.0)-6.0*M_PI-4.0));
 
 	ldouble fac=1.0; /*Boundary Correction Factor*/
-	if(pj.b==0) fac=(1+0.5*cos(M_PI*(fvar.contangb/180))); 
+	if(pj.b==BOUND) fac=(1+0.5*cos(M_PI*(fvar.contangb/180))); 
 
 	/*npd = numerical particle density (see code above) */
 	ldouble sij = 0.5*pow(npd,-2.0)*(fvar.sig/lam)*fac;
@@ -135,11 +135,11 @@ StateVecD HuST(const FLUID &fvar, const Part &pi, const Part &pj,
 ///**************** RESID calculation **************
 void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*, State& airP*/,
 	 const vector<vector<Part>>& neighb, const outl& outlist,
-	 vector<StateVecD>& RV, vector<ldouble>& Rrho)
+	 vector<StateVecD>& RV, vector<ldouble>& Rrho, std::vector<StateVecD> Af)
 {
 	svar.maxmu=0; 					    /* CFL Parameter */
-	const uint start = svar.bndPts;
-	const uint end = svar.totPts;
+	const size_t start = svar.bndPts;
+	const size_t end = svar.totPts;
 
 	/*Gravity Vector*/
 	#if SIMDIM == 3
@@ -178,7 +178,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 
 /******** LOOP 3 - Piston points: Calculate density and pressure. **********/		
 		#pragma omp for reduction(+:RV, Rrho) /*Reduction defs in Aero.h*/
-		for (uint ii=0; ii < start; ++ii)
+		for (size_t ii=0; ii < start; ++ii)
 		{
 			const Part pi = pnp1[ii];
 			const uint size = outlist[ii].size();
@@ -216,10 +216,10 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 
 /******* LOOP 4 - All simulation points: Calculate forces on the fluid. *********/
 		#pragma omp for reduction(+:Rrho, RV/*, ST*/)  /*Reduction defs in Aero.h*/
-		for (uint ii = start; ii < end; ++ii)
+		for (size_t ii = start; ii < end; ++ii)
 		{
 			Part pi = pnp1[ii];
-			uint size = outlist[ii].size();
+			size_t size = outlist[ii].size();
 			// pnp1[ii].theta = double(size);
 			// pnp1[ii].theta = 0.0;
 
@@ -250,7 +250,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 				/*Laminar Viscosity - Morris (2003)*/
 				const StateVecD visc    = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
 
-				if (pj.b != 3)
+				if (pj.b != GHOST)
 				{
 					/*Surface Tension - Nair & Poeschel (2017)*/
 					// StateVecD SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
@@ -262,7 +262,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 
 				RV[ii] += pj.m*contrib + pj.m*visc /*+ SurfC/pj.m*/;
 
-				// if (pj.b == 3)
+				// if (pj.b == 4)
 				// {
 				// 	ST[ii] += pj.m*contrib + pj.m*visc;
 				// }
@@ -300,7 +300,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 
 		/*Aerodynamic force*/
 	if(svar.Bcase > 1)
-		ApplyAero(svar,fvar,avar,pnp1,outlist,RV);
+		ApplyAero(svar,fvar,avar,pnp1,outlist,RV,Af);
 	
 }
 

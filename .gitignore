@@ -30,19 +30,27 @@
 *.exe
 *.out
 *.app
+*.sh
 
 # Test files
-PDSTest.exe
-PDSTest.cpp
-XSPH_Submission.sh
-SPH_Array.sh
+
+
+#Inputs
+#Inputs/*
+*.cdl
+*.taumesh*
+*.pval*
+*.bmap
+*.edges
+*.faces
+para
+
 
 # Folders
-Inputs/*
 Outputs/*
 
+
 # Output files
-Test_Settings.txt
 *.plt
 *.lpk
 *.sty
@@ -51,8 +59,9 @@ Test_Settings.txt
 *.png
 *.info
 *.stackdump
-Crossflow.txt
-WCXSPH
+*.log
+FailedCellContainment.dat
+
 WCSPH
 Cell2Edge
 Cell2Face
@@ -68,3 +77,4 @@ Inputs/3/3.dat
 Inputs/2D220/3D_220.dat
 Inputs/2D220/220.dat
 Inputs/220/3D_220.dat
+

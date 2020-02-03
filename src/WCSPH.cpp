@@ -26,8 +26,8 @@ using namespace nanoflann;
 
 void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outlist, State& pnp1, State& airP)
 {
-	const uint start = svar.bndPts;
-	const uint end = svar.totPts;
+	const size_t start = svar.bndPts;
+	const size_t end = svar.totPts;
 
 	#if DEBUG 
 		dbout << "Starting first step. ";
@@ -36,7 +36,7 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 
 	std::vector<std::vector<Part>> neighb;
 	neighb.reserve(end);
-	for(uint ii = 0; ii < start; ++ii)
+	for(size_t ii = 0; ii < start; ++ii)
 		neighb.emplace_back();
 
 	/*Check if a particle is running low on neighbours, and add ficticious particles*/
@@ -46,7 +46,7 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 		std::vector<std::vector<Part>> localN;
 		vector<vector<Part>> localA;
 		#pragma omp for schedule(static) nowait 
-		for (uint ii = start; ii < end; ++ii)
+		for (size_t ii = start; ii < end; ++ii)
 		{
 			std::vector<Part> temp;
 			if(svar.ghost == 1 && pnp1[ii].b == 2 && outlist[ii].size() < avar.nfull &&
@@ -71,12 +71,12 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 	}
 	airP.clear();
 
-	for(uint ii = 0; ii < air.size(); ++ii)
-		for(uint jj = 0; jj < air[ii].size(); ++jj)
+	for(size_t ii = 0; ii < air.size(); ++ii)
+		for(size_t jj = 0; jj < air[ii].size(); ++jj)
 			airP.emplace_back(PartToParticle(air[ii][jj]));
 
 	#pragma omp parallel for shared(outlist)
-	for(uint ii = start; ii < end; ++ii)
+	for(size_t ii = start; ii < end; ++ii)
 	{
 		pnp1[ii].theta = outlist[ii].size(); 
 	}
@@ -84,12 +84,13 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 	/*Previous State for error calc*/
 	vector<StateVecD> xih(svar.totPts);
 	#pragma omp parallel for shared(pnp1)
-	for (uint  ii=0; ii < end; ++ii)
+	for (size_t  ii=0; ii < end; ++ii)
 		xih[ii] = pnp1[ii].xi;
 	
 	vector<StateVecD> res(svar.totPts,StateVecD::Zero());
+	vector<StateVecD> Af(end,StateVecD::Zero());
 	vector<ldouble> Rrho(svar.totPts,0.0);
-	Forces(svar,fvar,avar,pnp1,neighb,outlist,res,Rrho); /*Guess force at time n+1*/
+	Forces(svar,fvar,avar,pnp1,neighb,outlist,res,Rrho,Af); /*Guess force at time n+1*/
 
 	/*Find maximum safe timestep*/
 	vector<StateVecD>::iterator maxfi = std::max_element(res.begin(),res.end(),
@@ -100,16 +101,17 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 	const ldouble dt = 0.3*std::min(dtf,dtcv);
 
 	#pragma omp parallel for shared(res, Rrho)
-	for(uint ii = 0; ii < end; ++ii)
+	for(size_t ii = 0; ii < end; ++ii)
 	{
 		pnp1[ii].f = res[ii];
-		pnp1[ii].Rrho = Rrho[ii]; 
+		pnp1[ii].Rrho = Rrho[ii];
+		pnp1[ii].Af = Af[ii]; 
 		xih[ii] = pnp1[ii].xi + dt*pnp1[ii].v;
 	}
 #if DEBUG 
 	ldouble errsum = 0.0;
 
-	for (uint ii = start; ii < end; ++ii)
+	for (size_t ii = start; ii < end; ++ii)
 	{
 		StateVecD r = xih[ii]-pnp1[ii].xi;
 		errsum += r.squaredNorm();
@@ -141,7 +143,7 @@ void Find_MinMax(SIM& svar, const State& pnp1)
 		#endif
 
 		/*Check if they are more than the previous step*/
-		for (uint dim = 0; dim < SIMDIM; ++dim)
+		for (size_t dim = 0; dim < SIMDIM; ++dim)
 		{
 			if(minC(dim) < svar.minC(dim))
 				svar.minC(dim) = minC(dim);
@@ -166,17 +168,6 @@ int main(int argc, char *argv[])
 	
 	write_header();
     
-
-    // cout << MEPSILON << endl;
-    // for(double ii = 1; ii < 200; ii++)
-    // {
-    // 	if(double(1.0+pow(2.0,-ii)) == double(1.0))
-    // 	{
-    // 		cout << ii << "  " << pow(2.0,-ii) << endl;
-    // 		break;
-    // 	}
-    // }
-
     /******* Define the global simulation parameters ******/
 	SIM svar;
 	FLUID fvar;
@@ -186,15 +177,27 @@ int main(int argc, char *argv[])
 
 	GetInput(argc,argv,svar,fvar,avar);
 	
+	if(MakeOutputDir(argc,argv,svar))
+	{
+		cout << "Couldn't make output directory. Please check permissions." << endl;
+		exit(-1);
+	}
+
 	if(svar.Bcase == 6)
 	{
 		#if SIMDIM == 3
 		Read_TAUMESH_FACE(svar,cells,fvar);
 		// Read_TAUMESH(svar,cells,fvar);
 		#else
-		Read_TAUMESH(svar,cells,fvar);
+		Read_TAUMESH_EDGE(svar,cells,fvar);
 		#endif
 	}	
+
+	cout << "Adjusted Start Coordinates: " << endl;
+	cout << svar.Start(0) << "  " << svar.Start(1);
+#if SIMDIM == 3
+	cout << "  " << svar.Start(2) << endl;
+#endif
 
 	// Check if cells have been initialsed before making a tree off it
 	if(cells.cCentre.size() == 0)
@@ -210,28 +213,27 @@ int main(int argc, char *argv[])
 
 
 	/*Make a guess of how many there will be...*/
-	int partCount = ParticleCount(svar);
+	// int partCount = ParticleCount(svar);
     ///****** Initialise the particles memory *********/
 	State pn;	    /*Particles at n   */
 	State pnp1; 	/*Particles at n+1 */
 	State airP;
 
-	cout << "Final particle count:  " << partCount << endl;
-	svar.finPts = partCount;
-	pn.reserve(partCount);
-  	pnp1.reserve(partCount);
+	cout << "Final particle count:  " << svar.nmax << endl;
+	svar.finPts = svar.nmax;
+	pn.reserve(svar.nmax);
+  	pnp1.reserve(svar.nmax);
 	
-	if(MakeOutputDir(argc,argv,svar))
-	{
-		cout << "Couldn't make output directory. Please check permissions." << endl;
-		exit(-1);
-	}
 	
 	// if (svar.Bcase == 6){
 	// 	Write_Mesh_Data(svar,cells);
 	// }	
 
 	InitSPH(svar,fvar,avar,pn,pnp1);
+
+	cout << "Starting counts: " << endl;
+	cout << "Boundary: " << svar.bndPts << "  Sim: " << svar.simPts << endl;
+	 
 
 	///********* Tree algorithm stuff ************/
 	Sim_Tree NP1_INDEX(SIMDIM,pnp1,20);
@@ -253,14 +255,15 @@ int main(int argc, char *argv[])
 	#endif
 	#if SIMDIM == 2
 		// avar.nfull = (2.0/3.0) * double(nfull->size());
-		avar.nfull = 32.67;
+		// avar.nfull = 32.67;
+		avar.nfull = 37;
 		svar.nfull = 48;
 	#endif
 
 	// cout << avar.nfull << endl;
 	First_Step(svar,fvar,avar,outlist,pnp1,airP);
 	///*************** Open simulation files ***************/
-	std::ofstream f1,f2,f3,fb;
+	std::ofstream f1,f2,f3,fb,fg;
 	// NcFile* fn;
 	// h5_file_t fh5;
 
@@ -270,26 +273,42 @@ int main(int argc, char *argv[])
 
 	f1 << std::scientific << std::setprecision(6);
 	f3 << std::scientific << std::setw(10);
+	uint ghost_strand = 0;
+	if(svar.boutform == 0)
+		ghost_strand = 2;
+	else
+		ghost_strand = 3;
+
 
 	if(svar.outtype == 0 )
 	{
-		if (svar.outform > 2)
+		if (svar.outform > 4)
 		{	
 			cout << "Output type not within design. Outputting fluid data..." << endl;
 			svar.outform = 1;
 		}
 
+		
+		/*Write sim particles*/
+		
+		Init_Binary_PLT(svar,"Fuel.szplt","Simulation Particles");
+		Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1);
+
+
 		if (svar.Bcase != 0 && svar.Bcase !=5)
 		{
 			/*Write boundary particles*/
 			Init_Binary_PLT(svar,"Boundary.szplt","Boundary Particles");
-			Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",1); 
+			Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2); 
 			if(svar.boutform == 0)
 				TECEND142();			
-		}
-		/*Write sim particles*/
-		Init_Binary_PLT(svar,"Fuel.szplt","Simulation Particles");
-		Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",2); 		
+		}	
+
+		if (svar.ghost == 1 && svar.gout == 1)
+		{
+			/*Write boundary particles*/
+			Init_Binary_PLT(svar,"Ghost.szplt","Ghost Particles");		
+		}	
 	}
 	else if (svar.outtype == 1)
 	{
@@ -310,7 +329,7 @@ int main(int argc, char *argv[])
 				{
 					State empty;
 					Write_ASCII_header(fb,svar);
-					Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,empty);
+					Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");
 				}
 			}
 			else
@@ -327,7 +346,7 @@ int main(int argc, char *argv[])
 		if(f1.is_open())
 		{
 			Write_ASCII_header(f1,svar);
-			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,airP);
+			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,"Fuel");
 			// if(svar.Bcase != 0 && svar.Bcase != 5 && svar.boutform == 1)
 			// 	Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,airP);
 
@@ -336,6 +355,18 @@ int main(int argc, char *argv[])
 		{
 			cerr << "Failed to open fuel.plt. Stopping." << endl;
 			exit(-1);
+		}
+
+		if(svar.ghost == 1 && svar.gout == 1)
+		{
+			string ghostfile = svar.outfolder;
+			ghostfile.append("Ghost.plt");
+			fg.open(ghostfile,std::ios::out);
+			if(fg.is_open())
+			{
+				Write_ASCII_header(fg,svar);
+				Write_ASCII_Timestep(fg,svar,airP,0,0,airP.size(),"Ghost");
+			}
 		}
 	}
 	// else if (svar.outtype == 2)
@@ -391,6 +422,19 @@ int main(int argc, char *argv[])
 
 	///************************* MAIN LOOP ********************/
 	svar.frame = 0;
+#ifdef DEBUG
+	const ldouble a = 1 - svar.gamma;
+	const ldouble b = svar.gamma;
+	const ldouble c = 0.5*(1-2*svar.beta);
+	const ldouble d = svar.beta;
+	const ldouble B = fvar.B;
+	const ldouble gam = fvar.gam;
+	dbout << "Newmark Beta integration parameters" << endl;
+	dbout << "a: " << a << "  b: " << b << endl;
+	dbout << "c: " << c << "  d: " << d << endl;
+	dbout << "B: " << B << "  gam: " << gam << endl << endl; 
+#endif
+
 	for (uint frame = 1; frame<= svar.Nframe; ++frame)
 	{
 		int stepits=0;
@@ -447,18 +491,23 @@ int main(int argc, char *argv[])
 		{
 			if(svar.Bcase != 0 && svar.Bcase != 5 && svar.boutform == 1)
 			{	/*Write boundary particles*/
-				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",1); 
+				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2); 
 			}
-			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",2); /*Write sim particles*/
+			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1); /*Write sim particles*/
+			if(svar.ghost == 1 && svar.gout == 1 && airP.size() != 0)
+				Write_Binary_Timestep(svar,airP,0,airP.size(),"Ghost",ghost_strand);
 		} 
 		else if (svar.outtype == 1)
 		{
-			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,airP);
+			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,"Fuel");
 			if(svar.Bcase != 0 && svar.Bcase != 5 && svar.boutform == 1)
 			{
 				State empty;
-				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,empty);
+				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");
 			}
+
+			if(svar.ghost == 1 && svar.gout == 1)
+				Write_ASCII_Timestep(fg,svar,airP,0,0,airP.size(),"Ghost");
 		}
 		// else if (svar.outtype == 2)
 		// {
@@ -479,6 +528,8 @@ int main(int argc, char *argv[])
 		f3.close();
 	if (fb.is_open())
 		fb.close();
+	if (fg.is_open())
+		fg.close();
 	
 	if(svar.outtype == 0)
 	{
