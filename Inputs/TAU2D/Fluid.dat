@@ -11,6 +11,6 @@
 119.926              #Reference gas airspeed
 36472                #Reference gas pressure
 273.15               #Reference gas temperature
-mesh.grid.conf.edges #Input Mesh File
+mesh.grid.taumesh.edges #Input Mesh File
 sol.pval.10000       #Input Solution File
 1                    #Input mesh scale

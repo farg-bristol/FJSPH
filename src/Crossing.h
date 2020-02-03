@@ -357,12 +357,17 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
     {   
         uint inside_flag = 0;
         uint line_flag = 0;
-#if SIMDIM == 3
+
         for (uint const& findex:cells.cFaces[index] ) 
         {
             const vector<size_t>& face = cells.faces[findex];
+
+#if SIMDIM == 3            
             if(Crossings3D(cells.verts,face,testp,rayp))
-            {
+#else
+            if(Crossings2D(cells.verts,face,testp))
+#endif                
+            {   
                 inside_flag=!inside_flag;
                 if ( line_flag ) goto wrongcell;
 
@@ -370,23 +375,6 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
                 line_flag = TRUE;
             }
         }
-#else
-        for (uint const& findex:cells.cFaces[index] ) 
-        {
-            const std::vector<size_t>& edge = 
-            cells.faces[findex];
-            
-            if(Crossings2D(cells.verts,edge,testp))
-            {
-                inside_flag = !inside_flag; 
-                if ( line_flag ) goto wrongcell;
-
-                /* note that one edge has been hit by the ray's line */
-                line_flag = TRUE;
-            } 
-        }
-
-#endif
 
         if(inside_flag == TRUE)
         {
@@ -400,14 +388,22 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
                 dbout << "Cell found: " << index << endl;
                 dbout << "Tries: " << count << endl;
                 dbout << "Test point: " << 
-                testp[0] << "  " << testp[1] << "  " << testp[2] << endl;
+                testp[0] << "  " << testp[1];
+#if SIMDIM == 3
+                dbout << "  " << testp[2];
+#endif
+                dbout << endl;
                 dbout << "Containing cell vertices: " << endl;
                 dbout << "Cell number of elements: " << cells.elems[index].size() << endl;
                 for(size_t kk = 0; kk < cells.elems[index].size(); ++kk)
                 {
                     size_t elemI = cells.elems[index][kk];
                     dbout << kk << "  " << cells.verts[elemI][0] << " " 
-                    << cells.verts[elemI][1] << " " << cells.verts[elemI][2] << endl;
+                    << cells.verts[elemI][1];
+#if SIMDIM == 3
+                    dbout << " " << cells.verts[elemI][2];
+#endif
+                    dbout << endl;
                 }
 #endif
             break;
@@ -419,7 +415,7 @@ wrongcell:
     if(found != 1)
     {
         /*Point could be across a boundary. Test if a ray crosses...*/
-
+        cout << "Checking if particle has crossed a boundary." << endl;
         /*Check if the ray from the point to the cell centre crosses a boundary face.*/
         uint cross = 0;
         for(auto index:ret_indexes)
@@ -502,30 +498,35 @@ void FindCell(SIM& svar, const ldouble nfull, Vec_Tree& CELL_INDEX,
     {
         if (pnp1[ii].b == 2 && outlist[ii].size() < nfull )
         {   
-            uint inside_flag = 0;
             StateVecD testp = pnp1[ii].xi;
             StateVecD rayp;
 #if SIMDIM == 3
                 
             rayp = testp;
             rayp(0) = 1e+100;
+#endif
+            uint inside_flag = 0;
+            uint line_flag = 0;
             /*Test the cell it is already in first*/
             for (size_t const& findex:cells.cFaces[pnp1[ii].cellID] ) 
             {   /*Check each face of the cell*/
                 const vector<size_t>& face = cells.faces[findex];
+
+#if SIMDIM == 3            
                 if(Crossings3D(cells.verts,face,testp,rayp))
-                {
-                    inside_flag = !inside_flag;
-                }     
-            }
-
 #else
-            if(Crossings2D(cells.verts,cells.elems[pnp1[ii].cellID],testp))
-            {
-                inside_flag = !inside_flag;
+                if(Crossings2D(cells.verts,face,testp))
+#endif                
+                {   
+                    inside_flag=!inside_flag;
+                    if ( line_flag ) break;
+
+                    /* note that one edge has been hit by the ray's line */
+                    line_flag = TRUE;
+                }
+            
             }
 
-#endif
 
             if(inside_flag == 1)
             {
@@ -540,12 +541,16 @@ void FindCell(SIM& svar, const ldouble nfull, Vec_Tree& CELL_INDEX,
                 {
                     uint inside_flag = 0;
                     uint line_flag = 0;
-            #if SIMDIM == 3
+            
                     for (uint const& findex:cells.cFaces[cell] ) 
                     {
                         const vector<size_t>& face = cells.faces[findex];
+#if SIMDIM == 3            
                         if(Crossings3D(cells.verts,face,testp,rayp))
-                        {
+#else
+                        if(Crossings2D(cells.verts,face,testp))
+#endif                
+                        {   
                             inside_flag=!inside_flag;
                             if ( line_flag ) break;
 
@@ -553,23 +558,6 @@ void FindCell(SIM& svar, const ldouble nfull, Vec_Tree& CELL_INDEX,
                             line_flag = TRUE;
                         }
                     }
-            #else
-                    for (uint const& findex:cells.cFaces[cell] ) 
-                    {
-                        const std::vector<size_t>& edge = 
-                        cells.faces[findex];
-                        
-                        if(Crossings2D(cells.verts,edge,testp))
-                        {
-                            inside_flag = !inside_flag; 
-                            if ( line_flag ) break;
-
-                            /* note that one edge has been hit by the ray's line */
-                            line_flag = TRUE;
-                        } 
-                    }
-
-            #endif
 
                     if(inside_flag == 1)
                     {
@@ -606,36 +594,23 @@ CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10
                 {   
                     uint inside_flag = 0;
                     uint line_flag = 0;
-#if SIMDIM == 3
+
                     for (uint const& findex:cells.cFaces[index] ) 
                     {
                         const vector<size_t>& face = cells.faces[findex];
+#if SIMDIM == 3            
                         if(Crossings3D(cells.verts,face,testp,rayp))
-                        {
+#else
+                        if(Crossings2D(cells.verts,face,testp))
+#endif                
+                        {   
                             inside_flag=!inside_flag;
-                            if ( line_flag ) break;
+                            if ( line_flag ) break; /*Assumes convex cells*/
 
                             /* note that one edge has been hit by the ray's line */
                             line_flag = TRUE;
                         }
                     }
-#else
-                    for (uint const& findex:cells.cFaces[index] ) 
-                    {
-                        const std::vector<size_t>& edge = 
-                        cells.faces[findex];
-                        
-                        if(Crossings2D(cells.verts,edge,testp))
-                        {
-                            inside_flag = !inside_flag; 
-                            if ( line_flag ) break;
-
-                            /* note that one edge has been hit by the ray's line */
-                            line_flag = TRUE;
-                        } 
-                    }
-
-#endif
 
                     if(inside_flag == 1)
                     {
@@ -650,6 +625,7 @@ CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10
                     }
                 }
                 
+                cout << "Checking if particle has crossed a boundary." << endl;
                 // If still not found, then the point could be across a boundary.
                 // Check if the ray from the point to the cell centre crosses a boundary face.
                 uint cross = 0;
@@ -662,33 +638,33 @@ CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10
                         {
                             const vector<size_t>& face = cells.faces[findex];
                             int ints;
-        #if SIMDIM == 3                   
+#if SIMDIM == 3                   
                             ints = Crossings3D(cells.verts,face,testp,rayp);
-        #else               /*2D line intersection*/
+#else                       /*2D line intersection*/
                             ints = get_line_intersection(cells.verts,face,testp,rayp);
-        #endif
+#endif
                             if(ints)
                             {
                                 cross=!cross;
-        #ifdef DEBUG
+#ifdef DEBUG
                                 cout << "Particle has crossed a boundary!" << endl;
-        #endif
+#endif
                                 if(cells.leftright[findex].second == -1)
                                 {
                                     cout << "Particle has crossed an inner boundary!" << endl;
                                     StateVecD norm;
-        #if SIMDIM == 3
+#if SIMDIM == 3
                                     /*Get the face normal*/
                                     StateVecD r1 = cells.verts[face[1]]- cells.verts[face[0]];
                                     StateVecD r2 = cells.verts[face[2]]- cells.verts[face[0]];
 
                                     norm = r1.cross(r2);
                                     norm = norm.normalized();
-        #else
+#else
                                     StateVecD r1 = cells.verts[face[1]]-cells.verts[face[0]];
                                     norm = StateVecD(-r1(1),r1(0)); 
                                     norm = norm.normalized();
-        #endif
+#endif
                                     /*Reflect the velocity away from the surface*/
                                     pnp1[ii].v = pnp1[ii].v - 2*(pnp1[ii].v.dot(norm))*norm;
 

@@ -916,7 +916,7 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 	}
 
 	fout << "VARIABLES= \"X\" \"Y\" \"Z\" " << endl;
-	fout << "ZONE T=\"FEPOLYGON Test\"" << endl;
+	fout << "ZONE T=\"FEPOLYHEDRON Test\"" << endl;
 	fout << "ZONETYPE=FEPOLYHEDRON" << endl;
 	fout << "NODES=" << fdata.numPoint << " ELEMENTS=" << fdata.numElem << " FACES=" << fdata.numFaces << endl;
 	fout << "TotalNumFaceNodes=" << TotalNumFaceNodes << endl;

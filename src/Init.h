@@ -700,7 +700,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 		for (auto p: pn)
 			pnp1.emplace_back(p);
 
-		for (ldouble y = 0.0; y > -svar.Jet[1]; y-=svar.dx)
+		for (ldouble y = -svar.Jet[1]+4*svar.dx; y > -svar.Jet[1]; y-=svar.dx)
 		{
 			// cout << "In add points for-loop" << endl;
 			AddPoints(y, svar, fvar, avar, pn, pnp1);

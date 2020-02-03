@@ -1247,44 +1247,44 @@ void Init_Binary_PLT(const SIM &svar, const string& filename, const string& zone
      * header information
      */
     #if SIMDIM == 2
-    	std::string variables = "x y";	
+    	std::string variables = "X Z";	
 		if (svar.outform == 1)
 		{
-			variables = "x y rho P m v a";
+			variables = "X Z rho P m v a";
 		}
 		else if (svar.outform == 2)
 		{
-			variables = "x y rho P m v_x v_y a_x a_y";
+			variables = "X Z rho P m v_x v_z a_x a_z";
 		}
 		else if (svar.outform == 3)
 		{
-			variables = "x y rho P m v_x v_y a_x a_y Cell_Vx Cell_Vy Cell_Rho Cell_P Cell_ID";
+			variables = "X Z rho P m v_x v_z a_x a_z Cell_Vx Cell_Vz Cell_Rho Cell_P Cell_ID";
 		}
 		else if (svar.outform == 4)
 		{
-			variables = "x y rho P m v a b Neighbours Aero";
+			variables = "X Z rho P m v a b Neighbours Aero";
 		}
 
 	#endif
 
 	#if SIMDIM == 3
-		std::string variables = "x y z";  
+		std::string variables = "X Y Z";  
 		if (svar.outform == 1)
 		{
-			variables = "x y z rho P m v a";
+			variables = "X Y Z rho P m v a";
 		}
 		else if (svar.outform == 2)
 		{
-			variables = "x y z rho P m v_x v_y v_z a_x a_y a_z";
+			variables = "X Y Z rho P m v_x v_y v_z a_x a_y a_z";
 		}
 		else if (svar.outform == 3)
 		{
 			variables = 
-		"x y z rho P m v_x v_y v_z a_x a_y a_z Cell_Vx Cell_Vy Cell_Vz Cell_Rho Cell_P Cell_ID";
+		"X Y Z rho P m v_x v_y v_z a_x a_y a_z Cell_Vx Cell_Vy Cell_Vz Cell_Rho Cell_P Cell_ID";
 		}
 		else if (svar.outform == 4)
 		{
-			variables = "x y z rho P m v a b Neighbours Aero";
+			variables = "X Y Z rho P m v a b Neighbours Aero";
 		}
 
 	#endif

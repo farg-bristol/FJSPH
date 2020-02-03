@@ -55,7 +55,7 @@ void FindCellNeighbours(const Vec_Tree& CELL_INDEX, const vector<StateVecD>& cel
 	#if SIMDIM == 3
 	const size_t num_results = 80;
 	#else
-	const size_t num_results = 40;
+	const size_t num_results = 80;
 	#endif
 
 	outlist = vector<vector<size_t>>(cells.size(),vector<size_t>(num_results));

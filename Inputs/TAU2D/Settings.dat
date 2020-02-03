@@ -2,11 +2,11 @@
 1200              #number of frames
 1            #Output Frame Interval (if 0, suppresses framewise output)
 0              #Output encoding (0 = Binary, 1 = ASCII)
-1              #Output format (0 = Position only, 1 = fluid properties, 2 = debug/research)
+3              #Output format (0 = Position only, 1 = fluid properties, 2 = debug/research)
 1              #Boundary timestep output (0 = no, 1 = yes)
 0             #Ghost particle output (0 = no, 1 = yes)
 25             #Max Sub-iterations
-4000           #Max Add particle rounds
+10000           #Max particles
 20 20          #No particles in x-dir, y-dir, z-dir (optional) (only for boundary case 1)
 0.0002         #Initial Particle spacing
 0.7            #Boundary particle spacing factor (of part spacing)

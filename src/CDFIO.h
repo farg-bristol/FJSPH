@@ -261,13 +261,16 @@ vector<vector<uint>> Get_Element(NcFile& fin, string variable)
 }
 
 /*To run on the mesh file*/
-vector<StateVecD> Get_Coordinates(NcFile& fin)
+uint Get_Coordinates(NcFile& fin, vector<StateVecD>& coordVec)
 {
-	#ifdef DEBUG
+#ifdef DEBUG
 		dbout << "Reading coordinates." << endl;
-	#endif
-	// uint counts[3] = {0};
+#endif
+
+#if SIMDIM == 2
 	uint ignore=0;
+#endif
+
 	NcVar coordXD = fin.getVar("points_xc");
 	NcVar coordYD = fin.getVar("points_yc");
 	NcVar coordZD = fin.getVar("points_zc");	
@@ -302,12 +305,12 @@ vector<StateVecD> Get_Coordinates(NcFile& fin)
 #endif
 	}
 
-
+#if SIMDIM == 2
 #ifdef DEBUG
 	dbout << "Ignored dimension: " << ignore << endl;
 #endif
 	cout << "Ignored dimension: " << ignore << endl;
-
+#endif
 	
 	NcDim dim = coordXD.getDim(0);
 	size_t nPts = dim.getSize();
@@ -319,7 +322,7 @@ vector<StateVecD> Get_Coordinates(NcFile& fin)
 	double* coordX = new double[nPts];
 	double* coordY = new double[nPts];
 
-	vector<StateVecD> coordVec(nPts);
+	coordVec = vector<StateVecD>(nPts);
 #if SIMDIM == 2	
 	/*Get the actual data from the file*/
 	if(ignore == 1)
@@ -349,7 +352,9 @@ vector<StateVecD> Get_Coordinates(NcFile& fin)
 	}
 	
 #else
-	double* coordZ = new double[nPts];	
+	double* coordZ = new double[nPts];
+	coordXD.getVar(coordX);
+	coordYD.getVar(coordY);	
 	coordZD.getVar(coordZ);
 	
 	for (uint ii = 0; ii < nPts; ++ii)
@@ -362,7 +367,11 @@ vector<StateVecD> Get_Coordinates(NcFile& fin)
 	dbout << "Returning coordinates." << endl;
 #endif
 
-	return coordVec;	
+#if SIMDIM == 3
+	return 0;	
+#else
+	return ignore;
+#endif
 }
 
 /*To run on the solution file*/
@@ -426,7 +435,7 @@ void Get_Cell_Faces(const vector<vector<uint>>& cell,
 /***************** READING NETCDF SOLUTION DATA FUNCTIONS ********************/
 /*****************************************************************************/
 
-void Read_SOLUTION(const string& solIn, const FLUID& fvar, MESH& cells, vector<uint> usedVerts)
+void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, MESH& cells, vector<uint> usedVerts)
 {
 	NcFile sol(solIn, NcFile::read);
 
@@ -437,20 +446,39 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, MESH& cells, vector<u
 	dbout << "Solution points: " << solPts << endl;
 	#endif
 
+#if SIMDIM ==3
 	if(solPts!=cells.numPoint)
 	{
 		cout << "Solution file does not have the same number of vertices as the mesh." << endl;
 		cout << "Please check again." << endl;
 		exit(-1);
 	}
+#endif
 
 	/*Get the velocities*/
 	vector<double> xvel, yvel, zvel;
+#if SIMDIM == 3
 	Get_Scalar_Property(sol, "x_velocity", xvel);
-	#if SIMDIM == 3
 	Get_Scalar_Property(sol, "y_velocity", yvel);
-	#endif
 	Get_Scalar_Property(sol, "z_velocity", zvel);
+#else 
+	if(ignored == 1)
+	{
+		Get_Scalar_Property(sol, "y_velocity", xvel);
+		Get_Scalar_Property(sol, "z_velocity", zvel);
+	}
+	else if (ignored == 2)
+	{
+		Get_Scalar_Property(sol, "x_velocity", xvel);
+		Get_Scalar_Property(sol, "z_velocity", zvel);
+	}
+	else if(ignored == 3)
+	{
+		Get_Scalar_Property(sol, "x_velocity", xvel);
+		Get_Scalar_Property(sol, "y_velocity", zvel);
+	}
+#endif
+
 
 	/*Test for size*/
 	if(xvel.size() == solPts)
@@ -1001,7 +1029,7 @@ void Read_TAUMESH(const SIM& svar, MESH& cells, const FLUID& fvar)
 
 
 	/*Get the coordinates of the mesh*/
-	cells.verts = Get_Coordinates(fin);
+	uint ignored = Get_Coordinates(fin,cells.verts);
 	if(cells.verts.size()!= nPts)
 	{
 		cout << "Some data has been missed.\nPlease check how many points." << endl;
@@ -1016,7 +1044,7 @@ void Read_TAUMESH(const SIM& svar, MESH& cells, const FLUID& fvar)
 	// /*End of reading the mesh file.*/
 	// cout << "Trying solution file: " << solIn << endl;
 	vector<uint> empty;
-	Read_SOLUTION(solIn,fvar,cells, empty);
+	Read_SOLUTION(solIn,fvar,ignored,cells, empty);
 }
 
 /*****************************************************************************/
@@ -1025,7 +1053,7 @@ void Read_TAUMESH(const SIM& svar, MESH& cells, const FLUID& fvar)
 
 vector<vector<size_t>> Get_Edges(NcFile& fin)
 {
-	#ifdef DEBUG
+#ifdef DEBUG
 		dbout << "Reading edge data" << endl;
 #endif
 
@@ -1057,15 +1085,15 @@ vector<vector<size_t>> Get_Edges(NcFile& fin)
 	countp.push_back(nPnts);
 	
 #ifdef DEBUG
-	dbout << "Attempting to read NetCDF faces." << endl;
+	dbout << "Attempting to read NetCDF points_of_element_edges." << endl;
 #endif
 
 	edgeData.getVar(startp,countp,edgeArray);
 
-	cout << "Successfully read face data." << endl;
+	cout << "Successfully read points_of_element_edges data." << endl;
 
 #ifdef DEBUG
-	dbout << "Successfully read face data." << endl;
+	dbout << "Successfully read points_of_element_edges data." << endl;
 #endif
 
 	/*Convert it to a vector to store*/
@@ -1128,15 +1156,15 @@ void Place_Edges(NcFile& fin, MESH& cells)
 	int* left = new int[nLeft];
 	
 	#ifdef DEBUG
-	dbout << "Attempting to read NetCDF left elements." << endl;
+	dbout << "Attempting to read NetCDF left_element_of_edges." << endl;
 	#endif
 
 	leftData.getVar(left);
 
-	cout << "Successfully read left element data." << endl;
+	cout << "Successfully read left_element_of_edges data." << endl;
 
 	#ifdef DEBUG
-	dbout << "Successfully read left element data." << endl;
+	dbout << "Successfully read left_element_of_edges data." << endl;
 	#endif
 
 	NcVar rightData = fin.getVar("right_element_of_edges");	
@@ -1152,15 +1180,15 @@ void Place_Edges(NcFile& fin, MESH& cells)
 	int* right = new int[nRight];
 	
 	#ifdef DEBUG
-	dbout << "Attempting to read NetCDF right elements." << endl;
+	dbout << "Attempting to read NetCDF right_element_of_edges." << endl;
 	#endif
 
 	rightData.getVar(right);
 
-	cout << "Successfully read right element data." << endl;
+	cout << "Successfully read right_element_of_edges data." << endl;
 
 	#ifdef DEBUG
-	dbout << "Successfully read right element data." << endl;
+	dbout << "Successfully read right_element_of_edges data." << endl;
 	#endif
 	vector<std::pair<int,int>> leftright(nLeft);
 
@@ -1277,12 +1305,7 @@ void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, const FLUID& fvar)
 	/*Get the faces of the mesh*/
 	cells.faces = Get_Edges(fin);
 
-	/*Get the coordinates of the mesh*/
-	cells.verts = Get_Coordinates(fin);
-	if(cells.verts.size()!= nPnts)
-	{
-		cout << "Some data has been missed.\nPlease check how many points." << endl;
-	}
+	
 
 	/*Adjust the scale*/
 	cells.scale = svar.scale;
@@ -1299,28 +1322,43 @@ void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, const FLUID& fvar)
 
 
 	/*Get the vertices that are in use to take the values from the solution file*/
+
 	int* usedVerts = new int[nPnts];
 
+#ifdef DEBUG 
+	dbout << "Attempting to read NetCDF vertices_in_use data." << endl;
+#endif
 	NcVar uVar = fin.getVar("vertices_in_use");
-	if(!uVar.isNull())
-		uVar.putVar(usedVerts);
-	else
+	if(uVar.isNull())
 	{
 		cout << "No information of which vertices have been used. Stopping." << endl;
 		exit(-1);
 	}
+	else
+		uVar.getVar(usedVerts);
 	
+#ifdef DEBUG 
+	dbout << "Successfully read vertices_in_use data." << endl;
+#endif
+
 	vector<uint> uVerts(nPnts);
-	for(size_t ii = 0; ii < nPnts;)
+	for(size_t ii = 0; ii < nPnts; ++ii)
 		uVerts[ii] = usedVerts[ii];
 
+
+	/*Get the coordinates of the mesh*/
+	uint ignored = Get_Coordinates(fin,cells.verts);
+	if(cells.verts.size()!= nPnts)
+	{
+		cout << "Some data has been missed.\nPlease check how many points." << endl;
+	}
 
 	#ifdef DEBUG
 	dbout << "End of interaction with mesh file and ingested data." << endl << endl;
 	dbout << "Opening solultion file." << endl;
 	#endif
 
-	Read_SOLUTION(solIn,fvar,cells, uVerts);
+	Read_SOLUTION(solIn,fvar,ignored,cells,uVerts);
 }
 
 #endif
@@ -1584,7 +1622,7 @@ void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
 	cells.faces = Get_Faces(fin);
 
 	/*Get the coordinates of the mesh*/
-	cells.verts = Get_Coordinates(fin);
+	uint ignored = Get_Coordinates(fin, cells.verts);
 	if(cells.verts.size()!= nPnts)
 	{
 		cout << "Some data has been missed.\nPlease check how many points." << endl;
@@ -1608,7 +1646,7 @@ void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
 	dbout << "Opening solultion file." << endl;
 	#endif
 	vector<uint> empty;
-	Read_SOLUTION(solIn,fvar,cells,empty);
+	Read_SOLUTION(solIn,fvar,ignored,cells,empty);
 }
 
 
