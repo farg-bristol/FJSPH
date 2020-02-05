@@ -165,11 +165,11 @@ void Write_Zone(string input, ZONE& zn, MESH& cells)
 	fout.close();
 }
 
-template <class T>
-void Average_Point_to_Cell(const vector<T>& pData, vector<T>& cData,
-							const vector<vector<size_t>>& elems, const T zero)
+
+void Average_Point_to_Cell(const vector<StateVecD>& pData, vector<StateVecD>& cData,
+							const vector<vector<size_t>>& elems)
 {
-	vector<T> sum(elems.size(),zero);
+	vector<StateVecD> sum(elems.size(),StateVecD::Zero());
 
 	#pragma omp parallel for reduction(+:sum)
 	for(uint ii = 0; ii < elems.size(); ++ii)
@@ -186,9 +186,29 @@ void Average_Point_to_Cell(const vector<T>& pData, vector<T>& cData,
 	cData = sum; 
 }
 
-vector<ldouble> CpToPressure(const vector<ldouble>& Cp, const FLUID& fvar)
+void Average_Point_to_Cell(const vector<real>& pData, vector<real>& cData,
+							const vector<vector<size_t>>& elems)
 {
-	vector<ldouble> press(Cp.size());
+	vector<real> sum(elems.size(),0.0);
+
+	#pragma omp parallel for reduction(+:sum)
+	for(uint ii = 0; ii < elems.size(); ++ii)
+	{
+		
+		const uint nVerts = elems[ii].size();
+		for (auto jj:elems[ii])
+		{
+			sum[ii] += pData[jj];
+		}
+		sum[ii] /= nVerts;
+	}
+
+	cData = sum; 
+}
+
+vector<real> CpToPressure(const vector<real>& Cp, const FLUID& fvar)
+{
+	vector<real> press(Cp.size());
 	#pragma omp parallel for shared(Cp)
 	for (uint ii = 0; ii < Cp.size(); ++ii)
 	{
@@ -319,8 +339,8 @@ uint Get_Coordinates(NcFile& fin, vector<StateVecD>& coordVec)
 		dbout << "Number of points: " << nPts << endl;
 	#endif
 	/*Allocate on the heap (can be big datasets)*/
-	double* coordX = new double[nPts];
-	double* coordY = new double[nPts];
+	real* coordX = new real[nPts];
+	real* coordY = new real[nPts];
 
 	coordVec = vector<StateVecD>(nPts);
 #if SIMDIM == 2	
@@ -352,7 +372,7 @@ uint Get_Coordinates(NcFile& fin, vector<StateVecD>& coordVec)
 	}
 	
 #else
-	double* coordZ = new double[nPts];
+	real* coordZ = new real[nPts];
 	coordXD.getVar(coordX);
 	coordYD.getVar(coordY);	
 	coordZD.getVar(coordZ);
@@ -437,6 +457,7 @@ void Get_Cell_Faces(const vector<vector<uint>>& cell,
 
 void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, MESH& cells, vector<uint> usedVerts)
 {
+	cout << "Reading solution file..." << endl;
 	NcFile sol(solIn, NcFile::read);
 
 	NcDim solPN = sol.getDim("no_of_points");
@@ -456,7 +477,7 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 #endif
 
 	/*Get the velocities*/
-	vector<double> xvel, yvel, zvel;
+	vector<real> xvel, yvel, zvel;
 #if SIMDIM == 3
 	Get_Scalar_Property(sol, "x_velocity", xvel);
 	Get_Scalar_Property(sol, "y_velocity", yvel);
@@ -523,12 +544,12 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 	}
 
 	/*Get other scalar data that may or may not exist*/
-	vector<double> press;
+	vector<real> press;
 	Get_Scalar_Property(sol,"pressure",press);
 	if(press.size()==0)
 	{
 		/*Pressure data doesn't exist, so go to cp*/
-		vector<double> cp;
+		vector<real> cp;
 		Get_Scalar_Property(sol,"cp",cp);
 
 		/*Then convert cp to pressure. can get global attributes from sol file.. Maybe...*/
@@ -540,7 +561,7 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 			press[ii] -= fvar.gasPress;
 	}
 
-	vector<double> dens(solPts);
+	vector<real> dens(solPts);
 
 	for(uint ii = 0; ii < press.size(); ++ii)
 	{
@@ -555,8 +576,8 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 	/*Update the point arrays with the actual stuff*/
 	if(usedVerts.size()!=0)
 	{	/*Get the used vertices*/
-		vector<ldouble> newP;
-		vector<ldouble> newR;
+		vector<real> newP;
+		vector<real> newR;
 		for(auto index:usedVerts)
 		{
 			newP.emplace_back(press[index]);
@@ -578,13 +599,31 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 
 	/*Average the data to a the cell*/
 	cells.SetCells();
-	StateVecD zero = StateVecD::Zero();
-	Average_Point_to_Cell(cells.pVel,cells.cVel, cells.elems, zero);
-	Average_Point_to_Cell(cells.pointRho,cells.cellRho,cells.elems,0.0);
-	Average_Point_to_Cell(cells.pointP,cells.cellP,cells.elems,0.0);
+	
+
+	cout << "Averaging points to cell centres..." << endl;
+	Average_Point_to_Cell(cells.pVel,cells.cVel, cells.elems);
+	Average_Point_to_Cell(cells.pointRho,cells.cellRho,cells.elems);
+	Average_Point_to_Cell(cells.pointP,cells.cellP,cells.elems);
 	
 	/*Find cell centres*/
-	Average_Point_to_Cell(cells.verts,cells.cCentre,cells.elems,zero);
+	Average_Point_to_Cell(cells.verts,cells.cCentre,cells.elems);
+
+	uint isZero = 1;
+	for(size_t ii = 0; ii < cells.cellRho.size(); ++ii)
+	{
+		if(cells.cellRho[ii] != 0)
+		{
+			isZero = 0;
+			break;
+		}
+	}
+
+	if(isZero)
+	{
+		cout << "Averaging has failed somehow." << endl;
+		exit(-1);
+	}
 
 	/*Check the data*/
 	// for(auto value:dens)
@@ -1662,17 +1701,17 @@ void Write_Group(NcGroup &zone, const State &pnp1,
 	const uint size = end - start;
 	NcDim posDim = zone.addDim("Point",size);
 
-	NcVar xVar = zone.addVar("x",ncDouble,posDim);
-	NcVar yVar = zone.addVar("y",ncDouble,posDim);
-	NcVar zVar = zone.addVar("z",ncDouble,posDim);
+	NcVar xVar = zone.addVar("x",ncFloat,posDim);
+	NcVar yVar = zone.addVar("y",ncFloat,posDim);
+	NcVar zVar = zone.addVar("z",ncFloat,posDim);
 	NcVar idVar = zone.addVar("id",ncInt,posDim);
 
 	// xVar.putAtt("units","m");
 	// yVar.putAtt("units","m");
 	// zVar.putAtt("units","m");
-	double* x = new double[size];
-	double* y = new double[size];
-	double* z = new double[size];
+	real* x = new real[size];
+	real* y = new real[size];
+	real* z = new real[size];
 	int* id = new int[size];
 
 	for(uint i = start; i < end; ++i)
@@ -1696,20 +1735,20 @@ void Write_Group(NcGroup &zone, const State &pnp1,
 
 	if(outform == 1)
 	{	/*Write fluid data*/
-		NcVar press = zone.addVar("Pressure", ncDouble,posDim);
-		NcVar dens = zone.addVar("Density",ncDouble,posDim);
-		NcVar acc = zone.addVar("Acceleration",ncDouble,posDim);
-		NcVar vel = zone.addVar("Velocity",ncDouble,posDim);
+		NcVar press = zone.addVar("Pressure", ncFloat,posDim);
+		NcVar dens = zone.addVar("Density",ncFloat,posDim);
+		NcVar acc = zone.addVar("Acceleration",ncFloat,posDim);
+		NcVar vel = zone.addVar("Velocity",ncFloat,posDim);
 
 		// press.putAtt("units","Pa");
 		// dens.putAtt("units","kg/m^3");
 		// acc.putAtt("units","m/s^2");
 		// vel.putAtt("units","m/s");
 
-		double* p = new double[size];
-		double* rho = new double[size];
-		double* f = new double[size];
-		double* v = new double[size];
+		real* p = new real[size];
+		real* rho = new real[size];
+		real* f = new real[size];
+		real* v = new real[size];
 
 		for(uint i = start; i < end; ++i)
 		{
@@ -1727,10 +1766,10 @@ void Write_Group(NcGroup &zone, const State &pnp1,
 
 	if(outform == 2)
 	{	/*Write research data*/
-		NcVar aero = zone.addVar("Aerodynamic Force", ncDouble,posDim);
-		NcVar surf = zone.addVar("Surface Tension", ncDouble,posDim);
-		NcVar Sx = zone.addVar("S_x", ncDouble,posDim);
-		NcVar Sy = zone.addVar("S_y", ncDouble,posDim);
+		NcVar aero = zone.addVar("Aerodynamic Force", ncFloat,posDim);
+		NcVar surf = zone.addVar("Surface Tension", ncFloat,posDim);
+		NcVar Sx = zone.addVar("S_x", ncFloat,posDim);
+		NcVar Sy = zone.addVar("S_y", ncFloat,posDim);
 		NcVar B = zone.addVar("Boundary",ncInt,posDim);
 		NcVar theta = zone.addVar("Theta",ncInt,posDim);
 
@@ -1739,10 +1778,10 @@ void Write_Group(NcGroup &zone, const State &pnp1,
 		// Sx.putAtt("units","N");
 		// Sy.putAtt("units","N");
 	
-		double* af = new double[size]{0.0};
-		double* sf = new double[size]{0.0};
-		double* sx = new double[size]{0.0};
-		double* sy = new double[size]{0.0};
+		real* af = new real[size]{0.0};
+		real* sf = new real[size]{0.0};
+		real* sx = new real[size]{0.0};
+		real* sy = new real[size]{0.0};
 		int* b = new int[size]{0};
 		int* t = new int[size]{0};
 
@@ -1765,9 +1804,9 @@ void Write_Group(NcGroup &zone, const State &pnp1,
 
 		if (SIMDIM == 3)
 		{
-			NcVar Sz = zone.addVar("S_z",ncDouble,posDim);
+			NcVar Sz = zone.addVar("S_z",ncFloat,posDim);
 			// Sz.putAtt("units","m");
-			double* sz = new double[size]{0.0};
+			real* sz = new real[size]{0.0};
 			for(uint i = start; i < end; ++i)
 				sz[i-start] = pnp1[i].Sf[2];
 
@@ -1803,7 +1842,7 @@ void Write_CDF_File(NcFile &nd, SIM &svar, const State &pnp1)
 	steps.append(std::to_string(svar.frame));
 	NcGroup ts(nf.addGroup(steps));
 	NcDim tDim = ts.addDim("time",1);
-	NcVar tVar = ts.addVar("time",ncDouble,tDim);
+	NcVar tVar = ts.addVar("time",ncFloat,tDim);
 	tVar.putVar(&svar.t);
 
 	/*Write the Particles group*/

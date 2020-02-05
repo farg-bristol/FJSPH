@@ -16,16 +16,29 @@
 #endif
 
 /*Crossing test for 3 dimensions.*/
-ldouble LessThanREError(const DensMatD& A)
+int LessThanREError(const DensMatD& A)
 {
-    ldouble a1, a2, a3;
+    real a1, a2, a3;
 
     /*Calculate components of the absolute*/
     a1 = fabs(A(0,2)-A(3,2))*(fabs((A(1,0)-A(3,0))*(A(2,1)-A(3,1)))+fabs((A(1,1)-A(3,1))*(A(2,0)-A(3,0))));
     a2 = fabs(A(1,2)-A(3,2))*(fabs((A(2,0)-A(3,0))*(A(0,1)-A(3,1)))+fabs((A(2,1)-A(3,1))*(A(0,0)-A(3,0))));
     a3 = fabs(A(2,2)-A(3,2))*(fabs((A(0,0)-A(3,0))*(A(1,1)-A(3,1)))+fabs((A(0,1)-A(3,1))*(A(1,0)-A(3,0))));
 
-    return MERROR*(a1+a2+a3);
+    if(fabs(A.determinant()) <=  MERROR*(a1+a2+a3))
+    {
+        #pragma omp critical
+        {
+        cout << "Volume is inside the tolerance of round-off error. Need to do some form of tiebreaking." << endl;
+        cout << "Matrix: " << endl << A << endl;
+        cout << "MERROR: " << MERROR << endl;
+        cout << "Components: " << a1 << "  " << a2 << "  " << a3 << endl;
+        cout << A.determinant() <<  " <= " <<  MERROR*(a1+a2+a3) << endl;
+        }
+        return 0;
+    }
+
+    return 1;
 }
 
 // #ifdef DEBUG
@@ -150,7 +163,7 @@ bool get_line_intersection(vector<StateVecD> const& verts, vector<size_t> const&
     s = cellC - p1; r = e2 - e1;
 
     // Find the denominator of the calculation 
-    ldouble denom =  (-r(0) * s(1) + s(0) * r(1));
+    real denom =  (-r(0) * s(1) + s(0) * r(1));
 
     // If the value of this is nearly 0, then 
     if(denom < MEPSILON)
@@ -158,7 +171,7 @@ bool get_line_intersection(vector<StateVecD> const& verts, vector<size_t> const&
         return 0;
     }
 
-    ldouble u, t;
+    real u, t;
     u = (-s(1) * (p1(0) - e1(0)) + s(0) * (p1(1) - e1(1))) / denom;
     t = ( r(0) * (p1(1) - e1(1)) - r(1) * (p1(0) - e1(0))) / denom;
 
@@ -184,7 +197,7 @@ bool get_line_intersection(vector<StateVecD> const& verts, vector<size_t> const&
     int Crossings2D(vector<StateVecD> const& verts, vector<size_t> const& edge, StateVecD const& point)
     {
         int  yflag0, yflag1, inside_flag;
-        double  ty, tx;
+        real  ty, tx;
         StateVecD vtx0, vtx1;
 
         tx = point[X];
@@ -246,20 +259,20 @@ int Crossings3D(const vector<StateVecD>& verts, const vector<size_t>& face, Stat
     vol1.row(2) << verts[face[2]](0),verts[face[2]](1),verts[face[2]](2),1.0;
     vol1.row(3) << point(0), point(1), point(2),1.0;
 
-    if(fabs(vol1.determinant()) <= LessThanREError(vol1))
+    if(LessThanREError(vol1))
     {
-        cout << "Volume is inside the tolerance of round-off error. Need to do some form of tiebreaking." << endl;
-        cout << vol1.determinant() << endl;
+        /*To add Simulation of Simplicity*/
     }
+    
 
     flag1 = (vol1.determinant() < 0);
 
     vol1.row(3) << point2(0), point2(1), point2(2),1.0;
-    if(fabs(vol1.determinant()) <= LessThanREError(vol1))
+    if(LessThanREError(vol1))
     {
-        cout << "Volume is inside the tolerance of round-off error. Need to do some form of tiebreaking." << endl;
-        cout << vol1.determinant() << endl;
+        /*To add Simulation of Simplicity*/
     }
+    
 
 
     flag2 = (vol1.determinant() < 0); 
@@ -269,8 +282,7 @@ int Crossings3D(const vector<StateVecD>& verts, const vector<size_t>& face, Stat
     {
         uint numverts = face.size();
         
-        int flag3, flag4, face_flag;
-        face_flag = 1; /*Default to crossing the face first*/
+        int flag3, flag4;
         StateVecD vtx0, vtx1;
         vtx0 = verts[face[numverts-1]]; /*Start on the last - first point edge*/
         vtx1 = verts[face[0]];
@@ -281,11 +293,9 @@ int Crossings3D(const vector<StateVecD>& verts, const vector<size_t>& face, Stat
         vol.row(1) << vtx0(0), vtx0(1), vtx0(2), 1.0;
         vol.row(2) << vtx1(0), vtx1(1), vtx1(2), 1.0;
         vol.row(3) << point2(0), point2(1), point2(2),1.0;
-        if(fabs(vol.determinant()) <= LessThanREError(vol))
+        if(LessThanREError(vol1))
         {
-        cout << "Volume is inside the tolerance of round-off error." << 
-                " Need to do some form of tiebreaking." << endl;
-        cout << vol.determinant() << endl;
+            /*To add Simulation of Simplicity*/
         }
         
         flag3 = (vol.determinant() < 0);
@@ -299,33 +309,64 @@ int Crossings3D(const vector<StateVecD>& verts, const vector<size_t>& face, Stat
 
             vol.row(1) << vtx0(0), vtx0(1), vtx0(2), 1.0;
             vol.row(2) << vtx1(0), vtx1(1), vtx1(2), 1.0;
-            if(fabs(vol.determinant()) <= LessThanREError(vol))
+            if(LessThanREError(vol1))
             {
-            cout << "Volume is inside the tolerance of round-off error." <<
-                    " Need to do some form of tiebreaking." << endl;
-            cout << vol.determinant() << endl;
+                /*To add Simulation of Simplicity*/
             }
 
             flag4 = (vol.determinant() < 0);
 
             /*If the sign of the tet is different, this face isn't intersected.*/
             if (flag4 != flag3)
-            {
                 return 0;
-            }
+            
         }
         
-        if(face_flag == 1)
-        {
+        return 1;
             // std::cout << "Crosses face!" << std::endl;
-           return 1;
-        }
-
     }
     
     return 0;    
 }
 #endif
+
+uint CheckCell(const size_t cell,  const size_t& ii, const MESH& cells, State& pnp1)
+{
+    const StateVecD testp = pnp1[ii].xi;
+#if SIMDIM == 3    
+    const StateVecD rayp(testp(0)+1e+10,testp(1),testp(2));
+#endif
+
+    uint line_flag = 0;
+    uint inside_flag = 0;
+    for (uint const& findex:cells.cFaces[cell] ) 
+    {
+        const vector<size_t>& face = cells.faces[findex];
+#if SIMDIM == 3            
+        if(Crossings3D(cells.verts,face,testp,rayp))
+#else
+        if(Crossings2D(cells.verts,face,testp))
+#endif                
+        {   
+            inside_flag=!inside_flag;
+            if ( line_flag ) break; //Convex assumption
+
+            //  note that one edge has been hit by the ray's line 
+            line_flag = TRUE;
+        }
+    }
+
+    if(inside_flag == 1)
+    {
+        pnp1[ii].cellID = cell;
+        pnp1[ii].cellV = cells.cVel[cell];
+        pnp1[ii].cellP = cells.cellP[cell];
+        pnp1[ii].cellRho = cells.cellRho[cell];        
+        return 1;
+    }
+
+    return 0;
+}
 
 void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
      const MESH& cells, const outl& outlist, State& pnp1, State& pn)
@@ -336,16 +377,16 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
     StateVecD rayp;
 #if SIMDIM == 3    
     rayp = testp;
-    rayp(0) += 50000;
+    rayp(0) += 1e+10;
     const size_t num_results = 40;
 #else
     const size_t num_results = 20;
 #endif
 
     vector<size_t> ret_indexes(num_results);
-    vector<double> out_dists_sqr(num_results);
+    vector<real> out_dists_sqr(num_results);
 
-    nanoflann::KNNResultSet<double> resultSet(num_results);
+    nanoflann::KNNResultSet<real> resultSet(num_results);
     resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
     
     CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
@@ -355,67 +396,18 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
     uint count = 0;
     for(auto index:ret_indexes)
     {   
-        uint inside_flag = 0;
-        uint line_flag = 0;
-
-        for (uint const& findex:cells.cFaces[index] ) 
+        if(CheckCell(index,ii,cells,pnp1))
         {
-            const vector<size_t>& face = cells.faces[findex];
-
-#if SIMDIM == 3            
-            if(Crossings3D(cells.verts,face,testp,rayp))
-#else
-            if(Crossings2D(cells.verts,face,testp))
-#endif                
-            {   
-                inside_flag=!inside_flag;
-                if ( line_flag ) goto wrongcell;
-
-                /* note that one edge has been hit by the ray's line */
-                line_flag = TRUE;
-            }
-        }
-
-        if(inside_flag == TRUE)
-        {
-           
-            pnp1[ii].cellID = index;
-            pnp1[ii].cellV = cells.cVel[index];
-            pnp1[ii].cellP = cells.cellP[index];
-            pnp1[ii].cellRho = cells.cellRho[index];
             found = 1;
-#ifdef DEBUG
-                dbout << "Cell found: " << index << endl;
-                dbout << "Tries: " << count << endl;
-                dbout << "Test point: " << 
-                testp[0] << "  " << testp[1];
-#if SIMDIM == 3
-                dbout << "  " << testp[2];
-#endif
-                dbout << endl;
-                dbout << "Containing cell vertices: " << endl;
-                dbout << "Cell number of elements: " << cells.elems[index].size() << endl;
-                for(size_t kk = 0; kk < cells.elems[index].size(); ++kk)
-                {
-                    size_t elemI = cells.elems[index][kk];
-                    dbout << kk << "  " << cells.verts[elemI][0] << " " 
-                    << cells.verts[elemI][1];
-#if SIMDIM == 3
-                    dbout << " " << cells.verts[elemI][2];
-#endif
-                    dbout << endl;
-                }
-#endif
             break;
         }
-wrongcell:
         count++;
     }
 
     if(found != 1)
     {
         /*Point could be across a boundary. Test if a ray crosses...*/
-        cout << "Checking if particle has crossed a boundary." << endl;
+        cout << "Checking if particle if outside the mesh." << endl;
         /*Check if the ray from the point to the cell centre crosses a boundary face.*/
         uint cross = 0;
         for(auto index:ret_indexes)
@@ -487,48 +479,31 @@ wrongcell:
     }   
 }
 
-void FindCell(SIM& svar, const ldouble nfull, Vec_Tree& CELL_INDEX,
+void FindCell(SIM& svar, const real nfull, Vec_Tree& CELL_INDEX,
      const MESH& cells, const outl& outlist, State& pnp1, State& pn)
 {
     /*Find which cell the particle is in*/
+    vector<size_t> toDelete;
     const size_t start = svar.bndPts;
-    size_t end = svar.totPts;
-    #pragma omp parallel for
+    const size_t end = svar.totPts;
+
+#pragma omp parallel 
+    {
+    vector<size_t> localDel;
+    #pragma omp for schedule(static) nowait 
     for (size_t ii = start; ii < end; ++ii)
     {
-        if (pnp1[ii].b == 2 && outlist[ii].size() < nfull )
+        if (pnp1[ii].b == FREE && outlist[ii].size() < nfull )
         {   
             StateVecD testp = pnp1[ii].xi;
             StateVecD rayp;
 #if SIMDIM == 3
                 
             rayp = testp;
-            rayp(0) = 1e+100;
+            rayp(0) = 1e+10;
 #endif
-            uint inside_flag = 0;
-            uint line_flag = 0;
-            /*Test the cell it is already in first*/
-            for (size_t const& findex:cells.cFaces[pnp1[ii].cellID] ) 
-            {   /*Check each face of the cell*/
-                const vector<size_t>& face = cells.faces[findex];
-
-#if SIMDIM == 3            
-                if(Crossings3D(cells.verts,face,testp,rayp))
-#else
-                if(Crossings2D(cells.verts,face,testp))
-#endif                
-                {   
-                    inside_flag=!inside_flag;
-                    if ( line_flag ) break;
-
-                    /* note that one edge has been hit by the ray's line */
-                    line_flag = TRUE;
-                }
-            
-            }
-
-
-            if(inside_flag == 1)
+           
+            if(CheckCell(pnp1[ii].cellID,ii,cells,pnp1))
             {
 #ifdef DEBUG
                 // cout << "In the same cell" << endl;
@@ -537,34 +512,10 @@ void FindCell(SIM& svar, const ldouble nfull, Vec_Tree& CELL_INDEX,
             }
             else
             {
-                for(const auto cell:cells.cNeighb[pnp1[ii].cellID])
+                for(auto const& cell:cells.cNeighb[pnp1[ii].cellID])
                 {
-                    uint inside_flag = 0;
-                    uint line_flag = 0;
-            
-                    for (uint const& findex:cells.cFaces[cell] ) 
+                    if(CheckCell(cell,ii,cells,pnp1))
                     {
-                        const vector<size_t>& face = cells.faces[findex];
-#if SIMDIM == 3            
-                        if(Crossings3D(cells.verts,face,testp,rayp))
-#else
-                        if(Crossings2D(cells.verts,face,testp))
-#endif                
-                        {   
-                            inside_flag=!inside_flag;
-                            if ( line_flag ) break;
-
-                            /* note that one edge has been hit by the ray's line */
-                            line_flag = TRUE;
-                        }
-                    }
-
-                    if(inside_flag == 1)
-                    {
-                        pnp1[ii].cellID = cell;
-                        pnp1[ii].cellV = cells.cVel[cell];
-                        pnp1[ii].cellP = cells.cellP[cell];
-                        pnp1[ii].cellRho = cells.cellRho[cell];
 #ifdef DEBUG
                         // cout << "Moved to a neighbour cell." << endl;
 #endif
@@ -580,44 +531,20 @@ void FindCell(SIM& svar, const ldouble nfull, Vec_Tree& CELL_INDEX,
                 const size_t num_results = 40;
 #endif
                 vector<size_t> ret_indexes(num_results);
-                vector<double> out_dists_sqr(num_results);
+                vector<real> out_dists_sqr(num_results);
 #ifdef DEBUG
-                cout << "Having to perform neighbour search again. size: " << num_results << endl;
+                // cout << "Having to perform neighbour search again. size: " << num_results << endl;
 #endif
 
-                nanoflann::KNNResultSet<double> resultSet(num_results);
+                nanoflann::KNNResultSet<real> resultSet(num_results);
                 resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
                 
 CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
 
-                for(auto const& index:ret_indexes)
+                for(auto const& cell:ret_indexes)
                 {   
-                    uint inside_flag = 0;
-                    uint line_flag = 0;
-
-                    for (uint const& findex:cells.cFaces[index] ) 
+                    if(CheckCell(cell,ii,cells,pnp1))
                     {
-                        const vector<size_t>& face = cells.faces[findex];
-#if SIMDIM == 3            
-                        if(Crossings3D(cells.verts,face,testp,rayp))
-#else
-                        if(Crossings2D(cells.verts,face,testp))
-#endif                
-                        {   
-                            inside_flag=!inside_flag;
-                            if ( line_flag ) break; /*Assumes convex cells*/
-
-                            /* note that one edge has been hit by the ray's line */
-                            line_flag = TRUE;
-                        }
-                    }
-
-                    if(inside_flag == 1)
-                    {
-                        pnp1[ii].cellID = index;
-                        pnp1[ii].cellV = cells.cVel[index];
-                        pnp1[ii].cellP = cells.cellP[index];
-                        pnp1[ii].cellRho = cells.cellRho[index];
 #ifdef DEBUG
                         // cout << "Moved to a neighbour cell." << endl;
 #endif
@@ -625,11 +552,11 @@ CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10
                     }
                 }
                 
-                cout << "Checking if particle has crossed a boundary." << endl;
+                // cout << "Checking if particle has crossed a boundary." << endl;
                 // If still not found, then the point could be across a boundary.
                 // Check if the ray from the point to the cell centre crosses a boundary face.
                 uint cross = 0;
-                for(auto index:ret_indexes)
+                for(auto const& index:ret_indexes)
                 {
                     rayp = cells.cCentre[index];            
                     for (size_t const& findex:cells.cFaces[index] ) 
@@ -646,9 +573,6 @@ CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10
                             if(ints)
                             {
                                 cross=!cross;
-#ifdef DEBUG
-                                cout << "Particle has crossed a boundary!" << endl;
-#endif
                                 if(cells.leftright[findex].second == -1)
                                 {
                                     cout << "Particle has crossed an inner boundary!" << endl;
@@ -671,18 +595,8 @@ CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10
                                 }
                                 else if(cells.leftright[findex].second == -2)
                                 {
-                                    #pragma omp critical
-                                    {
-                                    cout << "Particle has crossed an outer boundary!" << endl;
-                                    cout << "Particle will be deleted." << endl;
-                                    pnp1.erase(pnp1.begin()+ii);
-                                    pn.erase(pn.begin()+ii);
-                                    }
-                                    #pragma omp atomic
-                                        svar.totPts--;
-                                    #pragma omp atomic
-                                        end--;
-                                    
+                                    // cout << "Particle has crossed an outer boundary!" << endl; 
+                                    localDel.emplace_back(ii);         
                                 }
                             }  
                         }
@@ -698,9 +612,31 @@ CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10
                 
                  
             }  
-        }
+        } //end if particle is valid
         cellfound: ;
+    }   // End of particle loop
+
+    #pragma omp for schedule(static) ordered
+    for(int ii=0; ii<omp_get_num_threads(); ii++)
+    {
+        #pragma omp ordered
+        toDelete.insert(toDelete.end(),localDel.begin(),localDel.end());
     }
 
+
+    }/*End of parallel*/
+
+    if(toDelete.size()!=0)
+    {
+        std::sort(toDelete.begin(),toDelete.end());
+        for(vector<size_t>::reverse_iterator index = toDelete.rbegin(); 
+            index!=toDelete.rend(); ++index)
+        {
+            pnp1.erase(pnp1.begin()+*index);
+            pn.erase(pn.begin()+*index);
+        }
+        for(auto& back:svar.back)
+            back-=toDelete.size();
+    }
 }
 #endif

@@ -211,14 +211,14 @@ int getInt(ifstream& In, uint& lineno, const string& name)
 	return 0;
 }
 
-double getDouble(ifstream& In, uint& lineno, const string& name)
+real getDouble(ifstream& In, uint& lineno, const string& name)
 {
 	string line;
 	getline(In,line);
 	lineno++;
 	std::stringstream sstr;
 	sstr << line;
-	double d;
+	real d;
 	if(sstr >> d)
 	{
 #ifdef DEBUG
@@ -300,7 +300,7 @@ StateVecD getDVector(ifstream& In, uint& lineno, const string& name)
 	sline >> x(0); sline >> x(1);
 
 #if SIMDIM == 2
-	double temp;
+	real temp;
 	if(sline >> temp)
 	{
 		cout << "\tWARNING: 3D Input provided for a 2D Simulation." << endl;
@@ -345,7 +345,7 @@ Eigen::Vector2d getvector(ifstream& In, uint& lineno, const string& name)
 	return x;
 }
 
-void GetAero(AERO& avar, const FLUID& fvar, const ldouble rad)
+void GetAero(AERO& avar, const FLUID& fvar, const real rad)
 {
 	#if SIMDIM == 3
 		avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
@@ -402,7 +402,8 @@ RotMat GetRotationMat(StateVecD& angles)
 void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 {
 	uint justPost = 0;
-	double Hfac = 0;
+	real Hfac = 0;
+	StateVecD angle;
 	if (argc > 3) 
 	{	/*Check number of input arguments*/
 		cout << "\tWARNING: only two input arguments accepted,\n";
@@ -477,6 +478,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	  		else if(svar.Bcase > 1 && svar.Bcase < 8)
 	  		{	
 	  			StateVecD angles = getDVector(in, lineno, "Starting angle");
+	  			angle = angles;
 	  			angles = angles *M_PI/180;
 	  			svar.Rotate = GetRotationMat(angles);
 	  			svar.Transp = svar.Rotate.transpose();
@@ -589,16 +591,16 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
 
 		/*Pipe Pressure calc*/
-		ldouble rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
+		real rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
 
 		/*Defining pstep then finding dx*/
 		// fvar.Simmass = fvar.rho0*pow(svar.Pstep,SIMDIM);
-		// svar.dx = pow(fvar.Simmass/rho, 1.0/double(SIMDIM));
+		// svar.dx = pow(fvar.Simmass/rho, 1.0/real(SIMDIM));
 		
 
 		// Defining dx to fit the pipe, then find rest spacing
 		uint ndiam = ceil(abs(svar.Jet(0)/svar.Pstep));
-		svar.dx = 0.999*svar.Jet(0)/ldouble(ndiam);	
+		svar.dx = 0.999*svar.Jet(0)/real(ndiam);	
 
 	 	svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/3.0);
 
@@ -616,7 +618,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
 		svar.Bclosed = 0; 		/*Boundary begins open*/
 		svar.psnPts = 0; 		/*Start with no pitson points*/
-
+	  	svar.delNum = 0;
 
 #if SIMDIM == 2
 				fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
@@ -630,7 +632,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 #ifdef DEBUG
 		dbout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
 		dbout << "Pipe rho: " << rho << endl;
-		// dbout << "Number of fluid particles along diameter: " << ndiam << endl;
+		dbout << "Number of fluid particles along diameter: " << ndiam << endl;
 		dbout << "Pipe step (dx): " << svar.dx << endl;
 		dbout << "Particle mass: " << fvar.Simmass << endl;
 		dbout << "Freestream initial spacing: " << svar.Pstep << endl;
@@ -638,14 +640,52 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		dbout << "Gas Dynamic pressure: " << fvar.gasDynamic << endl << endl;
 #endif
 
-		cout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
-		cout << "Pipe rho: " << rho << endl;
-		// dbout << "Number of fluid particles along diameter: " << ndiam << endl;
+		cout << "****** SIMULATION SETTINGS *******" << endl;
+		cout << "Tait gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
+		cout << "Newmark-Beta parameters: " << svar.beta << ", " << svar.gamma << endl;
+		cout << "Boundary case: " << svar.Bcase << endl;
+		cout << "Aerodynamic case:" << avar.acase << endl;
+		cout << "Speed of sound: " << fvar.Cs << endl;
+		cout << endl;
+		cout << "****** PIPE SETTINGS *******" << endl;
+		cout << "Pipe density: " << rho << endl;
 		cout << "Pipe step (dx): " << svar.dx << endl;
+		cout << "Pipe diameter: " << svar.Jet(0) << endl;
+		cout << "Number of fluid particles along diameter: " << ndiam << endl;
+		cout << "Pipe start position: " << svar.Start(0) << "  " << svar.Start(1);
+		#if SIMDIM == 3
+		cout << "  " << svar.Start(2);
+		#endif
+		cout << endl;
+		cout << "Pipe start rotation: " << angle(0) << "  " << angle(1);
+		#if SIMDIM == 3
+		cout << "  " << angle(2);
+		#endif
+		cout << endl;
+		cout << "Jet velocity: " << avar.vJet << endl;
+
+		cout << endl;		
+		cout << "****** RESTING FUEL SETTINGS *******" << endl;
+		cout << "Particle spacing: " << svar.Pstep << endl;
+		cout << "Support radius: " << fvar.H << endl;
 		cout << "Particle mass: " << fvar.Simmass << endl;
-		cout << "Freestream initial spacing: " << svar.Pstep << endl;
-		cout << "Support Radius: " << fvar.H << endl;
-		cout << "Gas Dynamic pressure: " << fvar.gasDynamic << endl << endl;
+		cout << "Liquid viscosity: " << fvar.mu << endl;
+		cout << "Resting density: " << fvar.rho0 << endl;
+		
+		cout << endl;
+		cout << "****** FREESTREAM SETTINGS ******" << endl;
+		if(svar.Bcase != 6)
+			cout << "Gas Velocity: " << avar.vInf << endl;
+
+		if(svar.Bcase == 6)
+		{
+			cout << "Reference velocity: " << fvar.gasVel << endl;
+			cout << "Reference pressure: " << fvar.gasPress << endl;
+			cout << "Reference temperature: " << fvar.T << endl;
+		}
+		cout << "Gas density: " << fvar.rhog << endl;
+		cout << "Gas viscosity: " << fvar.mug << endl;
+		cout << "Gas dynamic pressure: " << fvar.gasDynamic << endl << endl;
 
 		#if SIMDIM == 3
 			if(svar.Bcase == 4)

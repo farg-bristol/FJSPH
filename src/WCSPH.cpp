@@ -39,6 +39,9 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 	for(size_t ii = 0; ii < start; ++ii)
 		neighb.emplace_back();
 
+
+
+
 	/*Check if a particle is running low on neighbours, and add ficticious particles*/
 	vector<vector<Part>> air;
 	#pragma omp parallel shared(svar, pnp1, outlist)
@@ -49,7 +52,7 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 		for (size_t ii = start; ii < end; ++ii)
 		{
 			std::vector<Part> temp;
-			if(svar.ghost == 1 && pnp1[ii].b == 2 && outlist[ii].size() < avar.nfull &&
+			if(svar.ghost == 1 && pnp1[ii].b == FREE && outlist[ii].size() < avar.nfull &&
 				outlist[ii].size() > 0.4*avar.nfull)
 				temp = PoissonSample::generatePoissonPoints(svar,fvar,avar,ii,pnp1,outlist);
 
@@ -89,16 +92,16 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 	
 	vector<StateVecD> res(svar.totPts,StateVecD::Zero());
 	vector<StateVecD> Af(end,StateVecD::Zero());
-	vector<ldouble> Rrho(svar.totPts,0.0);
+	vector<real> Rrho(svar.totPts,0.0);
 	Forces(svar,fvar,avar,pnp1,neighb,outlist,res,Rrho,Af); /*Guess force at time n+1*/
 
 	/*Find maximum safe timestep*/
 	vector<StateVecD>::iterator maxfi = std::max_element(res.begin(),res.end(),
 		[](StateVecD p1, StateVecD p2){return p1.norm() < p2.norm();});
-	ldouble maxf = maxfi->norm();
-	ldouble dtf = sqrt(fvar.H/maxf);
-	ldouble dtcv = fvar.H/(fvar.Cs+svar.maxmu);
-	const ldouble dt = 0.3*std::min(dtf,dtcv);
+	real maxf = maxfi->norm();
+	real dtf = sqrt(fvar.H/maxf);
+	real dtcv = fvar.H/(fvar.Cs+svar.maxmu);
+	const real dt = 0.3*std::min(dtf,dtcv);
 
 	#pragma omp parallel for shared(res, Rrho)
 	for(size_t ii = 0; ii < end; ++ii)
@@ -109,7 +112,7 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 		xih[ii] = pnp1[ii].xi + dt*pnp1[ii].v;
 	}
 #if DEBUG 
-	ldouble errsum = 0.0;
+	real errsum = 0.0;
 
 	for (size_t ii = start; ii < end; ++ii)
 	{
@@ -117,7 +120,7 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 		errsum += r.squaredNorm();
 	}
 
-	ldouble error=log10(sqrt(errsum/(double(svar.totPts))));
+	real error=log10(sqrt(errsum/(real(svar.totPts))));
 
 	
 		dbout << "Exiting first step. Error: " << error << endl;
@@ -153,6 +156,53 @@ void Find_MinMax(SIM& svar, const State& pnp1)
 		}	
 }
 
+uint Check_Pipe(Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& testp)
+{
+    StateVecD rayp;
+#if SIMDIM == 3    
+    rayp = testp;
+    rayp(0) += 1e+10;	    
+#endif
+	const size_t num_results = 20;
+    vector<size_t> ret_indexes(num_results);
+    vector<real> out_dists_sqr(num_results);
+
+    nanoflann::KNNResultSet<real> resultSet(num_results);
+    resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
+    
+    CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
+	
+	uint inside_flag=0;
+    for(auto index:ret_indexes)
+    {   
+        inside_flag = 0;
+        uint line_flag = 0;
+
+        for (uint const& findex:cells.cFaces[index] ) 
+        {
+            const vector<size_t>& face = cells.faces[findex];
+
+#if SIMDIM == 3            
+            if(Crossings3D(cells.verts,face,testp,rayp))
+#else
+            if(Crossings2D(cells.verts,face,testp))
+#endif                
+            {   
+                inside_flag=!inside_flag;
+                if ( line_flag ) break; //Convex assumption
+
+                //  note that one edge has been hit by the ray's line 
+                line_flag = TRUE;
+            }
+        }
+
+        if(inside_flag == TRUE)
+        	break;
+	}
+
+	return inside_flag;
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -161,10 +211,10 @@ int main(int argc, char *argv[])
 	Eigen::initParallel();
 	// omp_set_num_threads(NTHREADS);
 
-    double duration;
-    double error = 0;
+    real duration;
+    real error = 0;
     cout.width(13);
-    cout << std::scientific << std::left;
+    cout << std::scientific << std::left << std::setprecision(2);
 	
 	write_header();
     
@@ -193,6 +243,7 @@ int main(int argc, char *argv[])
 		#endif
 	}	
 
+	cout << std::setprecision(5);
 	cout << "Adjusted Start Coordinates: " << endl;
 	cout << svar.Start(0) << "  " << svar.Start(1);
 #if SIMDIM == 3
@@ -209,6 +260,40 @@ int main(int argc, char *argv[])
 	{
 		cout << "Building cell neighbours..." << endl;
 		FindCellNeighbours(CELL_INDEX, cells.cCentre, cells.cNeighb);
+
+		// Check if the pipe is inside the mesh
+		real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
+		real stepb = (svar.Pstep*svar.Bstep);
+		real r = 0.5*holeD;
+		#if SIMDIM == 3
+    	real dtheta = atan((stepb)/(r));
+		for(real theta = 0; theta < 2*M_PI; theta += dtheta)
+		{
+			StateVecD xi(r*sin(theta), 0.0, r*cos(theta));
+			/*Apply Rotation...*/
+			xi = svar.Rotate*xi;
+			xi += svar.Start;
+		    if(!Check_Pipe(CELL_INDEX, cells, xi))
+		    {
+		    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
+		    	exit(-1);
+		    }
+
+    	}
+    	#else
+    	for(real x = -r; x <= r; x+=stepb)
+    	{
+    		StateVecD xi(x,0.0);
+    		xi = svar.Rotate*xi;
+			xi += svar.Start;
+		    if(!Check_Pipe(CELL_INDEX, cells, xi))
+		    {
+		    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
+		    	exit(-1);
+		    }
+    	}
+    	#endif
+
 	}
 
 
@@ -249,12 +334,12 @@ int main(int argc, char *argv[])
 	
 
 	#if SIMDIM == 3
-		// avar.nfull = (2.0/3.0) * double(nfull->size());
+		// avar.nfull = (2.0/3.0) * real(nfull->size());
 		avar.nfull = 1.713333e+02;
 		svar.nfull = 257;
 	#endif
 	#if SIMDIM == 2
-		// avar.nfull = (2.0/3.0) * double(nfull->size());
+		// avar.nfull = (2.0/3.0) * real(nfull->size());
 		// avar.nfull = 32.67;
 		avar.nfull = 37;
 		svar.nfull = 48;
@@ -423,12 +508,12 @@ int main(int argc, char *argv[])
 	///************************* MAIN LOOP ********************/
 	svar.frame = 0;
 #ifdef DEBUG
-	const ldouble a = 1 - svar.gamma;
-	const ldouble b = svar.gamma;
-	const ldouble c = 0.5*(1-2*svar.beta);
-	const ldouble d = svar.beta;
-	const ldouble B = fvar.B;
-	const ldouble gam = fvar.gam;
+	const real a = 1 - svar.gamma;
+	const real b = svar.gamma;
+	const real c = 0.5*(1-2*svar.beta);
+	const real d = svar.beta;
+	const real B = fvar.B;
+	const real gam = fvar.gam;
 	dbout << "Newmark Beta integration parameters" << endl;
 	dbout << "a: " << a << "  b: " << b << endl;
 	dbout << "c: " << c << "  d: " << d << endl;
@@ -438,7 +523,7 @@ int main(int argc, char *argv[])
 	for (uint frame = 1; frame<= svar.Nframe; ++frame)
 	{
 		int stepits=0;
-		double stept=0.0;
+		real stept=0.0;
 		while (stept<svar.framet)
 		{
 		    error = Newmark_Beta(NP1_INDEX,CELL_INDEX,svar,fvar,avar,cells,pn,pnp1,airP,outlist);
@@ -482,6 +567,8 @@ int main(int argc, char *argv[])
 			{	/*Output to console every 20 or so steps*/
 			  	cout << "Frame: " << frame << "  Sim Time: " << svar.t-svar.dt << "  Compute Time: "
 			  	<< duration <<"  Error: " << error << endl;
+			  	cout << "Boundary particles:  " << svar.bndPts << " Sim particles: " << svar.totPts-svar.bndPts
+			  	<< " Deleted particles: " << svar.delNum << endl;
 			}
 		}
 

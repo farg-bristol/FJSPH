@@ -17,9 +17,9 @@
 #include "Aero.h"
 #include "Add.h"
 
-ldouble GetNumpartdens(const SIM &svar, const FLUID &fvar, const State &pnp1, const outl &outlist)
+real GetNumpartdens(const SIM &svar, const FLUID &fvar, const State &pnp1, const outl &outlist)
 {
-	ldouble npd = 0.0;
+	real npd = 0.0;
 	const uint end = svar.totPts;
 	#pragma omp parallel for reduction(+:npd) shared(outlist)
 	for (uint ii=0; ii< end; ++ii)
@@ -28,11 +28,11 @@ ldouble GetNumpartdens(const SIM &svar, const FLUID &fvar, const State &pnp1, co
 		for (auto jj:outlist[ii])
 		{ /* Surface Tension calcs */
 			StateVecD pj = pnp1[jj].xi;
-			ldouble r = (pj-pi).norm();
+			real r = (pj-pi).norm();
 			npd += W2Kernel(r,fvar.H,fvar.correc);
 		}
 	}
-	return npd/ldouble(svar.totPts);
+	return npd/real(svar.totPts);
 }
 
 /* Colour field gradient in Hu et al (2014) method, note the bottom variable to account for no air*/
@@ -47,13 +47,13 @@ std::vector<StateVecD> GetColourGrad(const SIM &svar, const FLUID &fvar, const S
 	{
 		StateVecD pi = pnp1[ii].xi;
 		// StateVecD top = StateVecD::Zero();
-		ldouble bottom = 0.0;
+		real bottom = 0.0;
 		// pnp1[ii].normal = StateVecD::Zero();
 		
 		for(auto jj:outlist[ii])
 		{	/*Find the denominator to correct absence of second phase*/
 			Part pj = pnp1[jj];
-			ldouble r = (pj.xi-pi).norm();
+			real r = (pj.xi-pi).norm();
 			bottom +=(pj.m/pj.rho)*W2Kernel(r,fvar.H,fvar.correc);
 
 		}
@@ -62,7 +62,7 @@ std::vector<StateVecD> GetColourGrad(const SIM &svar, const FLUID &fvar, const S
 		{	/*Find the numerator and sum*/
 			Part pj = pnp1[jj];
 			StateVecD Rij = pj.xi-pi;
-			ldouble r = Rij.norm();
+			real r = Rij.norm();
 			cgrad[ii] += (pj.m/pj.rho)*W2GradK(Rij,r,fvar.H,fvar.correc);
 			// pnp1[ii].normal += Rij;
 		}
@@ -75,21 +75,21 @@ std::vector<StateVecD> GetColourGrad(const SIM &svar, const FLUID &fvar, const S
 }
 
 StateVecD Base(const FLUID &fvar, const Part &pi, const Part &pj, 
-	const StateVecD &Rij, const StateVecD &Vij, const ldouble r, 
-	const StateVecD &Grad, std::vector<ldouble> &mu)
+	const StateVecD &Rij, const StateVecD &Vij, const real r, 
+	const StateVecD &Grad, std::vector<real> &mu)
 {
 	/*Pressure and artificial viscosity - Monaghan (1994) p.400*/
-	ldouble pifac;
-	const ldouble vdotr = Vij.dot(Rij);
-	const ldouble muij= fvar.H*vdotr/(r*r+0.01*fvar.HSQ);
+	real pifac;
+	const real vdotr = Vij.dot(Rij);
+	const real muij= fvar.H*vdotr/(r*r+0.01*fvar.HSQ);
 	if (vdotr > 0.0 || pj.b == GHOST) 
 	{
 		pifac = 0.0;
 	}
 	else
 	{
-		ldouble rhoij = 0.5*(pi.rho+pj.rho);
-		ldouble cbar= 0.5*(sqrt((fvar.B*fvar.gam)/pi.rho)+sqrt((fvar.B*fvar.gam)/pj.rho));
+		real rhoij = 0.5*(pi.rho+pj.rho);
+		real cbar= 0.5*(sqrt((fvar.B*fvar.gam)/pi.rho)+sqrt((fvar.B*fvar.gam)/pj.rho));
 		pifac = fvar.alpha*cbar*muij/rhoij;
 	}
 	
@@ -99,29 +99,29 @@ StateVecD Base(const FLUID &fvar, const Part &pi, const Part &pj,
 
 /*Laminar Viscosity - Morris (2003)*/
 StateVecD Viscosity(const FLUID &fvar, const Part &pi, const Part &pj, 
-	const StateVecD &Rij, const StateVecD &Vij, const ldouble &r, const StateVecD &Grad)
+	const StateVecD &Rij, const StateVecD &Vij, const real &r, const StateVecD &Grad)
 {
 	return -Vij*((fvar.mu)/(pi.rho*pj.rho))*(1.0/(r*r+0.01*fvar.HSQ))*Rij.dot(Grad);
 }
 
 /*Surface Tension - Nair & Poeschel (2017)*/
 StateVecD SurfaceTens(const FLUID &fvar, const Part &pj, const StateVecD &Rij, 
-					  const ldouble &r, const ldouble &npd)
+					  const real &r, const real &npd)
 {
 	/*Surface tension factor*/
-	const static ldouble lam = (6.0/81.0*pow((2.0*fvar.H),3.0)/pow(M_PI,4.0)*
+	const static real lam = (6.0/81.0*pow((2.0*fvar.H),3.0)/pow(M_PI,4.0)*
 							(9.0/4.0*pow(M_PI,3.0)-6.0*M_PI-4.0));
 
-	ldouble fac=1.0; /*Boundary Correction Factor*/
+	real fac=1.0; /*Boundary Correction Factor*/
 	if(pj.b==BOUND) fac=(1+0.5*cos(M_PI*(fvar.contangb/180))); 
 
 	/*npd = numerical particle density (see code above) */
-	ldouble sij = 0.5*pow(npd,-2.0)*(fvar.sig/lam)*fac;
+	real sij = 0.5*pow(npd,-2.0)*(fvar.sig/lam)*fac;
 	return -(Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*fvar.H));
 }
 
 StateVecD HuST(const FLUID &fvar, const Part &pi, const Part &pj, 
-			  const StateVecD &Rij, const ldouble &r, const StateVecD &cgradi, const StateVecD &cgradj)
+			  const StateVecD &Rij, const real &r, const StateVecD &cgradi, const StateVecD &cgradj)
 {
 
 	StateVecD Fst;
@@ -135,7 +135,7 @@ StateVecD HuST(const FLUID &fvar, const Part &pi, const Part &pj,
 ///**************** RESID calculation **************
 void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*, State& airP*/,
 	 const vector<vector<Part>>& neighb, const outl& outlist,
-	 vector<StateVecD>& RV, vector<ldouble>& Rrho, std::vector<StateVecD> Af)
+	 vector<StateVecD>& RV, vector<real>& Rrho, std::vector<StateVecD> Af)
 {
 	svar.maxmu=0; 					    /* CFL Parameter */
 	const size_t start = svar.bndPts;
@@ -150,7 +150,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 	// const uint piston = svar.psnPts;
 
 	/********* LOOP 1 - all points: Calculate numpartdens ************/
-	// ldouble numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
+	// real numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
 	// std::vector<StateVecD> cgrad(svar.totPts,StateVecD::Zero());
 	// cgrad = GetColourGrad(svar,fvar,pnp1,outlist);
 
@@ -169,7 +169,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 		// 		Part pj = pnp1[j];
 		// 		StateVecD Rij = pj.xi-pi.xi;
 		// 		StateVecD Vij = pj.v-pi.v;
-		// 		ldouble r = Rij.norm();
+		// 		real r = Rij.norm();
 		// 		StateVecD Grad = W2GradK(Rij, r,fvar.H,fvar.correc);
 		// 		Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
 		// 	}
@@ -182,10 +182,10 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 		{
 			const Part pi = pnp1[ii];
 			const uint size = outlist[ii].size();
-			// pnp1[ii].theta = double(size);
+			// pnp1[ii].theta = real(size);
 			// pnp1[ii].theta = 0.0;
 
-			std::vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
+			std::vector<real> mu;  /*Vector to find largest mu value for CFL stability*/
 			mu.reserve(size+1);			
 			if (ii > neighb.size())
 			{
@@ -201,7 +201,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 
 				const StateVecD Rij = pj.xi-pi.xi;
 				const StateVecD Vij = pj.v-pi.v;
-				const ldouble r = Rij.norm();
+				const real r = Rij.norm();
 				const StateVecD Grad = W2GradK(Rij, r,fvar.H, fvar.correc);
 
 				StateVecD contrib = Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
@@ -220,10 +220,10 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 		{
 			Part pi = pnp1[ii];
 			size_t size = outlist[ii].size();
-			// pnp1[ii].theta = double(size);
+			// pnp1[ii].theta = real(size);
 			// pnp1[ii].theta = 0.0;
 
-			vector<double> mu;  /*Vector to find largest mu value for CFL stability*/
+			vector<real> mu;  /*Vector to find largest mu value for CFL stability*/
 			mu.reserve(size+1);
 			mu.emplace_back(0);	/*Avoid dereference of empty vector*/		
 
@@ -241,7 +241,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 
 				const StateVecD Rij = pj.xi-pi.xi;
 				const StateVecD Vij = pj.v-pi.v;
-				const ldouble r = Rij.norm();
+				const real r = Rij.norm();
 				const StateVecD Grad = W2GradK(Rij, r,fvar.H, fvar.correc);
 
 				/*Momentum contribution - Monaghan (1994)*/
@@ -272,7 +272,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 			
 			RV[ii] += g;
 			//CFL f_cv Calc
-			double it = *max_element(mu.begin(),mu.end());
+			real it = *max_element(mu.begin(),mu.end());
 			if(it > svar.maxmu)
 				svar.maxmu = it;
 		} /*End of sim parts*/
@@ -350,7 +350,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 // 			Beta = (1)*one;
 
 // 		//Find corrected kernel
-// 		ldouble rho = 0.0;
+// 		real rho = 0.0;
 // 		for (uint j=0; j< outlist[i].size(); ++j)
 // 		{
 // 			StateVecD Rij = pi.xi-pnp1[outlist[i][j]].xi;

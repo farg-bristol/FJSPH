@@ -13,7 +13,7 @@
 int ParticleCount(SIM &svar)
 {
 	int partCount = 0;
-	ldouble step = svar.Pstep*svar.Bstep;
+	real step = svar.Pstep*svar.Bstep;
 	int Ny = ceil(svar.Box(1)/step);
 	int Nx = ceil(svar.Box(0)/step);
 
@@ -36,7 +36,7 @@ int ParticleCount(SIM &svar)
 		{
 			#if SIMDIM == 3
 			{
-				ldouble holeD = svar.Jet(0)+4*svar.Pstep; /*Diameter of hole (or width)*/
+				real holeD = svar.Jet(0)+4*svar.Pstep; /*Diameter of hole (or width)*/
 
 	            /*Find the points on the side of the pipe (Assume a circle)*/
 	            float dtheta = atan((step)/(0.5*holeD));
@@ -45,15 +45,15 @@ int ParticleCount(SIM &svar)
 
 				/*Simulation Points*/
 				int simCount = 0;
-				ldouble jetR = 0.5*(svar.Jet(0));
+				real jetR = 0.5*(svar.Jet(0));
 				
 				/*Do the centerline of points*/
-				for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
+				for (real z = -jetR; z <= jetR; z+= svar.dx)
 					simCount++;
 
-				for (ldouble x = svar.dx; x < jetR ; x+=svar.dx)
+				for (real x = svar.dx; x < jetR ; x+=svar.dx)
 				{ /*Do the either side of the centerline*/
-					for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
+					for (real z = -jetR; z <= jetR; z+= svar.dx)
 					{	/*If the point is inside the hole diameter, add it*/
 						if(((x*x)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
 			    			simCount += 2;
@@ -73,8 +73,8 @@ int ParticleCount(SIM &svar)
 
 				/*Simulation Points*/
 				int simCount = 0;
-				ldouble jetR = 2*(0.5*(svar.Jet(0)));
-				for (ldouble x = -jetR; x <= jetR; x+= svar.dx)
+				real jetR = 2*(0.5*(svar.Jet(0)));
+				for (real x = -jetR; x <= jetR; x+= svar.dx)
 					simCount++;
 
 				/*Need to add the pn already present*/
@@ -88,7 +88,7 @@ int ParticleCount(SIM &svar)
 		{	
 			#if SIMDIM == 3
 			{
-				ldouble holeD = svar.Jet(0)+4*svar.Pstep; /*Diameter of hole (or width)*/
+				real holeD = svar.Jet(0)+4*svar.Pstep; /*Diameter of hole (or width)*/
 
 	            /*Find the points on the side of the pipe (Assume a circle)*/
 	            float dtheta = atan((step)/(0.5*holeD));
@@ -97,15 +97,15 @@ int ParticleCount(SIM &svar)
 
 				/*Simulation Points*/
 				int simCount = 0;
-				ldouble jetR = 0.5*(svar.Jet(0));
+				real jetR = 0.5*(svar.Jet(0));
 				
 				/*Do the centerline of points*/
-				for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
+				for (real z = -jetR; z <= jetR; z+= svar.dx)
 					simCount++;
 
-				for (ldouble x = svar.dx; x < jetR ; x+=svar.dx)
+				for (real x = svar.dx; x < jetR ; x+=svar.dx)
 				{ /*Do the either side of the centerline*/
-					for (ldouble z = -jetR; z <= jetR; z+= svar.dx)
+					for (real z = -jetR; z <= jetR; z+= svar.dx)
 					{	/*If the point is inside the hole diameter, add it*/
 						if(((x*x)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
 			    			simCount += 2;
@@ -125,8 +125,8 @@ int ParticleCount(SIM &svar)
 
 				/*Simulation Points*/
 				int simCount = 0;
-				ldouble jetR = 0.5*(svar.Jet(0));
-				for (ldouble x = -jetR; x <= jetR; x+= svar.dx)
+				real jetR = 0.5*(svar.Jet(0));
+				for (real x = -jetR; x <= jetR; x+= svar.dx)
 					simCount++;
 
 				/*Need to add the pn already present*/
@@ -140,18 +140,18 @@ int ParticleCount(SIM &svar)
 		{	
 			#if SIMDIM == 3
 				uint simCount = 0;
-				ldouble radius = 0.5*svar.Start(0);
-				for (ldouble y = -radius; y <= radius; y+=svar.dx)
+				real radius = 0.5*svar.Start(0);
+				for (real y = -radius; y <= radius; y+=svar.dx)
 				{	
-					ldouble xradius = sqrt(radius*radius - y*y);
-					for (ldouble z = -xradius; z <= xradius; z+= svar.dx)
+					real xradius = sqrt(radius*radius - y*y);
+					for (real z = -xradius; z <= xradius; z+= svar.dx)
 					{ /*Do the centerline of points*/
 						++simCount;
 					}
 
-					for (ldouble x = svar.dx; x <= xradius ; x+=svar.dx)
+					for (real x = svar.dx; x <= xradius ; x+=svar.dx)
 					{ /*Do the either side of the centerline*/
-						for (ldouble z = -xradius; z <= xradius; z+= svar.dx)
+						for (real z = -xradius; z <= xradius; z+= svar.dx)
 						{
 							if(((x*x) + (z*z) + (y*y)) <= (radius*radius))
 				    		{   /*If the point is inside the hole diameter, add it*/
@@ -164,13 +164,13 @@ int ParticleCount(SIM &svar)
 				partCount = simCount;
 			#else
 				uint simCount = 0;
-				ldouble radius = 0.5*svar.Start(0);
-				for (ldouble y = -radius; y <= radius; y+=svar.dx)
+				real radius = 0.5*svar.Start(0);
+				for (real y = -radius; y <= radius; y+=svar.dx)
 				{	
 					++simCount;
 					
 
-					for (ldouble x = svar.dx; x <= radius ; x+=svar.dx)
+					for (real x = svar.dx; x <= radius ; x+=svar.dx)
 					{ /*Do the either side of the centerline*/
 							if(((x*x) + (y*y)) <= (radius*radius))
 				    		{   /*If the point is inside the hole diameter, add it*/
@@ -187,9 +187,9 @@ int ParticleCount(SIM &svar)
 
 			#if SIMDIM == 2
 				/*Create the reservoir tank*/
-				ldouble tankW = svar.Start(0);
-				ldouble tankD = svar.Start(1);
-				ldouble stepb = (svar.Pstep*svar.Bstep);
+				real tankW = svar.Start(0);
+				real tankD = svar.Start(1);
+				real stepb = (svar.Pstep*svar.Bstep);
 
 				uint pisCnt = ceil((tankW + 8*svar.dx-4*svar.Pstep)/stepb);
 				
@@ -197,8 +197,8 @@ int ParticleCount(SIM &svar)
 				uint wall = ceil((tankD+4*svar.dx+6*svar.Pstep)/stepb);
 				
 				/*Create the tapering section*/
-				ldouble theta = atan(svar.Jet(1)/(0.5*tankW-0.5*svar.Jet(0)));
-				ldouble stepy = stepb*sin(theta);
+				real theta = atan(svar.Jet(1)/(0.5*tankW-0.5*svar.Jet(0)));
+				real stepy = stepb*sin(theta);
 				uint taper = ceil((svar.Jet(1))/stepy);
 
 				/*Create the exit bit.*/
@@ -227,14 +227,14 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 	//Structure input initialiser
 	//Particle(StateVecD x, StateVecD v, StateVecD vh, StateVecD f, float rho, float Rrho, bool bound) :
 	StateVecD v = StateVecD::Zero();   
-	// ldouble rho=fvar.rho0;
-	// ldouble press = fvar.B*(pow(rho/fvar.rho0,fvar.gam)-1);  
+	// real rho=fvar.rho0;
+	// real press = fvar.B*(pow(rho/fvar.rho0,fvar.gam)-1);  
 	
-	ldouble press = fvar.pPress;
-	ldouble rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
+	real press = fvar.pPress;
+	real rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
 
 /************** Create the boundary pn  *****************/ 	 
-	ldouble step = svar.Pstep*svar.Bstep;
+	real step = svar.Pstep*svar.Bstep;
 	int Ny = ceil((svar.Box(1)+4*svar.Pstep)/step);	
 	int Nx = ceil((svar.Box(0)+4*svar.Pstep)/step);
 	#if (SIMDIM == 3)
@@ -320,16 +320,16 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 	else if (svar.Bcase == 2)
 	{	/*Converging nozzle for jet spray*/
 		#if SIMDIM == 3
-			ldouble holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
-			ldouble stepb = (svar.Pstep*svar.Bstep);
+			real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
+			real stepb = (svar.Pstep*svar.Bstep);
 			
 
 			/*Create a bit of the pipe downward.*/
-			double r = 0.5*holeD;
-	    	double dtheta = atan((stepb)/(r));
-			for (ldouble y = 0; y > -svar.Jet(1); y-=stepb)			
+			real r = 0.5*holeD;
+	    	real dtheta = atan((stepb)/(r));
+			for (real y = 0; y > -svar.Jet(1); y-=stepb)			
 			{	
-				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(r*sin(theta), y, r*cos(theta));
 					/*Apply Rotation...*/
@@ -341,10 +341,10 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}
 
 			/*Interpolate between the big and small diameters*/
-			for (ldouble y = -svar.Jet(1)*1; y > -svar.Jet(1)*2; y-=stepb)			
+			for (real y = -svar.Jet(1)*1; y > -svar.Jet(1)*2; y-=stepb)			
 			{	
-				ldouble x = holeD + (y-2*svar.Jet(1))*(r-holeD)/(-svar.Jet(1));
-				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				real x = holeD + (y-2*svar.Jet(1))*(r-holeD)/(-svar.Jet(1));
+				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(x*sin(theta), y, x*cos(theta));
 					/*Apply Rotation...*/
@@ -358,9 +358,9 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			/*Create the wide bit of the nozzle*/
 			r = holeD;
 	    	dtheta = atan((stepb)/(r));
-			for (ldouble y = -svar.Jet(1)*2; y >= -svar.Jet(1)*3; y-=stepb)			
+			for (real y = -svar.Jet(1)*2; y >= -svar.Jet(1)*3; y-=stepb)			
 			{	
-				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(r*sin(theta), y, r*cos(theta));
 					/*Apply Rotation...*/
@@ -373,12 +373,12 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 
 		#else
 
-			ldouble stepb = (svar.Pstep*svar.Bstep);
-			ldouble jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Diameter of hole (or width)*/
-			ldouble resR = jetR*2.0;
+			real stepb = (svar.Pstep*svar.Bstep);
+			real jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Diameter of hole (or width)*/
+			real resR = jetR*2.0;
 
 			/*Create the wide bit of the nozzle*/
-			for (ldouble y = -svar.Jet(1)*2; y >= -svar.Jet(1)*3; y-=stepb)
+			for (real y = -svar.Jet(1)*2; y >= -svar.Jet(1)*3; y-=stepb)
 			{
 				StateVecD xi(-resR,y);
 				xi = svar.Rotate*xi;
@@ -388,10 +388,10 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}	
 
 			/*Create the tapering section*/
-			for (ldouble y = -svar.Jet(1); y > -svar.Jet(1)*2; y-=stepb)
+			for (real y = -svar.Jet(1); y > -svar.Jet(1)*2; y-=stepb)
 			{
 				/*Interpolate between resR and jetR*/
-				ldouble x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
+				real x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
 				StateVecD xi(-x,y);
 				xi = svar.Rotate*xi;
 				xi += svar.Start;
@@ -400,7 +400,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}
 
 			/*Create the exit bit.*/
-			for (ldouble y = 0; y > -svar.Jet(1); y-=stepb)
+			for (real y = 0; y > -svar.Jet(1); y-=stepb)
 			{
 				StateVecD xi(-jetR,y);
 				xi = svar.Rotate*xi;
@@ -410,7 +410,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}
 
 			/*Create the wide bit of the nozzle*/
-			for (ldouble y = -svar.Jet(1)*2; y >= -svar.Jet(1)*3; y-=stepb)
+			for (real y = -svar.Jet(1)*2; y >= -svar.Jet(1)*3; y-=stepb)
 			{
 				StateVecD xi(resR,y);
 				xi = svar.Rotate*xi;
@@ -420,10 +420,10 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}
 
 			/*Create the tapering section*/
-			for (ldouble y = -svar.Jet(1); y > -svar.Jet(1)*2; y-=stepb)
+			for (real y = -svar.Jet(1); y > -svar.Jet(1)*2; y-=stepb)
 			{
 				/*Interpolate between resR and jetR*/
-				ldouble x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
+				real x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
 				StateVecD xi(x,y);
 				xi = svar.Rotate*xi;
 				xi += svar.Start;
@@ -432,7 +432,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}
 
 			/*Create the exit bit.*/
-			for (ldouble y = 0; y > -svar.Jet(1); y-=stepb)
+			for (real y = 0; y > -svar.Jet(1); y-=stepb)
 			{
 				StateVecD xi(jetR,y);
 				xi = svar.Rotate*xi;
@@ -445,15 +445,15 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 	else if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
 	{	/*Jet in Crossflow*/
 		#if SIMDIM == 3
-			ldouble holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
-			ldouble stepb = (svar.Pstep*svar.Bstep);
+			real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
+			real stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
-			double r = 0.5*holeD;
-	    	double dtheta = atan((stepb)/(r));
-			for (ldouble y = 0; y >= -svar.Jet(1)-stepb; y-=stepb)			
+			real r = 0.5*holeD;
+	    	real dtheta = atan((stepb)/(r));
+			for (real y = 0; y >= -svar.Jet(1)-stepb; y-=stepb)			
 			{	
-				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(r*sin(theta), y, r*cos(theta));
 					/*Apply Rotation...*/
@@ -464,11 +464,11 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 				}	
 			}
 		#else
-			ldouble jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Radius of hole (or width)*/
-			ldouble stepb = (svar.Pstep*svar.Bstep);
+			real jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Radius of hole (or width)*/
+			real stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
-			for (ldouble y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)			{
+			for (real y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)			{
 				StateVecD xi(-jetR,y);
 				xi = svar.Rotate*xi;
 				xi += svar.Start;
@@ -476,7 +476,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 				pID++;
 			}
 
-			for (ldouble y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)
+			for (real y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)
 			{
 				StateVecD xi(jetR,y);
 				xi = svar.Rotate*xi;
@@ -490,19 +490,19 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 	{	
 		#if SIMDIM == 3
 			/*Piston driven flow*/
-			ldouble stepb = (svar.Pstep*svar.Bstep);
-			ldouble tankW = svar.Start(0)+8*svar.dx;
-			ldouble tankD = svar.Start(1);
+			real stepb = (svar.Pstep*svar.Bstep);
+			real tankW = svar.Start(0)+8*svar.dx;
+			real tankD = svar.Start(1);
 
-			ldouble jetR = 0.5*(svar.Jet(0)+8*svar.dx); /*Diameter of hole (or width)*/
-			ldouble resR = 0.5*tankW;
+			real jetR = 0.5*(svar.Jet(0)+8*svar.dx); /*Diameter of hole (or width)*/
+			real resR = 0.5*tankW;
 			v = (avar.vJet*pow(jetR,2))/(0.6*pow(resR,2));
 			
 
 			/*Create the piston*/
-			for (ldouble z = -resR; z <= resR; z+= svar.dx)
+			for (real z = -resR; z <= resR; z+= svar.dx)
 			{ /*Do the centerline of points*/
-				ldouble y = -(2*svar.Jet(1)+tankD+fvar.H);
+				real y = -(2*svar.Jet(1)+tankD+fvar.H);
 				StateVecD xi(0.0,y,z);
 				xi = svar.Rotate*xi;
 				xi += svar.Start;
@@ -510,13 +510,13 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 				++pID;
 			}
 
-			for (ldouble x = svar.dx; x < resR ; x+=svar.dx)
+			for (real x = svar.dx; x < resR ; x+=svar.dx)
 			{ /*Do the either side of the centerline*/
-				for (ldouble z = -resR; z <= resR; z+= svar.dx)
+				for (real z = -resR; z <= resR; z+= svar.dx)
 				{
 					if(((x*x)/(resR*resR) + (z*z)/(resR*resR)) <= 1.0 )
 		    		{   /*If the point is inside the hole diameter, add it*/
-		    			ldouble y = -(2*svar.Jet(1)+tankD+fvar.H);
+		    			real y = -(2*svar.Jet(1)+tankD+fvar.H);
 						StateVecD temp(x,y,z);
 						StateVecD xi = svar.Rotate*temp;
 						xi+= svar.Start;
@@ -536,10 +536,10 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 
 
 			/*Create the reservior*/
-	    	ldouble dtheta = atan((stepb)/(resR));
-			for (ldouble y = (-svar.Jet(1)*2-tankW); y <= -svar.Jet(1)*2; y+=stepb)			
+	    	real dtheta = atan((stepb)/(resR));
+			for (real y = (-svar.Jet(1)*2-tankW); y <= -svar.Jet(1)*2; y+=stepb)			
 			{	
-				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(resR*sin(theta), y, resR*cos(theta));
 					/*Apply Rotation...*/
@@ -551,11 +551,11 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}
 
 			/*Interpolate between the big and small diameters*/
-			for (ldouble y = -svar.Jet(1)*2; y < -svar.Jet(1)*1; y+=stepb)			
+			for (real y = -svar.Jet(1)*2; y < -svar.Jet(1)*1; y+=stepb)			
 			{	
-				ldouble x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
+				real x = resR + (y-2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
 				dtheta = atan((stepb)/(x));
-				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(x*sin(theta), y, x*cos(theta));
 					/*Apply Rotation...*/
@@ -568,9 +568,9 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 
 			/*Create the exit section.*/
 			dtheta = atan((stepb)/(jetR));
-			for (ldouble y = -svar.Jet(1); y < 0; y+=stepb)			
+			for (real y = -svar.Jet(1); y < 0; y+=stepb)			
 			{	
-				for(ldouble theta = 0; theta < 2*M_PI; theta += dtheta)
+				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(jetR*sin(theta), y, jetR*cos(theta));
 					/*Apply Rotation...*/
@@ -584,16 +584,16 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 
 		#if SIMDIM == 2
 			/*Piston driven flow*/
-			ldouble stepb = (svar.Pstep*svar.Bstep);
-			ldouble tankW = svar.Start(0)+8*svar.dx;
-			ldouble tankD = svar.Start(1)+4*svar.dx;
+			real stepb = (svar.Pstep*svar.Bstep);
+			real tankW = svar.Start(0)+8*svar.dx;
+			real tankD = svar.Start(1)+4*svar.dx;
 
-			ldouble jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Diameter of hole (or width)*/
-			ldouble resR = 0.5*tankW;
+			real jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Diameter of hole (or width)*/
+			real resR = 0.5*tankW;
 
 			v = (avar.vJet*pow(jetR,2))/(0.6*pow(resR,2));
 			/*Create the piston*/
-			for(ldouble x = -(resR-fvar.H); x < (resR -fvar.H); x+=stepb)
+			for(real x = -(resR-fvar.H); x < (resR -fvar.H); x+=stepb)
 			{
 				StateVecD xi(x,-(2*svar.Jet(1)+tankD+3*fvar.H));
 				xi = svar.Rotate*xi;
@@ -604,7 +604,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 
 			v=StateVecD::Zero();
 			/*Create the reservoir tank*/
-			for (ldouble y = -(svar.Jet(1)*2+tankD+3*fvar.H); y <= -svar.Jet(1)*2; y+=stepb)
+			for (real y = -(svar.Jet(1)*2+tankD+3*fvar.H); y <= -svar.Jet(1)*2; y+=stepb)
 			{
 				StateVecD xi(-resR,y);
 				xi = svar.Rotate*xi;
@@ -612,13 +612,13 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 				pID++;
 			}
 
-			ldouble theta = atan(svar.Jet(1)/(resR-jetR));
-			ldouble stepy = stepb*sin(theta);
+			real theta = atan(svar.Jet(1)/(resR-jetR));
+			real stepy = stepb*sin(theta);
 			/*Create the tapering section*/
-			for (ldouble y = -svar.Jet(1)*2; y < -svar.Jet(1); y+=stepy)
+			for (real y = -svar.Jet(1)*2; y < -svar.Jet(1); y+=stepy)
 			{
 				/*Interpolate between resR and jetR*/
-				ldouble x = resR - (y+2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
+				real x = resR - (y+2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
 				StateVecD xi(-x,y);
 				xi = svar.Rotate*xi;
 				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,BOUND,pID));
@@ -626,7 +626,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}
 
 			/*Create the exit bit.*/
-			for (ldouble y = -svar.Jet(1); y < 0; y+=stepb)
+			for (real y = -svar.Jet(1); y < 0; y+=stepb)
 			{
 				StateVecD xi(-jetR,y);
 				xi = svar.Rotate*xi;
@@ -635,7 +635,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}
 
 			/*Create the exit bit.*/
-			for (ldouble y = 0; y > -svar.Jet(1); y-=stepb)
+			for (real y = 0; y > -svar.Jet(1); y-=stepb)
 			{
 				StateVecD xi(jetR,y);
 				xi = svar.Rotate*xi;
@@ -644,10 +644,10 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}
 
 			/*Create the tapering section*/
-			for (ldouble y = -svar.Jet(1); y > -svar.Jet(1)*2; y-=stepy)
+			for (real y = -svar.Jet(1); y > -svar.Jet(1)*2; y-=stepy)
 			{
 				/*Interpolate between resR and jetR*/
-				ldouble x = resR - (y+2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
+				real x = resR - (y+2*svar.Jet(1))*(jetR-resR)/(-svar.Jet(1));
 				StateVecD xi(x,y);
 				xi = svar.Rotate*xi;
 				pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,BOUND,pID));
@@ -655,7 +655,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}
 
 			/*Create the other wall.*/
-			for (ldouble y = -svar.Jet(1)*2; y >= -(svar.Jet(1)*2+tankD+3*fvar.H); y-=stepb)
+			for (real y = -svar.Jet(1)*2; y >= -(svar.Jet(1)*2+tankD+3*fvar.H); y-=stepb)
 			{
 				StateVecD xi(resR,y);
 				xi = svar.Rotate*xi;
@@ -684,7 +684,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 		for (auto p: pn)
 			pnp1.emplace_back(p);
 
-		for (ldouble y = -svar.Jet[1]*2; y > -svar.Jet[1]*3; y-=svar.dx)
+		for (real y = -svar.Jet[1]*2; y > -svar.Jet[1]*3; y-=svar.dx)
 		{
 			// cout << "In add points for-loop" << endl;
 			AddPoints(y, svar, fvar, avar, pn, pnp1);
@@ -700,7 +700,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 		for (auto p: pn)
 			pnp1.emplace_back(p);
 
-		for (ldouble y = -svar.Jet[1]+4*svar.dx; y > -svar.Jet[1]; y-=svar.dx)
+		for (real y = -svar.Jet[1]+4*svar.dx; y > -svar.Jet[1]; y-=svar.dx)
 		{
 			// cout << "In add points for-loop" << endl;
 			AddPoints(y, svar, fvar, avar, pn, pnp1);
@@ -729,16 +729,16 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 		svar.simPts = 0;
 		#if SIMDIM == 3
 			/*Create fluid in the reservoir*/
-			ldouble tankW = svar.Start(0);
-			ldouble tankD = svar.Start(1);
+			real tankW = svar.Start(0);
+			real tankD = svar.Start(1);
 
 			press = fvar.pPress;
 			rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
 
 			/*Create the simulation pn*/
-			for (ldouble y = -(tankD + 2*svar.Jet(1)); y < 2*svar.Jet(1); y+=svar.dx)
+			for (real y = -(tankD + 2*svar.Jet(1)); y < 2*svar.Jet(1); y+=svar.dx)
 			{
-				for (ldouble z = -tankW; z <= tankW; z+= svar.dx)
+				for (real z = -tankW; z <= tankW; z+= svar.dx)
 				{ /*Do the centerline of points*/
 					StateVecD xi(0.0,y,z);
 					xi = svar.Rotate*xi;
@@ -747,9 +747,9 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 					++svar.simPts;
 				}
 
-				for (ldouble x = svar.dx; x < tankW ; x+=svar.dx)
+				for (real x = svar.dx; x < tankW ; x+=svar.dx)
 				{ /*Do the either side of the centerline*/
-					for (ldouble z = -tankW; z <= tankW; z+= svar.dx)
+					for (real z = -tankW; z <= tankW; z+= svar.dx)
 					{
 						if(((x*x)/(tankW*tankW) + (z*z)/(tankW*tankW)) <= 1.0 )
 			    		{   /*If the point is inside the hole diameter, add it*/
@@ -772,16 +772,16 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 		#endif
 		#if SIMDIM == 2
 			/*Create fluid in the reservoir*/
-			ldouble tankW = svar.Start(0);
-			ldouble tankD = svar.Start(1);
+			real tankW = svar.Start(0);
+			real tankD = svar.Start(1);
 
 			press = fvar.pPress;
 			rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
 
 			/*Create the simulation pn*/
-			for(ldouble y = -(tankD + 2*svar.Jet(1)+4*svar.dx); y < -(2*svar.Jet(1)+4*svar.dx); y+=svar.dx)
+			for(real y = -(tankD + 2*svar.Jet(1)+4*svar.dx); y < -(2*svar.Jet(1)+4*svar.dx); y+=svar.dx)
 			{
-				for(ldouble x = -(0.5*tankW); x < 0.5*tankW; x+=svar.dx) 
+				for(real x = -(0.5*tankW); x < 0.5*tankW; x+=svar.dx) 
 				{		
 					StateVecD xi(x,y);		
 					pn.emplace_back(Particle(xi,v,rho,fvar.Boundmass,press,PIPE,pID));

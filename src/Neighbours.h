@@ -10,7 +10,7 @@
 void FindNeighbours(const Sim_Tree& NP1_INDEX, const FLUID& fvar, const State& pnp1, outl& outlist)
 {
 	const static nanoflann::SearchParams params;
-	const static ldouble search_radius = fvar.sr;
+	const static real search_radius = fvar.sr;
 	outlist.clear();
 	outlist.reserve(pnp1.size());
 	
@@ -22,7 +22,7 @@ void FindNeighbours(const Sim_Tree& NP1_INDEX, const FLUID& fvar, const State& p
 		for(size_t ii=0; ii < pnp1.size(); ++ii)
 		{
 			// std::cout << pnp1[i].list.size();
-			std::vector<std::pair<size_t, ldouble>> matches; /* Nearest Neighbour Search*/
+			std::vector<std::pair<size_t, real>> matches; /* Nearest Neighbour Search*/
 			#if SIMDIM == 3
 			matches.reserve(250);
 			#else
@@ -68,9 +68,9 @@ void FindCellNeighbours(const Vec_Tree& CELL_INDEX, const vector<StateVecD>& cel
 		{
 			StateVecD testp = cells[ii];
 			vector<size_t> ret_indexes(num_results);
-			vector<double> out_dists_sqr(num_results);
+			vector<real> out_dists_sqr(num_results);
 
-			nanoflann::KNNResultSet<double> resultSet(num_results);
+			nanoflann::KNNResultSet<real> resultSet(num_results);
 			resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
 			
 			CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));

@@ -27,14 +27,14 @@ struct Point {
 	{
 		dataType = type;
 		verts = vector<StateVecD>(size);
-		press = vector<ldouble>(size);
-		rho = vector<ldouble>(size);
-		m = vector<ldouble>(size);
+		press = vector<real>(size);
+		rho = vector<real>(size);
+		m = vector<real>(size);
 
 		if (type == 1)
 		{
-			vnorm = vector<ldouble>(size);
-			anorm = vector<ldouble>(size);
+			vnorm = vector<real>(size);
+			anorm = vector<real>(size);
 		}
 		else if (type == 2)
 		{
@@ -46,8 +46,8 @@ struct Point {
 			vel = vector<StateVecD>(size);
 			acc = vector<StateVecD>(size);
 			cellV = vector<StateVecD>(size);
-			cellP = vector<ldouble>(size);
-			cellRho = vector<ldouble>(size);
+			cellP = vector<real>(size);
+			cellRho = vector<real>(size);
 		}
 	}
 
@@ -82,12 +82,12 @@ struct Point {
 	}
 
 	uint dataType;
-	ldouble time;
+	double time;
 	vector<StateVecD> verts, vel, acc;
-	vector<ldouble> vnorm, anorm;
-	vector<ldouble> press, rho, m;
+	vector<real> vnorm, anorm;
+	vector<real> press, rho, m;
 	vector<StateVecD> cellV;
-	vector<ldouble> cellP, cellRho;
+	vector<real> cellP, cellRho;
 };
 
 void* Read_Binary_Info(SIM& svar, const string filename)
@@ -211,9 +211,10 @@ Point Read_Binary_Timestep(void* inputHandle, const INTEGER4 zoneNum, const uint
 
     Point tsData(iMax,dataType);
     I = tecZoneGetSolutionTime(inputHandle, zoneNum, &tsData.time);
-    vector<double> xVar(iMax);
-    vector<double> yVar(iMax);
-        
+    vector<real> xVar(iMax);
+    vector<real> yVar(iMax);
+
+#if FOD == 1
     INTEGER4 varCount = 1;
     I = tecZoneVarGetDoubleValues(inputHandle, zoneNum, varCount, 1, iMax, &xVar[0]);
     ++varCount;
@@ -221,7 +222,7 @@ Point Read_Binary_Timestep(void* inputHandle, const INTEGER4 zoneNum, const uint
 	++varCount;
 
     #if SIMDIM == 3
-	    vector<double> zVar(iMax);
+	    vector<real> zVar(iMax);
 	    I = tecZoneVarGetDoubleValues(inputHandle, zoneNum, varCount, 1, iMax, &zVar[0]);
 	    ++varCount;
     #endif
@@ -251,10 +252,10 @@ Point Read_Binary_Timestep(void* inputHandle, const INTEGER4 zoneNum, const uint
 	if(dataType == 2 || dataType == 3)
 	{	/*Data has components*/
 
-	 	vector<double> xVel(iMax);
-	    vector<double> yVel(iMax);
-	    vector<double> xAcc(iMax);
-	    vector<double> yAcc(iMax);
+	 	vector<real> xVel(iMax);
+	    vector<real> yVel(iMax);
+	    vector<real> xAcc(iMax);
+	    vector<real> yAcc(iMax);
 
 	    /*Get velocity components*/
 		I = tecZoneVarGetDoubleValues(inputHandle, zoneNum, varCount, 1, iMax, &xVel[0]);
@@ -263,7 +264,7 @@ Point Read_Binary_Timestep(void* inputHandle, const INTEGER4 zoneNum, const uint
 		++varCount;
 
 		#if SIMDIM == 3
-			vector<double> zVel(iMax);
+			vector<real> zVel(iMax);
 		    I = tecZoneVarGetDoubleValues(inputHandle, zoneNum, varCount, 1, iMax, &zVel[0]);
 		    ++varCount;
 		
@@ -276,7 +277,7 @@ Point Read_Binary_Timestep(void* inputHandle, const INTEGER4 zoneNum, const uint
 		++varCount;
 
 		#if SIMDIM == 3
-		    vector<double> zAcc(iMax);
+		    vector<real> zAcc(iMax);
 		    I = tecZoneVarGetDoubleValues(inputHandle, zoneNum, varCount, 1, iMax, &zAcc[0]);
 			++varCount;	
 		#endif
@@ -300,8 +301,8 @@ Point Read_Binary_Timestep(void* inputHandle, const INTEGER4 zoneNum, const uint
 
 		if(dataType == 3)
 		{	/*Get the cell information for the points*/
-			vector<double> xVel(iMax);
-		    vector<double> yVel(iMax);
+			vector<real> xVel(iMax);
+		    vector<real> yVel(iMax);
 
 		    /*Get velocity components*/
 			I = tecZoneVarGetDoubleValues(inputHandle, zoneNum, varCount, 1, iMax, &xVel[0]);
@@ -310,7 +311,7 @@ Point Read_Binary_Timestep(void* inputHandle, const INTEGER4 zoneNum, const uint
 			++varCount;
 
 			#if SIMDIM == 3
-				vector<double> zVel(iMax);
+				vector<real> zVel(iMax);
 			    I = tecZoneVarGetDoubleValues(inputHandle, zoneNum, varCount, 1, iMax, &zVel[0]);
 			    ++varCount;
 			#endif
@@ -341,7 +342,136 @@ Point Read_Binary_Timestep(void* inputHandle, const INTEGER4 zoneNum, const uint
 		I = tecZoneVarGetDoubleValues(inputHandle, zoneNum, varCount, 1, iMax, &tsData.anorm[0]);
 		++varCount;
 	}
+#else
 	
+	INTEGER4 varCount = 1;
+    I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &xVar[0]);
+    ++varCount;
+    I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &yVar[0]);
+	++varCount;
+
+    #if SIMDIM == 3
+	    vector<real> zVar(iMax);
+	    I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &zVar[0]);
+	    ++varCount;
+    #endif
+
+	#pragma omp parallel for
+	for(uint ii = 0; ii < xVar.size(); ++ii)
+	{
+		tsData.verts[ii](0) = xVar[ii];
+		tsData.verts[ii](1) = yVar[ii];
+		
+		#if SIMDIM == 3
+			tsData.verts[ii](2) = zVar[ii];
+		#endif
+
+		// cout << tsData.verts[ii](0) << "  " << tsData.verts[ii](1) << endl;
+	}
+
+	/*Get density, pressure and mass*/
+	I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &tsData.rho[0]);
+	++varCount;
+	I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &tsData.press[0]);
+	++varCount;    
+    I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &tsData.m[0]);
+	++varCount;  
+
+	/*Check if the data has components or not*/
+	if(dataType == 2 || dataType == 3)
+	{	/*Data has components*/
+
+	 	vector<real> xVel(iMax);
+	    vector<real> yVel(iMax);
+	    vector<real> xAcc(iMax);
+	    vector<real> yAcc(iMax);
+
+	    /*Get velocity components*/
+		I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &xVel[0]);
+	    ++varCount;
+	    I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &yVel[0]);
+		++varCount;
+
+		#if SIMDIM == 3
+			vector<real> zVel(iMax);
+		    I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &zVel[0]);
+		    ++varCount;
+		
+		#endif
+
+		/*Get acceleration components*/
+		I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &xAcc[0]);
+	    ++varCount;
+	    I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &yAcc[0]);
+		++varCount;
+
+		#if SIMDIM == 3
+		    vector<real> zAcc(iMax);
+		    I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &zAcc[0]);
+			++varCount;	
+		#endif
+
+
+		/*Write data to a StateVecD vector*/
+		#pragma omp parallel for
+		for (uint ii = 0; ii < iMax; ++ii)
+		{
+			tsData.vel[ii](0) = xVel[ii];
+			tsData.vel[ii](1) = yVel[ii];
+
+			tsData.acc[ii](0) = xAcc[ii];
+			tsData.acc[ii](1) = yAcc[ii];
+
+			#if SIMDIM == 3
+			tsData.vel[ii](2) = zVel[ii];
+			tsData.acc[ii](2) = zAcc[ii];
+			#endif
+		}
+
+		if(dataType == 3)
+		{	/*Get the cell information for the points*/
+			vector<real> xVel(iMax);
+		    vector<real> yVel(iMax);
+
+		    /*Get velocity components*/
+			I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &xVel[0]);
+		    ++varCount;
+		    I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &yVel[0]);
+			++varCount;
+
+			#if SIMDIM == 3
+				vector<real> zVel(iMax);
+			    I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &zVel[0]);
+			    ++varCount;
+			#endif
+
+			#pragma omp parallel for
+			for(uint ii = 0; ii < xVar.size(); ++ii)
+			{
+				tsData.cellV[ii](0) = xVel[ii];
+				tsData.cellV[ii](1) = yVel[ii];
+				
+				#if SIMDIM == 3
+					tsData.cellV[ii](2) = zVel[ii];
+				#endif
+			}
+
+			/*Get density and pressure*/
+			I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &tsData.cellRho[0]);
+		    ++varCount;
+		    I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &tsData.cellP[0]);
+			++varCount;
+
+		}
+	}
+	else
+	{
+	    I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &tsData.vnorm[0]);
+		++varCount;
+		I = tecZoneVarGetFloatValues(inputHandle, zoneNum, varCount, 1, iMax, &tsData.anorm[0]);
+		++varCount;
+	}
+#endif
 
 	
     
@@ -407,13 +537,13 @@ typedef class TECMESH {
 			}
 
 			nX = ceil((maxC(0)-minC(0)+4*svar.postRadius)/svar.cellSize);
-			step(0) = (maxC(0)-minC(0)+4*svar.postRadius)/ldouble(nX-1);
+			step(0) = (maxC(0)-minC(0)+4*svar.postRadius)/real(nX-1);
 			nY = ceil((maxC(1)-minC(1)+4*svar.postRadius)/svar.cellSize);
-			step(1) = (maxC(1)-minC(1)+4*svar.postRadius)/ldouble(nY-1);
+			step(1) = (maxC(1)-minC(1)+4*svar.postRadius)/real(nY-1);
 
 			#if SIMDIM == 3
 				nZ = ceil((maxC(2)-minC(2)+4*svar.postRadius)/svar.cellSize);
-				step(2) = (maxC(2)-minC(2)+4*svar.postRadius)/ldouble(nZ);
+				step(2) = (maxC(2)-minC(2)+4*svar.postRadius)/real(nZ);
 				nVerts = nX*nY*nZ;
 				nCells = (nX-1)*(nY-1)*(nZ-1);
 				nConns = 8*nCells;
@@ -443,18 +573,18 @@ typedef class TECMESH {
 				for(INTEGER4 ii = 0; ii < nX; ii++)
 					for(INTEGER4 kk = 0; kk < nZ; kk++)
 					{
-						ldouble x = minC(0)-2*svar.postRadius + step(0)*ii;
-						ldouble y = minC(1)-2*svar.postRadius + step(1)*jj;
-						ldouble z = minC(2)-2*svar.postRadius + step(2)*kk;
+						real x = minC(0)-2*svar.postRadius + step(0)*ii;
+						real y = minC(1)-2*svar.postRadius + step(1)*jj;
+						real z = minC(2)-2*svar.postRadius + step(2)*kk;
 						verts[index2(ii,jj)] = StateVecD(x,y,z);
 					}
 
 			// cout << maxC(0)+2*svar.postRadius << "  " << maxC(1)+2*svar.postRadius << endl;
 			// cout << verts[nVerts-1](0) << "  " << verts[nVerts-1](1) << endl;
 
-			xC = new double[verts.size()];
-			yC = new double[verts.size()];
-			zC = new double[verts.size()];
+			xC = new real[verts.size()];
+			yC = new real[verts.size()];
+			zC = new real[verts.size()];
 
 			for(uint jj = 0; jj < verts.size(); ++jj)
 			{
@@ -469,16 +599,16 @@ typedef class TECMESH {
 			for(INTEGER4 jj = 0; jj < nY; jj++)
 				for(INTEGER4 ii = 0; ii < nX; ii++)
 				{
-					ldouble x = minC(0)-2*svar.postRadius + step(0)*ii;
-					ldouble y = minC(1)-2*svar.postRadius + step(1)*jj;
+					real x = minC(0)-2*svar.postRadius + step(0)*ii;
+					real y = minC(1)-2*svar.postRadius + step(1)*jj;
 					verts[index2(ii,jj)] = StateVecD(x,y);
 				}
 
 			// cout << maxC(0)+2*svar.postRadius << "  " << maxC(1)+2*svar.postRadius << endl;
 			// cout << verts[nVerts-1](0) << "  " << verts[nVerts-1](1) << endl;
 
-			xC = new double[verts.size()];
-			yC = new double[verts.size()];
+			xC = new real[verts.size()];
+			yC = new real[verts.size()];
 
 			for(uint jj = 0; jj < verts.size(); ++jj)
 			{
@@ -503,7 +633,7 @@ typedef class TECMESH {
 		{
 			INTEGER4 I;
 			INTEGER4 DIsDouble                = 0;
-		    if(sizeof(ldouble) == 8)
+		    if(sizeof(real) == 8)
 				DIsDouble            = 1;
 
 		    const INTEGER4 strandID = 1;     
@@ -536,30 +666,30 @@ typedef class TECMESH {
 
 			/*Now that there is the neighbour tree, interpolate the properties to the grid*/
 			const nanoflann::SearchParams params;
-			const ldouble search_radius = fvar.sr;
+			const real search_radius = fvar.sr;
 
 			#pragma omp parallel for
 			for(uint ii=0; ii < verts.size(); ++ii)
 			{
 				StateVecD testp = verts[ii];
-				std::vector<std::pair<size_t, ldouble>> matches; /* Nearest Neighbour Search*/
+				std::vector<std::pair<size_t, real>> matches; /* Nearest Neighbour Search*/
 				INDEX.index->radiusSearch(&testp[0], search_radius, matches, params);
 
-				ldouble ktemp = 0.0;
-				ldouble pressure = 0.0;
-				ldouble mass = 0.0;
-				ldouble dens = 0.0;
+				real ktemp = 0.0;
+				real pressure = 0.0;
+				real mass = 0.0;
+				real dens = 0.0;
 
 				if (dataType == 1)
 				{
-					ldouble vels = 0.0;
-					ldouble accs = 0.0;
+					real vels = 0.0;
+					real accs = 0.0;
 					for(auto temp:matches)
 					{
 						uint jj = temp.first;
 						/*Find the kernel*/
-						ldouble Rij = (fluid.verts[jj] - testp).norm();
-						ldouble k = W2Kernel(Rij,fvar.H,1.0)/kernsum;
+						real Rij = (fluid.verts[jj] - testp).norm();
+						real k = W2Kernel(Rij,fvar.H,1.0)/kernsum;
 
 						ktemp += k;
 						pressure += k*fluid.press[jj];
@@ -579,8 +709,8 @@ typedef class TECMESH {
 					{
 						uint jj = temp.first;
 						/*Find the kernel*/
-						ldouble Rij = (fluid.verts[jj] - testp).norm();
-						ldouble k = W2Kernel(Rij,fvar.H,1.0)/kernsum;
+						real Rij = (fluid.verts[jj] - testp).norm();
+						real k = W2Kernel(Rij,fvar.H,1.0)/kernsum;
 
 						ktemp += k;
 						pressure += k*fluid.press[jj];
@@ -596,14 +726,14 @@ typedef class TECMESH {
 					StateVecD vels = StateVecD::Zero();
 					StateVecD accs = StateVecD::Zero();
 					StateVecD cV = StateVecD::Zero();
-					ldouble cR = 0.0;
-					ldouble cP = 0.0;
+					real cR = 0.0;
+					real cP = 0.0;
 					for(auto temp:matches)
 					{
 						uint jj = temp.first;
 						/*Find the kernel*/
-						ldouble Rij = (fluid.verts[jj] - testp).norm();
-						ldouble k = W2Kernel(Rij,fvar.H,1.0)/kernsum;
+						real Rij = (fluid.verts[jj] - testp).norm();
+						real k = W2Kernel(Rij,fvar.H,1.0)/kernsum;
 
 						ktemp += k;
 						vels += k*fluid.vel[jj];
@@ -718,7 +848,7 @@ typedef class TECMESH {
 				const INTEGER4 Debug = 0;
 			#endif
 			INTEGER4 VIsDouble       = 0; 
-			if(sizeof(ldouble) == 8)
+			if(sizeof(real) == 8)
 				VIsDouble            = 1;
 		    
 		    const INTEGER4 FileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/
@@ -873,24 +1003,24 @@ typedef class TECMESH {
 
 			/*Now that there is the neighbour tree, interpolate the properties to the grid*/
 			const nanoflann::SearchParams params;
-			const ldouble search_radius = fvar.sr;
+			const real search_radius = fvar.sr;
 
 			/*Find the maximum kernel sum to normalise by*/
-			ldouble ksum = 0.0;
+			real ksum = 0.0;
 			#pragma omp parallel for
 			for(uint ii=0; ii < verts.size(); ++ii)
 			{
 				StateVecD testp = verts[ii];
-				std::vector<std::pair<size_t, ldouble>> matches; /* Nearest Neighbour Search*/
+				std::vector<std::pair<size_t, real>> matches; /* Nearest Neighbour Search*/
 				INDEX.index->radiusSearch(&testp[0], search_radius, matches, params);
 
-				ldouble ktemp = 0.0;
+				real ktemp = 0.0;
 				for(auto temp:matches)
 				{
 					uint jj = temp.first;
 					/*Find the kernel*/
-					ldouble Rij = (fluid.verts[jj] - testp).norm();
-					ldouble k = W2Kernel(Rij,fvar.H,1.0);
+					real Rij = (fluid.verts[jj] - testp).norm();
+					real k = W2Kernel(Rij,fvar.H,1.0);
 
 					ktemp += k;
 				}
@@ -914,42 +1044,42 @@ typedef class TECMESH {
 
 		void init(const uint size)
 		{
-			press = new ldouble[size];
-			rho = new ldouble[size];
-			m = new ldouble[size];
-			kvalue = new ldouble[size];
+			press = new real[size];
+			rho = new real[size];
+			m = new real[size];
+			kvalue = new real[size];
 
 			if (dataType == 1)
 			{
-				vnorm = new ldouble[size]; anorm = new ldouble[size]; 
+				vnorm = new real[size]; anorm = new real[size]; 
 			}
 			else if(dataType == 2 || dataType == 3)
 			{
-				vX = new ldouble[size]; vY = new ldouble[size]; 
-				aX = new ldouble[size]; aY = new ldouble[size];
+				vX = new real[size]; vY = new real[size]; 
+				aX = new real[size]; aY = new real[size];
 				#if SIMDIM == 3
-				vZ = new ldouble[size]; aZ = new ldouble[size]; 
+				vZ = new real[size]; aZ = new real[size]; 
 				#endif  
 
 				if(dataType == 3)
 				{	
-					cVX = new ldouble[size]; cVY = new ldouble[size];  
-					cellP = new ldouble[size]; cellRho = new ldouble[size]; 
+					cVX = new real[size]; cVY = new real[size];  
+					cellP = new real[size]; cellRho = new real[size]; 
 					#if SIMDIM == 3
-						cVZ = new ldouble[size];
+						cVZ = new real[size];
 					#endif
 				}
 			}
 		}
-		void input(const uint ii, const ldouble k, const ldouble& vels, 
-			const ldouble& acc, const ldouble P, const ldouble dens, const ldouble mass)
+		void input(const uint ii, const real k, const real& vels, 
+			const real& acc, const real P, const real dens, const real mass)
 		{
 			vnorm[ii] = vels; anorm[ii] = acc; kvalue[ii] = k;
 			press[ii] = P; rho[ii] = dens; m[ii] = mass;
 		}
 
-		void input(const uint ii, const ldouble k, const StateVecD& vels, 
-		const StateVecD& acc, const ldouble P, const ldouble dens, const ldouble mass)
+		void input(const uint ii, const real k, const StateVecD& vels, 
+		const StateVecD& acc, const real P, const real dens, const real mass)
 		{
 			vX[ii] = vels(0); vY[ii] = vels(1); aX[ii] = acc(0); aY[ii] = acc(1); 
 			press[ii] = P; rho[ii] = dens; m[ii] = mass; kvalue[ii] = k;
@@ -958,9 +1088,9 @@ typedef class TECMESH {
 			#endif
 		}
 
-		void input(const uint ii, const ldouble k, const StateVecD& vels, const StateVecD& acc, 
-		const ldouble P, const ldouble dens, const ldouble mass, const StateVecD& cellV, 
-		const ldouble cP, const ldouble cR)
+		void input(const uint ii, const real k, const StateVecD& vels, const StateVecD& acc, 
+		const real P, const real dens, const real mass, const StateVecD& cellV, 
+		const real cP, const real cR)
 		{
 			kvalue[ii] = k;
 			vX[ii] = vels(0); vY[ii] = vels(1); aX[ii] = acc(0); aY[ii] = acc(1); 
@@ -982,32 +1112,32 @@ typedef class TECMESH {
 
 		StateVecD minC, maxC, step;
 		INTEGER4 nVerts, nCells, nFaces, nConns, nX, nY, nZ;
-		ldouble time;
+		double time;
 		INTEGER4 zone;
 		uint dataType, nVar;
 		vector<StateVecD> verts;
 
-		ldouble kernsum;
-		ldouble* xC;
-		ldouble* yC;
-		ldouble* zC;
-		ldouble* kvalue;
-		ldouble* vnorm;
-		ldouble* anorm;
-		ldouble* vX;
-		ldouble* vY;
-		ldouble* vZ;
-		ldouble* aX;
-		ldouble* aY;
-		ldouble* aZ;
-		ldouble* cVX;
-		ldouble* cVY;
-		ldouble* cVZ;
-		ldouble* press;
-		ldouble* rho;
-		ldouble* m;
-		ldouble* cellP;
-		ldouble* cellRho;
+		real kernsum;
+		real* xC;
+		real* yC;
+		real* zC;
+		real* kvalue;
+		real* vnorm;
+		real* anorm;
+		real* vX;
+		real* vY;
+		real* vZ;
+		real* aX;
+		real* aY;
+		real* aZ;
+		real* cVX;
+		real* cVY;
+		real* cVZ;
+		real* press;
+		real* rho;
+		real* m;
+		real* cellP;
+		real* cellRho;
 }TECMESH;
 
 
@@ -1034,7 +1164,7 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
     const INTEGER4 JCellMax                 = 0;
     const INTEGER4 KCellMax                 = 0;
     INTEGER4 DIsDouble                = 0;
-    if(sizeof(ldouble) == 8)
+    if(sizeof(real) == 8)
 		DIsDouble            = 1;
 
     const double   SolTime                  = svar.t;     
@@ -1075,7 +1205,7 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
     	exit(-1);
 
     /*Write the basic position data present for all outputs*/
-    double* x = new double[size];
+    real* x = new real[size];
     
     for(uint dim = 0; dim < SIMDIM; ++dim)
     {
@@ -1088,9 +1218,9 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 
 	if(svar.outform != 0)
 	{
-		double* rho = new double[size];
-	    double* p = new double[size];
-		double* m = new double[size];
+		real* rho = new real[size];
+	    real* p = new real[size];
+		real* m = new real[size];
 
 		#pragma omp parallel for
 	  	for(uint ii = start; ii < end; ++ii)
@@ -1107,8 +1237,8 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 
     if(svar.outform == 1)
     {
-    	double* v = new double[size];
-	  	double* a = new double[size];
+    	real* v = new real[size];
+	  	real* a = new real[size];
 	  	
 	  	#pragma omp parallel for
 	  	for(uint ii = start; ii < end; ++ii)
@@ -1123,10 +1253,10 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
     else if (svar.outform == 2 || svar.outform == 3)
     {
 // variables = "x y z rho P m v_x v_y v_z a_x a_y a_z Cell_ID Cell_Vx Cell_Vy Cell_Vz Cell_P Cell_Rho";
-    	double* ax = new double[size];
-    	double* ay = new double[size];
-    	double* vx = new double[size];
-    	double* vy = new double[size];
+    	real* ax = new real[size];
+    	real* ay = new real[size];
+    	real* vx = new real[size];
+    	real* vy = new real[size];
 	  	
 	  	#pragma omp parallel for
 	  	for(uint ii = start; ii < end; ++ii)
@@ -1141,7 +1271,7 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 	  	I   = TECDAT142(&IMax, vx, &DIsDouble);
 		I   = TECDAT142(&IMax, vy, &DIsDouble);
 		#if SIMDIM == 3
-			double* vz = new double[size];
+			real* vz = new real[size];
 			#pragma omp parallel for
 	  		for(uint ii = start; ii < end; ++ii)
 				vz[ii-start] = pnp1[ii].f(2);
@@ -1151,7 +1281,7 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 		I   = TECDAT142(&IMax, ax, &DIsDouble);
 		I   = TECDAT142(&IMax, ay, &DIsDouble);
 		#if SIMDIM == 3
-			double* az = new double[size];
+			real* az = new real[size];
 			#pragma omp parallel for
 	  		for(uint ii = start; ii < end; ++ii)
 				az[ii-start] = pnp1[ii].v(2);
@@ -1160,11 +1290,11 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 
 	    if (svar.outform == 3)
 		{
-			double* cID = new double[size];
-		  	double* cVx = new double[size];
-		  	double* cVy = new double[size];
-		  	double* cP = new double[size];
-		  	double* cRho = new double[size];
+			real* cID = new real[size];
+		  	real* cVx = new real[size];
+		  	real* cVy = new real[size];
+		  	real* cP = new real[size];
+		  	real* cRho = new real[size];
 			#pragma omp parallel for
 		  	for(uint ii = start; ii < end; ++ii)
 		  	{
@@ -1180,7 +1310,7 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 		    I   = TECDAT142(&IMax, cVy, &DIsDouble);
 
 		  	#if SIMDIM == 3
-		  		double* cVz = new double[size];
+		  		real* cVz = new real[size];
 		  		#pragma omp parallel for
 		  		for(uint ii = start; ii < end; ++ii)
 			  		cVz[ii-start] = pnp1[ii].cellV(2);
@@ -1197,11 +1327,11 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 		{
 			// variables = "x y z rho P m v a b Neighbours Aero";
 
-			double* v = new double[size];
-		  	double* a = new double[size];
+			real* v = new real[size];
+		  	real* a = new real[size];
 			float* b = new float[size];
 			float* nNb = new float[size];
-			double* aF = new double[size];
+			real* aF = new real[size];
 
 			#pragma omp parallel for
 		  	for(uint ii = start; ii < end; ++ii)
@@ -1233,7 +1363,7 @@ void Init_Binary_PLT(const SIM &svar, const string& filename, const string& zone
 		const INTEGER4 Debug = 0;
 	#endif
 	INTEGER4 VIsDouble       = 0; 
-	if(sizeof(ldouble) == 8)
+	if(sizeof(real) == 8)
 		VIsDouble            = 1;
     
     const INTEGER4 FileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/

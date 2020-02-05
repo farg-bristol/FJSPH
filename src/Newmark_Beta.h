@@ -12,24 +12,24 @@
 #include "Resid.h"
 
 ///**************** Integration loop **************///
-ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FLUID& fvar, const AERO& avar, 
+real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FLUID& fvar, const AERO& avar, 
 	MESH& cells, State& pn, State& pnp1, State& airP, outl& outlist)
 {
 	// cout << "Entered Newmark_Beta" << endl;
 	uint   k = 0;	
-	double errsum = 1.0;
-	double logbase = 0.0;
-	double error1 = 0.0;
-	double error2 = 0.0;
+	real errsum = 1.0;
+	real logbase = 0.0;
+	real error1 = 0.0;
+	real error2 = 0.0;
 
-	/*Find maximum safe timestep*/
+	// Find maximum safe timestep
 	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin(),pnp1.end(),
 		[](Particle p1, Particle p2){return p1.f.norm()< p2.f.norm();});
-	ldouble maxf = maxfi->f.norm();
-	ldouble dtf = sqrt(fvar.H/maxf);
-	ldouble dtcv = fvar.H/(fvar.Cs+svar.maxmu);
+	real maxf = maxfi->f.norm();
+	real dtf = sqrt(fvar.H/maxf);
+	real dtcv = fvar.H/(fvar.Cs+svar.maxmu);
 
-	/*Only use if -fno-finite-math is on*/
+	// Only use if -fno-finite-math is on
 	// if (std::isinf(maxf))
 	// {
 	// 	std::cerr << "Forces are quasi-infinite. Stopping..." << std::endl;
@@ -54,19 +54,29 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 		svar.dt = svar.framet/frac;
 	}
 
-	/*Check if the particle has moved to a new cell*/
+	// Check if the particle has moved to a new cell
 	if (svar.Bcase == 6)
 	{
 		FindCell(svar,avar.nfull,CELL_INDEX,cells,outlist,pnp1,pn);
+		if (svar.totPts != pnp1.size())
+		{	//Rebuild the neighbour list
+			// cout << "Updating neighbour list" << endl;
+			// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
+			svar.delNum += svar.totPts-pnp1.size();
+			svar.totPts = pnp1.size();
+			NP1_INDEX.index->buildIndex();
+			FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
+		}
 	}
 	// cout << svar.Start(0) << "  " << svar.Start(1) << endl;
 	// cout << svar.Transp << endl;
+
 
 	const size_t start = svar.bndPts;
 	const size_t end = svar.totPts;
 	const size_t piston = svar.psnPts;
 
-	/*Check if a particle is running low on neighbours, and add ficticious particles*/
+	// Check if a particle is running low on neighbours, and add ficticious particles
 	std::vector<std::vector<Part>> air(start);
 	if(svar.ghost == 1)
 	{
@@ -77,7 +87,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 			for (size_t ii = start; ii < end; ++ii)
 			{
 				std::vector<Part> temp;
-				if(pnp1[ii].b == 2 && outlist[ii].size() > 0.4*avar.nfull 
+				if(pnp1[ii].b == FREE && outlist[ii].size() > 0.4*avar.nfull 
 					&& outlist[ii].size() < avar.nfull)
 				{
 					temp = PoissonSample::generatePoissonPoints(svar,fvar,avar,ii,pnp1,outlist);
@@ -106,14 +116,14 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 	}
 
 	vector<StateVecD> xih(svar.totPts);
-	const ldouble a = 1 - svar.gamma;
-	const ldouble b = svar.gamma;
-	const ldouble c = 0.5*(1-2*svar.beta);
-	const ldouble d = svar.beta;
-	const ldouble B = fvar.B;
-	const ldouble gam = fvar.gam;
+	const real a = 1 - svar.gamma;
+	const real b = svar.gamma;
+	const real c = 0.5*(1-2*svar.beta);
+	const real d = svar.beta;
+	const real B = fvar.B;
+	const real gam = fvar.gam;
 
-	while (log10(sqrt(errsum/(double(svar.totPts)))) - logbase > -7.0)
+	while (log10(sqrt(errsum/(real(svar.totPts)))) - logbase > -7.0)
 	{
 		/****** UPDATE TREE ***********/
 		NP1_INDEX.index->buildIndex();
@@ -168,7 +178,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 		// cout << "Calculating forces" << endl;
 		vector<StateVecD> res(end,StateVecD::Zero());
 		vector<StateVecD> Af(end,StateVecD::Zero());
-		vector<ldouble> Rrho(end,0.0);
+		vector<real> Rrho(end,0.0);
 
  		Forces(svar,fvar,avar,pnp1,neighb,outlist,res,Rrho,Af); /*Guess force at time n+1*/
 
@@ -179,8 +189,8 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 		for (size_t  ii=0; ii < end; ++ii)
 			xih[ii] = pnp1[ii].xi;
 
-		const ldouble dt = svar.dt;
-		const ldouble dt2 = dt*dt;
+		const real dt = svar.dt;
+		const real dt2 = dt*dt;
 
 		/*Update the state at time n+1*/
 		#pragma omp parallel shared(pn,res,Rrho,svar,fvar)
@@ -277,10 +287,10 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 		}/*End pragma omp parallel*/
 
 		if(k == 0)
-			logbase=log10(sqrt(errsum/(double(svar.totPts))));
+			logbase=log10(sqrt(errsum/(real(svar.totPts))));
 
 
-		error1 = log10(sqrt(errsum/(double(svar.totPts)))) - logbase;
+		error1 = log10(sqrt(errsum/(real(svar.totPts)))) - logbase;
 		// cout << RestartCount << "  " << k << "  " << error1  << "  " << svar.dt << endl;
 		// cout << k << "  " << error1 << "  " << svar.dt << endl;
 
@@ -378,7 +388,7 @@ ldouble Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const
 
 	pn = pnp1;
 
-	return log10(sqrt(errsum/(double(svar.totPts))))-logbase;
+	return log10(sqrt(errsum/(real(svar.totPts))))-logbase;
 }
 
 #endif
