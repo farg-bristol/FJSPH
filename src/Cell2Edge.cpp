@@ -152,10 +152,7 @@ vector<int> Find_Bmap_Markers(const string& bmapIn, int& symPlane1, int& symPlan
 				if(line.find("Markers:")!=string::npos)
 				{
 					// cout << "Found a boundary marker" << endl;
-					std::stringstream sstr;
-
-					sstr << line;
-
+					std::stringstream sstr(line);
 					string temp;
 					int found;
 
@@ -299,17 +296,17 @@ vector<StateVecD> Get_Coordinates(NcFile& fin)
 	uint counts[3] = {0};
 	for(uint ii = 0; ii < nPts; ++ii)
 	{
-		if(coordX[ii] == 0 || coordX[ii] == -1)
+		if(coordX[ii] == 0 || coordX[ii] == -1 || coordX[ii] == 1)
 		{
 			counts[0]++;
 		}
 
-		if(coordY[ii] == 0 || coordY[ii] == -1)
+		if(coordY[ii] == 0 || coordY[ii] == -1 || coordY[ii] == 1)
 		{
 			counts[1]++;
 		}
 
-		if(coordZ[ii] == 0 || coordZ[ii] == -1)
+		if(coordZ[ii] == 0 || coordZ[ii] == -1 || coordZ[ii] == 1)
 		{
 			counts[2]++;
 		}
@@ -749,6 +746,7 @@ void Recast_Data(EDGE& edata)
 	cout << "vertInUse size: " << vertInUse.size() << endl;
 	/*Now the edges need recasting to the index of the vector*/
 	vector<StateVecD> newVerts(vertInUse.size());
+	#pragma omp parallel for schedule(static)
 	for(uint ii = 0; ii < vertInUse.size(); ++ii)
 	{
 		for(auto& edge:edata.edges)

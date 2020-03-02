@@ -10,9 +10,10 @@
 #include "IO.h"
 #include "Neighbours.h"
 #include "Resid.h"
+#include "Crossing.h"
 
 ///**************** Integration loop **************///
-real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FLUID& fvar, const AERO& avar, 
+real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar, 
 	MESH& cells, State& pn, State& pnp1, State& airP, outl& outlist)
 {
 	// cout << "Entered Newmark_Beta" << endl;
@@ -53,19 +54,19 @@ real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FL
 		uint frac = ceil(svar.framet/svar.dt);
 		svar.dt = svar.framet/frac;
 	}
-
+	
 	// Check if the particle has moved to a new cell
 	if (svar.Bcase == 6)
 	{
-		FindCell(svar,avar.nfull,CELL_INDEX,cells,outlist,pnp1,pn);
+		FindCell(svar,fvar.sr,TREE,cells,pnp1,pn);
 		if (svar.totPts != pnp1.size())
 		{	//Rebuild the neighbour list
 			// cout << "Updating neighbour list" << endl;
 			// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
 			svar.delNum += svar.totPts-pnp1.size();
 			svar.totPts = pnp1.size();
-			NP1_INDEX.index->buildIndex();
-			FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
+			TREE.NP1.index->buildIndex();
+			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 		}
 	}
 	// cout << svar.Start(0) << "  " << svar.Start(1) << endl;
@@ -115,7 +116,8 @@ real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FL
 		pnp1[ii].theta = outlist[ii].size(); 
 	}
 
-	vector<StateVecD> xih(svar.totPts);
+	vector<StateVecD> xih(end);
+	
 	const real a = 1 - svar.gamma;
 	const real b = svar.gamma;
 	const real c = 0.5*(1-2*svar.beta);
@@ -123,11 +125,12 @@ real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FL
 	const real B = fvar.B;
 	const real gam = fvar.gam;
 
+
 	while (log10(sqrt(errsum/(real(svar.totPts)))) - logbase > -7.0)
 	{
 		/****** UPDATE TREE ***********/
-		NP1_INDEX.index->buildIndex();
-		FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
+		TREE.NP1.index->buildIndex();
+		FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 		
 		// airP.clear();
 		std::vector<std::vector<Part>> neighb;
@@ -176,11 +179,12 @@ real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FL
 				
 		// cout << "K: " << k << endl;
 		// cout << "Calculating forces" << endl;
+		// vector<StateVecD> vPert(end,StateVecD::Zero());
 		vector<StateVecD> res(end,StateVecD::Zero());
 		vector<StateVecD> Af(end,StateVecD::Zero());
 		vector<real> Rrho(end,0.0);
 
- 		Forces(svar,fvar,avar,pnp1,neighb,outlist,res,Rrho,Af); /*Guess force at time n+1*/
+ 		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,/*vPert,*/res,Rrho,Af); /*Guess force at time n+1*/
 
 		// #pragma omp parallel
 	
@@ -205,7 +209,6 @@ real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FL
 				pnp1[ii].Rrho = Rrho[ii];
 			}
 
-
 			#pragma omp for schedule(static) nowait
 			for (size_t ii=piston; ii < start; ++ii)
 			{	/****** BOUNDARY PARTICLES ***********/
@@ -217,13 +220,86 @@ real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FL
 				pnp1[ii].Rrho = Rrho[ii];
 			}
 			
+			// #pragma omp for schedule(static) nowait reduction(+:vPert)
+			// for (size_t ii= start; ii < end; ++ii)
+			// {
+			// 	StateVecD perturb;
+
+			// 	if(pnp1[ii].b == FREE && real(outlist[ii].size()) < avar.nfull)
+			// 	{
+			// 		real kernsum = 0.0;
+			// 		StateVecD Vdiff = pn[ii].v - pnp1[ii].v;
+
+			// 		// StateVecD Vdiff = StateVecD::Zero();
+			// 		// cout << "Particle ID: " << ii  << " subit step: " << k << endl;
+			// 		// cout << "pn velocity: " << pn[ii].v(0) << "  " << pn[ii].v(1) 
+			// 		// 	<< "  " << pn[ii].v(2) << endl;
+			// 		// cout << "pnp1 velocity: " << pnp1[ii].v(0) << "  " << pnp1[ii].v(1) 
+			// 		// 	<< "  " << pnp1[ii].v(2) << endl;	
+			// 		// cout << "Velocity difference: " << Vdiff(0) << "  " << Vdiff(1) 
+			// 		// 	<< "  " << Vdiff(2) << endl;
+			// 		// for (auto const jj:outlist[ii])
+			// 		// {	/* Neighbour list loop. */
+			// 		// 	if(pnp1[ii].partID == pnp1[jj].partID)
+			// 		// 	{
+			// 		// 		kernsum += fvar.correc;
+			// 		// 		Vdiff += fvar.correc*(pn[jj].v - pnp1[jj].v);
+			// 		// 		continue;
+			// 		// 	}
+
+			// 		// 	StateVecD Rij = pnp1[jj].xi-pnp1[ii].xi;
+			// 		// 	real r = Rij.norm();
+			// 		// 	real kern = W2Kernel(r,fvar.H,fvar.correc);
+			// 		// 	kernsum += kern;
+			// 		// 	if(pnp1[jj].b != BOUND)
+			// 		// 		Vdiff += kern*(pn[jj].v - pnp1[jj].v);
+			// 		// }
+
+			// 		// cout << "Neighbour list: " << outlist[ii].size() << "  " << svar.nfull << endl;
+					
+			// 			// cout << "Calculating perturbation" << endl;
+			// 			perturb = pn[ii].vPert + dt*((fvar.simM*real(outlist[ii].size()))/
+			// 			(fvar.gasM*real((svar.nfull-outlist[ii].size()))))*(Vdiff);
+			// 			// cout << "Gas mass: " << fvar.gasM*real((svar.nfull-outlist[ii].size())) << endl;
+
+			// 			// cout << "Perturbation: " << perturb(0) << "  " << perturb(1) << 
+			// 			// "  " << perturb(2) << endl;
+			// 		// } 
+			// 		// else
+			// 		// {
+			// 		// 	perturb = pn[ii].vPert;
+			// 		// }
+
+			// 		for (auto jj:outlist[ii])
+			// 		{	/* Neighbour list loop. */
+			// 			const Part pj = pnp1[jj];
+
+			// 			if(pj.b == BOUND)
+			// 				continue;
+						
+			// 			real r = (pnp1[jj].xi-pnp1[ii].xi).norm();
+			// 			real kern = W2Kernel(r,fvar.H,fvar.correc);
+			// 			vPert[jj] += perturb*kern/kernsum;
+			// 		}
+			// 			// vPert[ii] = perturb;
+			// 		// cout << "dt: " << dt << endl;
+			// 	}
+			// }
+
+			// #pragma omp for schedule(static) nowait
+			// for (size_t ii= start; ii < end; ++ii)
+			// {
+
+			// 	pnp1[ii].vPert = vPert[ii];
+			// }
+
 
 			#pragma omp for schedule(static) nowait
 			for (size_t ii=start; ii < end; ++ii)
 			{	/****** FLUID PARTICLES **************/
 				
 				/*Check if the particle is clear of the starting area*/
-				if(pnp1[ii].b == START)
+				if(pnp1[ii].b == START || pnp1[ii].b == BACK)
 				{   /* boundary particle value of 1 means its a                    */
 					/* fluid particle that isn't clear of the starting area        */
 					/* 2 means it is clear, and can receive a force aerodynamically*/
@@ -242,7 +318,8 @@ real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FL
 						// pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
 					}
 				}
-				else if(pnp1[ii].b == PIPE)
+
+				if(pnp1[ii].b == PIPE)
 				{	/*Do a check to see if it needs to be given an aero force*/
 					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
 					if(vec(1) > 0.0)
@@ -253,38 +330,43 @@ real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FL
 							/*retrieve the cell it's in*/
 							if (outlist[ii].size() < avar.nfull)
 							{
-								FirstCell(svar,end,ii, CELL_INDEX, cells, outlist, pnp1, pn);
+								FirstCell(svar,end,ii,TREE.CELL, cells, pnp1, pn);
 							}
 						}
 					}	
 				}
 
-				if(pnp1[ii].b != START)
+				if(pnp1[ii].b > START)
 				{	/*For any other particles, intergrate as normal*/
 					pnp1[ii].v =  pn[ii].v +dt*(a*pn[ii].f+b*res[ii]);
 					pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(c*pn[ii].f+d*res[ii]);
 					pnp1[ii].f = res[ii];
 					pnp1[ii].Rrho = Rrho[ii];
 					pnp1[ii].Af = Af[ii];
-					// if(pnp1[ii].b == FREE)
-					// {
-						pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
-						pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
-					// }
+					pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
+					pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
+					
+
 				}
+
+
 				
 			} /*End fluid particles*/
-		
+
+
+		}/*End pragma omp parallel*/
+
+
 		/****** FIND ERROR ***********/
 		errsum = 0.0;
-		#pragma omp parallel for reduction(+:errsum) shared(pnp1,xih) schedule(static)
+		#pragma omp parallel for reduction(+:errsum) schedule(static) shared(pnp1,xih)
 		for (size_t ii = start; ii < end; ++ii)
 		{
 			StateVecD r = pnp1[ii].xi-xih[ii];
 			errsum += r.squaredNorm();
 		}
 		
-		}/*End pragma omp parallel*/
+		
 
 		if(k == 0)
 			logbase=log10(sqrt(errsum/(real(svar.totPts))));
@@ -298,7 +380,7 @@ real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FL
 		{	/*If simulation starts diverging, then reduce the timestep and try again.*/
 			// cout << "Unstable timestep. Reducing timestep..." << endl;
 			pnp1 = pn;
-			svar.dt = 0.5*svar.dt;
+			svar.dt = 0.1*svar.dt;
 			k = 0;
 			error1 = 0.0;
 			// RestartCount++;
@@ -316,8 +398,9 @@ real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FL
 	// cout << "Out of the parallel loop." << endl;
 	// RestartCount = 0;
 	/*Add time to global*/
+
 	svar.t+=svar.dt;
-	// cout << "Timestep Params: " << maxf << " " << fvar.Cs + maxmu << " " << dtf << " " << dtcv << endl;
+	// cout << "Timestep Params: " << maxf << " " << fvar.Cs + svar.maxmu << " " << dtf << " " << dtcv << endl;
 	// cout << "New Time: " << svar.t << endl;
 	
 
@@ -332,50 +415,37 @@ real Newmark_Beta(Sim_Tree& NP1_INDEX, Vec_Tree& CELL_INDEX, SIM& svar, const FL
 				{
 					/*Check that the starting area is clear first...*/
 					StateVecD vec = svar.Transp*(pnp1[back].xi-svar.Start);
+					real clear;
 					if(svar.Bcase == 2)
-					{
-						if(vec[1]< svar.dx-svar.Jet(1)*3)
-						{
-							StateVecD xi = vec;
-							xi(1) -= svar.dx;
-							xi = svar.Rotate*xi;
-							xi += svar.Start;
-
-							pn.emplace_back(Particle(xi,pnp1[back],svar.totPts));
-							pnp1.emplace_back(Particle(xi,pnp1[back],svar.totPts));
-							svar.totPts++;
-							/*Update the back vector*/
-							back = svar.totPts;
-						}
-					}
+						clear =  svar.dx-svar.Jet(1)*3;
 					else
-					{
-						if(vec[1] > svar.dx-svar.Jet(1))
-						{	/*Create a new particle behind the last one*/
+						clear = svar.dx-svar.Jet(1);
+					
+					if(vec[1] > clear)
+					{	/*Create a new particle behind the last one*/
+						StateVecD xi = vec;
+						xi(1) -= svar.dx;
+						xi = svar.Rotate*xi;
+						xi += svar.Start;
 
-							StateVecD xi = vec;
-							xi(1) -= svar.dx;
-							xi = svar.Rotate*xi;
-							xi += svar.Start;
+						pn.emplace_back(Particle(xi,pnp1[back],svar.totPts));
+						pnp1.emplace_back(Particle(xi,pnp1[back],svar.totPts));
 
-							pn.emplace_back(Particle(xi,pnp1[back],svar.totPts));
-							pnp1.emplace_back(Particle(xi,pnp1[back],svar.totPts));
-							back = svar.totPts;
-							svar.totPts++;
-							/*Update the back vector*/
-							
-						}	
+						pnp1[back].b = START;
+						/*Update the back vector*/
+						back = svar.totPts;
+						svar.simPts++;
+						svar.totPts++;
 					}
 				}
 				else
 				{
 					svar.Bclosed = 1;
-				}
-					
+				}	
 			}
 			
-			NP1_INDEX.index->buildIndex();
-			FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
+			TREE.NP1.index->buildIndex();
+			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 		}
 	}
 

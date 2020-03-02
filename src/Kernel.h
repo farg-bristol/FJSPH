@@ -24,4 +24,22 @@ inline real W2Grad2(const StateVecD& Rij, const real dist, const real H, const r
 	return Rij.dot(Rij)*(5.0*correc/(H*H))*(2*q-1)*pow(1-0.5*q,2);
 }
 
+inline real BoundaryKernel(const real dist, const real H, const real beta)
+{
+	const real q = dist/H;
+	if (q < 2.0/3.0)
+	{
+		return beta*2.0/3.0;
+	}
+	else if (2.0/3.0 <= q && q < 1.0)
+	{
+		return beta*(2*q - 3.0/2.0*q*q);
+	}
+	else if (1<= q && q < 2)
+	{
+		return 0.5*beta*pow((2-q),2);
+	}
+	return 0;
+}
+
 #endif

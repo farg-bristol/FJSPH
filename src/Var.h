@@ -18,6 +18,11 @@
 #include <limits>
 #include <vector>
 #include <fstream>
+#include <iostream>
+#include <iomanip>
+#include <fstream>
+#include <string.h>
+#include <sstream>
 #include "Eigen/Core"
 #include "Eigen/StdVector"
 #include "NanoFLANN/nanoflann.hpp"
@@ -36,7 +41,12 @@
 
 using std::vector;
 using std::cout;
+using std::cerr;
+using std::ifstream;
+using std::ofstream;
 using std::endl;
+using std::string; 
+using std::setw;
 
 /* Define data type. */
 #ifndef FOD
@@ -61,7 +71,6 @@ typedef float real;
 #endif
 
 /****** Eigen vector definitions ************/
-
 typedef Eigen::Matrix<real,SIMDIM,1> StateVecD;
 typedef Eigen::Matrix<int,SIMDIM,1> StateVecI;
 typedef Eigen::Matrix<real,SIMDIM,SIMDIM> RotMat;
@@ -89,11 +98,13 @@ typedef Eigen::Matrix<real, SIMDIM+1, SIMDIM+1> DensMatD;
 
 /*Define particle type indexes*/
 #define BOUND 0
-#define START 1
-#define PIPE 2
-#define FREE 3
-#define GHOST 4
-#define PISTON 5
+#define PISTON 1
+#define BACK 2            
+#define START 3
+#define PIPE 4
+#define FREE 5
+#define GHOST 6
+
 
 /*Simulation parameters*/
 typedef struct SIM {
@@ -103,6 +114,7 @@ typedef struct SIM {
 	size_t psnPts;					/*Piston Points*/
 	size_t nrefresh; 					/*Crossflow refresh particle number*/
 	size_t delNum;                  /*Number of deleted particles*/
+	size_t intNum;                  /*Number of internal particles*/
 	uint nmax;                      /*Max number of particles*/
 	uint outframe;	                /*Terminal output frame interval*/
 	uint addcount;					/*Current Number of add-particle calls*/
@@ -133,6 +145,8 @@ typedef struct SIM {
 	#endif
 	StateVecD Force;					/*Total Force*/
 
+	uint restart;
+
 	/*Post Processessing settings*/
 	uint afterSim;
 	uint sliceOrSet;
@@ -145,21 +159,23 @@ typedef struct SIM {
 
 /*Fluid and smoothing parameters*/
 typedef struct FLUID {
+	real Hfac;
 	real H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
-	real rho0, rhoJ; 					/*Resting Fluid density*/
+	real rho0, rhoJ; 			/*Resting Fluid density*/
 	real pPress, gasPress;		/*Starting pressure in pipe*/
-	real gasDynamic, gasVel;     /*Reference gas velocity*/
-	real Simmass, Boundmass;		/*Particle and boundary masses*/
-	real correc;					/*Smoothing Kernel Correction*/
+	real gasDynamic, gasVel;    /*Reference gas velocity*/
+	real simM, bndM;			/*Particle and boundary masses*/
+	real gasM;					/*A gas particle mass*/
+	real correc;				/*Smoothing Kernel Correction*/
 	real alpha,Cs,mu;		    /*}*/
 	real sig;					/* Fluid properties*/
 	real gam, B; 				/*}*/
 	real mug;					/* Gas Properties*/
 	real rhog;
 	real T;						/*Temperature*/
-	real Rgas;                   /*Specific gas constant*/
+	real Rgas;                  /*Specific gas constant*/
 	real contangb;				/*Boundary contact angle*/
-	real resVel;					/*Reservoir velocity*/
+	real resVel;				/*Reservoir velocity*/
 	//real front, height, height0;		/*Dam Break validation parameters*/
 }FLUID;
 
@@ -232,7 +248,11 @@ typedef struct MESH
 	vector<vector<StateVecD>> cVerts;
 	vector<StateVecD> cCentre;
 	vector<vector<size_t>> cFaces;
-	vector<vector<size_t>> cNeighb;
+	// vector<vector<size_t>> cNeighb;
+
+	/*Boundary data*/
+	vector<size_t> bIndex;
+	vector<StateVecD> bVerts;
 
 	/*Solution vectors*/
 	vector<StateVecD> cVel;
@@ -255,13 +275,17 @@ typedef class Particle {
 			Sf = StateVecD::Zero(); 
 			Af = StateVecD::Zero();
 			normal = StateVecD::Zero();
+			vPert = StateVecD::Zero();
 			p = press;
 			Rrho = 0.0;
 			theta = 0.0;
 			cellV = StateVecD::Zero();
 			cellID = 0;
+			faceID = 0;
 			cellP = 0.0;
 			cellRho = 0.0;
+			internal = 0;
+
 		}
 
 		/*To add particles dynamically for boundary layer*/
@@ -295,18 +319,15 @@ typedef class Particle {
 			return(xi[a]);
 		}
 
-		// void erase_list(void)
-		// {
-		// 	list.erase(list.begin(),list.end());
-		// }
-		// std::vector<uint> list; /*Neighbour list*/
-
-		StateVecD xi, v, Sf, Af, normal, f;
+		StateVecD xi, v, f, Sf, Af, normal, vPert;
 		real Rrho, rho, p, m, theta;
 		uint b; //What state is a particle. Boundary, forced particle or unforced
 		StateVecD cellV;
-		size_t partID, cellID;
+		size_t partID, cellID, faceID;
 		real cellP, cellRho;
+		uint internal; 
+		StateVecD bNorm;
+		real y;
 }Particle;
 
 typedef class Part {
@@ -314,21 +335,20 @@ typedef class Part {
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 		Part(const Particle& pi)
 		{
-			partID = pi.partID;
-			xi = pi.xi; v = pi.v; 
-			rho = pi.rho; 
-			p = pi.p;
-			m = pi.m;
-			b = pi.b;
-			Sf = pi.Sf;
-			normal = pi.normal;
+			xi = pi.xi; v = pi.v; Sf = pi.Sf;
+			normal = pi.normal;	vPert = pi.vPert;
+			rho = pi.rho; p = pi.p;	m = pi.m; b = pi.b;
 			cellV = pi.cellV;
+			partID = pi.partID;
 			cellID = pi.cellID;
 			cellP = pi.cellP;
 			cellRho = pi.cellRho;
+			internal = pi.internal;
+			bNorm = pi.bNorm;
+			y = pi.y;
 		}
 
-		Part(const StateVecD xin, const StateVecD vin, const real pin, 
+		Part(const StateVecD& xin, const StateVecD& vin, const real pin, 
 				const real rhoin, const real min, const uint bin, const uint pID)
 		{
 			xi = xin;
@@ -353,35 +373,29 @@ typedef class Part {
 			return(xi[a]);
 		}
 
-		void operator=(const Particle pi)
+		void operator=(const Particle& pi)
 		{
-			partID = pi.partID;
-			xi = pi.xi; v = pi.v; 
-			rho = pi.rho; 
-			p = pi.p;
-			m = pi.m;
-			b = pi.b;
-			Sf = pi.Sf;
+			xi = pi.xi; v = pi.v; Sf = pi.Sf; vPert = pi.vPert;
+			rho = pi.rho;	p = pi.p;	m = pi.m;	b = pi.b;
 			cellV = pi.cellV;
+			partID = pi.partID;
 			cellID = pi.cellID;
 			cellP = pi.cellP;
 			cellRho = pi.cellRho;
+			internal = pi.internal;
+			bNorm = pi.bNorm;
+			y = pi.y;
 		}
 
-
-
-		// void erase_list(void)
-		// {
-		// 	list.erase(list.begin(),list.end());
-		// }
-		// std::vector<uint> list; /*Neighbour list*/
-
-		StateVecD xi, v, Sf, normal;
+		StateVecD xi, v, Sf, normal, vPert;
 		real rho, p, m;
 		uint b; //What state is a particle. Boundary, forced particle or unforced, or air
 		StateVecD cellV;
-		uint partID, cellID;
+		size_t partID, cellID/*, faceID*/;
 		real cellP, cellRho;
+		uint internal;
+		StateVecD bNorm;
+		real y;
 }Part;
 
 Particle PartToParticle(Part& pj)
@@ -407,4 +421,14 @@ typedef std::vector<Particle> State;
 typedef std::vector<std::vector<size_t>> outl;
 typedef KDTreeVectorOfVectorsAdaptor<State,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Sim_Tree;
 typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Vec_Tree;
+
+typedef struct KDTREE
+{
+	KDTREE(const State& pnp1, const MESH& cells): NP1(SIMDIM,pnp1,20), 
+	CELL(SIMDIM,cells.cCentre,20), BOUNDARY(SIMDIM,cells.bVerts,20) {}
+	Sim_Tree NP1;
+	Vec_Tree CELL;
+	Vec_Tree BOUNDARY;	
+}KDTREE;
+
 #endif /* VAR_H */

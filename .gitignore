@@ -43,6 +43,8 @@
 *.bmap
 *.edges
 *.faces
+*.grid*
+
 para
 
 
@@ -52,6 +54,8 @@ Outputs/*
 
 # Output files
 *.plt
+*.szplt*
+*.dat
 *.lpk
 *.sty
 *.lay

@@ -1,0 +1,14 @@
+0.25 0.5             #Beta & Gamma in Newmark-Beta
+2.0                  #Smoothing length factor
+0.1                  #Aritificial Viscosity factor
+150.0                #Boundary contact angle
+810                  #Rho_jet
+1.0                  #Rho_gas
+150                  #Speed of Sound C_s
+0.00142              #Liquid Dynamic Viscosity
+0.00003692           #Gas Dynamic Viscosity
+0.0256               #Surface Tension
+119.926              #Reference gas airspeed
+36434                #Reference gas pressure
+273.15               #Reference gas temperature
+sol.pval.10000.plt   #Input Mesh File

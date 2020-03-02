@@ -24,7 +24,7 @@ using namespace std::chrono;
 using namespace nanoflann;
 
 
-void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outlist, State& pnp1, State& airP)
+void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const MESH& cells, const outl& outlist, State& pnp1, State& airP)
 {
 	const size_t start = svar.bndPts;
 	const size_t end = svar.totPts;
@@ -38,8 +38,6 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 	neighb.reserve(end);
 	for(size_t ii = 0; ii < start; ++ii)
 		neighb.emplace_back();
-
-
 
 
 	/*Check if a particle is running low on neighbours, and add ficticious particles*/
@@ -90,10 +88,11 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 	for (size_t  ii=0; ii < end; ++ii)
 		xih[ii] = pnp1[ii].xi;
 	
-	vector<StateVecD> res(svar.totPts,StateVecD::Zero());
+	// vector<StateVecD> vPert(end,StateVecD::Zero());
+	vector<StateVecD> res(end,StateVecD::Zero());
 	vector<StateVecD> Af(end,StateVecD::Zero());
 	vector<real> Rrho(svar.totPts,0.0);
-	Forces(svar,fvar,avar,pnp1,neighb,outlist,res,Rrho,Af); /*Guess force at time n+1*/
+	Forces(svar,fvar,avar,cells,pnp1,neighb,outlist/*,vPert*/,res,Rrho,Af); /*Guess force at time n+1*/
 
 	/*Find maximum safe timestep*/
 	vector<StateVecD>::iterator maxfi = std::max_element(res.begin(),res.end(),
@@ -127,33 +126,25 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const outl& outl
 #endif
 }
 
-void Find_MinMax(SIM& svar, const State& pnp1)
+std::pair<StateVecD,StateVecD> Find_MinMax(SIM& svar, const State& pnp1)
 {
 	/*Find the max and min positions*/
-		auto xC = std::minmax_element(pnp1.begin(),pnp1.end(),
-					[](Particle p1, Particle p2){return p1.xi(0)< p2.xi(0);});
-		auto yC = std::minmax_element(pnp1.begin(),pnp1.end(),
-					[](Particle p1, Particle p2){return p1.xi(1)< p2.xi(1);});
-		#if SIMDIM == 3
-			auto zC = std::minmax_element(pnp1.begin(),pnp1.end(),
-					[](Particle p1, Particle p2){return p1.xi(2)< p2.xi(2);});
+	auto xC = std::minmax_element(pnp1.begin(),pnp1.end(),
+				[](Particle p1, Particle p2){return p1.xi(0)< p2.xi(0);});
+	auto yC = std::minmax_element(pnp1.begin(),pnp1.end(),
+				[](Particle p1, Particle p2){return p1.xi(1)< p2.xi(1);});
+	#if SIMDIM == 3
+		auto zC = std::minmax_element(pnp1.begin(),pnp1.end(),
+				[](Particle p1, Particle p2){return p1.xi(2)< p2.xi(2);});
 
-			StateVecD minC = StateVecD(xC.first->xi(0),yC.first->xi(1),zC.first->xi(2));
-			StateVecD maxC = StateVecD(xC.second->xi(0),yC.second->xi(1),zC.second->xi(2));
-		#else 
-			StateVecD minC = StateVecD(xC.first->xi(0),yC.first->xi(1));
-			StateVecD maxC = StateVecD(xC.second->xi(0),yC.second->xi(1));
-		#endif
+		StateVecD minC = StateVecD(xC.first->xi(0),yC.first->xi(1),zC.first->xi(2));
+		StateVecD maxC = StateVecD(xC.second->xi(0),yC.second->xi(1),zC.second->xi(2));
+	#else 
+		StateVecD minC = StateVecD(xC.first->xi(0),yC.first->xi(1));
+		StateVecD maxC = StateVecD(xC.second->xi(0),yC.second->xi(1));
+	#endif	
 
-		/*Check if they are more than the previous step*/
-		for (size_t dim = 0; dim < SIMDIM; ++dim)
-		{
-			if(minC(dim) < svar.minC(dim))
-				svar.minC(dim) = minC(dim);
-
-			if(maxC(dim) > svar.maxC(dim))
-				svar.maxC(dim) = maxC(dim);
-		}	
+	return std::pair<StateVecD,StateVecD>(minC,maxC);
 }
 
 uint Check_Pipe(Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& testp)
@@ -197,7 +188,15 @@ uint Check_Pipe(Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& testp)
         }
 
         if(inside_flag == TRUE)
+        {
+        	// cout << "Found cell." << endl;
         	break;
+        }
+	}
+
+	if(inside_flag == 0)
+	{
+		Write_Containment(ret_indexes, cells, testp);
 	}
 
 	return inside_flag;
@@ -247,56 +246,9 @@ int main(int argc, char *argv[])
 	cout << "Adjusted Start Coordinates: " << endl;
 	cout << svar.Start(0) << "  " << svar.Start(1);
 #if SIMDIM == 3
-	cout << "  " << svar.Start(2) << endl;
+	cout << "  " << svar.Start(2); 
 #endif
-
-	// Check if cells have been initialsed before making a tree off it
-	if(cells.cCentre.size() == 0)
-		cells.cCentre.emplace_back(StateVecD::Zero());
-
-	Vec_Tree CELL_INDEX(SIMDIM,cells.cCentre,20);
-	CELL_INDEX.index->buildIndex();
-	if(svar.Bcase == 6)
-	{
-		cout << "Building cell neighbours..." << endl;
-		FindCellNeighbours(CELL_INDEX, cells.cCentre, cells.cNeighb);
-
-		// Check if the pipe is inside the mesh
-		real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
-		real stepb = (svar.Pstep*svar.Bstep);
-		real r = 0.5*holeD;
-		#if SIMDIM == 3
-    	real dtheta = atan((stepb)/(r));
-		for(real theta = 0; theta < 2*M_PI; theta += dtheta)
-		{
-			StateVecD xi(r*sin(theta), 0.0, r*cos(theta));
-			/*Apply Rotation...*/
-			xi = svar.Rotate*xi;
-			xi += svar.Start;
-		    if(!Check_Pipe(CELL_INDEX, cells, xi))
-		    {
-		    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
-		    	exit(-1);
-		    }
-
-    	}
-    	#else
-    	for(real x = -r; x <= r; x+=stepb)
-    	{
-    		StateVecD xi(x,0.0);
-    		xi = svar.Rotate*xi;
-			xi += svar.Start;
-		    if(!Check_Pipe(CELL_INDEX, cells, xi))
-		    {
-		    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
-		    	exit(-1);
-		    }
-    	}
-    	#endif
-
-	}
-
-
+	cout << endl << endl;
 	/*Make a guess of how many there will be...*/
 	// int partCount = ParticleCount(svar);
     ///****** Initialise the particles memory *********/
@@ -308,30 +260,46 @@ int main(int argc, char *argv[])
 	svar.finPts = svar.nmax;
 	pn.reserve(svar.nmax);
   	pnp1.reserve(svar.nmax);
+
 	
 	
 	// if (svar.Bcase == 6){
 	// 	Write_Mesh_Data(svar,cells);
 	// }	
 
-	InitSPH(svar,fvar,avar,pn,pnp1);
+  	if(svar.restart == 1)
+  	{
+  		Restart(svar,pn,cells);
+  		pnp1 = pn;
+  	}
+  	else
+  		InitSPH(svar,fvar,avar,pn,pnp1);
 
+	// Check if cells have been initialsed before making a tree off it
+	if(cells.cCentre.size() == 0)
+		cells.cCentre.emplace_back(StateVecD::Zero());
+	if (cells.bVerts.size() == 0)
+		cells.bVerts.emplace_back(StateVecD::Zero());
+
+	// Vec_Tree CELL_INDEX(SIMDIM,cells.cCentre,20);
+		
 	cout << "Starting counts: " << endl;
 	cout << "Boundary: " << svar.bndPts << "  Sim: " << svar.simPts << endl;
 	 
 
 	///********* Tree algorithm stuff ************/
-	Sim_Tree NP1_INDEX(SIMDIM,pnp1,20);
-	NP1_INDEX.index->buildIndex();
-	FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
+	KDTREE TREE(pnp1,cells);
+	// Sim_Tree NP1_INDEX(SIMDIM,pnp1,20);
+	TREE.CELL.index->buildIndex();
+	TREE.NP1.index->buildIndex();
 
+	// if(svar.Bcase == 6)
+	// {
+	// 	cout << "Building cell neighbours..." << endl;
+	// 	FindCellNeighbours(TREE.CELL, cells.cCentre, cells.cNeighb);
+	// }
 
-	///*** Perform an iteration to populate the vectors *****/
-	// std::vector<std::vector<uint>>::iterator nfull = 
-	// 	std::max_element(outlist.begin(),outlist.end(),
-	// 	[](std::vector<uint> p1, std::vector<uint> p2){return p1.size()< p2.size();});
-
-	
+	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
 	#if SIMDIM == 3
 		// avar.nfull = (2.0/3.0) * real(nfull->size());
@@ -345,16 +313,20 @@ int main(int argc, char *argv[])
 		svar.nfull = 48;
 	#endif
 
-	// cout << avar.nfull << endl;
-	First_Step(svar,fvar,avar,outlist,pnp1,airP);
+	///*** Perform an iteration to populate the vectors *****/
+	First_Step(svar,fvar,avar,cells,outlist,pnp1,airP);
+
 	///*************** Open simulation files ***************/
-	std::ofstream f1,f2,f3,fb,fg;
+	std::fstream f1,f2,f3,fb,fg;
 	// NcFile* fn;
 	// h5_file_t fh5;
 
 	string framef = svar.outfolder;
 	framef.append("frame.info");
-	f2.open(framef, std::ios::out);
+	if(svar.restart == 1)
+		f2.open(framef, std::ios::out | std::ios::app);
+	else
+		f2.open(framef, std::ios::out);
 
 	f1 << std::scientific << std::setprecision(6);
 	f3 << std::scientific << std::setw(10);
@@ -367,26 +339,26 @@ int main(int argc, char *argv[])
 
 	if(svar.outtype == 0 )
 	{
-		if (svar.outform > 4)
-		{	
-			cout << "Output type not within design. Outputting fluid data..." << endl;
-			svar.outform = 1;
-		}
-
-		
 		/*Write sim particles*/
 		
 		Init_Binary_PLT(svar,"Fuel.szplt","Simulation Particles");
-		Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1);
+		// if(svar.restart == 0)
+		// {
+			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1);
+		// }
 
-
-		if (svar.Bcase != 0 && svar.Bcase !=5)
+		if (svar.Bcase != 0 && svar.Bcase !=5 && svar.restart == 0)
 		{
 			/*Write boundary particles*/
 			Init_Binary_PLT(svar,"Boundary.szplt","Boundary Particles");
-			Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2); 
+
 			if(svar.boutform == 0)
+			{   //Don't write a strand, so zone is static. 
+				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",0); 
 				TECEND142();			
+			}
+			else
+				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2); 
 		}	
 
 		if (svar.ghost == 1 && svar.gout == 1)
@@ -398,24 +370,17 @@ int main(int argc, char *argv[])
 	else if (svar.outtype == 1)
 	{
 
-		if (svar.Bcase != 0 && svar.Bcase != 5)
+		if (svar.Bcase != 0 && svar.Bcase != 5 && svar.restart == 0)
 		{	/*If the boundary exists, write it.*/
 			string bfile = svar.outfolder;
 			bfile.append("Boundary.plt");
 			fb.open(bfile, std::ios::out);
 			if(fb.is_open())
 			{
+				Write_ASCII_header(fb,svar);
+				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");
 				if(svar.boutform == 0)
-				{
-					Write_Boundary_ASCII(fb,svar,pnp1);
 					fb.close();
-				}
-				else
-				{
-					State empty;
-					Write_ASCII_header(fb,svar);
-					Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");
-				}
 			}
 			else
 			{
@@ -432,9 +397,6 @@ int main(int argc, char *argv[])
 		{
 			Write_ASCII_header(f1,svar);
 			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,"Fuel");
-			// if(svar.Bcase != 0 && svar.Bcase != 5 && svar.boutform == 1)
-			// 	Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,airP);
-
 		}
 		else
 		{
@@ -471,8 +433,50 @@ int main(int argc, char *argv[])
 	// }
 	else
 	{
-		cerr << "Output type ambiguous. Please select 0, 1 or 2 for output data type." << endl;
+		cerr << "Output type ambiguous. Please select 0 or 1 for output data type." << endl;
 		exit(-1);
+	}
+
+	if(svar.Bcase == 6)
+	{
+				// Check if the pipe is inside the mesh
+		real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
+		real stepb = (svar.Pstep*svar.Bstep);
+		real r = 0.5*holeD;
+		#if SIMDIM == 3
+    	real dtheta = atan((stepb)/(r));
+		for(real theta = 0; theta < 2*M_PI; theta += dtheta)
+		{
+			StateVecD xi(r*sin(theta), 0.0, r*cos(theta));
+			/*Apply Rotation...*/
+			xi = svar.Rotate*xi;
+			xi += svar.Start;
+		    if(!Check_Pipe(TREE.CELL, cells, xi))
+		    {
+
+		    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
+		    	cout << "Fuel will be excessively close to begin." << endl;
+		    	exit(-1);
+		    }
+
+    	}
+    	#else
+    	for(real x = -r; x <= r; x+=stepb)
+    	{
+
+    		StateVecD xi(x,0.0);
+    		xi = svar.Rotate*xi;
+			xi += svar.Start;
+
+			// cout << "Checking point: " << xi(0) << "  " << xi(1) << endl;
+		    if(!Check_Pipe(TREE.CELL, cells, xi))
+		    {
+		    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
+		    	cout << "Fuel will be excessively close to begin." << endl;
+		    	exit(-1);
+		    }
+    	}
+    	#endif
 	}
 
 	#if SIMDIM == 3
@@ -482,31 +486,41 @@ int main(int argc, char *argv[])
 	/*Timing calculation + error sum output*/
 	t2 = high_resolution_clock::now();
 	duration = duration_cast<microseconds>(t2-t1).count()/1e6;
-	cout << "Frame: " << 0 << "  Sim Time: " << svar.t << "  Compute Time: "
-	<< duration <<"  Error: " << error << endl;
 	
-	f2 << "Frame: " << 0 << endl;
-	f2 << "Total Points: " << svar.totPts << " Boundary Points: " << svar.bndPts 
-		<< " Fluid Points: " << svar.simPts << endl;
-	f2 << "Sim Time:  " << std::scientific << std::setprecision(6) << svar.t 
-	<< " Comp Time: " << std::fixed << duration << " Error: " << 0 << " Sub-iterations: " 
-    << 0 << endl;
-	
-	Find_MinMax(svar,pnp1);	
-	
-	f2 << "Minimum Coords:" << endl << std::scientific << std::setprecision(8) 
-		<< svar.minC(0) << " " << svar.minC(1) << " ";
-	#if SIMDIM ==3
-	f2 << svar.minC(2) << " ";
-	#endif
-	f2 << endl << "Maximum Coords:" << endl  << svar.maxC(0) << " " << svar.maxC(1);
-	#if SIMDIM ==3
-	f2 <<  " " << svar.maxC(2); 
-	#endif
-	f2 << endl;
+	if(svar.restart != 1)
+		svar.frame = 0;
+	else
+	{
+		cout << "Restarting simulation..." << endl;
+	}
 
+	cout << "Frame: " << svar.frame << "  Sim Time: " << svar.t << "  Compute Time: "
+	<< duration <<"  Error: " << error << endl;
+
+	if(svar.restart != 1)
+	{
+		f2 << "Frame: " << svar.frame << endl;
+		f2 << "Total Points: " << svar.totPts << " Boundary Points: " << svar.bndPts 
+			<< " Fluid Points: " << svar.simPts << endl;
+		f2 << "Sim Time:  " << std::scientific << std::setprecision(6) << svar.t 
+		<< " Comp Time: " << std::fixed << duration << " Error: " << 0 << " Sub-iterations: " 
+	    << 0 << endl;
+		f2 << "Deleted particles: " << svar.delNum << " Internal collisions: " << svar.intNum <<  endl;
+		
+
+		// f2 << "Minimum Coords:" << endl << std::scientific << std::setprecision(8) 
+		// 	<< svar.minC(0) << " " << svar.minC(1) << " ";
+		// #if SIMDIM ==3
+		// f2 << svar.minC(2) << " ";
+		// #endif
+		// f2 << endl << "Maximum Coords:" << endl  << svar.maxC(0) << " " << svar.maxC(1);
+		// #if SIMDIM ==3
+		// f2 <<  " " << svar.maxC(2); 
+		// #endif
+		// f2 << endl;
+	}
 	///************************* MAIN LOOP ********************/
-	svar.frame = 0;
+	
 #ifdef DEBUG
 	const real a = 1 - svar.gamma;
 	const real b = svar.gamma;
@@ -520,13 +534,13 @@ int main(int argc, char *argv[])
 	dbout << "B: " << B << "  gam: " << gam << endl << endl; 
 #endif
 
-	for (uint frame = 1; frame<= svar.Nframe; ++frame)
+	for (uint frame = svar.frame+1; frame<= svar.Nframe; ++frame)
 	{
 		int stepits=0;
 		real stept=0.0;
 		while (stept<svar.framet)
 		{
-		    error = Newmark_Beta(NP1_INDEX,CELL_INDEX,svar,fvar,avar,cells,pn,pnp1,airP,outlist);
+		    error = Newmark_Beta(TREE,svar,fvar,avar,cells,pn,pnp1,airP,outlist);
 		    stept+=svar.dt;
 		    ++stepits;
 		    //cout << svar.t << "  " << svar.dt << endl;
@@ -547,18 +561,18 @@ int main(int argc, char *argv[])
 		f2 << "Sim Time:  " << std::scientific << std::setprecision(6) << svar.t 
 		<< " Comp Time: " << std::fixed << duration << " Error: " << error << " Sub-iterations: " 
 	    << stepits << endl;
+	    f2 << "Deleted particles: " << svar.delNum << " Internal collisions: " << svar.intNum <<  endl;
 		
-		
-		f2 << "Minimum Coords:" << endl << std::scientific << std::setprecision(8) 
-			<< svar.minC(0) << " " << svar.minC(1) << " ";
-		#if SIMDIM ==3
-		f2 << svar.minC(2) << " ";
-		#endif
-		f2 << endl << "Maximum Coords:" << endl  << svar.maxC(0) << " " << svar.maxC(1);
-		#if SIMDIM ==3
-		f2 <<  " " << svar.maxC(2);
-		#endif
-		f2 << endl;
+		// f2 << "Minimum Coords:" << endl << std::scientific << std::setprecision(8) 
+		// 	<< svar.minC(0) << " " << svar.minC(1);
+		// #if SIMDIM ==3
+		// f2 << " " << svar.minC(2);
+		// #endif
+		// f2 << endl << "Maximum Coords:" << endl  << svar.maxC(0) << " " << svar.maxC(1);
+		// #if SIMDIM ==3
+		// f2 <<  " " << svar.maxC(2);
+		// #endif
+		// f2 << endl;
 		
 
 		if(svar.outframe !=0)
@@ -568,7 +582,7 @@ int main(int argc, char *argv[])
 			  	cout << "Frame: " << frame << "  Sim Time: " << svar.t-svar.dt << "  Compute Time: "
 			  	<< duration <<"  Error: " << error << endl;
 			  	cout << "Boundary particles:  " << svar.bndPts << " Sim particles: " << svar.totPts-svar.bndPts
-			  	<< " Deleted particles: " << svar.delNum << endl;
+			  	<< " Deleted particles: " << svar.delNum << " Internal collisions: " << svar.intNum <<  endl;
 			}
 		}
 
@@ -633,15 +647,5 @@ int main(int argc, char *argv[])
     cout << "Time taken:\t" << duration << " seconds" << endl;
     cout << "Total simulation time:\t" << svar.t << " seconds" << endl;
 
-    /*Perform post processing if desired.*/
-    if(svar.afterSim == 1)
-    {
-    	fvar.H = svar.postRadius;
-	  	fvar.HSQ = fvar.H*fvar.H; 
-		fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
-
-    	TECMESH grid;
-    	grid.DoPostProcessing(svar,fvar);
-    }
 	return 0;
 }

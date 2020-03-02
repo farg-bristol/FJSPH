@@ -2,25 +2,12 @@
 #define CDFIO_H
 
 #include "Var.h"
-#include "Crossing.h"
-#include <iostream>
-#include <iomanip>
-#include <fstream>
-#include <string.h>
-#include <sstream>
+#include "IOFunctions.h"
 
-// #include <H5hut.h>
 #include <netcdf>
 using namespace netCDF;
 using namespace netCDF::exceptions;
 #define NC_ERR 2
-
-using std::cout;
-using std::cerr;
-using std::ifstream;
-using std::ofstream;
-using std::endl;
-using std::string;
 
 struct ZONE
 {
@@ -38,19 +25,7 @@ struct ZONE
 	uint veltype, velstart, cpstart, densstart;
 };
 
-uint index(uint ii, uint jj, uint nPts)
-{
-	return(ii*nPts + jj);
-}
 
-std::ifstream& GotoLine(std::ifstream& file, unsigned int num)
-{
-    file.seekg(std::ios::beg);
-    for(uint ii=0; ii < num - 1; ++ii){
-        file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
-    }
-    return file;
-}
 
 /*FOR DEBUGGING*/
 void Write_Zone(string input, ZONE& zn, MESH& cells)
@@ -635,461 +610,11 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 	// }
 }
 
-
-/*****************************************************************************/
-/*************** READING NETCDF CELL BASED DATA FUNCTION *********************/
-/*****************************************************************************/
-// #if SIMDIM == 3
-// void Read_TAUMESH(const SIM& svar, MESH& cells, const FLUID& fvar)
-// {
-	
-// 	string meshIn = svar.infolder;
-// 	string solIn = svar.infolder;
-
-// 	meshIn.append(svar.meshfile);
-// 	solIn.append(svar.solfile);
-	
-// 	#ifdef DEBUG 
-// 		dbout << "Attempting read of NetCDF file." << endl;
-// 		dbout << "Mesh file: " << meshIn << endl;
-// 		dbout << "Solution file: " << solIn << endl;
-// 	#endif
-// 	/*Read the mesh data*/
-// 	NcFile fin(meshIn, NcFile::read);
-// 	cout << "Mesh file open. Reading cell data..." << endl;
-
-// 	// Retrieve how many elements there are.
-// 	NcDim elemNo = fin.getDim("no_of_elements");
-// 	NcDim pointNo = fin.getDim("no_of_points");
-// 	uint nElem = static_cast<uint>(elemNo.getSize());
-// 	uint nPts = static_cast<uint>(pointNo.getSize());
-
-// 	#ifdef DEBUG
-// 		dbout << "nElem : " << nElem << " nPts: " << nPts << endl;
-// 	#endif
-
-// 	cout << "nElem : " << nElem << " nPts: " << nPts << endl;
-// 	cells.numPoint = nPts;
-// 	cells.numElem = nElem;
-
-// 	/*Retrieve the cells*/
-// 	vector<vector<uint>> tets = Get_Element(fin,"points_of_tetraeders");
-// 	vector<vector<uint>> prism = Get_Element(fin,"points_of_prisms");
-// 	vector<vector<uint>> pyra = Get_Element(fin,"points_of_pyramids");
-// 	vector<vector<uint>> hex = Get_Element(fin,"points_of_hexaeders");
-	
-// 	#ifdef DEBUG
-// 		if(tets.size() == 0)
-// 			dbout << "No tetraeders in mesh file." << endl;
-
-// 		if(prism.size() == 0)
-// 			dbout << "No prisms in mesh file." << endl;
-
-// 		if(pyra.size() == 0)
-// 			dbout << "No pyramids in mesh file." << endl;
-
-// 		if(hex.size() == 0)
-// 			dbout << "No hexaeders in mesh file." << endl;
-// 	#endif
-
-
-// 	/*Get the coordinates of the mesh*/
-// 	cells.verts = Get_Coordinates(fin);
-// 	if(cells.verts.size()!= nPts)
-// 	{
-// 		cout << "Some data has been missed.\nPlease check how many points." << endl;
-// 	}
-	
-
-// 	#ifdef DEBUG
-// 	dbout << "All element data ingested" << endl;
-// 	#endif
-
-
-// 	/*Put data into cell structure, and generate face based data*/
-// 	if(tets.size()!=0)
-// 	{
-// 		cells.elems.insert(cells.elems.end(),tets.begin(),tets.end());
-// 		#if SIMDIM == 3
-// 		cout << "Buiding cell faces for points_of_tetraeders" << endl;
-// 		std::vector<std::vector<uint>> facenum;
-// 		vector<vector<vector<uint>>> cFaces;
-// 		#ifdef DEBUG
-// 		dbout << "Getting tetraeder cell faces." << endl;
-// 		#endif
-// 		facenum = {{0,1,2},{0,2,3},{0,3,1},{1,3,2}};
-// 		Get_Cell_Faces(tets,facenum,cFaces);
-		
-// 		cells.cFaces.insert(cells.cFaces.end(), cFaces.begin(), cFaces.end());
-// 		#endif
-// 	}
-
-// 	if(prism.size()!=0)
-// 	{
-// 		cells.elems.insert(cells.elems.end(),prism.begin(),prism.end());
-// 		#if SIMDIM == 3
-// 		cout << "Buiding cell faces for points_of_prisms" << endl;
-// 		std::vector<std::vector<uint>> facenum;
-// 		vector<vector<vector<uint>>> cFaces;
-// 		#ifdef DEBUG
-// 		dbout << "Getting prism cell faces." << endl;
-// 		#endif
-// 		facenum = {{1,4,5},{1,5,2},{0,3,5},{0,5,2},
-// 				   {0,3,4},{0,4,1},{0,1,2},{5,4,3}};
-// 		Get_Cell_Faces(prism,facenum,cFaces);
-		
-// 		cells.cFaces.insert(cells.cFaces.end(), cFaces.begin(), cFaces.end());
-// 		#endif
-// 	}
-
-// 	if(pyra.size()!=0)
-// 	{
-// 		cells.elems.insert(cells.elems.end(),pyra.begin(),pyra.end());
-// 		#if SIMDIM == 3
-// 		cout << "Buiding cell faces for points_of_pyramids" << endl;
-// 		std::vector<std::vector<uint>> facenum;
-// 		vector<vector<vector<uint>>> cFaces;
-// 		#ifdef DEBUG
-// 		dbout << "Getting pyramid cell faces." << endl;
-// 		#endif
-// 		facenum = {{0,2,1},{0,3,2},{0,1,4},{0,4,3},{1,4,2},{2,3,4}};
-// 		Get_Cell_Faces(pyra,facenum,cFaces);
-		
-// 		cells.cFaces.insert(cells.cFaces.end(), cFaces.begin(), cFaces.end());
-// 		#endif
-// 	}
-
-// 	if(hex.size()!=0)
-// 	{
-// 		cells.elems.insert(cells.elems.end(),hex.begin(),hex.end());
-// 		#if SIMDIM == 3
-// 		cout << "Buiding cell faces for points_of_hexaeders" << endl;
-// 		std::vector<std::vector<uint>> facenum;
-// 		vector<vector<vector<uint>>> cFaces;
-// 		#ifdef DEBUG
-// 		dbout << "Getting hexaeder cell faces." << endl;
-// 		#endif
-// 		facenum = {{1,5,2},{6,2,5},{2,6,7},{7,3,2},{0,3,4},{3,7,4},
-// 				   {0,4,1},{5,1,4},{0,1,2},{0,2,3},{7,6,4},{6,5,4}};
-// 		Get_Cell_Faces(hex,facenum,cFaces);
-		
-// 		cells.cFaces.insert(cells.cFaces.end(), cFaces.begin(), cFaces.end());
-// 		#endif
-// 	}
-
-
-// 	if(cells.elems.size()!=nElem)
-// 	{
-// 		cout << "Some data has been missed.\nPlease check which kinds of volumes used." << endl;
-// 	}
-
-// 	#ifdef DEBUG
-// 	dbout << "End of interaction with mesh file and ingested data." << endl << endl;
-// 	dbout << "Opening solultion file." << endl;
-// 	#endif
-// 	// /*End of reading the mesh file.*/
-// 	// cout << "Trying solution file: " << solIn << endl;
-// 	Read_SOLUTION(solIn,fvar,cells);
-// }
-// #endif
-
-/*****************************************************************************/
-/******************** READING NETCDF 2D DATA FUNCTION ************************/
-/*****************************************************************************/
-#if SIMDIM == 2
-
-
-int Find_Bmap_Markers(const string& bmapIn)
-{
-	#ifdef DEBUG
-	dbout << "Entering Find_Bmap_Markers..." << endl;
-	#endif
-
-	std::ifstream fin(bmapIn,std::ios::in);
-
-	if(!fin.is_open())
-	{
-		cout << "Couldn't open the boundary map file." << endl;
-		cout << "Attempted path: " << bmapIn << endl;
-		exit(-1);
-	}
-
-	int marker = 0;
-	/*Search for the markers that have either farfield or symmetry plane*/
-	uint lineno = 0;
-	string line;
-
-	uint blockno = 0;
-	uint blockstart = 1; /*A store of when this block starts to search through*/
-
-	while(getline(fin,line))
-	{
-
-		// cout << line << endl;
-		if(line.find("Type: symmetry plane")!=string::npos)
-		{
-			
-			/*This marker is a far field, so store it.*/
-			/*Go to the start of the block, and search for the marker ID*/
-			GotoLine(fin,blockstart);
-			while(getline(fin,line))
-			{	
-				// cout << "inner:\t" << line << endl;
-				if(line.find("Markers:")!=string::npos)
-				{
-					// cout << "Found a boundary marker" << endl;
-					std::stringstream sstr;
-
-					sstr << line;
-
-					string temp;
-					int found;
-
-					while(!sstr.eof())
-					{
-						sstr >> temp;
-						if(std::stringstream(temp) >> found)
-						{
-							marker = found;
-						}
-
-						temp = "";
-					}
-
-					goto markerfound;
-				}
-			}
-		}
-
-		if(line.find("block end")!= string::npos)
-		{	/*We're on a new block*/
-			blockno++;
-			blockstart = lineno+1;
-		}
-
-		lineno++;
-	}
-
-markerfound:
-	cout << "Symmetry plane marker:" << marker << endl;
-
-	#ifdef DEBUG
-	dbout << "Exiting Find_Bmap_Markers..." << endl;
-	#endif
-
-	return marker;
-}
-
-vector<vector<size_t>> Get_Symmetry_Plane(NcFile& fin, const int marker)
-{
-
-#ifdef DEBUG
-	dbout << "Entering Get_Symmetry_Plane..."<< endl;
-	dbout << "Opening variable: boundarymarker_of_surfaces" << endl;
-#endif
-
-	NcVar bmarkers = fin.getVar("boundarymarker_of_surfaces");
-	if(bmarkers.isNull()) exit(NC_ERR);
-
-	NcDim dim = bmarkers.getDim(0);
-	size_t nMarkers = dim.getSize();
-	
-#ifdef DEBUG
-		dbout << "Number of surface markers: " << nMarkers << endl;
-#endif
-
-	int* markers = new int[nMarkers];
-
-	/*Get the actual data from the file*/
-	bmarkers.getVar(markers);
-
-
-	cout << "Successfully read boundary markers." << endl;
-
-	#ifdef DEBUG
-	dbout << "Successfully read boundary markers." << endl;
-	#endif
-
-	/*Now compare against the marker for the symmetry plane, */ 
-	/*and add index to a vector to retrieve the faces*/
-	vector<size_t> symPlaneM;
-
-	for(size_t ii = 0; ii < nMarkers; ++ii)
-	{
-		if(markers[ii] == marker)
-			symPlaneM.emplace_back(ii);
-	}
-
-	/*Get the surface indexes*/
-	vector<vector<size_t>> temp;
-	size_t nQuads = 0;
-	size_t nTris = 0;
-	/*Start with surface quadrilaterals*/
-#ifdef DEBUG
-	dbout << "Attempting to read surface quadrilaterals." << endl;
-#endif
-
-	NcVar quadVar = fin.getVar("points_of_surfacequadrilaterals");
-	if(!quadVar.isNull()) 
-	{
-		dim = quadVar.getDim(0);
-		NcDim dim2 = quadVar.getDim(1);
-		nQuads = dim.getSize();
-		size_t nPPQuad = dim2.getSize();
-			
-#ifdef DEBUG
-		dbout << "Number of surface quadrilaterals: " << nQuads << endl;
-#endif
-
-		int* quads = new int[nQuads*nPPQuad];
-
-		/*Get the actual data from the file*/
-		quadVar.getVar(quads);
-
-		cout << "Successfully read surface quadrilaterals." << endl;
-
-#ifdef DEBUG
-		dbout << "Successfully read surface quadrilaterals." << endl;
-#endif
-		/*Create the vector of surfaces*/
-		for (size_t ii = 0; ii < nQuads; ++ii)
-		{
-			temp.emplace_back();
-			for(size_t jj = 0; jj < nPPQuad; ++jj)
-				temp[ii].emplace_back(static_cast<size_t>(quads[index(ii,jj,nPPQuad)]));
-		}
-	}
-	else 
-	{
-
-#ifdef DEBUG
-		dbout << "No surface quadrilaterals." << endl;
-#endif
-	}
-
-#ifdef DEBUG
-	dbout << "Attempting to read surface triangles." << endl;
-#endif
-
-	NcVar triVar = fin.getVar("points_of_surfacetriangles");
-	if(!triVar.isNull())
-	{
-		dim = triVar.getDim(0);
-		NcDim dim2 = triVar.getDim(1);
-		nTris = dim.getSize();
-		size_t nPPTri = dim2.getSize();
-			
-#ifdef DEBUG
-			dbout << "Number of surface triangles: " << nTris << endl;
-#endif
-
-		int* tris = new int[nTris*nPPTri];
-
-		/*Get the actual data from the file*/
-		triVar.getVar(tris);
-
-		cout << "Successfully read surface triangles." << endl;
-
-#ifdef DEBUG
-		dbout << "Successfully read surface triangles." << endl;
-#endif
-
-		/*Create the vector of surfaces*/
-		for (size_t ii = nQuads; ii < nQuads + nTris; ++ii)
-		{
-			temp.emplace_back();
-			for(size_t jj = 0; jj < nPPTri; ++jj)
-				temp[ii].emplace_back(static_cast<size_t>(tris[index(ii,jj,nPPTri)]));
-		}
-	}
-	else 
-	{
-#ifdef DEBUG
-		dbout << "No surface triangles." << endl;
-#endif
-	}
-
-	if(temp.size()!= nMarkers)
-	{
-		cout << "Some surface faces have been missed." << endl;
-		exit(-1);
-	}
-
-	vector<vector<size_t>> symPlane;
-	for(auto const& index:symPlaneM)
-	{
-		symPlane.emplace_back(temp[index]);
-	}
-
-	return symPlane;
-}
-
-void Read_TAUMESH(const SIM& svar, MESH& cells, const FLUID& fvar)
-{
-	string bmapIn = svar.infolder;
-	string meshIn = svar.infolder;
-	string solIn = svar.infolder;
-
-	bmapIn.append(svar.bmapfile);
-	meshIn.append(svar.meshfile);
-	solIn.append(svar.solfile);
-	
-	#ifdef DEBUG 
-		dbout << "Attempting read of NetCDF file." << endl;
-		dbout << "Bmap file: " << bmapIn << endl;
-		dbout << "Mesh file: " << meshIn << endl;	
-		dbout << "Solution file: " << solIn << endl;
-	#endif
-
-	/*Find which marker we need to read for the surfaces*/
-	int marker = Find_Bmap_Markers(bmapIn);
-
-
-	/*Read the mesh data*/
-	NcFile fin(meshIn, NcFile::read);
-	cout << "Mesh file open. Reading cell data..." << endl;
-
-	// Retrieve how many elements there are.
-	NcDim elemNo = fin.getDim("no_of_elements");
-	NcDim pointNo = fin.getDim("no_of_points");
-	NcDim nSurfaces = fin.getDim("no_of_surfaceelements");
-	uint nElem = static_cast<uint>(elemNo.getSize());
-	uint nPts = static_cast<uint>(pointNo.getSize());
-
-	#ifdef DEBUG
-		dbout << "nElem : " << nElem << " nPts: " << nPts << endl;
-	#endif
-
-	cells.numPoint = nPts;
-	cells.numElem = nElem;
-
-	/*Retrieve the symmetry plane faces*/
-	cells.elems = Get_Symmetry_Plane(fin, marker);
-
-
-	/*Get the coordinates of the mesh*/
-	uint ignored = Get_Coordinates(fin,cells.verts);
-	if(cells.verts.size()!= nPts)
-	{
-		cout << "Some data has been missed.\nPlease check how many points." << endl;
-	}
-	
-
-	#ifdef DEBUG
-	dbout << "All element data ingested" << endl;
-	dbout << "End of interaction with mesh file and ingested data." << endl << endl;
-	dbout << "Opening solultion file." << endl;
-	#endif
-	// /*End of reading the mesh file.*/
-	// cout << "Trying solution file: " << solIn << endl;
-	vector<uint> empty;
-	Read_SOLUTION(solIn,fvar,ignored,cells, empty);
-}
-
 /*****************************************************************************/
 /*************** READING NETCDF EDGE BASED DATA FUNCTIONS ********************/
 /*****************************************************************************/
 
+#if SIMDIM == 2
 vector<vector<size_t>> Get_Edges(NcFile& fin)
 {
 #ifdef DEBUG
@@ -1156,31 +681,6 @@ void Place_Edges(NcFile& fin, MESH& cells)
 	#ifdef DEBUG
 		dbout << "Reading element left/right and placing faces" << endl;
 	#endif
-
-	/*Read how many faces there should be per element/cell*/
-	// NcVar nFaceElems = fin.getVar("faces_per_element");
-	// if(nFaceElems.isNull())
-	// {	/*No data is available*/
-	// 	cout << "No data on how many faces per cell. Stopping" << endl;
-	// 	exit(-1);
-	// }
-
-	// NcDim dim = nFaceElems.getDim(0);
-	// size_t nElems = dim.getSize();
-
-	// uint* elemFaceNo = new uint[nElems];
-	
-	// #ifdef DEBUG
-	// dbout << "Attempting to read NetCDF element face count." << endl;
-	// #endif
-
-	// nFaceElems.getVar(elemFaceNo);
-
-	// cout << "Successfully read element face count data." << endl;
-
-	// #ifdef DEBUG
-	// dbout << "Successfully read element face count data." << endl;
-	// #endif
 
 	NcVar leftData = fin.getVar("left_element_of_edges");	
 	if(leftData.isNull())
@@ -1252,18 +752,6 @@ void Place_Edges(NcFile& fin, MESH& cells)
 	}
 
 	cells.leftright = leftright;
-
-	/*Check if each element has the correct number of faces*/
-	// for(uint ii = 0; ii < nElems; ++ii)
-	// {
-	// 	if(cells.cFaces[ii].size() != elemFaceNo[ii])
-	// 	{
-	// 		cout << "Mismatch of number of faces in an element. " <<
-	// 			"Element " << ii <<  " should have " << elemFaceNo[ii] << "  but has " 
-	// 			<< cells.cFaces[ii].size() << " faces." << endl;
-	// 		exit(-1);
-	// 	}
-	// }
 
 	#ifdef DEBUG
 		dbout << "End of placing edges in elements." << endl;
@@ -1345,23 +833,12 @@ void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, const FLUID& fvar)
 	cells.faces = Get_Edges(fin);
 
 	
-
-	/*Adjust the scale*/
-	cells.scale = svar.scale;
-	for(auto& vert:cells.verts)
-	{
-		vert*=cells.scale;
-	}
-	svar.Start*=cells.scale;
-	// svar.Jet/=cells.scale;
 	
 
 	/*Get face left and right, and put the faces in the elements*/
 	Place_Edges(fin, cells);
 
-
 	/*Get the vertices that are in use to take the values from the solution file*/
-
 	int* usedVerts = new int[nPnts];
 
 #ifdef DEBUG 
@@ -1391,6 +868,15 @@ void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, const FLUID& fvar)
 	{
 		cout << "Some data has been missed.\nPlease check how many points." << endl;
 	}
+
+	/*Adjust the scale*/
+	cells.scale = svar.scale;
+	for(auto& vert:cells.verts)
+	{
+		vert*=cells.scale;
+	}
+	svar.Start*=cells.scale;
+	// svar.Jet/=cells.scale;
 
 	#ifdef DEBUG
 	dbout << "End of interaction with mesh file and ingested data." << endl << endl;
@@ -1473,31 +959,6 @@ void Place_Faces(NcFile& fin, MESH& cells)
 		dbout << "Reading element left/right and placing faces" << endl;
 	#endif
 
-	/*Read how many faces there should be per element/cell*/
-	// NcVar nFaceElems = fin.getVar("faces_per_element");
-	// if(nFaceElems.isNull())
-	// {	/*No data is available*/
-	// 	cout << "No data on how many faces per cell. Stopping" << endl;
-	// 	exit(-1);
-	// }
-
-	// NcDim dim = nFaceElems.getDim(0);
-	// size_t nElems = dim.getSize();
-
-	// uint* elemFaceNo = new uint[nElems];
-	
-	// #ifdef DEBUG
-	// dbout << "Attempting to read NetCDF element face count." << endl;
-	// #endif
-
-	// nFaceElems.getVar(elemFaceNo);
-
-	// cout << "Successfully read element face count data." << endl;
-
-	// #ifdef DEBUG
-	// dbout << "Successfully read element face count data." << endl;
-	// #endif
-
 	NcVar leftData = fin.getVar("left_element_of_faces");	
 	if(leftData.isNull())
 	{	/*No data is available*/
@@ -1546,12 +1007,9 @@ void Place_Faces(NcFile& fin, MESH& cells)
 	dbout << "Successfully read right element data." << endl;
 	#endif
 	vector<std::pair<int,int>> leftright(nLeft);
-
+	vector<size_t> bIndex;
 	#pragma omp parallel shared(leftright)
 	{ 
-		/*Create local of */
-		
-
 		#pragma omp for schedule(static) nowait
 		for(size_t ii = 0; ii < nLeft; ++ii)
 		{
@@ -1563,60 +1021,69 @@ void Place_Faces(NcFile& fin, MESH& cells)
 				cells.cFaces[lindex].emplace_back(ii);
 				if(rindex >=0)
 					cells.cFaces[rindex].emplace_back(ii);
-			}
-		}
-	}
-
-	cells.leftright = leftright;
-
-	/*Check if each element has the correct number of faces*/
-	// for(uint ii = 0; ii < nElems; ++ii)
-	// {
-	// 	if(cells.cFaces[ii].size() != elemFaceNo[ii])
-	// 	{
-	// 		cout << "Mismatch of number of faces in an element. " <<
-	// 			"Element " << ii <<  " should have " << elemFaceNo[ii] << "  but has " 
-	// 			<< cells.cFaces[ii].size() << " faces." << endl;
-	// 		exit(-1);
-	// 	}
-	// }
-
-	#ifdef DEBUG
-		dbout << "End of placing faces in elements." << endl;
-	#endif
-
-	/*Now go through the faces and see which vertices are unique, to get element data*/
-	cout << "Building elements..." << endl;
-#pragma omp parallel
-{
-	// vector<vector<uint>> local;
-	#pragma omp for schedule(static) nowait
-	for(uint ii = 0; ii < cells.cFaces.size(); ++ii)
-	{
-		for(auto const& index:cells.cFaces[ii])
-		{
-			const vector<size_t> face = cells.faces[index];
-			for(auto const& vert:face)
-			{
-				if(std::find(cells.elems[ii].begin(),cells.elems[ii].end(),vert)
-					==cells.elems[ii].end())
-				{	/*Vertex doesn't exist in the elems vector yet.*/
-					#pragma omp critical
+				else if(rindex == -1)
+				{	/*Create a list of vertices on the boundary*/
+					for(auto const& vindex:cells.faces[ii])
 					{
-						cells.elems[ii].emplace_back(vert);
+						bIndex.emplace_back(vindex);
 					}
 				}
 			}
 		}
 	}
-}
+
+	#ifdef DEBUG
+		dbout << "End of placing faces in elements." << endl;
+		dbout << "Building boundary indexes." << endl;
+	#endif
+
+
+	/*Sort and erase duplicates*/
+	std::sort(bIndex.begin(),bIndex.end());
+	bIndex.erase(std::unique(bIndex.begin(),bIndex.end()),bIndex.end());
+	
+	vector<StateVecD> bVerts(bIndex.size());
+	cells.bIndex = bIndex;
+	cells.leftright = leftright;	
+
+	/*Now go through the faces and see which vertices are unique, to get element data*/
+	cout << "Building elements..." << endl;
+	#pragma omp parallel
+	{
+		
+		#pragma omp for schedule(static) nowait
+		for(size_t ii = 0; ii < bIndex.size(); ++ii)
+		{
+			bVerts[ii] = cells.verts[bIndex[ii]];
+		}
+		// vector<vector<uint>> local;
+		#pragma omp for schedule(static) nowait
+		for(size_t ii = 0; ii < cells.cFaces.size(); ++ii)
+		{
+			for(auto const& index:cells.cFaces[ii])
+			{
+				const vector<size_t> face = cells.faces[index];
+				for(auto const& vert:face)
+				{
+					if(std::find(cells.elems[ii].begin(),cells.elems[ii].end(),vert)
+						==cells.elems[ii].end())
+					{	/*Vertex doesn't exist in the elems vector yet.*/
+						#pragma omp critical
+						{
+							cells.elems[ii].emplace_back(vert);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	cells.bVerts = bVerts;
 	cout << "Elements built." << endl;
 
 	#ifdef DEBUG
 	dbout << "All elements defined." << endl << endl;
 	#endif
-	
-
 }
 
 void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)

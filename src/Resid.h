@@ -17,7 +17,7 @@
 #include "Aero.h"
 #include "Add.h"
 
-real GetNumpartdens(const SIM &svar, const FLUID &fvar, const State &pnp1, const outl &outlist)
+real GetNumpartdens(const SIM& svar, const FLUID& fvar, const State& pnp1, const outl& outlist)
 {
 	real npd = 0.0;
 	const uint end = svar.totPts;
@@ -36,7 +36,7 @@ real GetNumpartdens(const SIM &svar, const FLUID &fvar, const State &pnp1, const
 }
 
 /* Colour field gradient in Hu et al (2014) method, note the bottom variable to account for no air*/
-std::vector<StateVecD> GetColourGrad(const SIM &svar, const FLUID &fvar, const State &pnp1, const outl &outlist)
+std::vector<StateVecD> GetColourGrad(const SIM& svar, const FLUID& fvar, const State &pnp1, const outl& outlist)
 {
 	std::vector<StateVecD> cgrad(svar.totPts, StateVecD::Zero());
 	const uint start = svar.bndPts;
@@ -74,9 +74,9 @@ std::vector<StateVecD> GetColourGrad(const SIM &svar, const FLUID &fvar, const S
 	return cgrad;
 }
 
-StateVecD Base(const FLUID &fvar, const Part &pi, const Part &pj, 
-	const StateVecD &Rij, const StateVecD &Vij, const real r, 
-	const StateVecD &Grad, std::vector<real> &mu)
+StateVecD Base(const FLUID& fvar, const Part& pi, const Part& pj, 
+	const StateVecD& Rij, const StateVecD& Vij, const real r, 
+	const StateVecD& Grad, std::vector<real> &mu)
 {
 	/*Pressure and artificial viscosity - Monaghan (1994) p.400*/
 	real pifac;
@@ -98,15 +98,15 @@ StateVecD Base(const FLUID &fvar, const Part &pi, const Part &pj,
 }
 
 /*Laminar Viscosity - Morris (2003)*/
-StateVecD Viscosity(const FLUID &fvar, const Part &pi, const Part &pj, 
-	const StateVecD &Rij, const StateVecD &Vij, const real &r, const StateVecD &Grad)
+StateVecD Viscosity(const FLUID& fvar, const Part& pi, const Part& pj, 
+	const StateVecD& Rij, const StateVecD& Vij, const real& r, const StateVecD& Grad)
 {
 	return -Vij*((fvar.mu)/(pi.rho*pj.rho))*(1.0/(r*r+0.01*fvar.HSQ))*Rij.dot(Grad);
 }
 
 /*Surface Tension - Nair & Poeschel (2017)*/
-StateVecD SurfaceTens(const FLUID &fvar, const Part &pj, const StateVecD &Rij, 
-					  const real &r, const real &npd)
+StateVecD SurfaceTens(const FLUID& fvar, const Part& pj, const StateVecD& Rij, 
+					  const real& r, const real& npd)
 {
 	/*Surface tension factor*/
 	const static real lam = (6.0/81.0*pow((2.0*fvar.H),3.0)/pow(M_PI,4.0)*
@@ -120,8 +120,8 @@ StateVecD SurfaceTens(const FLUID &fvar, const Part &pj, const StateVecD &Rij,
 	return -(Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*fvar.H));
 }
 
-StateVecD HuST(const FLUID &fvar, const Part &pi, const Part &pj, 
-			  const StateVecD &Rij, const real &r, const StateVecD &cgradi, const StateVecD &cgradj)
+StateVecD HuST(const FLUID& fvar, const Part& pi, const Part& pj, 
+			  const StateVecD& Rij, const real& r, const StateVecD& cgradi, const StateVecD& cgradj)
 {
 
 	StateVecD Fst;
@@ -132,9 +132,37 @@ StateVecD HuST(const FLUID &fvar, const Part &pi, const Part &pj,
 	return Fst;
 }
 
+StateVecD NormalBoundaryRepulsion(const FLUID& fvar, const MESH& cells, const Part& pi)
+{
+// 	const vector<size_t> face = cells.faces[pi.faceID];
+//     StateVecD norm;
+// #if SIMDIM == 3
+//     /*Get the face normal*/
+//     StateVecD r1 = cells.verts[face[1]]- cells.verts[face[0]];
+//     StateVecD r2 = cells.verts[face[2]]- cells.verts[face[0]];
+
+//     norm = r1.cross(r2);
+//     norm = norm.normalized();
+// #else
+//     StateVecD r1 = cells.verts[face[1]]-cells.verts[face[0]];
+//     norm = StateVecD(-r1(1),r1(0)); 
+//     norm = norm.normalized();
+// #endif
+
+   
+//     real plane = norm.dot(cells.verts[face[1]]);
+//     real dist =  (plane - pi.xi.dot(norm))/(norm.dot(norm));
+    // StateVecD bpos = pi.xi + (dist-fvar.H)*norm;
+    real beta = 4*fvar.Cs*fvar.Cs;
+
+    real kern = BoundaryKernel(pi.y,fvar.H,beta);
+
+	return fvar.bndM/(fvar.bndM+fvar.simM)*kern*pi.bNorm;
+}
+
 ///**************** RESID calculation **************
-void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*, State& airP*/,
-	 const vector<vector<Part>>& neighb, const outl& outlist,
+void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const MESH& cells, const State& pnp1/*, State& airP*/,
+	 const vector<vector<Part>>& neighb, const outl& outlist,/* const vector<StateVecD>& vPert,*/
 	 vector<StateVecD>& RV, vector<real>& Rrho, std::vector<StateVecD> Af)
 {
 	svar.maxmu=0; 					    /* CFL Parameter */
@@ -177,7 +205,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 		// }
 
 /******** LOOP 3 - Piston points: Calculate density and pressure. **********/		
-		#pragma omp for reduction(+:RV, Rrho) /*Reduction defs in Aero.h*/
+		#pragma omp for reduction(+:RV, Rrho) /*Reduction defs in Var.h*/
 		for (size_t ii=0; ii < start; ++ii)
 		{
 			const Part pi = pnp1[ii];
@@ -187,11 +215,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 
 			std::vector<real> mu;  /*Vector to find largest mu value for CFL stability*/
 			mu.reserve(size+1);			
-			if (ii > neighb.size())
-			{
-				cout << "neighb array smaller than totPts" << endl;
-				exit(-1);
-			}
+			
 			for (Part const& pj:neighb[ii])
 			{	/* Neighbour list loop. */
 
@@ -227,11 +251,6 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 			mu.reserve(size+1);
 			mu.emplace_back(0);	/*Avoid dereference of empty vector*/		
 
-			if (ii > neighb.size())
-			{
-				cout << "neighb array smaller than totPts" << endl;
-				exit(-1);
-			}
 			for (Part const& pj:neighb[ii])
 			{	/* Neighbour list loop. */
 
@@ -270,6 +289,12 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 				// ST[ii] += SurfC/pj.m;
 			}/*End of neighbours*/
 			
+			if(pi.internal == 1)
+			{
+				/*Apply the normal boundary force*/
+				RV[ii] += NormalBoundaryRepulsion(fvar, cells, pi);
+			}
+
 			RV[ii] += g;
 			//CFL f_cv Calc
 			real it = *max_element(mu.begin(),mu.end());
@@ -300,7 +325,7 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const State& pnp1/*,
 
 		/*Aerodynamic force*/
 	if(svar.Bcase > 1)
-		ApplyAero(svar,fvar,avar,pnp1,outlist,RV,Af);
+		ApplyAero(svar,fvar,avar,pnp1,outlist,/*vPert,*/RV,Af);
 	
 }
 

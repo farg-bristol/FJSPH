@@ -98,9 +98,9 @@ StateVecD CalcForce(SIM& svar, const FLUID& fvar, const AERO& avar,
 	}
 	else if(avar.acase == 4)
 	{	/*Gissler et al (2017)*/
-		// if(size < nfull)
-		// {	
-			const real nfull = avar.nfull;
+		const real nfull = avar.nfull;
+		if(size < nfull)
+		{	
 			const real ymax = Vdiff.squaredNorm()*avar.ycoef;
 			const real Re = 2.0*fvar.rhog*Vdiff.norm()*avar.L/fvar.mug;
 			real Cds;
@@ -110,14 +110,14 @@ StateVecD CalcForce(SIM& svar, const FLUID& fvar, const AERO& avar,
 			const real frac1 = (1.0 - frac2);
 
 			// if (Re < 3500)
-			//  	Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
+			 	Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
 			// else
 			// 	Cds = 1.699e-05*pow(Re,1.92)*(24.0/(Re));
 			
-			if( Re <= 1000.0)
-				Cds = (24.0/Re)*(1+(1.0/6.0)*pow(Re,2.0/3.0));
-			else 
-				Cds = 0.424;
+			// if( Re <= 1000.0)
+			// 	Cds = (24.0/Re)*(1+(1.0/6.0)*pow(Re,2.0/3.0));
+			// else 
+			// 	Cds = 0.424;
 
 			const real Cdl = Cds*(1+2.632*ymax);
 			const real	Cdi = frac1*Cdl + /*0.8**/frac2;
@@ -135,14 +135,15 @@ StateVecD CalcForce(SIM& svar, const FLUID& fvar, const AERO& avar,
 			const real Ai = (1-woccl)/*correc*/*Aunocc;
 
 			Fd = 0.5*fvar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai/pi.m;
-		// }
+		}
 	}
 
 	return Fd;
 }
 
 void ApplyAero(SIM &svar, const FLUID &fvar, const AERO &avar, 
-	const State &pnp1, const outl &outlist, vector<StateVecD>& res, std::vector<StateVecD>& Af)
+	const State &pnp1, const outl &outlist,/* const vector<StateVecD>& vPert,*/
+	 vector<StateVecD>& res, std::vector<StateVecD>& Af)
 {
 	// std::vector<StateVecD> Af(svar.totPts,StateVecD::Zero());
 	const uint start = svar.bndPts;
@@ -176,6 +177,9 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const AERO &avar,
 			}
 
 
+			// Vdiff += pi.vPert;
+			// cout << "Relative velocity: " << Vdiff(0) << "  " << Vdiff(1) << "  " << Vdiff(2) << endl;
+			
 			for (auto const jj:outlist[ii])
 			{	/* Neighbour list loop. */
 				const Part pj(pnp1[jj]);
@@ -204,6 +208,8 @@ void ApplyAero(SIM &svar, const FLUID &fvar, const AERO &avar,
 					}
 				}
 			} /*End of neighbours*/
+
+
 
 			/*Find the aero force*/
 			StateVecD Fd = CalcForce(svar,fvar,avar,pi,Vdiff,pi.normal,size,woccl);
