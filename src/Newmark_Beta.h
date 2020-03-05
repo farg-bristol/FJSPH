@@ -45,6 +45,8 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 /***********************************************************************************/
 /***********************************************************************************/
 
+	// cout << "dt: " << svar.dt << "  dtf: " << dtf << "  dtcv: " << dtcv << " maxmu: " << svar.maxmu << endl;
+
 	if (svar.dt > svar.framet)
 	{
 		svar.dt = svar.framet;
@@ -75,7 +77,7 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	const size_t start = svar.bndPts;
 	const size_t end = svar.totPts;
-	const size_t piston = svar.psnPts;
+	// const size_t piston = svar.psnPts;
 
 	// Check if a particle is running low on neighbours, and add ficticious particles
 	std::vector<std::vector<Part>> air(start);
@@ -146,6 +148,7 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				for (size_t ii = 0; ii < end; ++ii)
 				{
 					std::vector<Part> temp;
+					temp.reserve(outlist[ii].size());
 					for(auto jj:outlist[ii])
 						temp.push_back(Part(pnp1[jj])); 
 
@@ -162,6 +165,7 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				for (size_t ii = 0; ii < end; ++ii)
 				{
 					std::vector<Part> temp;
+					temp.reserve(outlist[ii].size());
 					for(auto jj:outlist[ii])
 						temp.push_back(Part(pnp1[jj])); 
 
@@ -184,6 +188,9 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		vector<StateVecD> Af(end,StateVecD::Zero());
 		vector<real> Rrho(end,0.0);
 
+		// cout << "Neighbour list size: " << neighb.size() << "  Outlist size: " << outlist.size() << endl;
+		// cout << "Start: " << start << "  End: " << end << endl;
+		
  		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,/*vPert,*/res,Rrho,Af); /*Guess force at time n+1*/
 
 		// #pragma omp parallel
@@ -199,21 +206,21 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		/*Update the state at time n+1*/
 		#pragma omp parallel shared(pn,res,Rrho,svar,fvar)
 		{
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = 0; ii < piston; ++ii)
-			{	/****** PISTON PARTICLES *************/
-				pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+Rrho[ii]);
-				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-				pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-				pnp1[ii].f = res[ii];
-				pnp1[ii].Rrho = Rrho[ii];
-			}
+			// #pragma omp for schedule(static) nowait
+			// for (size_t ii = 0; ii < piston; ++ii)
+			// {	/****** PISTON PARTICLES *************/
+			// 	pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+Rrho[ii]);
+			// 	pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
+			// 	pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
+			// 	pnp1[ii].f = res[ii];
+			// 	pnp1[ii].Rrho = Rrho[ii];
+			// }
 
 			#pragma omp for schedule(static) nowait
-			for (size_t ii=piston; ii < start; ++ii)
+			for (size_t ii=0/*piston*/; ii < start; ++ii)
 			{	/****** BOUNDARY PARTICLES ***********/
-				// pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+pnp1[ii].Rrho);
-				// pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
+				pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+Rrho[ii]);
+				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
 				// pnp1[ii].p = fvar.pPress;
 				// pnp1[ii].rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
 				pnp1[ii].f = res[ii];

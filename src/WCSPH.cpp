@@ -208,7 +208,7 @@ int main(int argc, char *argv[])
 	high_resolution_clock::time_point t1 = high_resolution_clock::now();
 	high_resolution_clock::time_point t2;
 	Eigen::initParallel();
-	// omp_set_num_threads(NTHREADS);
+	// omp_set_num_threads(1);
 
     real duration;
     real error = 0;
@@ -270,7 +270,18 @@ int main(int argc, char *argv[])
   	if(svar.restart == 1)
   	{
   		Restart(svar,pn,cells);
+  		// Initialise the pressure
+  		for(size_t ii = 0 ; ii < svar.totPts; ii++)
+  		{
+  			pn[ii].p =  fvar.B*(pow(pn[ii].rho/fvar.rho0,fvar.gam)-1);
+  		}
   		pnp1 = pn;
+  		// Define svar.clear to state a particle is clear of the starting area
+  		if (svar.Bcase == 2 || svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
+  			svar.clear = -svar.Jet[1] + 4*svar.dx;
+  		else
+  			svar.clear = 0.0;
+
   	}
   	else
   		InitSPH(svar,fvar,avar,pn,pnp1);
@@ -314,7 +325,8 @@ int main(int argc, char *argv[])
 	#endif
 
 	///*** Perform an iteration to populate the vectors *****/
-	First_Step(svar,fvar,avar,cells,outlist,pnp1,airP);
+	if(svar.restart == 0)
+		First_Step(svar,fvar,avar,cells,outlist,pnp1,airP);
 
 	///*************** Open simulation files ***************/
 	std::fstream f1,f2,f3,fb,fg;
@@ -342,22 +354,22 @@ int main(int argc, char *argv[])
 		/*Write sim particles*/
 		
 		Init_Binary_PLT(svar,"Fuel.szplt","Simulation Particles");
-		// if(svar.restart == 0)
-		// {
+		if(svar.restart == 0)
+		{
 			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1);
-		// }
+		}
 
-		if (svar.Bcase != 0 && svar.Bcase !=5 && svar.restart == 0)
+		if (svar.Bcase != 0 && svar.Bcase !=5)
 		{
 			/*Write boundary particles*/
 			Init_Binary_PLT(svar,"Boundary.szplt","Boundary Particles");
 
-			if(svar.boutform == 0)
+			if(svar.boutform == 0 && svar.restart == 0)
 			{   //Don't write a strand, so zone is static. 
 				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",0); 
 				TECEND142();			
 			}
-			else
+			else if(svar.restart == 0)
 				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2); 
 		}	
 
@@ -436,53 +448,55 @@ int main(int argc, char *argv[])
 		cerr << "Output type ambiguous. Please select 0 or 1 for output data type." << endl;
 		exit(-1);
 	}
-
-	if(svar.Bcase == 6)
+	if(svar.restart == 0)
 	{
-				// Check if the pipe is inside the mesh
-		real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
-		real stepb = (svar.Pstep*svar.Bstep);
-		real r = 0.5*holeD;
-		#if SIMDIM == 3
-    	real dtheta = atan((stepb)/(r));
-		for(real theta = 0; theta < 2*M_PI; theta += dtheta)
+		if(svar.Bcase == 6)
 		{
-			StateVecD xi(r*sin(theta), 0.0, r*cos(theta));
-			/*Apply Rotation...*/
-			xi = svar.Rotate*xi;
-			xi += svar.Start;
-		    if(!Check_Pipe(TREE.CELL, cells, xi))
-		    {
+					// Check if the pipe is inside the mesh
+			real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
+			real stepb = (svar.Pstep*svar.Bstep);
+			real r = 0.5*holeD;
+#if SIMDIM == 3
+	    	real dtheta = atan((stepb)/(r));
+			for(real theta = 0; theta < 2*M_PI; theta += dtheta)
+			{
+				StateVecD xi(r*sin(theta), 0.0, r*cos(theta));
+				/*Apply Rotation...*/
+				xi = svar.Rotate*xi;
+				xi += svar.Start;
+			    if(!Check_Pipe(TREE.CELL, cells, xi))
+			    {
 
-		    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
-		    	cout << "Fuel will be excessively close to begin." << endl;
-		    	exit(-1);
-		    }
+			    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
+			    	cout << "Fuel will be excessively close to begin." << endl;
+			    	exit(-1);
+			    }
 
-    	}
-    	#else
-    	for(real x = -r; x <= r; x+=stepb)
-    	{
+	    	}
+#else
+	    	for(real x = -r; x <= r; x+=stepb)
+	    	{
 
-    		StateVecD xi(x,0.0);
-    		xi = svar.Rotate*xi;
-			xi += svar.Start;
+	    		StateVecD xi(x,0.0);
+	    		xi = svar.Rotate*xi;
+				xi += svar.Start;
 
-			// cout << "Checking point: " << xi(0) << "  " << xi(1) << endl;
-		    if(!Check_Pipe(TREE.CELL, cells, xi))
-		    {
-		    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
-		    	cout << "Fuel will be excessively close to begin." << endl;
-		    	exit(-1);
-		    }
-    	}
-    	#endif
+				// cout << "Checking point: " << xi(0) << "  " << xi(1) << endl;
+			    if(!Check_Pipe(TREE.CELL, cells, xi))
+			    {
+			    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
+			    	cout << "Fuel will be excessively close to begin." << endl;
+			    	exit(-1);
+			    }
+	    	}
+#endif
+		}
+
+#if SIMDIM == 3
+			if(svar.Bcase == 4)
+				svar.vortex.write_VLM_Panels(svar.outfolder);		
+#endif
 	}
-
-	#if SIMDIM == 3
-		if(svar.Bcase == 4)
-			svar.vortex.write_VLM_Panels(svar.outfolder);		
-	#endif
 	/*Timing calculation + error sum output*/
 	t2 = high_resolution_clock::now();
 	duration = duration_cast<microseconds>(t2-t1).count()/1e6;

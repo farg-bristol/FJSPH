@@ -464,7 +464,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 				}	
 			}
 		#else
-			real jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Radius of hole (or width)*/
+			real jetR = 0.5*(svar.Jet(0)+6*svar.dx); /*Radius of hole (or width)*/
 			real stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/

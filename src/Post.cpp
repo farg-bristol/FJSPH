@@ -70,7 +70,7 @@ void* Read_Binary_Info(SIM& svar, const string file)
     	if(svar.boutform == 1)
     	{
     		
-	    	if(static_cast<uint>(numZones) != svar.Nframe)
+	    	if(static_cast<uint>(numZones) != svar.Nframe+1)
 		    {
 	cout << "Warning: number of written timesteps is different from the frame count." << endl;
 		    }
@@ -82,7 +82,7 @@ void* Read_Binary_Info(SIM& svar, const string file)
     else
     {
 	    
-    	if(static_cast<uint>(numZones) != svar.Nframe)
+    	if(static_cast<uint>(numZones) != svar.Nframe+1)
 	    {
 	cout << "Warning: number of written timesteps is different from the frame count." << endl;
 	    }
@@ -164,6 +164,39 @@ void Get_Sim_Info(int argc, char **argv, SIM& svar)
 
 	svar.Bcase = getInt(sett,lineno,"Boundary case");
 
+
+	getline(sett,line);
+	lineno++;
+	getline(sett,line);
+	lineno++;
+
+	/*Verify what dimension the system is*/
+	getline(sett,line);
+	lineno++;
+	std::stringstream sline(line);
+	
+	vector<real> vec;
+	real value;
+	string temp;
+	for(uint ii = 0; ii < 3; ii++)
+	{
+		sline >> temp;
+		if(std::stringstream(temp)>> value)
+		{
+			vec.emplace_back(value);
+		}
+		temp = "";
+	}
+
+	if(vec.size() == 0)
+	{
+		cout << "Error: Dimension is zero. Check the input order." << endl;
+		cout << "Line " << lineno << ": " << line << endl; 
+		exit(-1);
+	}	
+
+	DIM = vec.size();
+
 	sett.close();
 
 	// Get information of the output folder. 
@@ -178,7 +211,18 @@ void Get_Sim_Info(int argc, char **argv, SIM& svar)
 		exit(-1);
 	}
 
-	for(uint ii = 0; ii < 16; ii++)
+	uint nskip = 0;
+
+	if(svar.Bcase == 6)
+	{
+		nskip = 16;
+	}
+	else
+	{
+		nskip = 10;
+	}
+
+	for(uint ii = 0; ii < nskip; ii++)
 	{
 		getline(fluid,line);
 		lineno++;
@@ -195,7 +239,7 @@ void Get_Sim_Info(int argc, char **argv, SIM& svar)
 	std::ifstream f1(file);
 	
 	cout << "Simulation Parameters found..." << endl;
-
+	cout << "Dimension: " << DIM << endl;
 	cout << "Output data format: " ;
 	if(svar.outtype == 0)
 		cout << "Binary" << endl;
@@ -266,7 +310,7 @@ vector<StateVecD> Read_Binary_Vector(void* inputHandle, const INTEGER4& frame,
 Point Read_Binary_Timestep(void* inputHandle, const INTEGER4 zoneNum, const uint dataType)
 {
 // variables = "x y z rho P m v_x v_y v_z a_x a_y a_z Cell_ID Cell_Vx Cell_Vy Cell_Vz Cell_P Cell_Rho";
-    cout << "Reading zone number: " << zoneNum << endl;
+    // cout << "Reading zone number: " << zoneNum << endl;
 
     INTEGER4 I;
     INTEGER8 iMax, jMax, kMax;
@@ -277,7 +321,7 @@ Point Read_Binary_Timestep(void* inputHandle, const INTEGER4 zoneNum, const uint
     	exit(-1);
     }
 
-    cout << "Number of particles in zone: " << iMax << endl;
+    // cout << "Number of particles in zone: " << iMax << endl;
 
     Point tsData(iMax,dataType);
     I = tecZoneGetSolutionTime(inputHandle, zoneNum, &tsData.time);
@@ -881,6 +925,7 @@ typedef class TECMESH {
 			GetKernelSum(svar,fFile);
 			
 			/*Read the data from the files into something.*/
+			uint frameout = 50;
 			if(svar.Bcase !=0 && svar.Bcase != 5 && svar.boutform == 1)
 			{	/*The boundary is being written each timestep*/
 				for( INTEGER4 zone = 1; zone <= static_cast<INTEGER4>(svar.Nframe); ++zone)
@@ -892,6 +937,12 @@ typedef class TECMESH {
 					fluid.append(fuel);
 					
 					Interp_Data(fluid,svar);
+
+					if(zone%frameout == 0)
+					{
+						cout << "Frames processed: " << zone << endl;
+						cout << "Particle count on last timestep: " << fluid.size() << endl;
+					}
 				}
 			}
 			else
@@ -913,6 +964,11 @@ typedef class TECMESH {
 					fluid.append(fuel);
 					
 					Interp_Data(fluid, svar);
+					if(zone%frameout == 0)
+					{
+						cout << "Frames processed: " << zone << endl;
+						cout << "Particle count on last timestep: " << fluid.size() << endl;
+					}
 				}
 
 			}
@@ -969,17 +1025,17 @@ typedef class TECMESH {
 				auto zC = std::minmax_element(xi.begin(),xi.end(),
 						[](StateVecD p1, StateVecD p2){return p1(2)< p2(2);});
 
-				cout << "Min Pos: " << xC.first - xi.begin() << " " <<  yC.first - xi.begin()
-				<< " " << zC.first - xi.begin() << endl;
-				cout << "Min Value: " << (*xC.first)(0) << " " << (*yC.first)(1) << " " << (*zC.first)(2) << endl; 
+				// cout << "Min Pos: " << xC.first - xi.begin() << " " <<  yC.first - xi.begin()
+				// << " " << zC.first - xi.begin() << endl;
+				// cout << "Min Value: " << (*xC.first)(0) << " " << (*yC.first)(1) << " " << (*zC.first)(2) << endl; 
 				minC(0) = (*xC.first)(0);
 				minC(1) = (*yC.first)(1);
 				minC(2) = (*zC.first)(2);
 
 
-				cout << "Max Pos: " << xC.second - xi.begin() << " " <<  yC.second - xi.begin()
-				<< " " << zC.second - xi.begin() << endl;
-				cout << "Max Value: " << (*xC.second)(0) << " " << (*yC.second)(1) << " " << (*zC.second)(2) << endl; 
+				// cout << "Max Pos: " << xC.second - xi.begin() << " " <<  yC.second - xi.begin()
+				// << " " << zC.second - xi.begin() << endl;
+				// cout << "Max Value: " << (*xC.second)(0) << " " << (*yC.second)(1) << " " << (*zC.second)(2) << endl; 
 
 				maxC(0) = (*xC.second)(0);
 				maxC(1) = (*yC.second)(1);

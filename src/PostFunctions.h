@@ -198,113 +198,113 @@ std::string getString(ifstream& In, uint& lineno, const string& name)
 	return result; 
 }
 
-StateVecI getIVector(ifstream& In, uint& lineno, const string& name)
-{
-	string line;
-	getline(In,line);
-	lineno++;
-	std::stringstream sline(line);
+// StateVecI getIVector(ifstream& In, uint& lineno, const string& name)
+// {
+// 	string line;
+// 	getline(In,line);
+// 	lineno++;
+// 	std::stringstream sline(line);
 
-	vector<int> vec;
-	int value;
-	string temp;
-	for(uint ii = 0; ii < 3; ii++)
-	{
-		sline >> temp;
-		if(std::stringstream(temp)>> value)
-		{
-			vec.emplace_back(value);
-		}
-		temp = "";
-	}
+// 	vector<int> vec;
+// 	int value;
+// 	string temp;
+// 	for(uint ii = 0; ii < 3; ii++)
+// 	{
+// 		sline >> temp;
+// 		if(std::stringstream(temp)>> value)
+// 		{
+// 			vec.emplace_back(value);
+// 		}
+// 		temp = "";
+// 	}
 
-	if(vec.size() == 0)
-	{
-		cout << "Error: Dimension is zero. Check the input order." << endl;
-		cout << "Line " << lineno << ": " << line << endl;  
-		exit(-1);
-	}
+// 	if(vec.size() == 0)
+// 	{
+// 		cout << "Error: Dimension is zero. Check the input order." << endl;
+// 		cout << "Line " << lineno << ": " << line << endl;  
+// 		exit(-1);
+// 	}
 
-	DIM = vec.size();
+// 	DIM = vec.size();
 
-	StateVecI x(DIM);
+// 	StateVecI x(DIM);
 
-	for(size_t ii = 0; ii < DIM; ii++)
-	{
-		x(ii) = vec[ii];
-	}
+// 	for(size_t ii = 0; ii < DIM; ii++)
+// 	{
+// 		x(ii) = vec[ii];
+// 	}
 
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1);
-	if(DIM == 3)
-		dbout << "  " << x(2);
-	dbout << endl;
-#endif	
+// #ifdef DEBUG
+// 	dbout << name << ": " << x(0) << "  " << x(1);
+// 	if(DIM == 3)
+// 		dbout << "  " << x(2);
+// 	dbout << endl;
+// #endif	
 
-	return x;
-}
+// 	return x;
+// }
 
-StateVecD getDVector(ifstream& In, uint& lineno, const string& name)
-{
-	string line;
-	getline(In,line);
-	lineno++;
-	std::stringstream sline(line);
+// StateVecD getDVector(ifstream& In, uint& lineno, const string& name)
+// {
+// 	string line;
+// 	getline(In,line);
+// 	lineno++;
+// 	std::stringstream sline(line);
 	
-	vector<real> vec;
-	real value;
-	string temp;
-	for(uint ii = 0; ii < 3; ii++)
-	{
-		sline >> temp;
-		if(std::stringstream(temp)>> value)
-		{
-			vec.emplace_back(value);
-		}
-		temp = "";
-	}
+// 	vector<real> vec;
+// 	real value;
+// 	string temp;
+// 	for(uint ii = 0; ii < 3; ii++)
+// 	{
+// 		sline >> temp;
+// 		if(std::stringstream(temp)>> value)
+// 		{
+// 			vec.emplace_back(value);
+// 		}
+// 		temp = "";
+// 	}
 
-	if(vec.size() == 0)
-	{
-		cout << "Error: Dimension is zero. Check the input order." << endl;
-		cout << "Line " << lineno << ": " << line << endl; 
-		exit(-1);
-	}
+// 	if(vec.size() == 0)
+// 	{
+// 		cout << "Error: Dimension is zero. Check the input order." << endl;
+// 		cout << "Line " << lineno << ": " << line << endl; 
+// 		exit(-1);
+// 	}
 
-	DIM = vec.size();
+// 	DIM = vec.size();
 
-	StateVecD x(DIM);
+// 	StateVecD x(DIM);
 
-	for(size_t ii = 0; ii < DIM; ii++)
-	{
-		x(ii) = vec[ii];
-	}
+// 	for(size_t ii = 0; ii < DIM; ii++)
+// 	{
+// 		x(ii) = vec[ii];
+// 	}
 
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1);
-	if(DIM == 3)
-		dbout << "  " << x(2);
-	dbout << endl;
-#endif	
+// #ifdef DEBUG
+// 	dbout << name << ": " << x(0) << "  " << x(1);
+// 	if(DIM == 3)
+// 		dbout << "  " << x(2);
+// 	dbout << endl;
+// #endif	
 
-	return x;
-}
+// 	return x;
+// }
 
 /*Function for a 2D Vector (e.g. Newmark Beta parameters)*/
-Eigen::Vector2d getvector(ifstream& In, uint& lineno, const string& name)
-{
-	string line;
-	getline(In,line);
-	lineno++;
-	std::istringstream sline(line);
+// Eigen::Vector2d getvector(ifstream& In, uint& lineno, const string& name)
+// {
+// 	string line;
+// 	getline(In,line);
+// 	lineno++;
+// 	std::istringstream sline(line);
 	
-	Eigen::Vector2d x;
-	sline >> x[0]; sline >> x[1]; 
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1) << endl;
-#endif	
-	return x;
-}
+// 	Eigen::Vector2d x;
+// 	sline >> x[0]; sline >> x[1]; 
+// #ifdef DEBUG
+// 	dbout << name << ": " << x(0) << "  " << x(1) << endl;
+// #endif	
+// 	return x;
+// }
 
 uint index(uint ii, uint jj, uint nPts)
 {

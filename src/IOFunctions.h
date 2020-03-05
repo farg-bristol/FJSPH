@@ -146,6 +146,27 @@ int MakeOutputDir(int argc, char *argv[], SIM &svar)
 				    }
 		  		}
 
+		  		file = pathname;
+				file.append("Boundary.szplt");
+				if(stat( file.c_str(), &info ) != 0)
+		  		{
+		  			// File needs creating.
+		  			string cmd = "exec szcombine \"";
+			  		cmd.append(file);
+			  		cmd.append("\"");
+
+#ifdef DEBUG
+			  		dbout << "Attempting to combine szplt." << endl;
+			  		dbout << "Command: " << cmd << endl;
+#endif
+			  		if(system(cmd.c_str()))
+			  		{
+				    	cout << "System command failed to execute." << endl;
+				    	cout << "Command: " << cmd << endl;
+				    	exit(-1);
+				    }
+		  		}
+
 			}
 		}
 		else if(svar.restart == 1)

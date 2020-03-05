@@ -165,13 +165,13 @@ typedef struct FLUID {
 	real pPress, gasPress;		/*Starting pressure in pipe*/
 	real gasDynamic, gasVel;    /*Reference gas velocity*/
 	real simM, bndM;			/*Particle and boundary masses*/
-	real gasM;					/*A gas particle mass*/
 	real correc;				/*Smoothing Kernel Correction*/
 	real alpha,Cs,mu;		    /*}*/
 	real sig;					/* Fluid properties*/
 	real gam, B; 				/*}*/
 	real mug;					/* Gas Properties*/
 	real rhog;
+	real gasM;					/*A gas particle mass*/
 	real T;						/*Temperature*/
 	real Rgas;                  /*Specific gas constant*/
 	real contangb;				/*Boundary contact angle*/

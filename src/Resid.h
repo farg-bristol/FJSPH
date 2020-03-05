@@ -88,8 +88,8 @@ StateVecD Base(const FLUID& fvar, const Part& pi, const Part& pj,
 	}
 	else
 	{
-		real rhoij = 0.5*(pi.rho+pj.rho);
-		real cbar= 0.5*(sqrt((fvar.B*fvar.gam)/pi.rho)+sqrt((fvar.B*fvar.gam)/pj.rho));
+		const real rhoij = 0.5*(pi.rho+pj.rho);
+		const real cbar= 0.5*(sqrt((fvar.B*fvar.gam)/pi.rho)+sqrt((fvar.B*fvar.gam)/pj.rho));
 		pifac = fvar.alpha*cbar*muij/rhoij;
 	}
 	
@@ -256,7 +256,10 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const MESH& cells, c
 
 				/*Check if the position is the same, and skip the particle if yes*/
 				if(pi.partID == pj.partID)
+				{
+					// cout << "PartID is the same: " << pi.partID << endl;
 					continue;
+				}
 
 				const StateVecD Rij = pj.xi-pi.xi;
 				const StateVecD Vij = pj.v-pi.v;
@@ -280,7 +283,8 @@ void Forces(SIM& svar, const FLUID& fvar, const AERO& avar, const MESH& cells, c
 				}
 
 				RV[ii] += pj.m*contrib + pj.m*visc /*+ SurfC/pj.m*/;
-
+				// cout << Rij(0) << " " << Rij(1) << "  " << Vij(0) << "  " << Vij(1) << "  " << W2Kernel(r,fvar.H,fvar.correc)
+				// << "  " << Grad(0) << "  " << Grad(1) << "  " << pj.m << endl;
 				// if (pj.b == 4)
 				// {
 				// 	ST[ii] += pj.m*contrib + pj.m*visc;

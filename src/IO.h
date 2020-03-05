@@ -20,7 +20,7 @@
 /*************************************************************************/
 void CheckContents(void* inputHandle, SIM& svar)
 {
-	INTEGER4 numVars, I;
+	INTEGER4 numVars, numZones, I;
 	I = tecDataSetGetNumVars(inputHandle, &numVars);
 	if (I == -1)
 	{
@@ -29,23 +29,42 @@ void CheckContents(void* inputHandle, SIM& svar)
 	}
 
 	cout << "Number of variables in output file: " << numVars << endl;
-	if(numVars == 2 || numVars == 3)
+	uint dataType = 0;
+#if SIMDIM == 2
+	if(numVars == 2)
     {
     	cout << "Only basic data has been output. Cannot restart." << endl;
     	exit(-1);
     }
-    else if (numVars == 6 || numVars == 7)
+    else if (numVars == 6)
     {
     	cout << "Cannot restart. No components" << endl;
     	exit(-1);
     }
-    else if (numVars == 9 || numVars == 10)
+    else if (numVars == 9)
+    {
+    	cout << "Cannot restart. No components" << endl;
+    	exit(-1);
+    }
+#else
+    if( numVars == 3)
+    {
+    	cout << "Only basic data has been output. Cannot restart." << endl;
+    	exit(-1);
+    }
+    else if ( numVars == 7)
+    {
+    	cout << "Cannot restart. No components" << endl;
+    	exit(-1);
+    }
+    else if (numVars == 10)
     {
     	cout << "Cannot restart. No components" << endl;
     	exit(-1);
     }
 
-    uint dataType = 0;
+#endif
+    
     if(numVars == 10 || numVars == 13)
     {	
     	dataType = 2;
@@ -74,6 +93,15 @@ void CheckContents(void* inputHandle, SIM& svar)
 		}
     }
 
+    I = tecDataSetGetNumZones(inputHandle, &numZones);
+    cout << "Number of zones in file: " << numZones << endl;
+    if(numZones != static_cast<INTEGER4>(svar.frame+1))
+    {
+    	cout << "Mismatch of number of frames and number of zones in output file." << endl;
+    	cout << "Reading the last zone in file." << endl;
+    	svar.frame = numZones - 1;
+    }
+
 }
 
 void Restart(SIM& svar, State& pn, MESH& cells)
@@ -100,90 +128,104 @@ void Restart(SIM& svar, State& pn, MESH& cells)
 	// 	exit(-1);
 	// }
 
+	if(svar.boutform == 0)
+	{
+		cout << "Time data for the boundary has not been output. Cannot restart." << endl;
+		exit(-1);
+	}
 
 #ifdef DEBUG
 	dbout << "Reading frame info file for restart information." << endl;
 #endif
 
 	// find the last timestep by reading the frame file
-	string file = svar.outfolder;
-	file.append("frame.info");
+	// string file = svar.outfolder;
+// 	file.append("frame.info");
 
-	// Find end of file
-	std::ifstream f1(file,std::ios::in);
-	if(!f1.is_open())
-	{
-		cout << "Failed to open frame.info file" << endl;
-		exit(-1);
-	}
+// 	// Find end of file
+// 	std::ifstream f1(file,std::ios::in);
+// 	if(!f1.is_open())
+// 	{
+// 		cout << "Failed to open frame.info file" << endl;
+// 		exit(-1);
+// 	}
 
-	uint lsize = 0;
-	while(f1.ignore(std::numeric_limits<std::streamsize>::max(),'\n'))	
-		lsize++;
+// 	uint lsize = 0;
+// 	while(f1.ignore(std::numeric_limits<std::streamsize>::max(),'\n'))	
+// 		lsize++;
 
-	// cout << "Found file size: " << lsize 
-	// 	 << ". Now getting last frame." << endl;
-	f1.clear();
-	GotoLine(f1, lsize-4);
+// 	// cout << "Found file size: " << lsize 
+// 	// 	 << ". Now getting last frame." << endl;
+// 	f1.clear();
+// 	GotoLine(f1, lsize-4);
 
-	string line;
-	getline(f1,line);
-	std::stringstream sstr(line);
-	string temp;
-	uint frame;
-	while(!sstr.eof())
-	{
-		sstr >> temp;
-		if(std::stringstream(temp) >> frame)
-		{
-			break;
-		}
-		temp = "";
-	}
+// 	string line;
+// 	getline(f1,line);
+// 	std::stringstream sstr(line);
+// 	string temp;
+// 	uint frame;
+// 	while(!sstr.eof())
+// 	{
+// 		sstr >> temp;
+// 		if(std::stringstream(temp) >> frame)
+// 		{
+// 			break;
+// 		}
+// 		temp = "";
+// 	}
 
-#ifdef DEBUG
-	dbout << "Final frame: " << frame << endl;
-#endif
-	cout << "Found the final frame: " << frame << endl;
-	svar.frame = frame;
+// #ifdef DEBUG
+// 	dbout << "Final frame: " << frame << endl;
+// #endif
+// 	cout << "Found the final frame: " << frame << endl;
+// 	svar.frame = frame;
 
-#ifdef DEBUG
-	dbout << "Getting particle numbers" << endl;
-#endif
+// #ifdef DEBUG
+// 	dbout << "Getting particle numbers" << endl;
+// #endif
 
-	// Get the particle counts to checksum.
-	uint bndPts, simPts, totPts;
+// 	// Get the particle counts to checksum.
+// 	uint bndPts, simPts, totPts;
 	
-	getline(f1,line);
-	std::stringstream sline(line);
-	vector<uint> pts;
-	temp = "";
-	int var;
-	while(!sline.eof())
-	{
-		sline >> temp;
-		if(std::stringstream(temp) >> var)
-		{
-			pts.emplace_back(var);
-		}
-		temp = "";
-	}
+// 	getline(f1,line);
+// 	std::stringstream sline(line);
+// 	vector<uint> pts;
+// 	temp = "";
+// 	int var;
+// 	while(!sline.eof())
+// 	{
+// 		sline >> temp;
+// 		if(std::stringstream(temp) >> var)
+// 		{
+// 			pts.emplace_back(var);
+// 		}
+// 		temp = "";
+// 	}
 
-	totPts = pts[0];
-	bndPts = pts[1];
-	simPts = pts[2];
-	cout << line << endl;
-#ifdef DEBUG
-	dbout << line << endl;
-#endif
+// 	totPts = pts[0];
+// 	bndPts = pts[1];
+// 	simPts = pts[2];
+// 	cout << line << endl;
+// #ifdef DEBUG
+// 	dbout << line << endl;
+// #endif
 
 	// Now get the data from the files. Start with the boundary
 	if(svar.outtype == 0)
 	{
+		string file;
 		INTEGER4 I;
+		INTEGER4 frameNo;
 		void* boundHandle = NULL;
 		string boundf = svar.outfolder;
 		boundf.append("Boundary.szplt");
+
+		// Read the fuel
+		void* fuelHandle = NULL;
+		string fuelf = svar.outfolder;
+		fuelf.append("Fuel.szplt");
+
+		
 		I = tecFileReaderOpen(boundf.c_str(),&boundHandle);
 		if(I == -1)
 		{
@@ -192,22 +234,6 @@ void Restart(SIM& svar, State& pn, MESH& cells)
 			exit(-1);
 		}
 
-		CheckContents(boundHandle,svar);
-
-	    // Read the actual data.
-	    State boundary;
-	    INTEGER4 frameNo;
-	    if(svar.boutform == 0)
-	    	frameNo = 1;
-		else
-			frameNo = svar.frame+1;
-
-		Read_Binary_Timestep(boundHandle,svar,frameNo,boundary);
-
-		// Read the fuel
-		void* fuelHandle = NULL;
-		string fuelf = svar.outfolder;
-		fuelf.append("Fuel.szplt");
 		I = tecFileReaderOpen(fuelf.c_str(),&fuelHandle);
 		if(I == -1)
 		{
@@ -216,21 +242,38 @@ void Restart(SIM& svar, State& pn, MESH& cells)
 			exit(-1);
 		}
 
-		State fuel;
+		cout << "Checking Boundary file..." << endl;
+		CheckContents(boundHandle,svar);
+		cout << "Checking Fuel file..." << endl;
 		CheckContents(fuelHandle,svar);
-		frameNo = svar.frame+1;
+
+	    // Read the actual data.
+	    
+	    State boundary, fuel;
+	    frameNo = svar.frame+1;
+
+	    cout << "Attempting to read the boundary..." << endl;
+		Read_Binary_Timestep(boundHandle,svar,frameNo,boundary);
+		
+		cout << endl << "Attempting to read the fuel..." << endl;
 		Read_Binary_Timestep(fuelHandle,svar,frameNo,fuel);
 
 		pn = boundary;
-		svar.bndPts = pn.size();
+		svar.bndPts = boundary.size();
+		svar.simPts = fuel.size();
 		pn.insert(pn.end(),fuel.begin(),fuel.end());	
 		svar.totPts = pn.size();
-		svar.simPts = svar.totPts-svar.bndPts;
-
-		if(svar.totPts != totPts || svar.bndPts != bndPts || svar.simPts != simPts)
+		
+		if(svar.simPts + svar.bndPts != svar.totPts)
 		{
-			cout << "Mismatch of the particle numbers in the frame file and data file." << endl;
+			cout << "Mismatch of array sizes. Total array is not the sum of the others" << endl;
+			exit(-1);
 		}
+
+		// if(svar.totPts != totPts || svar.bndPts != bndPts || svar.simPts != simPts)
+		// {
+		// 	cout << "Mismatch of the particle numbers in the frame file and data file." << endl;
+		// }
 	}
 	else
 	{
@@ -243,8 +286,10 @@ void Restart(SIM& svar, State& pn, MESH& cells)
 
 	
 	// Go through the particles giving them the properties of the cell
-	for(size_t ii = svar.bndPts; ii < svar.totPts; ++ii)
+	#pragma omp parallel for 
+	for(size_t ii = 0; ii < svar.totPts; ++ii)
 	{
+		pn[ii].partID = ii;
 		if(svar.Bcase == 6 && svar.outform == 5)
 		{
 			if(pn[ii].b == FREE)
@@ -270,7 +315,7 @@ void GetAero(AERO& avar, const FLUID& fvar, const real rad)
 		avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
 	#endif
 	#if SIMDIM == 2
-		avar.L = 2*rad;
+		avar.L = rad/sqrt(M_PI);
 	#endif
 	avar.td = (2.0*fvar.rho0*pow(avar.L,SIMDIM-1))/(avar.Cd*fvar.mu);
 
@@ -509,16 +554,11 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		/*Pipe Pressure calc*/
 		real rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
 
-		/*Defining pstep then finding dx*/
-		// fvar.Simmass = fvar.rho0*pow(svar.Pstep,SIMDIM);
-		// svar.dx = pow(fvar.Simmass/rho, 1.0/real(SIMDIM));
-		
-
 		// Defining dx to fit the pipe, then find rest spacing
 		uint nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
 		svar.dx = 0.999*0.5*(svar.Jet(0))/real(nrad);	
 
-	 	svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/3.0);
+	 	svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/SIMDIM);
 
 	 	/*Mass from spacing and density*/
 		fvar.simM = fvar.rho0*pow(svar.Pstep,SIMDIM); 
@@ -606,10 +646,11 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 			cout << "Reference velocity: " << fvar.gasVel << endl;
 			cout << "Reference pressure: " << fvar.gasPress << endl;
 			cout << "Reference temperature: " << fvar.T << endl;
+			cout << "Gas dynamic pressure: " << fvar.gasDynamic << endl << endl;
 		}
 		cout << "Gas density: " << fvar.rhog << endl;
 		cout << "Gas viscosity: " << fvar.mug << endl;
-		cout << "Gas dynamic pressure: " << fvar.gasDynamic << endl << endl;
+		
 
 		#if SIMDIM == 3
 			if(svar.Bcase == 4)
@@ -619,7 +660,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 			}
 		#endif
 
-		GetAero(avar, fvar, fvar.H/*svar.Pstep*/);
+		GetAero(avar, fvar, svar.Pstep);
 
 		// if(svar.restart!=1)
 		// 	Write_Input(svar,fvar,avar,angle);

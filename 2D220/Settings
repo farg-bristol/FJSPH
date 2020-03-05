@@ -2,7 +2,7 @@
 2000          #Number of frames
 1             #Output Frame Interval (if 0, suppresses framewise output)
 0             #Output encoding (0 = Binary, 1 = ASCII)
-5             #Output format (1 = fluid properties, 2 = debug/research)
+2             #Output format (1 = fluid properties, 2 = debug/research)
 1             #Boundary timestep output (0 = no, 1 = yes)
 0             #Ghost particle output (0 = no, 1 = yes)
 20            #Max Sub-iterations
@@ -14,9 +14,9 @@
 3             #Boundary case (0 = none, 1= Rectangle, 2 = Bowl, 3= transverse jet)
 4             #Aero force case (0 = none, 1 = left surface, 2 = prop to ST-Aero angle, 4 = Gissler Method)
 0             #Ghost pressure particles (0 = no, 1 = yes)
-0.0 0.0 0.0     #Jet starting x-pos, y-pos, z-pos (pipe exit centre)
-0.0 0.0 0.0      #Jet starting rotation
-0.008 0.008    #Pipe diameter, Pipe Depth
+0.0 0.0       #Jet starting x-pos, y-pos, z-pos (pipe exit centre)
+0.0 0.0       #Jet starting rotation
+0.008 0.008   #Pipe diameter, Pipe Depth
 68950         #Pipe pressure (Pa)
 33.6          #Jet Velocity
-128.5 0 0          #Freestream Velocity
+128.5 0       #Freestream Velocity
