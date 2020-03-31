@@ -24,7 +24,8 @@ using namespace std::chrono;
 using namespace nanoflann;
 
 
-void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const MESH& cells, const outl& outlist, State& pnp1, State& airP)
+void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar, 
+	MESH& cells, outl& outlist, State& pnp1, State& pn, State& airP)
 {
 	const size_t start = svar.bndPts;
 	const size_t end = svar.totPts;
@@ -33,6 +34,21 @@ void First_Step(SIM& svar, const FLUID& fvar, const AERO& avar, const MESH& cell
 		dbout << "Starting first step. ";
 		dbout << "  Start index: " << start << "  End index: " << end << endl;
 	#endif
+
+	if (svar.Bcase == 6 || svar.Bcase ==7)
+	{
+		FindCell(svar,fvar.sr,TREE,cells,pnp1,pn);
+		if (svar.totPts != pnp1.size())
+		{	//Rebuild the neighbour list
+			// cout << "Updating neighbour list" << endl;
+			// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
+			svar.delNum += svar.totPts-pnp1.size();
+			svar.totPts = pnp1.size();
+			TREE.NP1.index->buildIndex();
+			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+		}
+	}
+
 
 	std::vector<std::vector<Part>> neighb;
 	neighb.reserve(end);
@@ -147,8 +163,9 @@ std::pair<StateVecD,StateVecD> Find_MinMax(SIM& svar, const State& pnp1)
 	return std::pair<StateVecD,StateVecD>(minC,maxC);
 }
 
-uint Check_Pipe(Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& testp)
+uint Check_Pipe(Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& xi)
 {
+	StateVecD testp = xi;
     StateVecD rayp;
 #if SIMDIM == 3    
     rayp = testp;
@@ -163,29 +180,62 @@ uint Check_Pipe(Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& testp)
     
     CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
 	
+    // cout << ret_indexes.size() << endl;
+
+
 	uint inside_flag=0;
     for(auto index:ret_indexes)
     {   
+    	// cout << index << endl;
         inside_flag = 0;
         uint line_flag = 0;
+        uint perturb = FALSE;
+	    for (size_t jj = 0; jj < cells.cFaces[index].size(); jj++) 
+	    {
+	        const vector<size_t>& face = cells.faces[cells.cFaces[index][jj]];
+#if SIMDIM == 3            
+	        if(Crossings3D(cells.verts,face,testp,rayp,perturb))
+#else
+	        if(Crossings2D(cells.verts,face,testp))
+#endif                
+	        {   
 
-        for (uint const& findex:cells.cFaces[index] ) 
-        {
-            const vector<size_t>& face = cells.faces[findex];
+	            inside_flag=!inside_flag;
+	            if ( line_flag ) break; //Convex assumption
+
+	            // //  note that one edge has been hit by the ray's line 
+	            line_flag = TRUE;
+	        }
+	        else if(perturb == TRUE)
+	        {
+	            // Reset the face index
+	            jj = 0;
+	            line_flag = 0;
+	            inside_flag = 0;
+
+#if SIMDIM == 3
+	            testp = xi + StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
+#else
+	            testp = xi + StateVecD(PERTURB(0,1),PERTURB(0,2));
+#endif
+	            const vector<size_t>& retest = cells.faces[cells.cFaces[index][jj]];
 
 #if SIMDIM == 3            
-            if(Crossings3D(cells.verts,face,testp,rayp))
+	            if(Crossings3D(cells.verts,retest,testp,rayp,perturb))
 #else
-            if(Crossings2D(cells.verts,face,testp))
+	            if(Crossings2D(cells.verts,retest,testp))
 #endif                
-            {   
-                inside_flag=!inside_flag;
-                if ( line_flag ) break; //Convex assumption
+	            {   
 
-                //  note that one edge has been hit by the ray's line 
-                line_flag = TRUE;
-            }
-        }
+	                inside_flag=!inside_flag;
+	                // note that one edge has been hit by the ray's line 
+	                line_flag = TRUE;
+	            }
+
+	        }
+	    }
+
+        
 
         if(inside_flag == TRUE)
         {
@@ -240,9 +290,16 @@ int main(int argc, char *argv[])
 		#else
 		Read_TAUMESH_EDGE(svar,cells,fvar);
 		#endif
+	}
+	else if (svar.Bcase == 7)
+	{
+		// Create single cell
+		Make_Cell(fvar,avar,cells);
 	}	
 
 	cout << std::setprecision(5);
+
+	
 	cout << "Adjusted Start Coordinates: " << endl;
 	cout << svar.Start(0) << "  " << svar.Start(1);
 #if SIMDIM == 3
@@ -256,13 +313,15 @@ int main(int argc, char *argv[])
 	State pnp1; 	/*Particles at n+1 */
 	State airP;
 
-	cout << "Final particle count:  " << svar.nmax << endl;
+	if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6 || svar.Bcase ==7)
+	{
+		cout << "Final particle count:  " << svar.nmax << endl;
+	}
+
 	svar.finPts = svar.nmax;
 	pn.reserve(svar.nmax);
   	pnp1.reserve(svar.nmax);
 
-	
-	
 	// if (svar.Bcase == 6){
 	// 	Write_Mesh_Data(svar,cells);
 	// }	
@@ -291,13 +350,24 @@ int main(int argc, char *argv[])
 		cells.cCentre.emplace_back(StateVecD::Zero());
 	if (cells.bVerts.size() == 0)
 		cells.bVerts.emplace_back(StateVecD::Zero());
+	if(cells.fNum.size() == 0)
+	{
+		cells.fNum.emplace_back();
+		cells.fMass.emplace_back();
+		cells.vFn.emplace_back();
+		cells.vFnp1.emplace_back();
+		cells.cVol.emplace_back();
+		cells.cMass.emplace_back();
+		cells.cRho.emplace_back();
+		cells.cPertn.emplace_back();
+		cells.cPertnp1.emplace_back();
+	}
 
 	// Vec_Tree CELL_INDEX(SIMDIM,cells.cCentre,20);
 		
 	cout << "Starting counts: " << endl;
 	cout << "Boundary: " << svar.bndPts << "  Sim: " << svar.simPts << endl;
-	 
-
+	
 	///********* Tree algorithm stuff ************/
 	KDTREE TREE(pnp1,cells);
 	// Sim_Tree NP1_INDEX(SIMDIM,pnp1,20);
@@ -316,23 +386,51 @@ int main(int argc, char *argv[])
 		// avar.nfull = (2.0/3.0) * real(nfull->size());
 		avar.nfull = 1.713333e+02;
 		svar.nfull = 257;
+
+		// avar.nfull = 170;
+		// svar.nfull = 257;
 	#endif
 	#if SIMDIM == 2
-		// avar.nfull = (2.0/3.0) * real(nfull->size());
-		// avar.nfull = 32.67;
-		avar.nfull = 37;
+		// avar.nfull = 37;
+		// svar.nfull = 48;
+
+		avar.nfull = 20;
 		svar.nfull = 48;
+
 	#endif
+
+	real aMom = 0.0;
+	for(size_t ii = 0; ii < cells.size(); ii++)
+	{
+		// Find the total momentum of the cells
+		aMom += cells.cMass[ii]*(cells.cVel[ii]).norm();
+	}
+
+	svar.aMom = aMom;
+	svar.tMom = aMom;
+
+	if(svar.Bcase == 5)
+	{
+		real volume = pow(svar.Pstep,SIMDIM)*svar.totPts;
+		real dvol = (4.0*M_PI/3.0)*pow(0.5*svar.diam,3);
+		cout << "SPH Volume: " << volume << "  Droplet expected volume: " << 
+		dvol;
+		cout << " Error: " << std::fixed << 100.0*(dvol-volume)/dvol << "%"  << endl;
+		cout << std::scientific;
+		svar.mass = pnp1[0].m * svar.totPts;
+
+		cout << "SPH Mass: " << svar.mass << "  Droplet expected mass: " << dvol*fvar.rho0;	
+
+		cout << " Error: " << std::fixed << 100.0*(dvol*fvar.rho0-svar.mass)/(dvol*fvar.rho0) << "%" << endl;	
+		cout << std::scientific;
+	}
 
 	///*** Perform an iteration to populate the vectors *****/
 	if(svar.restart == 0)
-		First_Step(svar,fvar,avar,cells,outlist,pnp1,airP);
+		First_Step(TREE,svar,fvar,avar,cells,outlist,pnp1,pn,airP);
 
 	///*************** Open simulation files ***************/
 	std::fstream f1,f2,f3,fb,fg;
-	// NcFile* fn;
-	// h5_file_t fh5;
-
 	string framef = svar.outfolder;
 	framef.append("frame.info");
 	if(svar.restart == 1)
@@ -342,6 +440,8 @@ int main(int argc, char *argv[])
 
 	f1 << std::scientific << std::setprecision(6);
 	f3 << std::scientific << std::setw(10);
+
+	pertLog << std::scientific << std::setprecision(8);
 	uint ghost_strand = 0;
 	if(svar.boutform == 0)
 		ghost_strand = 2;
@@ -359,7 +459,7 @@ int main(int argc, char *argv[])
 			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1);
 		}
 
-		if (svar.Bcase != 0 && svar.Bcase !=5)
+		if (svar.Bcase != 0 && svar.Bcase !=5 && svar.Bcase !=7)
 		{
 			/*Write boundary particles*/
 			Init_Binary_PLT(svar,"Boundary.szplt","Boundary Particles");
@@ -382,7 +482,7 @@ int main(int argc, char *argv[])
 	else if (svar.outtype == 1)
 	{
 
-		if (svar.Bcase != 0 && svar.Bcase != 5 && svar.restart == 0)
+		if (svar.Bcase != 0 && svar.Bcase != 5 &&  svar.restart == 0  && svar.Bcase !=7)
 		{	/*If the boundary exists, write it.*/
 			string bfile = svar.outfolder;
 			bfile.append("Boundary.plt");
@@ -511,6 +611,8 @@ int main(int argc, char *argv[])
 	cout << "Frame: " << svar.frame << "  Sim Time: " << svar.t << "  Compute Time: "
 	<< duration <<"  Error: " << error << endl;
 
+	// pertLog << "Time,  Total Momentum,   Air Momentum,   Fuel Momentum,  Perturbation velocity magnitude" << endl;
+
 	if(svar.restart != 1)
 	{
 		f2 << "Frame: " << svar.frame << endl;
@@ -547,6 +649,8 @@ int main(int argc, char *argv[])
 	dbout << "c: " << c << "  d: " << d << endl;
 	dbout << "B: " << B << "  gam: " << gam << endl << endl; 
 #endif
+
+	
 
 	for (uint frame = svar.frame+1; frame<= svar.Nframe; ++frame)
 	{
@@ -587,7 +691,6 @@ int main(int argc, char *argv[])
 		// f2 <<  " " << svar.maxC(2);
 		// #endif
 		// f2 << endl;
-		
 
 		if(svar.outframe !=0)
 		{
@@ -600,11 +703,17 @@ int main(int argc, char *argv[])
 			}
 		}
 
+		if (svar.totPts-svar.bndPts == 0) 
+		{
+			cout << "No more points in the simulation space. Ending...." << endl;
+			break;
+		}
+
 
 		// DensityReinit(fvar, pnp1, outlist);
 		if (svar.outtype == 0)
 		{
-			if(svar.Bcase != 0 && svar.Bcase != 5 && svar.boutform == 1)
+			if(svar.Bcase != 0 && svar.Bcase != 5 && svar.Bcase !=7 && svar.boutform == 1)
 			{	/*Write boundary particles*/
 				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2); 
 			}
@@ -615,7 +724,7 @@ int main(int argc, char *argv[])
 		else if (svar.outtype == 1)
 		{
 			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,"Fuel");
-			if(svar.Bcase != 0 && svar.Bcase != 5 && svar.boutform == 1)
+			if(svar.Bcase != 0 && svar.Bcase != 5 && svar.Bcase !=7 && svar.boutform == 1)
 			{
 				State empty;
 				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");

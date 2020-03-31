@@ -4,29 +4,29 @@
 #include "Var.h"
 
 ///******Wendland's C2 Quintic Kernel*******
-inline real W2Kernel(const real dist, const real H, const real correc) 
+real const W2Kernel(real const dist, real const H, real const correc) 
 {
-	const real q = dist/H;
+	real const q = dist/H;
 	return (pow(1-0.5*q,4))*(2*q+1)*correc;
 }
 
 /*Gradient*/
-inline StateVecD W2GradK(const StateVecD& Rij, const real dist, const real H, const real correc)
+StateVecD const W2GradK(StateVecD const& Rij, real const dist, real const H, real const correc)
 {
-	const real q = dist/H;
+	real const q = dist/H;
 	return 5.0*(Rij/(H*H))*pow(1-0.5*q,3)*correc;
 }
 
 /*2nd Gradient*/
-inline real W2Grad2(const StateVecD& Rij, const real dist, const real H, const real correc) 
+real const W2Grad2(StateVecD const& Rij, real const dist, real const H, real const correc) 
 {
-	const real q = dist/H;
+	real const q = dist/H;
 	return Rij.dot(Rij)*(5.0*correc/(H*H))*(2*q-1)*pow(1-0.5*q,2);
 }
 
-inline real BoundaryKernel(const real dist, const real H, const real beta)
+real const BoundaryKernel(real const dist, real const H, real const beta)
 {
-	const real q = dist/H;
+	real const q = dist/H;
 	if (q < 2.0/3.0)
 	{
 		return beta*2.0/3.0;

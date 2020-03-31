@@ -10,7 +10,6 @@
 #include "Eigen/LU"
 #include "Var.h"
 #include "IOFunctions.h"
-#include "BinaryIO.h"
 #include "CDFIO.h"
 // #include "TauIO.h"
 
@@ -18,92 +17,6 @@
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
 /*************************************************************************/
-void CheckContents(void* inputHandle, SIM& svar)
-{
-	INTEGER4 numVars, numZones, I;
-	I = tecDataSetGetNumVars(inputHandle, &numVars);
-	if (I == -1)
-	{
-		cout << "Couldn't obtain number of variables. Stopping" << endl;
-		exit(-1);
-	}
-
-	cout << "Number of variables in output file: " << numVars << endl;
-	uint dataType = 0;
-#if SIMDIM == 2
-	if(numVars == 2)
-    {
-    	cout << "Only basic data has been output. Cannot restart." << endl;
-    	exit(-1);
-    }
-    else if (numVars == 6)
-    {
-    	cout << "Cannot restart. No components" << endl;
-    	exit(-1);
-    }
-    else if (numVars == 9)
-    {
-    	cout << "Cannot restart. No components" << endl;
-    	exit(-1);
-    }
-#else
-    if( numVars == 3)
-    {
-    	cout << "Only basic data has been output. Cannot restart." << endl;
-    	exit(-1);
-    }
-    else if ( numVars == 7)
-    {
-    	cout << "Cannot restart. No components" << endl;
-    	exit(-1);
-    }
-    else if (numVars == 10)
-    {
-    	cout << "Cannot restart. No components" << endl;
-    	exit(-1);
-    }
-
-#endif
-    
-    if(numVars == 10 || numVars == 13)
-    {	
-    	dataType = 2;
-    }
-    else if(numVars == 15 || numVars == 19)
-    {
-    	dataType = 3;
-    }
-    else if(numVars == 11 || numVars == 14)
-    {
-    	dataType = 5;
-    }
-
-    if(dataType!= svar.outform)
-    {
-    	cout << "Data is different from that in the settings file." << endl;
-    	cout << "Changing to the file data type: " << dataType << endl;
-    	svar.outform = dataType;
-    	if(svar.outform == 2)
-		{
-			if(svar.Bcase == 6)
-			{
-				cout << "No cell information. Cannot restart" << endl;
-				exit(-1);
-			}
-		}
-    }
-
-    I = tecDataSetGetNumZones(inputHandle, &numZones);
-    cout << "Number of zones in file: " << numZones << endl;
-    if(numZones != static_cast<INTEGER4>(svar.frame+1))
-    {
-    	cout << "Mismatch of number of frames and number of zones in output file." << endl;
-    	cout << "Reading the last zone in file." << endl;
-    	svar.frame = numZones - 1;
-    }
-
-}
-
 void Restart(SIM& svar, State& pn, MESH& cells)
 {	
 	// Check that a restart can be performed. 
@@ -282,9 +195,6 @@ void Restart(SIM& svar, State& pn, MESH& cells)
 		// Find EOF, then walk back from there how many particles.
 	}
 
-
-
-	
 	// Go through the particles giving them the properties of the cell
 	#pragma omp parallel for 
 	for(size_t ii = 0; ii < svar.totPts; ++ii)
@@ -295,8 +205,7 @@ void Restart(SIM& svar, State& pn, MESH& cells)
 			if(pn[ii].b == FREE)
 			{
 				pn[ii].cellV = cells.cVel[pn[ii].cellID];
-				pn[ii].cellP = cells.cellP[pn[ii].cellID];
-				pn[ii].cellRho = cells.cellRho[pn[ii].cellID];
+				pn[ii].cellP = cells.cP[pn[ii].cellID];
 			}
 		}
 
@@ -305,62 +214,6 @@ void Restart(SIM& svar, State& pn, MESH& cells)
 			svar.back.emplace_back(ii);
 		}
 	}
-	
-
-}
-
-void GetAero(AERO& avar, const FLUID& fvar, const real rad)
-{
-	#if SIMDIM == 3
-		avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
-	#endif
-	#if SIMDIM == 2
-		avar.L = rad/sqrt(M_PI);
-	#endif
-	avar.td = (2.0*fvar.rho0*pow(avar.L,SIMDIM-1))/(avar.Cd*fvar.mu);
-
-	avar.omega = sqrt((avar.Ck*fvar.sig)/(fvar.rho0*pow(avar.L,SIMDIM))-1.0/pow(avar.td,2.0));
-
-	avar.tmax = -2.0 *(atan(sqrt(pow(avar.td*avar.omega,2.0)+1)
-					+avar.td*avar.omega) - M_PI)/avar.omega;
-
-	avar.Cdef = 1.0 - exp(-avar.tmax/avar.td)*(cos(avar.omega*avar.tmax)+
-		1/(avar.omega*avar.td)*sin(avar.omega*avar.tmax));
-	avar.ycoef = 0.5*avar.Cdef*(avar.Cf/(avar.Ck*avar.Cb))*(fvar.rhog*avar.L)/fvar.sig;
-
-	//cout << avar.ycoef << "  " << avar.Cdef << "  " << avar.tmax << "  " << endl;
-}
-
-RotMat GetRotationMat(StateVecD& angles)
-{
-	if (SIMDIM == 3)
-	{
-		RotMat rotx, roty, rotz;
-		rotx << 1.0, 0.0            , 0.0           ,
-			    0.0, cos(angles(0)) , sin(angles(0)),
-				0.0, -sin(angles(0)), cos(angles(0));
-
-		roty << cos(angles(1)) , 0.0 , -sin(angles(1)),
-			    0.0            , 1.0 , 0.0            ,
-				sin(angles(1)) , 0.0 , cos(angles(1));
-
-		rotz << cos(angles(2)) , sin(angles(2)) , 0.0 ,
-			    -sin(angles(2)), cos(angles(2)) , 0.0 ,
-				0.0            , 0.0            , 1.0 ;
-
-		return rotx*roty*rotz;
-	}
-	else if (SIMDIM == 2)
-	{
-		RotMat rot;
-		rot << cos(angles(0)), -sin(angles(0)),
-		       sin(angles(0)),  cos(angles(0));
-
-		return rot;
-	}
-
-	return RotMat::Zero();
-
 }
 
 void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
@@ -507,7 +360,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   		fvar.mu = getDouble(fluid, lineno, "Fluid viscosity");
   		fvar.mug = getDouble(fluid, lineno, "Air viscosity");
   		fvar.sig = getDouble(fluid, lineno, "Surface Tension");
-  		if(svar.Bcase == 6 || svar.Bcase == 4)
+  		if(svar.Bcase == 6 || svar.Bcase == 4 || svar.Bcase == 7)
   		{
 	  		fvar.gasVel = getDouble(fluid, lineno, "Gas ref Vel");
 	  		fvar.gasPress = getDouble(fluid, lineno, "Get ref Press");
@@ -554,11 +407,70 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		/*Pipe Pressure calc*/
 		real rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
 
-		// Defining dx to fit the pipe, then find rest spacing
-		uint nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
-		svar.dx = 0.999*0.5*(svar.Jet(0))/real(nrad);	
+		svar.nrad = 0;
 
-	 	svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/SIMDIM);
+		if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
+		{
+			// Defining dx to fit the pipe, then find rest spacing
+			svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
+			svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
+	 	}
+	 	else
+	 	{
+	 		svar.nrad = ceil(abs(0.5*svar.Start(0)/svar.Pstep));
+	 		svar.dx = 0.5*(svar.Start(0))/real(svar.nrad);
+	 	}
+
+	 // 	svar.dx = svar.Pstep;	
+		svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/SIMDIM);
+
+		// Correct the droplet to have the same volume as the original
+		if(svar.Bcase == 5)
+		{
+			int partCount = ParticleCount(svar);
+			cout << "Predicted particle count: " << partCount << endl;
+
+			
+#if SIMDIM == 3
+			real dvol = (4.0*M_PI/3.0)*pow(0.5*svar.Start(0),3);
+#else
+			real dvol = M_PI*pow(0.5*svar.Start(0),2);
+#endif
+
+			// Simulation mass
+			// real volume = pow(svar.dx,SIMDIM)*partCount;
+			// svar.mass = volume * rho;
+
+			// cout << "SPH Volume: " << volume << "  Droplet expected volume: " << dvol << endl;
+			// cout << "SPH Mass: " << svar.mass << "  Droplet expected mass: " << dvol*rho << endl;	
+
+			// Want to match the volume, so adjust step size to match. 
+
+			real newstep = 0.98*pow(dvol/real(partCount),1.0/SIMDIM);
+			// cout << "Old step: " << svar.dx << " New step: " << newstep << endl;
+			svar.dx = newstep;
+			// real radius = svar.dx * real(svar.nrad);
+
+			// cout << "Old diameter: " << svar.Start(0) << "  New diameter: " << radius*2.0 << endl;
+			svar.diam = svar.Start(0);
+			svar.Start(0) = 2.0*newstep*real(svar.nrad);
+
+			// svar.nrad = ceil(abs(0.5*svar.Start(0)/svar.Pstep));
+	 		// svar.dx = 0.5*(svar.Start(0))/real(svar.nrad);
+
+			svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/SIMDIM);
+
+			// int newCount = ParticleCount(svar);
+
+			// cout << "New particle count: " << newCount << endl;
+		}
+
+
+#if SIMDIM == 3
+	 	avar.pVol = 4.0/3.0 * M_PI * pow(svar.Pstep,SIMDIM);
+#else
+	 	avar.pVol = M_PI* svar.Pstep*svar.Pstep;
+#endif
 
 	 	/*Mass from spacing and density*/
 		fvar.simM = fvar.rho0*pow(svar.Pstep,SIMDIM); 
@@ -590,7 +502,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 #ifdef DEBUG
 		dbout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
 		dbout << "Pipe rho: " << rho << endl;
-		dbout << "Number of fluid particles along diameter: " << 2*nrad << endl;
+		dbout << "Number of fluid particles along diameter: " << 2*nrad+1 << endl;
 		dbout << "Pipe step (dx): " << svar.dx << endl;
 		dbout << "Particle mass: " << fvar.simM << endl;
 		dbout << "Freestream initial spacing: " << svar.Pstep << endl;
@@ -609,7 +521,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		cout << "Pipe density: " << rho << endl;
 		cout << "Pipe step (dx): " << svar.dx << endl;
 		cout << "Pipe diameter: " << svar.Jet(0) << endl;
-		cout << "Number of fluid particles along diameter: " << 2*nrad << endl;
+		cout << "Number of fluid particles along diameter: " << 2*svar.nrad+1 << endl;
 		cout << "Pipe start position: " << svar.Start(0) << "  " << svar.Start(1);
 		#if SIMDIM == 3
 		cout << "  " << svar.Start(2);
@@ -643,6 +555,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 
 		if(svar.Bcase == 6)
 		{
+			cout << "Mesh filename: " << svar.meshfile << endl;
+			cout << "Solution filename: " << svar.solfile << endl;
 			cout << "Reference velocity: " << fvar.gasVel << endl;
 			cout << "Reference pressure: " << fvar.gasPress << endl;
 			cout << "Reference temperature: " << fvar.T << endl;
@@ -660,8 +574,13 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 			}
 		#endif
 
-		GetAero(avar, fvar, svar.Pstep);
 
+		GetAero(avar, fvar, /*fvar.H*/svar.Pstep);
+#if SIMDIM == 3
+		avar.aPlate = svar.Pstep*svar.Pstep;
+#else
+		avar.aPlate = svar.Pstep;
+#endif
 		// if(svar.restart!=1)
 		// 	Write_Input(svar,fvar,avar,angle);
 }
@@ -686,7 +605,7 @@ void Write_ASCII_header(std::fstream& fp, SIM &svar)
 	else if (svar.outform == 3)
 	{
 		variables = 
-"\"X\", \"Z\", \"rho\", \"P\", \"m\", \"v_x\", \"v_z\", \"a_x\", \"a_z\", \"Cell_Vx\", \"Cell_Vz\", \"Cell_Rho\", \"Cell_P\", \"Cell_ID\"";
+"\"X\", \"Z\", \"rho\", \"P\", \"m\", \"v_x\", \"v_z\", \"a_x\", \"a_z\", \"Cell_Vx\", \"Cell_Vz\", \"Cell_P\", \"Cell_ID\"";
 	}
 	else if (svar.outform == 4)
 	{
@@ -708,7 +627,7 @@ void Write_ASCII_header(std::fstream& fp, SIM &svar)
 	else if (svar.outform == 3)
 	{
 		variables = 
-"\"X\", \"Y\", \"Z\", \"rho\", \"P\", \"m\", \"v_x\", \"v_y\", \"v_z\", \"a_x\", \"a_y\", \"a_z\", \"Cell_Vx\", \"Cell_Vy\", \"Cell_Vz\", \"Cell_Rho\", \"Cell_P\", \"Cell_ID\"";
+"\"X\", \"Y\", \"Z\", \"rho\", \"P\", \"m\", \"v_x\", \"v_y\", \"v_z\", \"a_x\", \"a_y\", \"a_z\", \"Cell_Vx\", \"Cell_Vy\", \"Cell_Vz\", \"Cell_P\", \"Cell_ID\"";
 	}
 	else if (svar.outform == 4)
 	{
@@ -841,7 +760,7 @@ void Write_ASCII_Timestep(std::fstream& fp, SIM &svar, const State &pnp1,
 	        for(uint i = 0; i < SIMDIM; ++i)
 				fp << setw(width) << p->cellV(i);
 
-			fp << setw(width) << p->cellRho << setw(width) << p->cellP;
+			fp << setw(width) << p->cellP;
 	        fp << setw(width) << p->cellID << "\n"; 
 	  	}
     }

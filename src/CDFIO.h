@@ -3,6 +3,7 @@
 
 #include "Var.h"
 #include "IOFunctions.h"
+#include "Geometry.h"
 
 #include <netcdf>
 using namespace netCDF;
@@ -73,9 +74,9 @@ void Write_Zone(string input, ZONE& zn, MESH& cells)
 
 	for(uint ii = 0; ii < SIMDIM; ++ii)
 	{	uint kk = 0;
-		for(uint jj = cells.pVel.size() - zn.nP; jj < cells.pVel.size(); ++jj)
+		for(uint jj = cells.cVel.size() - zn.nP; jj < cells.cVel.size(); ++jj)
 		{
-			fout << cells.pVel[jj][ii] << std::setw(15);
+			fout << cells.cVel[jj][ii] << std::setw(15);
 			kk++;
 
 			if(kk == 5)
@@ -451,6 +452,10 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 	}
 #endif
 
+	vector<real> realDens;
+	Get_Scalar_Property(sol,"density",realDens);
+
+
 	/*Get the velocities*/
 	vector<real> xvel, yvel, zvel;
 #if SIMDIM == 3
@@ -475,12 +480,11 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 	}
 #endif
 
-
+	vector<StateVecD> vel(solPts);
 	/*Test for size*/
 	if(xvel.size() == solPts)
 	{	/*Turn the arrays into a state vector*/
-		vector<StateVecD> vel(solPts);
-		
+		#pragma omp parallel for
 		for(uint ii = 0; ii < solPts; ++ii)
 		{
 			#if SIMDIM == 3
@@ -497,12 +501,13 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 			for(auto index:usedVerts)
 			{
 				newVel.emplace_back(vel[index]);
-				cells.pVel = newVel;
+				
 			}
+			vel = newVel;
 		}
 		else if (cells.verts.size() == solPts)
-		{
-			cells.pVel = vel;
+		{	// Do nothing
+			// vel = vel;
 		}
 		else
 		{
@@ -532,12 +537,15 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 	}
 	else
 	{
+		#pragma omp parallel for
 		for(uint ii = 0; ii < press.size(); ++ii)
 			press[ii] -= fvar.gasPress;
 	}
 
+	
 	vector<real> dens(solPts);
 
+	#pragma omp parallel for
 	for(uint ii = 0; ii < press.size(); ++ii)
 	{
 		dens[ii] = fvar.rho0 * pow((press[ii]/fvar.B + 1),1/fvar.gam);
@@ -557,14 +565,15 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 		{
 			newP.emplace_back(press[index]);
 			newR.emplace_back(dens[index]);
-			cells.pointP = newP;
-			cells.pointRho = newR;	
+			
 		}
+		press = newP;
+		dens = newR;	
 	}
 	else if (cells.verts.size() == solPts)
-	{
-		cells.pointP = press;
-		cells.pointRho = dens;	
+	{	//Do nothing
+		// cells.pointP = press;
+		// cells.pointRho = dens;	
 	}
 	else
 	{
@@ -577,29 +586,11 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 	
 
 	cout << "Averaging points to cell centres..." << endl;
-	Average_Point_to_Cell(cells.pVel,cells.cVel, cells.elems);
-	Average_Point_to_Cell(cells.pointRho,cells.cellRho,cells.elems);
-	Average_Point_to_Cell(cells.pointP,cells.cellP,cells.elems);
+	Average_Point_to_Cell(vel,cells.cVel, cells.elems);
+	// Average_Point_to_Cell(dens,cells.SPHRho,cells.elems);
+	Average_Point_to_Cell(press,cells.cP,cells.elems);
+	Average_Point_to_Cell(realDens,cells.cRho,cells.elems);
 	
-	/*Find cell centres*/
-	Average_Point_to_Cell(cells.verts,cells.cCentre,cells.elems);
-
-	uint isZero = 1;
-	for(size_t ii = 0; ii < cells.cellRho.size(); ++ii)
-	{
-		if(cells.cellRho[ii] != 0)
-		{
-			isZero = 0;
-			break;
-		}
-	}
-
-	if(isZero)
-	{
-		cout << "Averaging has failed somehow." << endl;
-		exit(-1);
-	}
-
 	/*Check the data*/
 	// for(auto value:dens)
 	// {
@@ -781,6 +772,28 @@ void Place_Edges(NcFile& fin, MESH& cells)
 			}
 		}
 	}
+
+
+	/*Find cell centres*/
+	#pragma omp single
+	{
+		cout << "Finding cell centres..." << endl;
+	}
+
+	Average_Point_to_Cell(cells.verts,cells.cCentre,cells.elems);
+
+	/*Find cell centres*/
+	#pragma omp single
+	{
+		cout << "Finding cell volumes..." << endl;
+	}
+
+	// Find cell volumes
+	#pragma omp for schedule(static) nowait
+	for(size_t ii = 0; ii < cells.elems.size(); ++ii)
+	{
+		cells.cVol[ii] = Cell_Volume(cells.verts,cells.faces,cells.elems[ii],cells.cFaces[ii],cells.cCentre[ii]);
+	}
 }
 	cout << "Elements built." << endl;
 
@@ -791,7 +804,7 @@ void Place_Edges(NcFile& fin, MESH& cells)
 
 }
 
-void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, const FLUID& fvar)
+void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, FLUID const& fvar)
 {
 	string meshIn = svar.infolder;
 	string solIn = svar.infolder;
@@ -827,16 +840,11 @@ void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, const FLUID& fvar)
 	cells.elems = vector<vector<size_t>>(nElem);
 	cells.cFaces = vector<vector<size_t>>(nElem);
 	cells.verts = vector<StateVecD>(nPnts);
+	cells.cVol = vector<real>(nElem);
 	// cells.leftright = vector<std::pair<int,int>>(nFace);
 
 	/*Get the faces of the mesh*/
 	cells.faces = Get_Edges(fin);
-
-	
-	
-
-	/*Get face left and right, and put the faces in the elements*/
-	Place_Edges(fin, cells);
 
 	/*Get the vertices that are in use to take the values from the solution file*/
 	int* usedVerts = new int[nPnts];
@@ -852,7 +860,7 @@ void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, const FLUID& fvar)
 	}
 	else
 		uVar.getVar(usedVerts);
-	
+
 #ifdef DEBUG 
 	dbout << "Successfully read vertices_in_use data." << endl;
 #endif
@@ -878,12 +886,20 @@ void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, const FLUID& fvar)
 	svar.Start*=cells.scale;
 	// svar.Jet/=cells.scale;
 
+	/*Get face left and right, and put the faces in the elements*/
+	Place_Edges(fin, cells);
+
 	#ifdef DEBUG
 	dbout << "End of interaction with mesh file and ingested data." << endl << endl;
 	dbout << "Opening solultion file." << endl;
 	#endif
 
 	Read_SOLUTION(solIn,fvar,ignored,cells,uVerts);
+
+	for(size_t ii = 0; ii < cells.cMass.size(); ii++)
+	{
+		cells.cMass[ii] = cells.cRho[ii]*cells.cVol[ii]; 
+	}
 }
 
 #endif
@@ -1056,7 +1072,8 @@ void Place_Faces(NcFile& fin, MESH& cells)
 		{
 			bVerts[ii] = cells.verts[bIndex[ii]];
 		}
-		// vector<vector<uint>> local;
+
+		// Create list of unique vertex indices for each element
 		#pragma omp for schedule(static) nowait
 		for(size_t ii = 0; ii < cells.cFaces.size(); ++ii)
 		{
@@ -1076,6 +1093,27 @@ void Place_Faces(NcFile& fin, MESH& cells)
 				}
 			}
 		}
+
+		/*Find cell centres*/
+		#pragma omp single
+		{
+			cout << "Finding cell centres..." << endl;
+		}
+
+		Average_Point_to_Cell(cells.verts,cells.cCentre,cells.elems);
+
+		/*Find cell centres*/
+		#pragma omp single
+		{
+			cout << "Finding cell volumes..." << endl;
+		}
+
+		// Find cell volumes
+		#pragma omp for schedule(static) nowait
+		for(size_t ii = 0; ii < cells.elems.size(); ++ii)
+		{
+			cells.cVol[ii] = Cell_Volume(cells.verts,cells.faces,cells.elems[ii],cells.cFaces[ii],cells.cCentre[ii]);
+		}
 	}
 
 	cells.bVerts = bVerts;
@@ -1084,6 +1122,8 @@ void Place_Faces(NcFile& fin, MESH& cells)
 	#ifdef DEBUG
 	dbout << "All elements defined." << endl << endl;
 	#endif
+
+
 }
 
 void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
@@ -1121,6 +1161,8 @@ void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
 
 	cells.elems = vector<vector<size_t>>(nElem);
 	cells.cFaces = vector<vector<size_t>>(nElem);
+	cells.cVol = vector<real>(nElem);
+
 	cells.verts = vector<StateVecD>(nPnts);
 	// cells.leftright = vector<std::pair<int,int>>(nFace);
 
@@ -1153,6 +1195,11 @@ void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
 	#endif
 	vector<uint> empty;
 	Read_SOLUTION(solIn,fvar,ignored,cells,empty);
+
+	for(size_t ii = 0; ii < cells.cMass.size(); ii++)
+	{
+		cells.cMass[ii] = cells.cRho[ii]*cells.cVol[ii]; 
+	}
 }
 
 

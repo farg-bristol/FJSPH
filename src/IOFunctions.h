@@ -3,6 +3,7 @@
 	
 
 #include "Var.h"
+#include "BinaryIO.h"
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <stdio.h>  /* defines FILENAME_MAX */
@@ -371,6 +372,362 @@ std::ifstream& GotoLine(std::ifstream& file, unsigned int num)
     return file;
 }
 
+void CheckContents(void* inputHandle, SIM& svar)
+{
+	INTEGER4 numVars, numZones, I;
+	I = tecDataSetGetNumVars(inputHandle, &numVars);
+	if (I == -1)
+	{
+		cout << "Couldn't obtain number of variables. Stopping" << endl;
+		exit(-1);
+	}
+
+	cout << "Number of variables in output file: " << numVars << endl;
+	uint dataType = 0;
+#if SIMDIM == 2
+	if(numVars == 2)
+    {
+    	cout << "Only basic data has been output. Cannot restart." << endl;
+    	exit(-1);
+    }
+    else if (numVars == 6)
+    {
+    	cout << "Cannot restart. No components" << endl;
+    	exit(-1);
+    }
+    else if (numVars == 9)
+    {
+    	cout << "Cannot restart. No components" << endl;
+    	exit(-1);
+    }
+#else
+    if( numVars == 3)
+    {
+    	cout << "Only basic data has been output. Cannot restart." << endl;
+    	exit(-1);
+    }
+    else if ( numVars == 7)
+    {
+    	cout << "Cannot restart. No components" << endl;
+    	exit(-1);
+    }
+    else if (numVars == 10)
+    {
+    	cout << "Cannot restart. No components" << endl;
+    	exit(-1);
+    }
+
+#endif
+    
+    if(numVars == 10 || numVars == 13)
+    {	
+    	dataType = 2;
+    }
+    else if(numVars == 15 || numVars == 19)
+    {
+    	dataType = 3;
+    }
+    else if(numVars == 11 || numVars == 14)
+    {
+    	dataType = 5;
+    }
+
+    if(dataType!= svar.outform)
+    {
+    	cout << "Data is different from that in the settings file." << endl;
+    	cout << "Changing to the file data type: " << dataType << endl;
+    	svar.outform = dataType;
+    	if(svar.outform == 2)
+		{
+			if(svar.Bcase == 6)
+			{
+				cout << "No cell information. Cannot restart" << endl;
+				exit(-1);
+			}
+		}
+    }
+
+    I = tecDataSetGetNumZones(inputHandle, &numZones);
+    cout << "Number of zones in file: " << numZones << endl;
+    if(numZones != static_cast<INTEGER4>(svar.frame+1))
+    {
+    	cout << "Mismatch of number of frames and number of zones in output file." << endl;
+    	cout << "Reading the last zone in file." << endl;
+    	svar.frame = numZones - 1;
+    }
+
+}
+
+/*Make a guess on how big the array is going to be (doesn't need to be totally exact)*/
+int ParticleCount(SIM &svar)
+{
+	int partCount = 0;
+	real step = svar.Pstep*svar.Bstep;
+	int Ny = ceil(svar.Box(1)/step);
+	int Nx = ceil(svar.Box(0)/step);
+
+	#if(SIMDIM == 3)
+		int Nz = ceil(svar.Box(2)/step);
+	#endif
+
+		if(svar.Bcase == 0)
+			partCount += svar.simPts; /*Simulation pn*/
+		else if (svar.Bcase == 1)
+		{
+			#if (SIMDIM == 3)
+				partCount = Nx*Nz + 2*Nx*Ny + 2*Ny*Nz; /*Boundary particles*/
+			#else
+				partCount = 2*Ny + Nx; /*Boundary particles*/
+			#endif
+			partCount += svar.simPts; /*Simulation pn*/
+		}
+		else if (svar.Bcase == 2)
+		{
+			#if SIMDIM == 3
+			{
+				real holeD = svar.Jet(0)+4*svar.Pstep; /*Diameter of hole (or width)*/
+
+	            /*Find the points on the side of the pipe (Assume a circle)*/
+	            float dtheta = atan((step)/(0.5*holeD));
+	            Ny = ceil(svar.Jet(1)/step);
+	            int holeWall = ceil(2*M_PI/dtheta)*Ny;
+
+				/*Simulation Points*/
+				int simCount = 0;
+				real jetR = 0.5*(svar.Jet(0));
+				
+				/*Do the centerline of points*/
+				for (real z = -jetR; z <= jetR; z+= svar.dx)
+					simCount++;
+
+				for (real x = svar.dx; x < jetR ; x+=svar.dx)
+				{ /*Do the either side of the centerline*/
+					for (real z = -jetR; z <= jetR; z+= svar.dx)
+					{	/*If the point is inside the hole diameter, add it*/
+						if(((x*x)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
+			    			simCount += 2;
+					}
+				}
+
+				/*Need to add the pn already present*/
+				int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
+
+				partCount = holeWall + simPts;
+			}
+			#else
+			{
+	            /*Find the points on the side of the pipe*/
+	            Ny = ceil((svar.Jet(1)*3)/step);
+	            int holeWall = 2*Ny;
+
+				/*Simulation Points*/
+				int simCount = 0;
+				real jetR = 2*(0.5*(svar.Jet(0)));
+				for (real x = -jetR; x <= jetR; x+= svar.dx)
+					simCount++;
+
+				/*Need to add the pn already present*/
+				int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
+
+				partCount = holeWall + simPts;
+			}
+			#endif
+		}
+		else if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
+		{	
+			#if SIMDIM == 3
+			{
+				real holeD = svar.Jet(0)+4*svar.Pstep; /*Diameter of hole (or width)*/
+
+	            /*Find the points on the side of the pipe (Assume a circle)*/
+	            float dtheta = atan((step)/(0.5*holeD));
+	            Ny = ceil(svar.Jet(1)/step);
+	            int holeWall = ceil(2*M_PI/dtheta)*Ny;
+
+				/*Simulation Points*/
+				int simCount = 0;
+				real jetR = 0.5*(svar.Jet(0));
+				
+				/*Do the centerline of points*/
+				for (real z = -jetR; z <= jetR; z+= svar.dx)
+					simCount++;
+
+				for (real x = svar.dx; x < jetR ; x+=svar.dx)
+				{ /*Do the either side of the centerline*/
+					for (real z = -jetR; z <= jetR; z+= svar.dx)
+					{	/*If the point is inside the hole diameter, add it*/
+						if(((x*x)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
+			    			simCount += 2;
+					}
+				}
+
+				/*Need to add the pn already present*/
+				int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
+
+				partCount = holeWall + simPts;
+			}
+			#else
+			{
+	            /*Find the points on the side of the pipe*/
+	            Ny = ceil(svar.Jet(1)/step);
+	            int holeWall = 2*Ny;
+
+				/*Simulation Points*/
+				int simCount = 0;
+				real jetR = 0.5*(svar.Jet(0));
+				for (real x = -jetR; x <= jetR; x+= svar.dx)
+					simCount++;
+
+				/*Need to add the pn already present*/
+				int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
+
+				partCount = holeWall + simPts;
+			}
+			#endif
+		}
+		else if (svar.Bcase == 5)
+		{	
+			#if SIMDIM == 3
+				uint simCount = 0;
+				real radius = 0.5*svar.Start(0);
+
+				for (real y = 0; y <= radius; y+=svar.dx)
+				{	
+					real xradius = sqrt(radius*radius - y*y);
+
+					simCount++;
+
+					for (real z = svar.dx; z <= xradius; z+= svar.dx)
+					{ /*Do the centerline of points*/
+						simCount +=2;
+					}
+
+					for (real x = svar.dx; x <= xradius ; x+=svar.dx)
+					{ /*Do the either side of the centerline*/
+						simCount += 2;
+
+						for (real z = svar.dx; z <= xradius; z+= svar.dx)
+						{
+							if(((x*x) + (z*z) + (y*y)) <= (radius*radius) )
+				    		{   /*If the point is inside the hole diameter, add it*/
+								simCount += 4;
+							}
+						}	
+					}
+				}
+				
+				for (real y = -svar.dx; y >= -radius; y-=svar.dx)
+				{	
+					real xradius = sqrt(radius*radius - y*y);
+
+					simCount++;
+
+					for (real z = svar.dx; z <= xradius; z+= svar.dx)
+					{ /*Do the centerline of points*/
+						simCount +=2;
+					}
+
+					for (real x = svar.dx; x <= xradius ; x+=svar.dx)
+					{ /*Do the either side of the centerline*/
+						simCount += 2;
+
+						for (real z = svar.dx; z <= xradius; z+= svar.dx)
+						{
+							if(((x*x) + (z*z) + (y*y)) <= (radius*radius) )
+				    		{   /*If the point is inside the hole diameter, add it*/
+								simCount += 4;
+							}
+						}	
+					}
+				}
+
+				partCount = simCount;
+			#else
+				uint simCount = 0;
+				real radius = 0.5*svar.Start(0);
+				for (real y = -radius; y <= radius; y+=svar.dx)
+				{	
+					++simCount;
+					
+
+					for (real x = svar.dx; x <= radius ; x+=svar.dx)
+					{ /*Do the either side of the centerline*/
+							if(((x*x) + (y*y)) <= (radius*radius))
+				    		{   /*If the point is inside the hole diameter, add it*/
+								++simCount;
+								++simCount;
+							}	
+					}
+				}
+				partCount = simCount;
+			#endif
+		}
+		else if (svar.Bcase == 7) 
+		{	/*Piston driven flow*/
+
+			#if SIMDIM == 2
+				/*Create the reservoir tank*/
+				real tankW = svar.Start(0);
+				real tankD = svar.Start(1);
+				real stepb = (svar.Pstep*svar.Bstep);
+
+				uint pisCnt = ceil((tankW + 8*svar.dx-4*svar.Pstep)/stepb);
+				
+				/*Create the reservoir tank*/
+				uint wall = ceil((tankD+4*svar.dx+6*svar.Pstep)/stepb);
+				
+				/*Create the tapering section*/
+				real theta = atan(svar.Jet(1)/(0.5*tankW-0.5*svar.Jet(0)));
+				real stepy = stepb*sin(theta);
+				uint taper = ceil((svar.Jet(1))/stepy);
+
+				/*Create the exit bit.*/
+				uint exit = ceil(svar.Jet(1)/stepb);
+
+				/*Simulation Particles*/
+				uint simCount = ceil(tankW/svar.dx)*ceil(tankD/svar.dx);	
+
+				partCount = pisCnt + 2*(wall+taper+exit) + simCount;
+			#endif
+		}	
+
+	return partCount;
+}
+
+void GetAero(AERO& avar, const FLUID& fvar, const real rad)
+{
+	#if SIMDIM == 3
+		avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
+	#endif
+	#if SIMDIM == 2
+		avar.L = rad/sqrt(M_PI);
+	#endif
+	avar.td = (2.0*fvar.rho0*pow(avar.L,SIMDIM-1))/(avar.Cd*fvar.mu);
+
+	avar.omega = sqrt((avar.Ck*fvar.sig)/(fvar.rho0*pow(avar.L,SIMDIM))-1.0/pow(avar.td,2.0));
+
+	avar.tmax = -2.0 *(atan(sqrt(pow(avar.td*avar.omega,2.0)+1)
+					+avar.td*avar.omega) - M_PI)/avar.omega;
+
+	avar.Cdef = 1.0 - exp(-avar.tmax/avar.td)*(cos(avar.omega*avar.tmax)+
+		1/(avar.omega*avar.td)*sin(avar.omega*avar.tmax));
+	avar.ycoef = 0.5*avar.Cdef*(avar.Cf/(avar.Ck*avar.Cb))*(fvar.rhog*avar.L)/fvar.sig;
+
+	// avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
+	
+	// avar.td = (2.0*fvar.rho0*pow(avar.L,2))/(avar.Cd*fvar.mu);
+
+	// avar.omega = sqrt((avar.Ck*fvar.sig)/(fvar.rho0*pow(avar.L,3))-1.0/pow(avar.td,2.0));
+
+	// avar.tmax = -2.0 *(atan(sqrt(pow(avar.td*avar.omega,2.0)+1)
+	// 				+avar.td*avar.omega) - M_PI)/avar.omega;
+
+	// avar.Cdef = 1.0 - exp(-avar.tmax/avar.td)*(cos(avar.omega*avar.tmax)+
+	// 	1/(avar.omega*avar.td)*sin(avar.omega*avar.tmax));
+	// avar.ycoef = 0.5*avar.Cdef*(avar.Cf/(avar.Ck*avar.Cb))*(fvar.rhog*avar.L)/fvar.sig;
+
+	//cout << avar.ycoef << "  " << avar.Cdef << "  " << avar.tmax << "  " << endl;
+}
 
 void Write_Input(SIM& svar, FLUID& fvar, AERO& avar, StateVecD& angle)
 {

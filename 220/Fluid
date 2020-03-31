@@ -8,4 +8,10 @@
 0.000894              #Liquid dynamic viscosity
 0.0000185           #Gas dynamic viscosity
 0.0708               #Surface tension (not on)
-Solution             #Output Folder
+128.5                #Reference gas airspeed
+98800                #Reference gas pressure
+298                  #Reference gas temperature
+mesh.faces           #Input Mesh File
+sol                  #Input Solution File
+1                    #Input mesh scale
+Solution             #Output folder name

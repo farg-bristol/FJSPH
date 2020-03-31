@@ -175,12 +175,20 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 	svar.nrefresh = 0;	
 	real radius = 0.5*svar.Start(0);
 
-	#if SIMDIM == 3
+#if SIMDIM == 3
 		
-		for (real y = -radius; y <= radius; y+=svar.dx)
+		for (real y = 0; y <= radius; y+=svar.dx)
 		{	
 			real xradius = sqrt(radius*radius - y*y);
-			for (real z = -xradius; z <= xradius; z+= svar.dx)
+
+			StateVecD xi_y(0.0,y,0.0);
+			pn.emplace_back(Particle(xi_y,v,rho,fvar.simM,press,FREE,pID));
+			pnp1.emplace_back(Particle(xi_y,v,rho,fvar.simM,press,FREE,pID));
+			++pID;
+			++svar.simPts;
+			++svar.nrefresh;
+
+			for (real z = svar.dx; z <= xradius; z+= svar.dx)
 			{ /*Do the centerline of points*/
 				StateVecD xi(0.0,y,z);
 				pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
@@ -188,11 +196,35 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 				++pID;
 				++svar.simPts;
 				++svar.nrefresh;
+
+				xi(2) = -z;
+				pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+				pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+				++pID;
+				++svar.simPts;
+				++svar.nrefresh;
+
 			}
 
 			for (real x = svar.dx; x <= xradius ; x+=svar.dx)
 			{ /*Do the either side of the centerline*/
-				for (real z = -xradius; z <= xradius; z+= svar.dx)
+				
+				StateVecD xi_z(x,y,0.0);
+				pn.emplace_back(Particle(xi_z,v,rho,fvar.simM,press,FREE,pID));
+				pnp1.emplace_back(Particle(xi_z,v,rho,fvar.simM,press,FREE,pID));
+				++pID;
+				++svar.simPts;
+				++svar.nrefresh;
+
+				xi_z(0) = -x;
+				pn.emplace_back(Particle(xi_z,v,rho,fvar.simM,press,FREE,pID));
+				pnp1.emplace_back(Particle(xi_z,v,rho,fvar.simM,press,FREE,pID));
+				++pID;
+				++svar.simPts;
+				++svar.nrefresh;
+
+
+				for (real z = svar.dx; z <= xradius; z+= svar.dx)
 				{
 					if(((x*x) + (z*z) + (y*y)) <= (radius*radius) )
 		    		{   /*If the point is inside the hole diameter, add it*/
@@ -208,12 +240,106 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 						++pID;
 						++svar.simPts;
 						++svar.nrefresh;
+
+						xi(2) = -z;
+						pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+						pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+						++pID;
+						++svar.simPts;
+						++svar.nrefresh;
+						xi(0) = x;
+						pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+						pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+						++pID;
+						++svar.simPts;
+						++svar.nrefresh;
 					}
 				}	
 			}
 		}
-	#else
-		for (real y = -radius; y <= radius; y+=svar.dx)
+
+		for (real y = -svar.dx; y >= -radius; y-=svar.dx)
+		{	
+			real xradius = sqrt(radius*radius - y*y);
+
+			StateVecD xi_y(0.0,y,0.0);
+			pn.emplace_back(Particle(xi_y,v,rho,fvar.simM,press,FREE,pID));
+			pnp1.emplace_back(Particle(xi_y,v,rho,fvar.simM,press,FREE,pID));
+			++pID;
+			++svar.simPts;
+			++svar.nrefresh;
+
+			for (real z = svar.dx; z <= xradius; z+= svar.dx)
+			{ /*Do the centerline of points*/
+				StateVecD xi(0.0,y,z);
+				pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+				pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+				++pID;
+				++svar.simPts;
+				++svar.nrefresh;
+
+				xi(2) = -z;
+				pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+				pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+				++pID;
+				++svar.simPts;
+				++svar.nrefresh;
+
+			}
+
+			for (real x = svar.dx; x <= xradius ; x+=svar.dx)
+			{ /*Do the either side of the centerline*/
+				
+				StateVecD xi_z(x,y,0.0);
+				pn.emplace_back(Particle(xi_z,v,rho,fvar.simM,press,FREE,pID));
+				pnp1.emplace_back(Particle(xi_z,v,rho,fvar.simM,press,FREE,pID));
+				++pID;
+				++svar.simPts;
+				++svar.nrefresh;
+
+				xi_z(0) = -x;
+				pn.emplace_back(Particle(xi_z,v,rho,fvar.simM,press,FREE,pID));
+				pnp1.emplace_back(Particle(xi_z,v,rho,fvar.simM,press,FREE,pID));
+				++pID;
+				++svar.simPts;
+				++svar.nrefresh;
+
+
+				for (real z = svar.dx; z <= xradius; z+= svar.dx)
+				{
+					if(((x*x) + (z*z) + (y*y)) <= (radius*radius) )
+		    		{   /*If the point is inside the hole diameter, add it*/
+						StateVecD xi(x,y,z);
+						pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+						pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+						++pID;
+						++svar.simPts;
+						++svar.nrefresh;
+						xi(0) = -x;
+						pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+						pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+						++pID;
+						++svar.simPts;
+						++svar.nrefresh;
+
+						xi(2) = -z;
+						pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+						pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+						++pID;
+						++svar.simPts;
+						++svar.nrefresh;
+						xi(0) = x;
+						pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+						pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+						++pID;
+						++svar.simPts;
+						++svar.nrefresh;
+					}
+				}	
+			}
+		}
+#else
+		for (real y = 0; y <= radius; y+=svar.dx)
 		{	
 			/*Do the centerline of points*/
 			StateVecD xi(0.0,y);
@@ -242,7 +368,37 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 				}	
 			}
 		}
-	#endif
+
+		for (real y = -svar.dx; y >= -radius; y-=svar.dx)
+		{	
+			/*Do the centerline of points*/
+			StateVecD xi(0.0,y);
+			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+			++pID;
+			++svar.simPts;
+			++svar.nrefresh;
+			
+			for (real x = svar.dx; x <= radius ; x+=svar.dx)
+			{ /*Do the either side of the centerline*/
+				if(((x*x) + (y*y)) <= (radius*radius) )
+	    		{   /*If the point is inside the hole diameter, add it*/
+					StateVecD xi2(x,y);
+					pn.emplace_back(Particle(xi2,v,rho,fvar.simM,press,FREE,pID));
+					pnp1.emplace_back(Particle(xi2,v,rho,fvar.simM,press,FREE,pID));
+					++pID;
+					++svar.simPts;
+					++svar.nrefresh;
+					xi2(0) = -x;
+					pn.emplace_back(Particle(xi2,v,rho,fvar.simM,press,FREE,pID));
+					pnp1.emplace_back(Particle(xi2,v,rho,fvar.simM,press,FREE,pID));
+					++pID;
+					++svar.simPts;
+					++svar.nrefresh;
+				}	
+			}
+		}
+#endif
 
 	svar.totPts += svar.nrefresh;
 }
@@ -464,7 +620,7 @@ namespace PoissonSample
 		{
 			press = pnp1[host].cellP;
 			vel = pnp1[host].cellV;
-			rho = pnp1[host].cellRho;
+			rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
 		}
 #if SIMDIM == 3
 		else if(svar.Bcase == 4)

@@ -1,79 +1,10 @@
 #ifndef CROSSING_H
 #define CROSSING_H
 
-#include "Eigen/Core"
-#include "Eigen/Geometry"
 #include "Var.h"
+#include "Geometry.h"
 #include <iomanip>
 // #include <gmpxx.h>
-
-#define X 0
-#define Y 1
-
-#ifndef TRUE
-#define TRUE  1
-#define FALSE 0
-#endif
-
-#define PERTURB(i,j) pow(MEPSILON,pow(2,i*SIMDIM-j))
-
-
-/*Crossing test for 3 dimensions.*/
-int LessThanREError(const DensMatD& A)
-{
-    real a1, a2, a3;
-
-    /*Calculate components of the absolute*/
-    a1 = fabs(A(0,2)-A(3,2))*(fabs((A(1,0)-A(3,0))*(A(2,1)-A(3,1)))+fabs((A(1,1)-A(3,1))*(A(2,0)-A(3,0))));
-    a2 = fabs(A(1,2)-A(3,2))*(fabs((A(2,0)-A(3,0))*(A(0,1)-A(3,1)))+fabs((A(2,1)-A(3,1))*(A(0,0)-A(3,0))));
-    a3 = fabs(A(2,2)-A(3,2))*(fabs((A(0,0)-A(3,0))*(A(1,1)-A(3,1)))+fabs((A(0,1)-A(3,1))*(A(1,0)-A(3,0))));
-
-    if(fabs(A.determinant()) <=  MERROR*(a1+a2+a3))
-    {
-        #pragma omp critical
-        {
-        cout << "Volume is inside the tolerance of round-off error. Need to do some form of tiebreaking." << endl;
-        cout << "Matrix: " << endl << A << endl;
-        cout << "MERROR: " << MERROR << endl;
-        cout << "Components: " << a1 << "  " << a2 << "  " << a3 << endl;
-        cout << A.determinant() <<  " <= " <<  MERROR*(a1+a2+a3) << endl;
-        }
-        return 1;
-    }
-
-    return 0;
-}
-
-// Returns 1 if the lines intersect, otherwise 0. In addition, if the lines 
-// intersect the intersection point may be stored in the floats i_x and i_y.
-bool get_line_intersection(vector<StateVecD> const& verts, vector<size_t> const& edge, 
-    const StateVecD& p1, const StateVecD& cellC)
-{
-    const StateVecD& e1 = verts[edge[0]];
-    const StateVecD& e2 = verts[edge[1]];
-    StateVecD s,r;
-    s = cellC - p1; r = e2 - e1;
-
-    // Find the denominator of the calculation 
-    real denom =  (-r(0) * s(1) + s(0) * r(1));
-
-    // If the value of this is nearly 0, then 
-    if(denom < MEPSILON)
-    {   // Lines are colinear
-        return 0;
-    }
-
-    real u, t;
-    u = (-s(1) * (p1(0) - e1(0)) + s(0) * (p1(1) - e1(1))) / denom;
-    t = ( r(0) * (p1(1) - e1(1)) - r(1) * (p1(0) - e1(0))) / denom;
-
-    if (u > 0 && u < 1 && t > 0 && t < 1)
-    {   // Collision detected
-        return 1;
-    }
-
-    return 0; // No collision
-}
 
 
 // #ifdef DEBUG
@@ -82,7 +13,8 @@ void Write_Containment(const vector<size_t>& ret_indexes, const MESH& cells, con
     cout << ret_indexes.size() << endl;
     vector<StateVecD> const& verts = cells.verts;
 
-#if SIMDIM == 3    
+#if SIMDIM == 3
+    cout << "Test point: " << testp(0) << " " << testp(1) << " " << testp(2) << endl;    
     cout << "First cell containment:" << endl;
     const auto index = ret_indexes[0];
     const auto cell = cells.cFaces[index];
@@ -98,6 +30,7 @@ void Write_Containment(const vector<size_t>& ret_indexes, const MESH& cells, con
     {
         cout << "Face: " << findex << " left: " << cells.leftright[findex].first << " right: "
          << cells.leftright[findex].second  << endl;
+
         const vector<size_t> face = cells.faces[findex];
         vol1 << testp(0)         , testp(1)         , testp(2)         , 1.0,
                 verts[face[0]](0), verts[face[0]](1), verts[face[0]](2), 1.0,
@@ -112,9 +45,28 @@ void Write_Containment(const vector<size_t>& ret_indexes, const MESH& cells, con
 
         cout << "Volume 1: " << vol1.determinant() << "  Volume 2: " << vol2.determinant() << endl;
 
-        if((vol1.determinant()<0.0)!=(vol2.determinant()<0))
+        if(LessThanREError(vol1))
         {
-            cout << "could cross this face..." << endl;
+            cout << "Volume 1 needs perturbing" << endl;
+
+            vol1.row(0) << testp(0)+PERTURB(0,1),testp(1)+PERTURB(0,2),testp(2)+PERTURB(0,3),1.0;
+
+            cout << "New volume:" << vol1.determinant() << endl;
+        }
+
+        if(LessThanREError(vol2))
+        {
+            cout << "Volume 2 needs perturbing" << endl;
+
+            vol2.row(0) << rayp(0)+PERTURB(0,1),rayp(1)+PERTURB(0,2),rayp(2)+PERTURB(0,3),1.0;
+
+            cout << "New volume:" << vol2.determinant() << endl;
+        }
+
+
+        if((vol1.determinant()<0.0)!=(vol2.determinant()<0.0))
+        {
+            cout << "Could cross this face..." << endl;
             uint numverts = face.size();
             
             uint flag3,flag4;
@@ -131,7 +83,19 @@ void Write_Containment(const vector<size_t>& ret_indexes, const MESH& cells, con
             vol.row(3) << rayp(0), rayp(1), rayp(2),1.0;
                         
             cout << "Volume 0: " << vol.determinant() << endl;
-            flag3 = (vol.determinant() < 0);
+
+            if(LessThanREError(vol))
+            {
+                cout << "Volume needs perturbing" << endl;
+                DensMatD pert = vol;
+
+                pert.row(0) << testp(0)+PERTURB(0,1),testp(1)+PERTURB(0,2),testp(2)+PERTURB(0,3),1.0;
+
+                flag3 = (pert.determinant() < 0.0);
+            }
+            else
+                flag3 = (vol.determinant() < 0.0);
+
             /*Check for each face, if the signs of all the tets are the same.*/
             for (size_t ii = 1; ii < face.size(); ++ii)
             {   /*Change the face vertices used*/
@@ -143,7 +107,18 @@ void Write_Containment(const vector<size_t>& ret_indexes, const MESH& cells, con
                 vol.row(2) << vtx1(0), vtx1(1), vtx1(2), 1.0;
 
                 cout << "Volume " << ii << ": " << vol.determinant() << endl;
-                flag4 = (vol.determinant() < 0);
+                if(LessThanREError(vol))
+                {
+                    cout << "Volume needs perturbing" << endl;
+                    DensMatD pert = vol;
+
+                    pert.row(0) << testp(0)+PERTURB(0,1),testp(1)+PERTURB(0,2),testp(2)+PERTURB(0,3),1.0;
+
+                    flag4 = (pert.determinant() < 0.0);
+                }
+                else
+                    flag4 = (vol.determinant() < 0.0);
+                
 
                 /*If the sign of the tet is different, this face isn't intersected.*/
                 if(flag4 != flag3)
@@ -252,6 +227,7 @@ void Write_Containment(const vector<size_t>& ret_indexes, const MESH& cells, con
 #endif
 
 #if SIMDIM == 2
+    cout << "Test point: " << testp(0) << " " << testp(1) << endl; 
     cout << "First cell containment:" << endl;
    
     const auto index = ret_indexes[0];
@@ -363,183 +339,72 @@ void Write_Containment(const vector<size_t>& ret_indexes, const MESH& cells, con
 
 }
 
-
-/* ======= Crossings algorithm ============================================  */
-/* By Eric Haines, 3D/Eye Inc, erich@eye.com                                 */
-/* Shoot a test ray along +X axis.  The strategy, from MacMartin, is to      */
-/* compare vertex Y values to the testing point's Y and quickly discard      */
-/* edges which are entirely to one side of the test ray.                     */
-/*                                                                           */
-/* Input 2D polygon _pgon_ with _numverts_ number of vertices and test point */
-/* _point_, returns 1 if inside, 0 if outside.  WINDING and CONVEX can be    */
-/* defined for this test.                                                    */
-#if SIMDIM == 2
-    int Crossings2D(vector<StateVecD> const& verts, vector<size_t> const& edge, StateVecD const& point)
-    {
-        int  yflag0, yflag1, inside_flag;
-        real  ty, tx;
-        StateVecD vtx0, vtx1;
-
-        tx = point[X];
-        ty = point[Y];
-
-        inside_flag = 0;
-
-        vtx0 = verts[edge[0]];
-        vtx1 = verts[edge[1]];
-        /* Move to the next pair of vertices, retaining info as possible. */
-        yflag0 = ( vtx0[Y] >= ty );
-        yflag1 = ( vtx1[Y] >= ty );
-
-        /* Check if endpoints straddle (are on opposite sides) of X axis
-         * (i.e. the Y's differ); if so, +X ray could intersect this edge.
-         * Credit to Joseph Samosky to try dropping
-         * the "both left or both right" part of my code.
-         */
-        if ( yflag0 != yflag1 ) 
-        {
-            /* Check intersection of pgon segment with +X ray.
-             * Note if >= point's X; if so, the ray hits it.
-             * The division operation is avoided for the ">=" test by checking
-             * the sign of the first vertex wrto the test point; idea inspired
-             * by Joseph Samosky's and Mark Haigh-Hutchinson's different
-             * polygon inclusion tests.
-             */
-            if ( ((vtx1[Y]-ty) * (vtx1[X]-vtx0[X]) >=
-              (vtx1[X]-tx) * (vtx1[Y]-vtx0[Y])) == yflag1 )
-            {
-              inside_flag = !inside_flag;
-            }
-
-            /* For convex cells, further optimisation can be done: */
-            /* A ray can only pass through a maximum of two faces.*/
-            /* If this is second edge hit, then done testing. */ 
-        }            
-        return( inside_flag );
-    }
-#endif
-
-
-#if SIMDIM == 3
-int Crossings3D(const vector<StateVecD>& verts, const vector<size_t>& face, 
-    StateVecD const& point, StateVecD const& point2)
-{   /*Using Signed volumes of tetrahedra*/
-    /*Shewchuk J.R 1996, & 
-    Robust Adaptive Floating-Point Geometric Predicates
-    Michael Aftosmis, Cart3D Software*/
-    /*https://www.nas.nasa.gov/publications/software/docs/cart3d/pages/bool_intersection.html*/
-    StateVecD testp = point; 
-    StateVecD rayp = point2;
-    DensMatD vol1;
-    int flag1, flag2;
-    vol1 << testp(0)         , testp(1)         , testp(2)         , 1.0,
-            verts[face[0]](0), verts[face[0]](1), verts[face[0]](2), 1.0,
-            verts[face[1]](0), verts[face[1]](1), verts[face[1]](2), 1.0,
-            verts[face[2]](0), verts[face[2]](1), verts[face[2]](2), 1.0;
-     
-
-    if(LessThanREError(vol1))
-    {   // Perturb the test point so that it doesn't go into roundoff error
-        testp += StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
-        vol1.row(0) << testp(0),testp(1),testp(2),1.0;
-    }
-
-    flag1 = (vol1.determinant() < 0);
-
-    vol1.row(0) << rayp(0), rayp(1), rayp(2),1.0;
-    if(LessThanREError(vol1))
-    {
-       /*To add Simulation of Simplicity*/
-        rayp += StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
-        
-        vol1.row(0) << rayp(0), rayp(1), rayp(2),1.0;
-    }
-   
-    flag2 = (vol1.determinant() < 0); 
-
-    /*If signs of the volumes alternate, then the points lie either side of the plane*/
-    if(flag1 != flag2)
-    {        
-        int flag3, flag4;
-        StateVecD vtx0, vtx1;
-        vtx0 = verts[face.back()]; /*Start on the last - first point edge*/
-        vtx1 = verts[face[0]];
-
-        /*Find initial volume size*/
-        DensMatD vol;
-        vol.row(0) << point(0), point(1), point(2), 1.0;
-        vol.row(1) << vtx0(0), vtx0(1), vtx0(2), 1.0;
-        vol.row(2) << vtx1(0), vtx1(1), vtx1(2), 1.0;
-        vol.row(3) << point2(0), point2(1), point2(2),1.0;
-        if(LessThanREError(vol))
-        {
-            vol.row(0) << testp(0),testp(1),testp(2),1.0;
-            vol.row(3) << point2(0)+PERTURB(3,1), 
-            point2(1) + PERTURB(3,2), point2(2) + PERTURB(3,3),1.0;
-        }
-        
-        flag3 = (vol.determinant() < 0);
-
-        /*Check for each face, if the signs of all the tets are the same.*/
-        for (size_t ii = 1; ii < face.size(); ++ii)
-        {   /*Change the face vertices used*/
-            // cout << face.size() << "  " << ii << endl;
-            vtx0 = vtx1;
-            vtx1 = verts[face[ii]];
-
-            vol.row(1) << vtx0(0), vtx0(1), vtx0(2), 1.0;
-            vol.row(2) << vtx1(0), vtx1(1), vtx1(2), 1.0;
-            if(LessThanREError(vol))
-            {
-                vol.row(0) << testp(0),testp(1),testp(2),1.0;
-                vol.row(3) << point2(0)+PERTURB(3,1), 
-                point2(1) + PERTURB(3,2), point2(2) + PERTURB(3,3),1.0;
-            }
-
-            flag4 = (vol.determinant() < 0);
-
-            /*If the sign of the tet is different, this face isn't intersected.*/
-            if (flag4 != flag3)
-                return 0;   
-        }  
-        return 1;
-    }  
-    return 0;    
-}
-#endif
-
-uint CheckCell(const size_t cell,  const size_t& ii, const MESH& cells, State& pnp1)
+uint CheckCell(const size_t& cell,  const size_t& ii, const MESH& cells, State& pnp1)
 {
-    const StateVecD testp = pnp1[ii].xi;
+    StateVecD testp = pnp1[ii].xi;
 #if SIMDIM == 3    
     const StateVecD rayp(testp(0)+1e+5,testp(1),testp(2));
 #endif
 
     uint line_flag = 0;
     uint inside_flag = 0;
-    for (uint const& findex:cells.cFaces[cell] ) 
+    uint perturb = FALSE;
+    for (size_t jj = 0; jj < cells.cFaces[cell].size(); jj++) 
     {
-        const vector<size_t>& face = cells.faces[findex];
+        const vector<size_t>& face = cells.faces[cells.cFaces[cell][jj]];
 #if SIMDIM == 3            
-        if(Crossings3D(cells.verts,face,testp,rayp))
+        if(Crossings3D(cells.verts,face,testp,rayp,perturb))
 #else
         if(Crossings2D(cells.verts,face,testp))
 #endif                
         {   
+
             inside_flag=!inside_flag;
             if ( line_flag ) break; //Convex assumption
 
             // //  note that one edge has been hit by the ray's line 
             line_flag = TRUE;
         }
+
+        if(perturb == TRUE)
+        {
+            // Reset the face index
+            jj = 0;
+            line_flag = 0;
+            inside_flag = 0;
+            perturb = FALSE;
+
+#if SIMDIM == 3
+            testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
+#else
+            testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2));
+#endif
+            const vector<size_t>& retest = cells.faces[cells.cFaces[cell][jj]];
+
+#if SIMDIM == 3            
+            if(Crossings3D(cells.verts,retest,testp,rayp,perturb))
+#else
+            if(Crossings2D(cells.verts,retest,testp))
+#endif                
+            {   
+
+                inside_flag=!inside_flag;
+                // note that one edge has been hit by the ray's line 
+                line_flag = TRUE;
+            }
+
+        }
     }
 
     if(inside_flag == 1)
     {
+        // cout << "Found the cell: " << cell << endl;
+        
         pnp1[ii].cellID = cell;
         pnp1[ii].cellV = cells.cVel[cell];
-        pnp1[ii].cellP = cells.cellP[cell];
-        pnp1[ii].cellRho = cells.cellRho[cell];        
+        pnp1[ii].cellP = cells.cP[cell];
+
+        // cout << "Cell velocity: " << pnp1[ii].cellV(0) << endl;       
         return 1;
     }
 
@@ -576,7 +441,7 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
     {   
         if(CheckCell(index,ii,cells,pnp1))
         {
-            found = 1;
+            found = 1; 
             break;
         }
         count++;
@@ -597,8 +462,15 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
                 {
                     const vector<size_t>& face = cells.faces[findex];
                     int ints;
-#if SIMDIM == 3                   
-                    ints = Crossings3D(cells.verts,face,testp,rayp);
+                    
+#if SIMDIM == 3     
+                    uint perturb = FALSE;              
+                    ints = Crossings3D(cells.verts,face,testp,rayp,perturb);
+                    if(perturb == TRUE)
+                    {
+                        testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
+                        ints = Crossings3D(cells.verts,face,testp,rayp,perturb);
+                    }
 #else               /*2D line intersection*/
                     ints = get_line_intersection(cells.verts,face,testp,rayp);
 #endif
@@ -653,14 +525,17 @@ void FirstCell(SIM& svar, size_t end, const uint ii, Vec_Tree& CELL_INDEX,
 
         if(cross == 0)
         {
-            cout << "First containing cell not found. Something is wrong." << endl;
-            Write_Containment(ret_indexes,cells,testp);
-            exit(-1);
+            #pragma omp single
+            {
+                cout << "First containing cell not found. Something is wrong." << endl;
+                Write_Containment(ret_indexes,cells,testp);
+                exit(-1);
+            }
         }
     }   
 }
 
-void FindCell(SIM& svar, const real sr, KDTREE& TREE, const MESH& cells, State& pnp1, State& pn)
+void FindCell(SIM& svar, const real sr, KDTREE& TREE, MESH& cells, State& pnp1, State& pn)
 {
     /*Find which cell the particle is in*/
     vector<size_t> toDelete;
@@ -712,6 +587,11 @@ void FindCell(SIM& svar, const real sr, KDTREE& TREE, const MESH& cells, State& 
                         // cout << "Moved to a neighbour cell." << endl;
 #endif
                         inside_flag = 1;
+                        // restore the perturbation to the old cell, and give it to the new cell.
+                        // cells.cPertn[pnp1[ii].cellID] += pnp1[ii].vPert;
+                        // cells.cPertn[pn[ii].cellID] -= pnp1[ii].vPert;
+
+
                         // cout << "Found new cell at " << count << " in list" << endl;
                     }
                     count++;
@@ -746,6 +626,9 @@ void FindCell(SIM& svar, const real sr, KDTREE& TREE, const MESH& cells, State& 
                         // cout << "Moved to a neighbour cell." << endl;
 #endif
                         inside_flag = 1;
+
+                        // cells.cPertn[pnp1[ii].cellID] += pnp1[ii].vPert;
+                        // cells.cPertn[pn[ii].cellID] -= pnp1[ii].vPert;
                         // cout << "Found new cell at " << count << " in list" << endl;
                     }
                     count++;
@@ -766,11 +649,18 @@ void FindCell(SIM& svar, const real sr, KDTREE& TREE, const MESH& cells, State& 
                             {
                                 const vector<size_t>& face = cells.faces[findex];
                                 int ints;
-    #if SIMDIM == 3                   
-                                ints = Crossings3D(cells.verts,face,testp,rayp);
-    #else                       /*2D line intersection*/
+#if SIMDIM == 3                   
+                                uint perturb = FALSE;              
+                                ints = Crossings3D(cells.verts,face,testp,rayp,perturb);
+                                if(perturb == TRUE)
+                                {
+
+                                    testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
+                                    ints = Crossings3D(cells.verts,face,testp,rayp,perturb);
+                                }
+#else                           /*2D line intersection*/
                                 ints = get_line_intersection(cells.verts,face,testp,rayp);
-    #endif
+#endif
                                 if(ints)
                                 {
                                     cross=!cross;
@@ -801,53 +691,53 @@ void FindCell(SIM& svar, const real sr, KDTREE& TREE, const MESH& cells, State& 
             }
                  
     
-        /*Check if the particle is close to the boundary*/
-        vector<size_t> b_indexes(1);
-        vector<real> b_dists_sqr(1);
-        nanoflann::KNNResultSet<real> bResult(1);
-        bResult.init(&b_indexes[0], &b_dists_sqr[0]);
+//         /*Check if the particle is close to the internal boundary*/
+//         vector<size_t> b_indexes(1);
+//         vector<real> b_dists_sqr(1);
+//         nanoflann::KNNResultSet<real> bResult(1);
+//         bResult.init(&b_indexes[0], &b_dists_sqr[0]);
             
-        TREE.BOUNDARY.index->findNeighbors(bResult, &testp[0], nanoflann::SearchParams(10));
+//         TREE.BOUNDARY.index->findNeighbors(bResult, &testp[0], nanoflann::SearchParams(10));
 
-        if(b_dists_sqr[0] < sr)
-        {   /*Means it's close to the surface*/
-            // #pragma omp critical
-            // {
-            //     cout << "Particle is receiving boundary treatment" << endl;
-            // }
-            b_indexes.resize(3);
-            b_dists_sqr.resize(3);
-            nanoflann::KNNResultSet<real> bFace(3);
-            bFace.init(&b_indexes[0], &b_dists_sqr[0]);
-            // Get the surface normal from the closest three points
-            TREE.BOUNDARY.index->findNeighbors(bFace, &testp[0], nanoflann::SearchParams(10));
+//         if(b_dists_sqr[0] < sr)
+//         {   /*Means it's close to the surface*/
+//             // #pragma omp critical
+//             // {
+//             //     cout << "Particle is receiving boundary treatment" << endl;
+//             // }
+//             b_indexes.resize(3);
+//             b_dists_sqr.resize(3);
+//             nanoflann::KNNResultSet<real> bFace(3);
+//             bFace.init(&b_indexes[0], &b_dists_sqr[0]);
+//             // Get the surface normal from the closest three points
+//             TREE.BOUNDARY.index->findNeighbors(bFace, &testp[0], nanoflann::SearchParams(10));
 
-            StateVecD norm;
-#if SIMDIM == 3
-            /*Get the face normal*/
-            StateVecD r1 = cells.bVerts[b_indexes[1]] - cells.bVerts[b_indexes[0]];
-            StateVecD r2 = cells.bVerts[b_indexes[2]] - cells.bVerts[b_indexes[0]];
+//             StateVecD norm;
+// #if SIMDIM == 3
+//             /*Get the face normal*/
+//             StateVecD r1 = cells.bVerts[b_indexes[1]] - cells.bVerts[b_indexes[0]];
+//             StateVecD r2 = cells.bVerts[b_indexes[2]] - cells.bVerts[b_indexes[0]];
 
-            norm = r1.cross(r2);
-            norm = norm.normalized();
-#else
-            StateVecD r1 = cells.bVerts[b_indexes[1]] - cells.bVerts[b_indexes[0]];
-            norm = StateVecD(-r1(1),r1(0)); 
-            norm = norm.normalized();
-#endif
-           // Create virtual particle with opposite velocity to create a force
-            real plane = norm.dot(cells.bVerts[b_indexes[1]]);
-            real dist =  (plane - pnp1[ii].xi.dot(norm))/(norm.dot(norm));
-            // cout << "Plane const:  " << plane << " dist: " << dist << endl;
-            pnp1[ii].bNorm = norm;
-            pnp1[ii].y = dist;
+//             norm = r1.cross(r2);
+//             norm = norm.normalized();
+// #else
+//             StateVecD r1 = cells.bVerts[b_indexes[1]] - cells.bVerts[b_indexes[0]];
+//             norm = StateVecD(-r1(1),r1(0)); 
+//             norm = norm.normalized();
+// #endif
+//            // Create virtual particle with opposite velocity to create a force
+//             real plane = norm.dot(cells.bVerts[b_indexes[1]]);
+//             real dist =  (plane - pnp1[ii].xi.dot(norm))/(norm.dot(norm));
+//             // cout << "Plane const:  " << plane << " dist: " << dist << endl;
+//             pnp1[ii].bNorm = norm;
+//             pnp1[ii].y = dist;
 
-            pnp1[ii].internal = 1;
-            #pragma omp atomic
-            svar.intNum++;
-        }
-        else
-            pnp1[ii].internal = 0;
+//             pnp1[ii].internal = 1;
+//             #pragma omp atomic
+//             svar.intNum++;
+//         }
+//         else
+//             pnp1[ii].internal = 0;
 
         } //end if particle is valid
     }   // End of particle loop

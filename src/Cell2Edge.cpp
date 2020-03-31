@@ -870,23 +870,16 @@ void Write_Edge_Tecplot(const EDGE& edata)
 		exit(-1);
 	}
 
-	// uint TotalNumFaceNodes = 0;
-	// for(uint ii = 0; ii < edata.edges.size(); ++ii)
-	// {
-	// 	TotalNumFaceNodes += edata.edges[ii].size();
-	// }
 
 	fout << "VARIABLES= \"X\" \"Z\" " << endl;
 	fout << "ZONE T=\"FEPOLYGON Test\"" << endl;
 	fout << "ZONETYPE=FEPOLYGON" << endl;
 	fout << "NODES=" << edata.numPoint << " ELEMENTS=" << edata.numElem << " FACES=" << edata.numEdges << endl;
-	// fout << "TotalNumFaceNodes=" << TotalNumFaceNodes << endl;
 	fout << "NumConnectedBoundaryFaces=0 TotalNumBoundaryConnections=0" << endl;
 
 	uint w = 15;
 	uint preci = 6;
 	fout << std::left << std::scientific << std::setprecision(preci);
-	// fout << fdata.numElem << " " << fdata.numFaces << "  " <<  fdata.numPoint << endl;
 	
 	/*Write vertices in block format (Each dimension in turn)*/
 	uint newl = 0;

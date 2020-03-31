@@ -8,7 +8,4 @@
 0.00142              #Liquid Dynamic Viscosity
 0.00003692           #Gas Dynamic Viscosity
 0.0256               #Surface Tension
-119.926              #Reference gas airspeed
-36434                #Reference gas pressure
-273.15               #Reference gas temperature
-sol.pval.10000.plt   #Input Mesh File
+solution

@@ -13,8 +13,6 @@
 // #define NTHREADS 4
 // #endif
 
-
-
 #include <limits>
 #include <vector>
 #include <fstream>
@@ -28,11 +26,14 @@
 #include "NanoFLANN/nanoflann.hpp"
 #include "NanoFLANN/utils.h"
 #include "NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
+#include <omp.h>
 
 #ifdef DEBUG
 	/*Open debug file to write to*/	
 	std::ofstream dbout("WCSPH.log",std::ios::out);
 #endif
+
+std::ofstream pertLog("cellPert.log",std::ios::out);
 
 // Define pi
 #ifndef M_PI
@@ -105,6 +106,10 @@ typedef Eigen::Matrix<real, SIMDIM+1, SIMDIM+1> DensMatD;
 #define FREE 5
 #define GHOST 6
 
+#ifndef TRUE
+#define TRUE  1
+#define FALSE 0
+#endif
 
 /*Simulation parameters*/
 typedef struct SIM {
@@ -119,6 +124,8 @@ typedef struct SIM {
 	uint outframe;	                /*Terminal output frame interval*/
 	uint addcount;					/*Current Number of add-particle calls*/
 	real Pstep,Bstep, dx, clear;	/*Initial spacings for particles and boundary*/
+	real diam;                      /*Droplet diameter*/
+	uint nrad;                      /*Points along the radius of the jet/droplet*/
 	uint nfull;						/*Full neighbour list amount*/
 	StateVecD Box;					/*Box dimensions*/
 	StateVecD Start; 				/*Sim box bottom left coordinate*/
@@ -143,7 +150,10 @@ typedef struct SIM {
 	#if SIMDIM == 3
 		VLM vortex;
 	#endif
-	StateVecD Force;					/*Total Force*/
+	StateVecD Force, AForce;					/*Total Force*/
+	real mass;
+	real tMom, aMom;
+
 
 	uint restart;
 
@@ -199,6 +209,9 @@ typedef class AERO
 		real Cf, Ck, Cd, Cb, Cdef;		/* }*/
 		real nfull;						/* }*/
 
+		real pVol;                     // Volume of a particle
+		real aPlate;                    /*Area of a plate*/
+
 		int acase;	                        /*Aerodynamic force case*/
 		StateVecD vJet, vInf;               /*Jet + Freestream velocity*/
 		real Acorrect;					/*Correction factor for aero force*/
@@ -222,11 +235,24 @@ typedef struct MESH
 	{
 		uint nC = elems.size();
 		cVel = std::vector<StateVecD>(nC);		
-		cellCp = std::vector<real>(nC);
-		cellP = std::vector<real>(nC);
-		cellRho = std::vector<real>(nC);
+		cCp = std::vector<real>(nC);
+		cP = std::vector<real>(nC);
+		cRho = std::vector<real>(nC);
+		cMass = vector<real>(nC);
+		fNum = vector<size_t>(nC,0);
+		fMass = vector<real>(nC,0);
+		cPertn = vector<StateVecD>(nC,StateVecD::Zero());
+		cPertnp1 = vector<StateVecD>(nC,StateVecD::Zero());
+		vFn = vector<StateVecD>(nC,StateVecD::Zero());
+		vFnp1 = vector<StateVecD>(nC,StateVecD::Zero());
 	}
 	
+
+	size_t size()
+	{
+		return elems.size();
+	}
+
 	/*Zone info*/
 	std::string zone;
 	uint numPoint, numElem;
@@ -234,10 +260,10 @@ typedef struct MESH
 
 	/*Point based data*/
 	std::vector<StateVecD> verts;
-	std::vector<StateVecD> pVel;
-	std::vector<real> pointCp;
-	std::vector<real> pointP;
-	std::vector<real> pointRho;
+	// std::vector<StateVecD> pVel;
+	// std::vector<real> pointCp;
+	// std::vector<real> pointP;
+	// std::vector<real> pointRho;
 
 	/*Face based data*/
 	vector<vector<size_t>> faces;
@@ -245,7 +271,7 @@ typedef struct MESH
 
 	/*Cell based data*/
 	vector<vector<size_t>> elems;
-	vector<vector<StateVecD>> cVerts;
+	// vector<vector<StateVecD>> cVerts;
 	vector<StateVecD> cCentre;
 	vector<vector<size_t>> cFaces;
 	// vector<vector<size_t>> cNeighb;
@@ -256,9 +282,23 @@ typedef struct MESH
 
 	/*Solution vectors*/
 	vector<StateVecD> cVel;
-	vector<real> cellCp;
-	vector<real> cellP;
-	vector<real> cellRho;
+	
+	vector<real> cCp;
+	vector<real> cP;
+
+	// Cell information for the momentum balance
+	vector<StateVecD> cPertn;
+	vector<StateVecD> cPertnp1;
+	vector<real> cVol;
+
+	vector<real> cMass;
+	vector<real> cRho;
+	vector<size_t> fNum; // number of fuel particles in cell
+	vector<real> fMass;
+
+	vector<StateVecD> vFn;
+	vector<StateVecD> vFnp1;
+
 }MESH;
 
 /*Particle data class*/
@@ -283,7 +323,6 @@ typedef class Particle {
 			cellID = 0;
 			faceID = 0;
 			cellP = 0.0;
-			cellRho = 0.0;
 			internal = 0;
 
 		}
@@ -304,7 +343,7 @@ typedef class Particle {
 			cellV = StateVecD::Zero();
 			cellID = 0;
 			cellP = 0.0;
-			cellRho = 0.0;
+			internal = 0.0;
 		}
 
 		Particle(){};
@@ -324,7 +363,7 @@ typedef class Particle {
 		uint b; //What state is a particle. Boundary, forced particle or unforced
 		StateVecD cellV;
 		size_t partID, cellID, faceID;
-		real cellP, cellRho;
+		real cellP;
 		uint internal; 
 		StateVecD bNorm;
 		real y;
@@ -342,7 +381,6 @@ typedef class Part {
 			partID = pi.partID;
 			cellID = pi.cellID;
 			cellP = pi.cellP;
-			cellRho = pi.cellRho;
 			internal = pi.internal;
 			bNorm = pi.bNorm;
 			y = pi.y;
@@ -360,7 +398,6 @@ typedef class Part {
 			partID = pID;
 			cellV = StateVecD::Zero();
 			cellP = 0.0;
-			cellRho = 0.0;
 		}
 
 		int size() const
@@ -381,7 +418,6 @@ typedef class Part {
 			partID = pi.partID;
 			cellID = pi.cellID;
 			cellP = pi.cellP;
-			cellRho = pi.cellRho;
 			internal = pi.internal;
 			bNorm = pi.bNorm;
 			y = pi.y;
@@ -392,7 +428,7 @@ typedef class Part {
 		uint b; //What state is a particle. Boundary, forced particle or unforced, or air
 		StateVecD cellV;
 		size_t partID, cellID/*, faceID*/;
-		real cellP, cellRho;
+		real cellP;
 		uint internal;
 		StateVecD bNorm;
 		real y;
@@ -411,7 +447,6 @@ Particle PartToParticle(Part& pj)
 	pi.cellV = pj.cellV;
 	pi.cellID = pj.cellID;
 	pi.cellP = pj.cellP;
-	pi.cellRho = pj.cellRho;
 	return pi;
 }
 

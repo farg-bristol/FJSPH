@@ -8,7 +8,10 @@
 0.00142              #Liquid dynamic viscosity
 0.00001716           #Gas dynamic viscosity
 0.0256               #Surface tension (not on)
-119.926              #Reference gas airspeed
-36434                #Reference gas pressure
-273.15               #Reference gas temperature
-sol.pval.10000.plt   #Input Mesh File
+58.22                #Reference gas airspeed
+101353                #Reference gas pressure
+298                  #Reference gas temperature
+2DHLCRM2.grid.edges #Input Mesh File
+sol2eq.pval.10000       #Input Solution File
+1                    #Input mesh scale
+Solution       #Output folder name

@@ -213,7 +213,6 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, INTEGER4 frame, State& p
 			{
 				pn[ii].cellV = cellV[ii];
 				pn[ii].cellP = cellP[ii];
-				pn[ii].cellRho = cellRho[ii];
 			}
 		}		
 	}
@@ -382,7 +381,6 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 			real* cVx = new real[size];
 			real* cVy = new real[size];
 			real* cP = new real[size];
-			real* cRho = new real[size];
 
 			#pragma omp parallel for
 			for(uint ii = start; ii < end; ++ii)
@@ -391,7 +389,6 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 				cVx[ii-start] = pnp1[ii].cellV(0);
 				cVy[ii-start] = pnp1[ii].cellV(1);
 				cP[ii-start] = pnp1[ii].cellP;
-				cRho[ii-start] = pnp1[ii].cellRho;
 			}
 
 			I   = TECDAT142(&IMax, cVx, &DIsDouble);
@@ -405,7 +402,6 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 				I   = TECDAT142(&IMax, cVz, &DIsDouble);
 			#endif
 
-			I   = TECDAT142(&IMax, cRho, &DIsDouble);
 			I   = TECDAT142(&IMax, cP, &DIsDouble);
 			I   = TECDAT142(&IMax, cID, &DIsDouble);
 		}
@@ -486,7 +482,7 @@ void Init_Binary_PLT(const SIM &svar, const string& filename, const string& zone
 		}
 		else if (svar.outform == 3)
 		{
-			variables = "X Z rho Rrho m v_x v_z a_x a_z b Cell_Vx Cell_Vz Cell_Rho Cell_P Cell_ID";
+			variables = "X Z rho Rrho m v_x v_z a_x a_z b Cell_Vx Cell_Vz Cell_P Cell_ID";
 		}
 		else if (svar.outform == 4)
 		{
@@ -511,7 +507,7 @@ void Init_Binary_PLT(const SIM &svar, const string& filename, const string& zone
 		else if (svar.outform == 3)
 		{
 			variables = 
-		"X Y Z rho Rrho m v_x v_y v_z a_x a_y a_z b Cell_Vx Cell_Vy Cell_Vz Cell_Rho Cell_P Cell_ID";
+		"X Y Z rho Rrho m v_x v_y v_z a_x a_y a_z b Cell_Vx Cell_Vy Cell_Vz Cell_P Cell_ID";
 		}
 		else if (svar.outform == 4)
 		{

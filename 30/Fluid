@@ -2,12 +2,12 @@
 2.0                  #Smoothing length factor
 0.1                  #Aritificial Viscosity factor
 150.0                #Boundary contact angle
-810                  #Rho_jet
-0.4648               #Rho_gas
+997                  #Rho_jet
+1.18               #Rho_gas
 150                  #Speed of Sound C_s
-0.00142              #Liquid dynamic viscosity
-0.00001716           #Gas dynamic viscosity
-0.0256               #Surface tension (not on)
+0.000894              #Liquid dynamic viscosity
+0.0000185           #Gas dynamic viscosity
+0.0708               #Surface tension (not on)
 119.926              #Reference gas airspeed
 36434                #Reference gas pressure
 273.15               #Reference gas temperature
