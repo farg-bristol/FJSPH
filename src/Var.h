@@ -114,10 +114,10 @@ typedef Eigen::Matrix<real, SIMDIM+1, SIMDIM+1> DensMatD;
 /*Simulation parameters*/
 typedef struct SIM {
 	StateVecI xyPART; 				/*Starting sim particles in x and y box*/
-	size_t simPts,bndPts,totPts;	    /*Simulation particles, Boundary particles, total particles*/
+	size_t simPts,bndPts,totPts;	/*Simulation particles, Boundary particles, total particles*/
 	size_t finPts;					/*How many points there will be at simulation end*/
 	size_t psnPts;					/*Piston Points*/
-	size_t nrefresh; 					/*Crossflow refresh particle number*/
+	size_t nrefresh; 				/*Crossflow refresh particle number*/
 	size_t delNum;                  /*Number of deleted particles*/
 	size_t intNum;                  /*Number of internal particles*/
 	uint nmax;                      /*Max number of particles*/
@@ -130,18 +130,19 @@ typedef struct SIM {
 	StateVecD Box;					/*Box dimensions*/
 	StateVecD Start; 				/*Sim box bottom left coordinate*/
 	RotMat Rotate;				    /*Starting rotation matrix*/ 
-	RotMat Transp;
+	RotMat Transp;                  /*Transpose of rotation matrix*/
 	Eigen::Vector2d Jet;			/*Jet properties*/
 	uint subits;                    /*Max number of sub-iterations*/
 	uint Nframe; 			        /*Max number of frames to output*/
 	uint frame;						/*Current frame number*/
-	real dt, t, framet;			/*Timestep, Simulation + frame times*/
+	real dt, t, framet;			    /*Timestep, Simulation + frame times*/
 	real beta,gamma;				/*Newmark-Beta Parameters*/
-	real maxmu;                   /*Maximum viscosity component (CFL)*/
-	int Bcase, Bclosed, ghost;		/*What boundary shape to take*/
+	real maxmu;                     /*Maximum viscosity component (CFL)*/
+	int Bcase, Bclosed, ghost;		/*What initial shape to take*/
+	int Asource;                      /*Source of aerodynamic solution*/
 	uint outtype;                   /*ASCII or binary output*/
 	uint outform, boutform, gout;   /*Output type. Fluid properties or Research.*/
-	uint framecount;
+	uint framecount;                /*How many frames have been output*/
 	vector<size_t> back;            /*Particles at the back of the pipe*/
 
 	std::string infolder, outfolder;
@@ -172,18 +173,16 @@ typedef struct FLUID {
 	real Hfac;
 	real H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
 	real rho0, rhoJ; 			/*Resting Fluid density*/
-	real pPress, gasPress;		/*Starting pressure in pipe*/
-	real gasDynamic, gasVel;    /*Reference gas velocity*/
+	real pPress;		/*Starting pressure in pipe*/
+	
 	real simM, bndM;			/*Particle and boundary masses*/
 	real correc;				/*Smoothing Kernel Correction*/
 	real alpha,Cs,mu;		    /*}*/
 	real sig;					/* Fluid properties*/
 	real gam, B; 				/*}*/
-	real mug;					/* Gas Properties*/
-	real rhog;
-	real gasM;					/*A gas particle mass*/
-	real T;						/*Temperature*/
-	real Rgas;                  /*Specific gas constant*/
+	// real mug;
+	// real rhog;
+	
 	real contangb;				/*Boundary contact angle*/
 	real resVel;				/*Reservoir velocity*/
 	//real front, height, height0;		/*Dam Break validation parameters*/
@@ -212,8 +211,16 @@ typedef class AERO
 		real pVol;                     // Volume of a particle
 		real aPlate;                    /*Area of a plate*/
 
+					/* Gas Properties*/
+		real qRef, vRef, pRef;      /*Reference gas values*/
+		real rhog, mug;
+		real gasM;					/*A gas particle mass*/
+		real T;						/*Temperature*/
+		real Rgas;                  /*Specific gas constant*/
+
 		int acase;	                        /*Aerodynamic force case*/
 		StateVecD vJet, vInf;               /*Jet + Freestream velocity*/
+		
 		real Acorrect;					/*Correction factor for aero force*/
 		real a;                          /*Case 3 tuning parameters*/
 		real b;                          /*}*/
@@ -305,8 +312,8 @@ typedef struct MESH
 typedef class Particle {
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-		Particle(const StateVecD& X, const StateVecD& Vi, const real Rhoi, const real Mi, 
-			const real press, const int bound, const uint pID)
+		Particle(StateVecD const& X, StateVecD const& Vi, real const Rhoi, real const Mi, 
+			real const press, int const bound, uint const pID)
 		{
 			xi = X;	v = Vi; 
 			rho = Rhoi; m = Mi; b = bound;
@@ -328,7 +335,7 @@ typedef class Particle {
 		}
 
 		/*To add particles dynamically for boundary layer*/
-		Particle(const StateVecD& X,  const Particle& pj, const size_t pID)
+		Particle(StateVecD const& X, Particle const& pj, size_t const pID)
 		{
 			xi = X;	v = pj.v; 
 			rho = pj.rho; m = pj.m; b = pj.b;
@@ -358,21 +365,23 @@ typedef class Particle {
 			return(xi[a]);
 		}
 
-		StateVecD xi, v, f, Sf, Af, normal, vPert;
-		real Rrho, rho, p, m, theta;
-		uint b; //What state is a particle. Boundary, forced particle or unforced
-		StateVecD cellV;
 		size_t partID, cellID, faceID;
+		uint b; //What state is a particle. Boundary, forced particle or unforced
+		StateVecD xi, v, f, Af;
+		real Rrho, rho, p, m, theta, nNeigb, surf;
+		StateVecD cellV;
 		real cellP;
 		uint internal; 
 		StateVecD bNorm;
 		real y;
+		
+		StateVecD Sf, normal, vPert;		
 }Particle;
 
 typedef class Part {
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-		Part(const Particle& pi)
+		Part(Particle const& pi)
 		{
 			xi = pi.xi; v = pi.v; Sf = pi.Sf;
 			normal = pi.normal;	vPert = pi.vPert;
@@ -386,8 +395,8 @@ typedef class Part {
 			y = pi.y;
 		}
 
-		Part(const StateVecD& xin, const StateVecD& vin, const real pin, 
-				const real rhoin, const real min, const uint bin, const uint pID)
+		Part(StateVecD const& xin, StateVecD const& vin, real const pin, 
+				real const rhoin, real const min, uint const bin, uint const pID)
 		{
 			xi = xin;
 			v = vin;
@@ -410,7 +419,7 @@ typedef class Part {
 			return(xi[a]);
 		}
 
-		void operator=(const Particle& pi)
+		void operator=(Particle const& pi)
 		{
 			xi = pi.xi; v = pi.v; Sf = pi.Sf; vPert = pi.vPert;
 			rho = pi.rho;	p = pi.p;	m = pi.m;	b = pi.b;
@@ -459,7 +468,7 @@ typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,real,SIMDIM,nanoflan
 
 typedef struct KDTREE
 {
-	KDTREE(const State& pnp1, const MESH& cells): NP1(SIMDIM,pnp1,20), 
+	KDTREE(State const& pnp1, MESH const& cells): NP1(SIMDIM,pnp1,20), 
 	CELL(SIMDIM,cells.cCentre,20), BOUNDARY(SIMDIM,cells.bVerts,20) {}
 	Sim_Tree NP1;
 	Vec_Tree CELL;

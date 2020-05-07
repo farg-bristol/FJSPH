@@ -142,8 +142,8 @@ void Write_Zone(string input, ZONE& zn, MESH& cells)
 }
 
 
-void Average_Point_to_Cell(const vector<StateVecD>& pData, vector<StateVecD>& cData,
-							const vector<vector<size_t>>& elems)
+void Average_Point_to_Cell(vector<StateVecD> const& pData, vector<StateVecD>& cData,
+							vector<vector<size_t>> const& elems)
 {
 	vector<StateVecD> sum(elems.size(),StateVecD::Zero());
 
@@ -151,7 +151,7 @@ void Average_Point_to_Cell(const vector<StateVecD>& pData, vector<StateVecD>& cD
 	for(uint ii = 0; ii < elems.size(); ++ii)
 	{
 		
-		const uint nVerts = elems[ii].size();
+		uint const nVerts = elems[ii].size();
 		for (auto jj:elems[ii])
 		{
 			sum[ii] += pData[jj];
@@ -162,8 +162,8 @@ void Average_Point_to_Cell(const vector<StateVecD>& pData, vector<StateVecD>& cD
 	cData = sum; 
 }
 
-void Average_Point_to_Cell(const vector<real>& pData, vector<real>& cData,
-							const vector<vector<size_t>>& elems)
+void Average_Point_to_Cell(vector<real> const& pData, vector<real>& cData,
+							vector<vector<size_t>> const& elems)
 {
 	vector<real> sum(elems.size(),0.0);
 
@@ -171,7 +171,7 @@ void Average_Point_to_Cell(const vector<real>& pData, vector<real>& cData,
 	for(uint ii = 0; ii < elems.size(); ++ii)
 	{
 		
-		const uint nVerts = elems[ii].size();
+		uint const nVerts = elems[ii].size();
 		for (auto jj:elems[ii])
 		{
 			sum[ii] += pData[jj];
@@ -182,13 +182,13 @@ void Average_Point_to_Cell(const vector<real>& pData, vector<real>& cData,
 	cData = sum; 
 }
 
-vector<real> CpToPressure(const vector<real>& Cp, const FLUID& fvar)
+vector<real> CpToPressure(vector<real> const& Cp, AERO const& avar)
 {
 	vector<real> press(Cp.size());
 	#pragma omp parallel for shared(Cp)
 	for (uint ii = 0; ii < Cp.size(); ++ii)
 	{
-		press[ii] = Cp[ii]*fvar.gasDynamic /*+ fvar.gasPress*/;
+		press[ii] = Cp[ii]*avar.qRef /*+ fvar.gasPress*/;
 	}
 	return press;
 }
@@ -408,8 +408,8 @@ int Get_Scalar_Property(NcFile& fin, string variable, vector<T>& var)
 	else return 1;
 }
 
-void Get_Cell_Faces(const vector<vector<uint>>& cell,
-	const vector<vector<uint>>& facenum, std::vector<std::vector<std::vector<uint>>>& cFaces)
+void Get_Cell_Faces(vector<vector<uint>> const& cell,
+	vector<vector<uint>> const& facenum, std::vector<std::vector<std::vector<uint>>>& cFaces)
 {
 	for(uint ii = 0; ii < cell.size(); ++ii)
 	{	
@@ -431,10 +431,27 @@ void Get_Cell_Faces(const vector<vector<uint>>& cell,
 /***************** READING NETCDF SOLUTION DATA FUNCTIONS ********************/
 /*****************************************************************************/
 
-void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, MESH& cells, vector<uint> usedVerts)
+void Read_SOLUTION(string const& solIn, FLUID const& fvar, AERO const& avar, 
+	uint const ignored, MESH& cells, vector<uint> usedVerts, const uint& vinuse)
 {
 	cout << "Reading solution file..." << endl;
-	NcFile sol(solIn, NcFile::read);
+
+	NcFile sol;
+
+	try
+	{
+		sol.open(solIn, NcFile::read);
+	}
+	catch (netCDF::exceptions::NcException& e)
+	{
+		cout << "A netCDF error occured whilst trying to open solution file:" << endl;
+		cout << "what(): " << e.what() << endl << endl;
+
+		cout << "Attemted file path: " << solIn << endl;
+		exit(-1);
+	}
+	
+	cout << "Solution file opened, reading contents..." << endl;
 
 	NcDim solPN = sol.getDim("no_of_points");
 	uint solPts = static_cast<uint>(solPN.getSize());
@@ -443,12 +460,19 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 	dbout << "Solution points: " << solPts << endl;
 	#endif
 
+
 #if SIMDIM ==3
 	if(solPts!=cells.numPoint)
 	{
 		cout << "Solution file does not have the same number of vertices as the mesh." << endl;
 		cout << "Please check again." << endl;
 		exit(-1);
+	}
+#else
+	if(solPts/2 != usedVerts.size() &&  vinuse == 1)
+	{
+		cout << "Solution file size does not match size of mesh. Please check inputs." << endl;
+
 	}
 #endif
 
@@ -533,13 +557,13 @@ void Read_SOLUTION(const string& solIn, const FLUID& fvar, const uint ignored, M
 		Get_Scalar_Property(sol,"cp",cp);
 
 		/*Then convert cp to pressure. can get global attributes from sol file.. Maybe...*/
-		press = CpToPressure(cp, fvar);
+		press = CpToPressure(cp, avar);
 	}
 	else
 	{
 		#pragma omp parallel for
 		for(uint ii = 0; ii < press.size(); ++ii)
-			press[ii] -= fvar.gasPress;
+			press[ii] -= avar.pRef;
 	}
 
 	
@@ -758,7 +782,7 @@ void Place_Edges(NcFile& fin, MESH& cells)
 	{
 		for(auto const& index:cells.cFaces[ii])
 		{
-			const vector<size_t> face = cells.faces[index];
+			vector<size_t> const face = cells.faces[index];
 			for(auto const& vert:face)
 			{
 				if(std::find(cells.elems[ii].begin(),cells.elems[ii].end(),vert)
@@ -804,7 +828,7 @@ void Place_Edges(NcFile& fin, MESH& cells)
 
 }
 
-void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, FLUID const& fvar)
+void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, FLUID const& fvar, AERO const& avar)
 {
 	string meshIn = svar.infolder;
 	string solIn = svar.infolder;
@@ -848,18 +872,21 @@ void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, FLUID const& fvar)
 
 	/*Get the vertices that are in use to take the values from the solution file*/
 	int* usedVerts = new int[nPnts];
-
+	uint vinuse = 0;
 #ifdef DEBUG 
 	dbout << "Attempting to read NetCDF vertices_in_use data." << endl;
 #endif
 	NcVar uVar = fin.getVar("vertices_in_use");
 	if(uVar.isNull())
 	{
-		cout << "No information of which vertices have been used. Stopping." << endl;
-		exit(-1);
+		cout << "Warning: no information on vertices used in solution file." << endl;
+		vinuse = 0;
 	}
 	else
+	{
 		uVar.getVar(usedVerts);
+		vinuse = 1;
+	}
 
 #ifdef DEBUG 
 	dbout << "Successfully read vertices_in_use data." << endl;
@@ -894,7 +921,7 @@ void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, FLUID const& fvar)
 	dbout << "Opening solultion file." << endl;
 	#endif
 
-	Read_SOLUTION(solIn,fvar,ignored,cells,uVerts);
+	Read_SOLUTION(solIn,fvar,avar,ignored,cells,uVerts, vinuse);
 
 	for(size_t ii = 0; ii < cells.cMass.size(); ii++)
 	{
@@ -1079,7 +1106,7 @@ void Place_Faces(NcFile& fin, MESH& cells)
 		{
 			for(auto const& index:cells.cFaces[ii])
 			{
-				const vector<size_t> face = cells.faces[index];
+				vector<size_t> const face = cells.faces[index];
 				for(auto const& vert:face)
 				{
 					if(std::find(cells.elems[ii].begin(),cells.elems[ii].end(),vert)
@@ -1126,7 +1153,7 @@ void Place_Faces(NcFile& fin, MESH& cells)
 
 }
 
-void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
+void Read_TAUMESH_FACE(SIM& svar, MESH& cells, FLUID const& fvar, AERO const& avar)
 {
 	string meshIn = svar.infolder;
 	string solIn = svar.infolder;
@@ -1144,8 +1171,9 @@ void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
 
 	// Retrieve how many elements there are.
 	NcDim elemNo = fin.getDim("no_of_elements");
-	NcDim pointNo = fin.getDim("no_of_points");
 	NcDim faceNo = fin.getDim("no_of_faces");
+	NcDim pointNo = fin.getDim("no_of_points");
+	
 	uint nElem = static_cast<uint>(elemNo.getSize());
 	uint nPnts = static_cast<uint>(pointNo.getSize());
 	uint nFace = static_cast<uint>(faceNo.getSize());
@@ -1194,7 +1222,8 @@ void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
 	dbout << "Opening solultion file." << endl;
 	#endif
 	vector<uint> empty;
-	Read_SOLUTION(solIn,fvar,ignored,cells,empty);
+	uint empt;
+	Read_SOLUTION(solIn,fvar,avar,ignored,cells,empty,empt);
 
 	for(size_t ii = 0; ii < cells.cMass.size(); ii++)
 	{
@@ -1207,12 +1236,12 @@ void Read_TAUMESH_FACE(SIM& svar, MESH& cells, const FLUID& fvar)
 /****************** WRITING NETCDF DATA FUNCTIONS ****************************/
 /*****************************************************************************/
 
-void Write_Group(NcGroup &zone, const State &pnp1, 
-	const uint start, const uint end, const uint outform)
+void Write_Group(NcGroup& zone, State const& pnp1, 
+	uint const start, uint const end, uint const outform)
 {
 	/*Write the Particles group*/
 	
-	const uint size = end - start;
+	uint const size = end - start;
 	NcDim posDim = zone.addDim("Point",size);
 
 	NcVar xVar = zone.addVar("x",ncFloat,posDim);
@@ -1341,7 +1370,7 @@ void Write_Group(NcGroup &zone, const State &pnp1,
 // }
 
 
-void Write_CDF_File(NcFile &nd, SIM &svar, const State &pnp1)
+void Write_CDF_File(NcFile& nd, SIM& svar, State const& pnp1)
 {	/*Write the timestep to a group*/
 	string timefile = svar.outfolder;
 	timefile.append("/h5/fuel_");
@@ -1364,7 +1393,7 @@ void Write_CDF_File(NcFile &nd, SIM &svar, const State &pnp1)
 
 }
 
-void Write_Boundary_CDF(const SIM &svar, const State &pnp1)
+void Write_Boundary_CDF(SIM const& svar, State const& pnp1)
 {	
 	std::string file = svar.outfolder;
 	file.append("/h5/Boundary.h5part");

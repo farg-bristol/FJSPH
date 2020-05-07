@@ -656,21 +656,42 @@ void Write_mesh(SIM const& svar, MESH const& cells)
 
 	/*Dimensions needed*/
 	NcDim nElems = fout.addDim("no_of_elements",cells.nElems);
-	NcDim nFaces = fout.addDim("no_of_faces",cells.nFaces);
-	NcDim ppFace = fout.addDim("points_per_face",DIM);
-	NcDim nWall = fout.addDim("no_of_wall_faces",cells.nWall);
-	NcDim nFar = fout.addDim("no_of_farfield_faces",cells.nFar);
+	NcDim nFaces, ppFace, nWall, nFar;
+
+	if(DIM == 2)
+	{
+		nFaces = fout.addDim("no_of_edges",cells.nFaces);
+		ppFace = fout.addDim("points_per_edge",DIM);
+		nWall = fout.addDim("no_of_wall_edges",cells.nWall);
+		nFar = fout.addDim("no_of_farfield_edges",cells.nFar);
+	}
+	else
+	{
+		nFaces = fout.addDim("no_of_faces",cells.nFaces);
+		ppFace = fout.addDim("points_per_face",DIM);
+		nWall = fout.addDim("no_of_wall_faces",cells.nWall);
+		nFar = fout.addDim("no_of_farfield_faces",cells.nFar);
+	}
 	NcDim nPoint = fout.addDim("no_of_points",cells.nVerts);
 
 	/*Define the faces*/
 	vector<NcDim> faceVar;
 	faceVar.emplace_back(nFaces);
 	faceVar.emplace_back(ppFace);
-	NcVar elemFaces = fout.addVar("points_of_element_faces",ncInt,faceVar);
-	// NcVar nElemFaces = fout.addVar("faces_per_element",ncInt,nElems);
-	NcVar leftElems = fout.addVar("left_element_of_faces",ncInt,nFaces);
-	NcVar rightElems = fout.addVar("right_element_of_faces",ncInt,nFaces);
-
+	NcVar elemFaces, leftElems, rightElems;
+	if (DIM == 2)
+	{
+		elemFaces = fout.addVar("points_of_element_edges",ncInt,faceVar);
+		leftElems = fout.addVar("left_element_of_edges",ncInt,nFaces);
+		rightElems = fout.addVar("right_element_of_edges",ncInt,nFaces);
+	}
+	else
+	{
+		elemFaces = fout.addVar("points_of_element_faces",ncInt,faceVar);
+		leftElems = fout.addVar("left_element_of_faces",ncInt,nFaces);
+		rightElems = fout.addVar("right_element_of_faces",ncInt,nFaces);
+		// nElemFaces = fout.addVar("faces_per_element",ncInt,nElems);
+	}
 	/*Define the points*/
 	NcVar vertsX = fout.addVar("points_xc",ncDouble,nPoint);
 	NcVar vertsY = fout.addVar("points_yc",ncDouble,nPoint);

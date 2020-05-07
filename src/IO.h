@@ -41,7 +41,7 @@ void Restart(SIM& svar, State& pn, MESH& cells)
 	// 	exit(-1);
 	// }
 
-	if(svar.boutform == 0)
+	if(svar.boutform == 0 && (svar.Bcase != 4 && svar.Bcase !=0))
 	{
 		cout << "Time data for the boundary has not been output. Cannot restart." << endl;
 		exit(-1);
@@ -51,102 +51,23 @@ void Restart(SIM& svar, State& pn, MESH& cells)
 	dbout << "Reading frame info file for restart information." << endl;
 #endif
 
-	// find the last timestep by reading the frame file
-	// string file = svar.outfolder;
-// 	file.append("frame.info");
-
-// 	// Find end of file
-// 	std::ifstream f1(file,std::ios::in);
-// 	if(!f1.is_open())
-// 	{
-// 		cout << "Failed to open frame.info file" << endl;
-// 		exit(-1);
-// 	}
-
-// 	uint lsize = 0;
-// 	while(f1.ignore(std::numeric_limits<std::streamsize>::max(),'\n'))	
-// 		lsize++;
-
-// 	// cout << "Found file size: " << lsize 
-// 	// 	 << ". Now getting last frame." << endl;
-// 	f1.clear();
-// 	GotoLine(f1, lsize-4);
-
-// 	string line;
-// 	getline(f1,line);
-// 	std::stringstream sstr(line);
-// 	string temp;
-// 	uint frame;
-// 	while(!sstr.eof())
-// 	{
-// 		sstr >> temp;
-// 		if(std::stringstream(temp) >> frame)
-// 		{
-// 			break;
-// 		}
-// 		temp = "";
-// 	}
-
-// #ifdef DEBUG
-// 	dbout << "Final frame: " << frame << endl;
-// #endif
-// 	cout << "Found the final frame: " << frame << endl;
-// 	svar.frame = frame;
-
-// #ifdef DEBUG
-// 	dbout << "Getting particle numbers" << endl;
-// #endif
-
-// 	// Get the particle counts to checksum.
-// 	uint bndPts, simPts, totPts;
-	
-// 	getline(f1,line);
-// 	std::stringstream sline(line);
-// 	vector<uint> pts;
-// 	temp = "";
-// 	int var;
-// 	while(!sline.eof())
-// 	{
-// 		sline >> temp;
-// 		if(std::stringstream(temp) >> var)
-// 		{
-// 			pts.emplace_back(var);
-// 		}
-// 		temp = "";
-// 	}
-
-// 	totPts = pts[0];
-// 	bndPts = pts[1];
-// 	simPts = pts[2];
-// 	cout << line << endl;
-// #ifdef DEBUG
-// 	dbout << line << endl;
-// #endif
-
 	// Now get the data from the files. Start with the boundary
 	if(svar.outtype == 0)
 	{
+		State boundary, fuel;
+
 		string file;
 		INTEGER4 I;
 		INTEGER4 frameNo;
-		void* boundHandle = NULL;
-		string boundf = svar.outfolder;
-		boundf.append("Boundary.szplt");
+		
 
 		// Read the fuel
 		void* fuelHandle = NULL;
 		string fuelf = svar.outfolder;
 		fuelf.append("Fuel.szplt");
 
-		
-		I = tecFileReaderOpen(boundf.c_str(),&boundHandle);
-		if(I == -1)
-		{
-			cout << "Error opening szplt file. Path:" << endl;
-			cout << file << endl;
-			exit(-1);
-		}
-
+		cout << fuelf << endl;
+		// fuelf = "Droplet2D/solution/Fuel.szplt";
 		I = tecFileReaderOpen(fuelf.c_str(),&fuelHandle);
 		if(I == -1)
 		{
@@ -155,21 +76,38 @@ void Restart(SIM& svar, State& pn, MESH& cells)
 			exit(-1);
 		}
 
-		cout << "Checking Boundary file..." << endl;
-		CheckContents(boundHandle,svar);
 		cout << "Checking Fuel file..." << endl;
 		CheckContents(fuelHandle,svar);
 
 	    // Read the actual data.
-	    
-	    State boundary, fuel;
 	    frameNo = svar.frame+1;
 
-	    cout << "Attempting to read the boundary..." << endl;
-		Read_Binary_Timestep(boundHandle,svar,frameNo,boundary);
-		
 		cout << endl << "Attempting to read the fuel..." << endl;
 		Read_Binary_Timestep(fuelHandle,svar,frameNo,fuel);
+
+		if (svar.Bcase != 4 && svar.Bcase !=0)
+		{
+			void* boundHandle = NULL;
+			string boundf = svar.outfolder;
+			boundf.append("Boundary.szplt");
+
+			I = tecFileReaderOpen(boundf.c_str(),&boundHandle);
+			if(I == -1)
+			{
+				cout << "Error opening szplt file. Path:" << endl;
+				cout << file << endl;
+				exit(-1);
+			}
+
+			cout << "Checking Boundary file..." << endl;
+			CheckContents(boundHandle,svar);
+
+			cout << "Attempting to read the boundary..." << endl;
+			Read_Binary_Timestep(boundHandle,svar,frameNo,boundary);
+		
+		}
+
+		
 
 		pn = boundary;
 		svar.bndPts = boundary.size();
@@ -200,7 +138,7 @@ void Restart(SIM& svar, State& pn, MESH& cells)
 	for(size_t ii = 0; ii < svar.totPts; ++ii)
 	{
 		pn[ii].partID = ii;
-		if(svar.Bcase == 6 && svar.outform == 5)
+		if((svar.Asource == 1 || svar.Asource == 2) && svar.outform == 5)
 		{
 			if(pn[ii].b == FREE)
 			{
@@ -277,15 +215,15 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   		/*Particle settings*/	
   		svar.Pstep = getDouble(in, lineno, "Particle initial spacing");
   		svar.Bstep = getDouble(in, lineno, "Boundary spacing factor");
-  		svar.Bcase = getInt(in, lineno, "Simulation boundary case");
-  		avar.acase = getInt(in, lineno, "Simulation Aerodynamic case");
+  		svar.Bcase = getInt(in, lineno, "Simulation initial case");
+  		svar.Asource = getInt(in, lineno, "Simulation aerodynamic solution source");
+  		avar.acase = getInt(in, lineno, "Simulation aerodynamic case");
   		svar.ghost = getInt(in, lineno, "Ghost particles?");
   		svar.Start = getDVector(in, lineno, "Starting position");
   		if(svar.Bcase < 2)
   		{
   			svar.xyPART = getIVector(in, lineno, "Particles in each coordinate");
   			svar.Box= getDVector(in, lineno, "Box dimensions");
-  			(void)getDouble(in, lineno, "Skipped");
   			fvar.pPress = getDouble(in, lineno, "Pipe pressure");
   			if(svar.Box(0) < 0 || svar.Box(1) < 0 
   			#if SIMDIM == 3
@@ -355,18 +293,18 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	  	fvar.alpha = getDouble(fluid, lineno, "Artificial visc");
   		fvar.contangb = getDouble(fluid, lineno, "contact angle");
   		fvar.rho0 = getDouble(fluid, lineno, "Fluid density rho0");
-  		fvar.rhog = getDouble(fluid, lineno, "Air density rhog");
+  		avar.rhog = getDouble(fluid, lineno, "Air density rhog");
   		fvar.Cs = getDouble(fluid, lineno, "Speed of sound");
   		fvar.mu = getDouble(fluid, lineno, "Fluid viscosity");
-  		fvar.mug = getDouble(fluid, lineno, "Air viscosity");
+  		avar.mug = getDouble(fluid, lineno, "Air viscosity");
   		fvar.sig = getDouble(fluid, lineno, "Surface Tension");
-  		if(svar.Bcase == 6 || svar.Bcase == 4 || svar.Bcase == 7)
+  		if(svar.Asource != 0)
   		{
-	  		fvar.gasVel = getDouble(fluid, lineno, "Gas ref Vel");
-	  		fvar.gasPress = getDouble(fluid, lineno, "Get ref Press");
-	  		fvar.T = getDouble(fluid, lineno, "Gas ref Temp");
+	  		avar.vRef = getDouble(fluid, lineno, "Gas ref Vel");
+	  		avar.pRef = getDouble(fluid, lineno, "Get ref Press");
+	  		avar.T = getDouble(fluid, lineno, "Gas ref Temp");
 
-	  		if(svar.Bcase == 6)
+	  		if(svar.Asource == 1 || svar.Asource == 2)
 	  		{
 		  		svar.meshfile = getString(fluid, lineno, "Mesh input file");
 		  		svar.solfile = getString(fluid,lineno, "Mesh solution file");
@@ -380,9 +318,9 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 #endif
   		fluid.close();
 
-  		if(svar.Bcase == 4)
+  		if(svar.Asource == 3)
   		{
-  			fvar.gasVel=avar.vInf(1);
+  			avar.vRef=avar.vInf(1);
   		}
 	}
 	else 
@@ -396,8 +334,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   		fvar.Cs = 100.0;
   		fvar.mu = 1.0;
   		fvar.sig = 0.0728;
-  		fvar.rhog = 1.225;
-  		fvar.mug = 18.5E-06;
+  		avar.rhog = 1.225;
+  		avar.mug = 18.5E-06;
 	}
 
 	  	/*Universal parameters based on input values*/
@@ -407,9 +345,9 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		/*Pipe Pressure calc*/
 		real rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
 
-		svar.nrad = 0;
+		svar.nrad = 1;
 
-		if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
+		if(svar.Bcase == 2 || svar.Bcase == 3)
 		{
 			// Defining dx to fit the pipe, then find rest spacing
 			svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
@@ -421,44 +359,45 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	 		svar.dx = 0.5*(svar.Start(0))/real(svar.nrad);
 	 	}
 
-	 // 	svar.dx = svar.Pstep;	
+	 	// svar.dx = svar.Pstep;	
 		svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/SIMDIM);
 
 		// Correct the droplet to have the same volume as the original
-		if(svar.Bcase == 5)
+		if(svar.Bcase == 4)
 		{
 			int partCount = ParticleCount(svar);
 			cout << "Predicted particle count: " << partCount << endl;
 
 			
-#if SIMDIM == 3
-			real dvol = (4.0*M_PI/3.0)*pow(0.5*svar.Start(0),3);
-#else
-			real dvol = M_PI*pow(0.5*svar.Start(0),2);
-#endif
+// #if SIMDIM == 3
+// 			real dvol = (4.0*M_PI/3.0)*pow(0.5*svar.Start(0),3);
+// #else
+// 			real dvol = M_PI*pow(0.5*svar.Start(0),2);
+// #endif
 
-			// Simulation mass
-			// real volume = pow(svar.dx,SIMDIM)*partCount;
-			// svar.mass = volume * rho;
+// 			// Simulation mass
+// 			// real volume = pow(svar.dx,SIMDIM)*partCount;
+// 			// svar.mass = volume * rho;
 
-			// cout << "SPH Volume: " << volume << "  Droplet expected volume: " << dvol << endl;
-			// cout << "SPH Mass: " << svar.mass << "  Droplet expected mass: " << dvol*rho << endl;	
+// 			// cout << "SPH Volume: " << volume << "  Droplet expected volume: " << dvol << endl;
+// 			// cout << "SPH Mass: " << svar.mass << "  Droplet expected mass: " << dvol*rho << endl;	
 
-			// Want to match the volume, so adjust step size to match. 
+// 			// Want to match the volume, so adjust step size to match. 
 
-			real newstep = 0.98*pow(dvol/real(partCount),1.0/SIMDIM);
-			// cout << "Old step: " << svar.dx << " New step: " << newstep << endl;
-			svar.dx = newstep;
+// 			real newstep = /*0.98**/pow(dvol/real(partCount),1.0/SIMDIM);
+// 			// cout << "Old step: " << svar.dx << " New step: " << newstep << endl;
+// 			svar.dx = newstep;
 			// real radius = svar.dx * real(svar.nrad);
 
 			// cout << "Old diameter: " << svar.Start(0) << "  New diameter: " << radius*2.0 << endl;
 			svar.diam = svar.Start(0);
-			svar.Start(0) = 2.0*newstep*real(svar.nrad);
+			// svar.Start(0) = newstep*(2.0*real(svar.nrad)-1);
 
-			// svar.nrad = ceil(abs(0.5*svar.Start(0)/svar.Pstep));
-	 		// svar.dx = 0.5*(svar.Start(0))/real(svar.nrad);
+			// cout << "New diameter: " <<  svar.Start(0) << endl;
+			// // svar.nrad = ceil(abs(0.5*svar.Start(0)/svar.Pstep));
+	 	// 	// svar.dx = 0.5*(svar.Start(0))/real(svar.nrad);
 
-			svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/SIMDIM);
+			// svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/SIMDIM);
 
 			// int newCount = ParticleCount(svar);
 
@@ -475,8 +414,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	 	/*Mass from spacing and density*/
 		fvar.simM = fvar.rho0*pow(svar.Pstep,SIMDIM); 
 		fvar.bndM = fvar.simM;
-		fvar.gasM = fvar.rhog*pow(svar.Pstep,SIMDIM);
-		fvar.gasDynamic = 0.5*fvar.rhog*fvar.gasVel;
+		avar.gasM = avar.rhog*pow(svar.Pstep,SIMDIM);
+		avar.qRef = 0.5*avar.rhog*avar.vRef;
 
 		svar.addcount = 0;
 	  	svar.dt = 2E-010; 			/*Initial timestep*/
@@ -490,6 +429,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	  	svar.delNum = 0;
 	  	svar.intNum = 0;
 
+
 #if SIMDIM == 2
 				fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
 				svar.simPts = svar.xyPART[0]*svar.xyPART[1];
@@ -502,22 +442,24 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 #ifdef DEBUG
 		dbout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
 		dbout << "Pipe rho: " << rho << endl;
-		dbout << "Number of fluid particles along diameter: " << 2*nrad+1 << endl;
+		dbout << "Number of fluid particles along diameter: " << 2*svar.nrad+1 << endl;
 		dbout << "Pipe step (dx): " << svar.dx << endl;
 		dbout << "Particle mass: " << fvar.simM << endl;
 		dbout << "Freestream initial spacing: " << svar.Pstep << endl;
 		dbout << "Support Radius: " << fvar.H << endl;
-		dbout << "Gas Dynamic pressure: " << fvar.gasDynamic << endl << endl;
+		dbout << "Gas Dynamic pressure: " << avar.qRef << endl << endl;
 #endif
 
 		cout << "****** SIMULATION SETTINGS *******" << endl;
 		cout << "Tait gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
 		cout << "Newmark-Beta parameters: " << svar.beta << ", " << svar.gamma << endl;
 		cout << "Boundary case: " << svar.Bcase << endl;
+		cout << "Aerodynamic source: " << svar.Asource << endl;
 		cout << "Aerodynamic case: " << avar.acase << endl;
 		cout << "Speed of sound: " << fvar.Cs << endl;
 		cout << endl;
 		cout << "****** PIPE SETTINGS *******" << endl;
+		cout << "Pipe pressure: " << fvar.pPress << endl;
 		cout << "Pipe density: " << rho << endl;
 		cout << "Pipe step (dx): " << svar.dx << endl;
 		cout << "Pipe diameter: " << svar.Jet(0) << endl;
@@ -544,7 +486,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		
 		cout << endl;
 		cout << "****** FREESTREAM SETTINGS ******" << endl;
-		if(svar.Bcase != 6)
+		if(svar.Asource != 1 || svar.Asource != 2)
 		{
 			cout << "Gas Velocity: " << avar.vInf(0) << "  " << avar.vInf(1);
 #if SIMDIM == 3
@@ -553,21 +495,34 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 			cout << endl;
 		}
 
-		if(svar.Bcase == 6)
+		if(svar.Asource == 1 || svar.Asource == 2)
 		{
 			cout << "Mesh filename: " << svar.meshfile << endl;
 			cout << "Solution filename: " << svar.solfile << endl;
-			cout << "Reference velocity: " << fvar.gasVel << endl;
-			cout << "Reference pressure: " << fvar.gasPress << endl;
-			cout << "Reference temperature: " << fvar.T << endl;
-			cout << "Gas dynamic pressure: " << fvar.gasDynamic << endl << endl;
+			cout << "Reference velocity: " << avar.vRef << endl;
+			cout << "Reference pressure: " << avar.pRef << endl;
+			cout << "Reference temperature: " << avar.T << endl;
+			cout << "Gas dynamic pressure: " << avar.qRef << endl << endl;
 		}
-		cout << "Gas density: " << fvar.rhog << endl;
-		cout << "Gas viscosity: " << fvar.mug << endl;
+		cout << "Gas density: " << avar.rhog << endl;
+		cout << "Gas viscosity: " << avar.mug << endl << endl;
 		
 
+		cout << "******** FILE SETTINGS ********" << endl;
+		cout << "Input folder: " << svar.infolder << endl;
+		if(svar.Asource == 1 || svar.Asource == 2)
+		{
+			cout << "Input mesh face file: " << svar.meshfile  << endl;
+			cout << "Input solution file: " << svar.solfile << endl;
+		}
+
+		cout << "Output folder: " << svar.outfolder << endl << endl;
+		
+
+
+
 		#if SIMDIM == 3
-			if(svar.Bcase == 4)
+			if(svar.Asource == 3)
 			{
 				svar.vortex.Init(svar.infolder);	
 				svar.vortex.GetGamma(avar.vInf);	
@@ -575,7 +530,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		#endif
 
 
-		GetAero(avar, fvar, /*fvar.H*/svar.Pstep);
+		GetYcoef(avar, fvar, fvar.H /*svar.Pstep*/);
 #if SIMDIM == 3
 		avar.aPlate = svar.Pstep*svar.Pstep;
 #else

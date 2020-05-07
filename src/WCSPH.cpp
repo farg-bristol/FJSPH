@@ -23,236 +23,6 @@
 using namespace std::chrono;
 using namespace nanoflann;
 
-
-void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar, 
-	MESH& cells, outl& outlist, State& pnp1, State& pn, State& airP)
-{
-	const size_t start = svar.bndPts;
-	const size_t end = svar.totPts;
-
-	#if DEBUG 
-		dbout << "Starting first step. ";
-		dbout << "  Start index: " << start << "  End index: " << end << endl;
-	#endif
-
-	if (svar.Bcase == 6 || svar.Bcase ==7)
-	{
-		FindCell(svar,fvar.sr,TREE,cells,pnp1,pn);
-		if (svar.totPts != pnp1.size())
-		{	//Rebuild the neighbour list
-			// cout << "Updating neighbour list" << endl;
-			// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
-			svar.delNum += svar.totPts-pnp1.size();
-			svar.totPts = pnp1.size();
-			TREE.NP1.index->buildIndex();
-			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-		}
-	}
-
-
-	std::vector<std::vector<Part>> neighb;
-	neighb.reserve(end);
-	for(size_t ii = 0; ii < start; ++ii)
-		neighb.emplace_back();
-
-
-	/*Check if a particle is running low on neighbours, and add ficticious particles*/
-	vector<vector<Part>> air;
-	#pragma omp parallel shared(svar, pnp1, outlist)
-	{
-		std::vector<std::vector<Part>> localN;
-		vector<vector<Part>> localA;
-		#pragma omp for schedule(static) nowait 
-		for (size_t ii = start; ii < end; ++ii)
-		{
-			std::vector<Part> temp;
-			if(svar.ghost == 1 && pnp1[ii].b == FREE && outlist[ii].size() < avar.nfull &&
-				outlist[ii].size() > 0.4*avar.nfull)
-				temp = PoissonSample::generatePoissonPoints(svar,fvar,avar,ii,pnp1,outlist);
-
-			localA.emplace_back(temp);
-
-			for(auto j:outlist[ii])
-				temp.emplace_back(Part(pnp1[j]));
-
-			localN.emplace_back(temp);
-		}
-
-		#pragma omp for schedule(static) ordered
-    	for(int i=0; i<omp_get_num_threads(); i++)
-    	{
-    		#pragma omp ordered
-    		neighb.insert(neighb.end(),localN.begin(),localN.end());
-    		air.insert(air.end(),localA.begin(),localA.end());
-    	}
-	}
-	airP.clear();
-
-	for(size_t ii = 0; ii < air.size(); ++ii)
-		for(size_t jj = 0; jj < air[ii].size(); ++jj)
-			airP.emplace_back(PartToParticle(air[ii][jj]));
-
-	#pragma omp parallel for shared(outlist)
-	for(size_t ii = start; ii < end; ++ii)
-	{
-		pnp1[ii].theta = outlist[ii].size(); 
-	}
-
-	/*Previous State for error calc*/
-	vector<StateVecD> xih(svar.totPts);
-	#pragma omp parallel for shared(pnp1)
-	for (size_t  ii=0; ii < end; ++ii)
-		xih[ii] = pnp1[ii].xi;
-	
-	// vector<StateVecD> vPert(end,StateVecD::Zero());
-	vector<StateVecD> res(end,StateVecD::Zero());
-	vector<StateVecD> Af(end,StateVecD::Zero());
-	vector<real> Rrho(svar.totPts,0.0);
-	Forces(svar,fvar,avar,cells,pnp1,neighb,outlist/*,vPert*/,res,Rrho,Af); /*Guess force at time n+1*/
-
-	/*Find maximum safe timestep*/
-	vector<StateVecD>::iterator maxfi = std::max_element(res.begin(),res.end(),
-		[](StateVecD p1, StateVecD p2){return p1.norm() < p2.norm();});
-	real maxf = maxfi->norm();
-	real dtf = sqrt(fvar.H/maxf);
-	real dtcv = fvar.H/(fvar.Cs+svar.maxmu);
-	const real dt = 0.3*std::min(dtf,dtcv);
-
-	#pragma omp parallel for shared(res, Rrho)
-	for(size_t ii = 0; ii < end; ++ii)
-	{
-		pnp1[ii].f = res[ii];
-		pnp1[ii].Rrho = Rrho[ii];
-		pnp1[ii].Af = Af[ii]; 
-		xih[ii] = pnp1[ii].xi + dt*pnp1[ii].v;
-	}
-#if DEBUG 
-	real errsum = 0.0;
-
-	for (size_t ii = start; ii < end; ++ii)
-	{
-		StateVecD r = xih[ii]-pnp1[ii].xi;
-		errsum += r.squaredNorm();
-	}
-
-	real error=log10(sqrt(errsum/(real(svar.totPts))));
-
-	
-		dbout << "Exiting first step. Error: " << error << endl;
-#endif
-}
-
-std::pair<StateVecD,StateVecD> Find_MinMax(SIM& svar, const State& pnp1)
-{
-	/*Find the max and min positions*/
-	auto xC = std::minmax_element(pnp1.begin(),pnp1.end(),
-				[](Particle p1, Particle p2){return p1.xi(0)< p2.xi(0);});
-	auto yC = std::minmax_element(pnp1.begin(),pnp1.end(),
-				[](Particle p1, Particle p2){return p1.xi(1)< p2.xi(1);});
-	#if SIMDIM == 3
-		auto zC = std::minmax_element(pnp1.begin(),pnp1.end(),
-				[](Particle p1, Particle p2){return p1.xi(2)< p2.xi(2);});
-
-		StateVecD minC = StateVecD(xC.first->xi(0),yC.first->xi(1),zC.first->xi(2));
-		StateVecD maxC = StateVecD(xC.second->xi(0),yC.second->xi(1),zC.second->xi(2));
-	#else 
-		StateVecD minC = StateVecD(xC.first->xi(0),yC.first->xi(1));
-		StateVecD maxC = StateVecD(xC.second->xi(0),yC.second->xi(1));
-	#endif	
-
-	return std::pair<StateVecD,StateVecD>(minC,maxC);
-}
-
-uint Check_Pipe(Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& xi)
-{
-	StateVecD testp = xi;
-    StateVecD rayp;
-#if SIMDIM == 3    
-    rayp = testp;
-    rayp(0) += 1e+10;	    
-#endif
-	const size_t num_results = 20;
-    vector<size_t> ret_indexes(num_results);
-    vector<real> out_dists_sqr(num_results);
-
-    nanoflann::KNNResultSet<real> resultSet(num_results);
-    resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
-    
-    CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
-	
-    // cout << ret_indexes.size() << endl;
-
-
-	uint inside_flag=0;
-    for(auto index:ret_indexes)
-    {   
-    	// cout << index << endl;
-        inside_flag = 0;
-        uint line_flag = 0;
-        uint perturb = FALSE;
-	    for (size_t jj = 0; jj < cells.cFaces[index].size(); jj++) 
-	    {
-	        const vector<size_t>& face = cells.faces[cells.cFaces[index][jj]];
-#if SIMDIM == 3            
-	        if(Crossings3D(cells.verts,face,testp,rayp,perturb))
-#else
-	        if(Crossings2D(cells.verts,face,testp))
-#endif                
-	        {   
-
-	            inside_flag=!inside_flag;
-	            if ( line_flag ) break; //Convex assumption
-
-	            // //  note that one edge has been hit by the ray's line 
-	            line_flag = TRUE;
-	        }
-	        else if(perturb == TRUE)
-	        {
-	            // Reset the face index
-	            jj = 0;
-	            line_flag = 0;
-	            inside_flag = 0;
-
-#if SIMDIM == 3
-	            testp = xi + StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
-#else
-	            testp = xi + StateVecD(PERTURB(0,1),PERTURB(0,2));
-#endif
-	            const vector<size_t>& retest = cells.faces[cells.cFaces[index][jj]];
-
-#if SIMDIM == 3            
-	            if(Crossings3D(cells.verts,retest,testp,rayp,perturb))
-#else
-	            if(Crossings2D(cells.verts,retest,testp))
-#endif                
-	            {   
-
-	                inside_flag=!inside_flag;
-	                // note that one edge has been hit by the ray's line 
-	                line_flag = TRUE;
-	            }
-
-	        }
-	    }
-
-        
-
-        if(inside_flag == TRUE)
-        {
-        	// cout << "Found cell." << endl;
-        	break;
-        }
-	}
-
-	if(inside_flag == 0)
-	{
-		Write_Containment(ret_indexes, cells, testp);
-	}
-
-	return inside_flag;
-}
-
-
 int main(int argc, char *argv[])
 {
 	high_resolution_clock::time_point t1 = high_resolution_clock::now();
@@ -282,16 +52,16 @@ int main(int argc, char *argv[])
 		exit(-1);
 	}
 
-	if(svar.Bcase == 6)
+	if(svar.Asource == 1 || svar.Asource == 2)
 	{
 		#if SIMDIM == 3
-		Read_TAUMESH_FACE(svar,cells,fvar);
+		Read_TAUMESH_FACE(svar,cells,fvar,avar);
 		// Read_TAUMESH(svar,cells,fvar);
 		#else
-		Read_TAUMESH_EDGE(svar,cells,fvar);
+		Read_TAUMESH_EDGE(svar,cells,fvar,avar);
 		#endif
 	}
-	else if (svar.Bcase == 7)
+	else if (svar.Asource == 4)
 	{
 		// Create single cell
 		Make_Cell(fvar,avar,cells);
@@ -313,7 +83,7 @@ int main(int argc, char *argv[])
 	State pnp1; 	/*Particles at n+1 */
 	State airP;
 
-	if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6 || svar.Bcase ==7)
+	if(svar.Bcase == 2 || svar.Bcase == 3)
 	{
 		cout << "Final particle count:  " << svar.nmax << endl;
 	}
@@ -336,7 +106,7 @@ int main(int argc, char *argv[])
   		}
   		pnp1 = pn;
   		// Define svar.clear to state a particle is clear of the starting area
-  		if (svar.Bcase == 2 || svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
+  		if (svar.Bcase == 2 || svar.Bcase == 3 || svar.Bcase == 5)
   			svar.clear = -svar.Jet[1] + 4*svar.dx;
   		else
   			svar.clear = 0.0;
@@ -391,11 +161,11 @@ int main(int argc, char *argv[])
 		// svar.nfull = 257;
 	#endif
 	#if SIMDIM == 2
+		avar.nfull = 36;
+		svar.nfull = 48;
+
 		// avar.nfull = 37;
 		// svar.nfull = 48;
-
-		avar.nfull = 20;
-		svar.nfull = 48;
 
 	#endif
 
@@ -409,10 +179,14 @@ int main(int argc, char *argv[])
 	svar.aMom = aMom;
 	svar.tMom = aMom;
 
-	if(svar.Bcase == 5)
+	if(svar.Bcase == 4)
 	{
 		real volume = pow(svar.Pstep,SIMDIM)*svar.totPts;
+	#if SIMDIM == 3
 		real dvol = (4.0*M_PI/3.0)*pow(0.5*svar.diam,3);
+	#else
+		real dvol = M_PI*pow(0.5*svar.diam,2);
+	#endif
 		cout << "SPH Volume: " << volume << "  Droplet expected volume: " << 
 		dvol;
 		cout << " Error: " << std::fixed << 100.0*(dvol-volume)/dvol << "%"  << endl;
@@ -459,7 +233,7 @@ int main(int argc, char *argv[])
 			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1);
 		}
 
-		if (svar.Bcase != 0 && svar.Bcase !=5 && svar.Bcase !=7)
+		if (svar.Bcase != 0 && svar.Bcase !=4)
 		{
 			/*Write boundary particles*/
 			Init_Binary_PLT(svar,"Boundary.szplt","Boundary Particles");
@@ -482,7 +256,7 @@ int main(int argc, char *argv[])
 	else if (svar.outtype == 1)
 	{
 
-		if (svar.Bcase != 0 && svar.Bcase != 5 &&  svar.restart == 0  && svar.Bcase !=7)
+		if (svar.Bcase != 0 && svar.Bcase != 4 &&  svar.restart == 0)
 		{	/*If the boundary exists, write it.*/
 			string bfile = svar.outfolder;
 			bfile.append("Boundary.plt");
@@ -550,9 +324,9 @@ int main(int argc, char *argv[])
 	}
 	if(svar.restart == 0)
 	{
-		if(svar.Bcase == 6)
-		{
-					// Check if the pipe is inside the mesh
+		if(svar.Bcase == 3 && (svar.Asource == 1 || svar.Asource == 2))
+		{// Check if the pipe is inside the mesh
+			cout << "Checking Pipe..." << endl;
 			real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
 			real stepb = (svar.Pstep*svar.Bstep);
 			real r = 0.5*holeD;
@@ -593,7 +367,7 @@ int main(int argc, char *argv[])
 		}
 
 #if SIMDIM == 3
-			if(svar.Bcase == 4)
+			if(svar.Asource == 3)
 				svar.vortex.write_VLM_Panels(svar.outfolder);		
 #endif
 	}
@@ -652,20 +426,20 @@ int main(int argc, char *argv[])
 
 	
 
-	for (uint frame = svar.frame+1; frame<= svar.Nframe; ++frame)
+	for (uint frame = svar.frame+1; frame <= svar.Nframe; ++frame)
 	{
 		int stepits=0;
 		real stept=0.0;
-		while (stept<svar.framet)
+		
+		while (stept+ MERROR <svar.framet)
 		{
 		    error = Newmark_Beta(TREE,svar,fvar,avar,cells,pn,pnp1,airP,outlist);
 		    stept+=svar.dt;
 		    ++stepits;
-		    //cout << svar.t << "  " << svar.dt << endl;
 		}
 		++svar.frame;
 
-		Find_MinMax(svar,pnp1);		
+		// Find_MinMax(svar,pnp1);		
 
 		t2= high_resolution_clock::now();
 		duration = duration_cast<microseconds>(t2-t1).count()/1e6;
@@ -680,23 +454,12 @@ int main(int argc, char *argv[])
 		<< " Comp Time: " << std::fixed << duration << " Error: " << error << " Sub-iterations: " 
 	    << stepits << endl;
 	    f2 << "Deleted particles: " << svar.delNum << " Internal collisions: " << svar.intNum <<  endl;
-		
-		// f2 << "Minimum Coords:" << endl << std::scientific << std::setprecision(8) 
-		// 	<< svar.minC(0) << " " << svar.minC(1);
-		// #if SIMDIM ==3
-		// f2 << " " << svar.minC(2);
-		// #endif
-		// f2 << endl << "Maximum Coords:" << endl  << svar.maxC(0) << " " << svar.maxC(1);
-		// #if SIMDIM ==3
-		// f2 <<  " " << svar.maxC(2);
-		// #endif
-		// f2 << endl;
 
 		if(svar.outframe !=0)
 		{
 			if (frame % svar.outframe == 0 )
 			{	/*Output to console every 20 or so steps*/
-			  	cout << "Frame: " << frame << "  Sim Time: " << svar.t-svar.dt << "  Compute Time: "
+			  	cout << "Frame: " << frame << "  Sim Time: " << svar.t << "  Compute Time: "
 			  	<< duration <<"  Error: " << error << endl;
 			  	cout << "Boundary particles:  " << svar.bndPts << " Sim particles: " << svar.totPts-svar.bndPts
 			  	<< " Deleted particles: " << svar.delNum << " Internal collisions: " << svar.intNum <<  endl;
@@ -710,10 +473,9 @@ int main(int argc, char *argv[])
 		}
 
 
-		// DensityReinit(fvar, pnp1, outlist);
 		if (svar.outtype == 0)
 		{
-			if(svar.Bcase != 0 && svar.Bcase != 5 && svar.Bcase !=7 && svar.boutform == 1)
+			if(svar.Bcase != 0 && svar.Bcase != 4 && svar.boutform == 1)
 			{	/*Write boundary particles*/
 				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2); 
 			}
@@ -724,7 +486,7 @@ int main(int argc, char *argv[])
 		else if (svar.outtype == 1)
 		{
 			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,"Fuel");
-			if(svar.Bcase != 0 && svar.Bcase != 5 && svar.Bcase !=7 && svar.boutform == 1)
+			if(svar.Bcase != 0 && svar.Bcase != 4 && svar.boutform == 1)
 			{
 				State empty;
 				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");

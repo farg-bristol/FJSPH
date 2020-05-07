@@ -225,7 +225,7 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, INTEGER4 frame, State& p
 /*************************************************************************/
 
 void Write_Binary_Timestep(const SIM& svar, const State& pnp1, 
-	const uint start, const uint end, const char* group, const INTEGER4 StrandID)
+	uint const start, uint const end, char const* group, INTEGER4 const StrandID)
 {
 	if(StrandID == 0)
 	{
@@ -235,33 +235,33 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 	else
 		TECFIL142(&StrandID);
 
-	uint size = end - start;
+	uint const size = end - start;
 
 	#ifdef DEBUG
 		
 	#endif
 
-	const INTEGER4 IMax = size;
-	const INTEGER4 JMax = 1;
-	const INTEGER4 KMax = 1;
-	const INTEGER4 ICellMax                 = 0;
-	const INTEGER4 JCellMax                 = 0;
-	const INTEGER4 KCellMax                 = 0;
+	INTEGER4 const IMax = size;
+	INTEGER4 const JMax = 1;
+	INTEGER4 const KMax = 1;
+	INTEGER4 const ICellMax                 = 0;
+	INTEGER4 const JCellMax                 = 0;
+	INTEGER4 const KCellMax                 = 0;
 #if FOD == 0
-	const INTEGER4 DIsDouble                = 0;
+	INTEGER4 const DIsDouble                = 0;
 #else
-	const INTEGER4 DIsDouble                = 1;
+	INTEGER4 const DIsDouble                = 1;
 #endif
-	const double   SolTime                  = svar.t;     
-	const INTEGER4 ParentZn                 = 0;
-	const INTEGER4 IsBlock                  = 1;      /* Block */
-	const INTEGER4 NFConns                  = 0;
-	const INTEGER4 FNMode                   = 0;
-	const INTEGER4 TotalNumFaceNodes        = 0;
-	const INTEGER4 TotalNumBndryFaces       = 0;
-	const INTEGER4 TotalNumBndryConnections = 0;
-	const INTEGER4 ShrConn                  = 0;
-	const INTEGER4 ZoneType = 0;
+	double const   SolTime                  = svar.t;     
+	INTEGER4 const ParentZn                 = 0;
+	INTEGER4 const IsBlock                  = 1;      /* Block */
+	INTEGER4 const NFConns                  = 0;
+	INTEGER4 const FNMode                   = 0;
+	INTEGER4 const TotalNumFaceNodes        = 0;
+	INTEGER4 const TotalNumBndryFaces       = 0;
+	INTEGER4 const TotalNumBndryConnections = 0;
+	INTEGER4 const ShrConn                  = 0;
+	INTEGER4 const ZoneType = 0;
 	INTEGER4 I = 0;
 
 
@@ -312,6 +312,8 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 		{
 			rho[ii-start] = pnp1[ii].rho;
 			Rrho[ii-start] = pnp1[ii].Rrho;
+
+			// cout << Rrho[ii-start] << "  ";
 			m[ii-start] = pnp1[ii].m;
 		}
 
@@ -450,18 +452,18 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 void Init_Binary_PLT(const SIM &svar, const string& filename, const string& zoneName)
 {
 #if DEBUG
-		const INTEGER4 Debug = 1;
+		INTEGER4 const Debug = 1;
 #else 
-		const INTEGER4 Debug = 0;
+		INTEGER4 const Debug = 0;
 #endif
 #if FOD == 0
-    const INTEGER4 VIsDouble  = 0;
+    INTEGER4 const VIsDouble  = 0;
 #else
-	const INTEGER4 VIsDouble  = 1;
+	INTEGER4 const VIsDouble  = 1;
 #endif
     
-    const INTEGER4 FileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/
-    const INTEGER4 fileFormat = 1; // 0 == PLT, 1 == SZPLT
+    INTEGER4 const FileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/
+    INTEGER4 const fileFormat = 1; // 0 == PLT, 1 == SZPLT
     INTEGER4 I          = 0; /* Used to track return codes */
 
     string file = svar.outfolder;

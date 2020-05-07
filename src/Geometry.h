@@ -42,8 +42,31 @@ RotMat GetRotationMat(StateVecD& angles)
 
 }
 
+std::pair<StateVecD,StateVecD> Find_MinMax(SIM& svar, const State& pnp1)
+{
+    /*Find the max and min positions*/
+    auto xC = std::minmax_element(pnp1.begin(),pnp1.end(),
+                [](Particle p1, Particle p2){return p1.xi(0)< p2.xi(0);});
+    auto yC = std::minmax_element(pnp1.begin(),pnp1.end(),
+                [](Particle p1, Particle p2){return p1.xi(1)< p2.xi(1);});
+    #if SIMDIM == 3
+        auto zC = std::minmax_element(pnp1.begin(),pnp1.end(),
+                [](Particle p1, Particle p2){return p1.xi(2)< p2.xi(2);});
+
+        StateVecD minC = StateVecD(xC.first->xi(0),yC.first->xi(1),zC.first->xi(2));
+        StateVecD maxC = StateVecD(xC.second->xi(0),yC.second->xi(1),zC.second->xi(2));
+    #else 
+        StateVecD minC = StateVecD(xC.first->xi(0),yC.first->xi(1));
+        StateVecD maxC = StateVecD(xC.second->xi(0),yC.second->xi(1));
+    #endif  
+
+    return std::pair<StateVecD,StateVecD>(minC,maxC);
+}
+
+
+
 /*Crossing test for 3 dimensions.*/
-int LessThanREError(const DensMatD& A)
+int LessThanREError(DensMatD const& A)
 {
     real a1, a2, a3;
 
@@ -157,15 +180,15 @@ bool get_line_intersection(vector<StateVecD> const& verts, vector<size_t> const&
 
 
 #if SIMDIM == 3
-int Crossings3D(const vector<StateVecD>& verts, const vector<size_t>& face, 
-    StateVecD const& point, StateVecD const& point2, uint &perturb)
+int Crossings3D(vector<StateVecD> const& verts, vector<size_t> const& face, 
+    StateVecD const& point, StateVecD const& point2, uint& perturb)
 {   /*Using Signed volumes of tetrahedra*/
     /*Shewchuk J.R 1996, & 
     Robust Adaptive Floating-Point Geometric Predicates
     Michael Aftosmis, Cart3D Software*/
     /*https://www.nas.nasa.gov/publications/software/docs/cart3d/pages/bool_intersection.html*/
-    const StateVecD testp = point; 
-    const StateVecD rayp = point2;
+    StateVecD const testp = point; 
+    StateVecD const rayp = point2;
     DensMatD vol1;
     int flag1, flag2;
     vol1 << testp(0)         , testp(1)         , testp(2)         , 1.0,
@@ -193,6 +216,7 @@ int Crossings3D(const vector<StateVecD>& verts, const vector<size_t>& face,
     flag2 = (vol1.determinant() < 0.0); 
 
     /*If signs of the volumes alternate, then the points lie either side of the plane*/
+    /*Now check if the line drawn by the two points intersects inside the bounds of the triangle plane*/
     if(flag1 != flag2)
     {   
         DensMatD vol;     
@@ -404,7 +428,7 @@ void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
 
 	// Generate the solution vectors
 	cells.cVel.emplace_back(avar.vInf);
-	cells.cP.emplace_back(fvar.gasPress);
+	cells.cP.emplace_back(avar.pRef);
 	// cells.SPHRho.emplace_back(fvar.rho0 * pow((fvar.gasPress/fvar.B + 1),1/fvar.gam));
 
 	cells.cVol.emplace_back(1.0);
@@ -413,15 +437,15 @@ void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
 	cells.vFn.emplace_back(StateVecD::Zero());
 	cells.vFnp1.emplace_back(StateVecD::Zero());
 
-	cells.cRho.emplace_back(fvar.rhog);
-	cells.cMass.emplace_back(fvar.rhog); //Since volume = 1 for this cell
+	cells.cRho.emplace_back(avar.rhog);
+	cells.cMass.emplace_back(avar.rhog); //Since volume = 1 for this cell
 
 	cells.cPertn.emplace_back(StateVecD::Zero());
 	cells.cPertnp1.emplace_back(StateVecD::Zero());
 
     // Second cell
     cells.cVel.emplace_back(avar.vInf);
-    cells.cP.emplace_back(fvar.gasPress);
+    cells.cP.emplace_back(avar.pRef);
     // cells.SPHRho.emplace_back(fvar.rho0 * pow((fvar.gasPress/fvar.B + 1),1/fvar.gam));
 
     cells.cVol.emplace_back(1.0);
@@ -430,8 +454,8 @@ void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
     cells.vFn.emplace_back(StateVecD::Zero());
     cells.vFnp1.emplace_back(StateVecD::Zero());
 
-    cells.cRho.emplace_back(fvar.rhog);
-    cells.cMass.emplace_back(fvar.rhog); //Since volume = 1 for this cell
+    cells.cRho.emplace_back(avar.rhog);
+    cells.cMass.emplace_back(avar.rhog); //Since volume = 1 for this cell
 
     cells.cPertn.emplace_back(StateVecD::Zero());
     cells.cPertnp1.emplace_back(StateVecD::Zero());

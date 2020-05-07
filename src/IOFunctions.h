@@ -98,6 +98,7 @@ int MakeOutputDir(int argc, char *argv[], SIM &svar)
   	/*Check output folder for any prexisting files*/
   	if(svar.outtype == 0)
   	{
+
   		string file = pathname;
   		file.append("Fuel.szplt.szdat");
 #ifdef DEBUG
@@ -151,49 +152,67 @@ int MakeOutputDir(int argc, char *argv[], SIM &svar)
 				file.append("Boundary.szplt");
 				if(stat( file.c_str(), &info ) != 0)
 		  		{
-		  			// File needs creating.
-		  			string cmd = "exec szcombine \"";
-			  		cmd.append(file);
-			  		cmd.append("\"");
+		  			// Check if szplt files exist
+		  			string szplt = file;
+		  			szplt.append(".szdat");
+		  			if(stat( szplt.c_str(), &info ) == 0)
+		  			{
+			  			// File needs creating.
+			  			string cmd = "exec szcombine \"";
+				  		cmd.append(file);
+				  		cmd.append("\"");
 
 #ifdef DEBUG
-			  		dbout << "Attempting to combine szplt." << endl;
-			  		dbout << "Command: " << cmd << endl;
+				  		dbout << "Attempting to combine szplt." << endl;
+				  		dbout << "Command: " << cmd << endl;
 #endif
-			  		if(system(cmd.c_str()))
-			  		{
-				    	cout << "System command failed to execute." << endl;
-				    	cout << "Command: " << cmd << endl;
-				    	exit(-1);
-				    }
+				  		if(system(cmd.c_str()))
+				  		{
+					    	cout << "System command failed to execute." << endl;
+					    	cout << "Command: " << cmd << endl;
+					    	exit(-1);
+					    }
+					}
+					else if(svar.Bcase != 0 && svar.Bcase != 4)
+					{
+						cout << "Boundary files cannot be found. Stopping" << endl;
+						exit(-1);
+					}
 		  		}
 
 			}
 		}
 		else if(svar.restart == 1)
 		{
-			cout << "No previous simulation file. Cannot restart." << endl;
-			exit(-1);
-		}
-  	}
-  	else if(svar.outtype == 2)
-  	{	/*Create h5 folder*/
-  		pathname.append("h5/");
-  		check_folder(pathname);
-  		string file = pathname;
-  		file.append("fuel_0.00e+00.h5part");
-  		struct stat info;
-  		if(stat( file.c_str(), &info ) == 0)
-  		{
-	  		string cmd = "exec rm -r \"";
-	  		cmd.append(pathname);
-	  		cmd.append("\"*.h5part");
-	  		if(system(cmd.c_str()))
+			string file = pathname;
+	  		file.append("Fuel.szplt");
+
+	  		struct stat info;
+	  		if(stat( file.c_str(), &info ) == 0)
 	  		{
-		    	cout << "System command failed to execute." << endl;
-		    	cout << "Command: " << cmd << endl;
-		    	exit(-1);
-		    }
+	  			cout << "Fuel solution file exist..." << endl;
+	  		}
+	  		else
+	  		{
+				cout << "No previous fuel simulation file. Cannot restart." << endl;
+				exit(-1);
+			}
+
+			file = pathname;
+	  		file.append("Boundary.szplt");
+
+	  		if(svar.Bcase != 0 && svar.Bcase != 4)
+	  		{
+		  		if(stat( file.c_str(), &info ) == 0)
+		  		{
+		  			cout << "Boundanry solution files exist..." << endl;
+		  		}
+		  		else
+		  		{
+					cout << "No previous boundary simulation file. Cannot restart." << endl;
+					exit(-1);
+				}
+			}
 		}
   	}
 
@@ -439,7 +458,7 @@ void CheckContents(void* inputHandle, SIM& svar)
     	svar.outform = dataType;
     	if(svar.outform == 2)
 		{
-			if(svar.Bcase == 6)
+			if(svar.Asource == 1 || svar.Asource == 2)
 			{
 				cout << "No cell information. Cannot restart" << endl;
 				exit(-1);
@@ -533,7 +552,7 @@ int ParticleCount(SIM &svar)
 			}
 			#endif
 		}
-		else if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
+		else if(svar.Bcase == 3)
 		{	
 			#if SIMDIM == 3
 			{
@@ -585,7 +604,7 @@ int ParticleCount(SIM &svar)
 			}
 			#endif
 		}
-		else if (svar.Bcase == 5)
+		else if (svar.Bcase == 4)
 		{	
 			#if SIMDIM == 3
 				uint simCount = 0;
@@ -645,7 +664,7 @@ int ParticleCount(SIM &svar)
 			#else
 				uint simCount = 0;
 				real radius = 0.5*svar.Start(0);
-				for (real y = -radius; y <= radius; y+=svar.dx)
+				for (real y = 0; y <= radius; y+=svar.dx)
 				{	
 					++simCount;
 					
@@ -659,10 +678,26 @@ int ParticleCount(SIM &svar)
 							}	
 					}
 				}
+
+				for (real y = -svar.dx; y >= -radius; y-=svar.dx)
+				{	
+					++simCount;
+					
+
+					for (real x = svar.dx; x <= radius ; x+=svar.dx)
+					{ /*Do the either side of the centerline*/
+							if(((x*x) + (y*y)) <= (radius*radius))
+				    		{   /*If the point is inside the hole diameter, add it*/
+								++simCount;
+								++simCount;
+							}	
+					}
+				}
+
 				partCount = simCount;
 			#endif
 		}
-		else if (svar.Bcase == 7) 
+		else if (svar.Bcase == 5) 
 		{	/*Piston driven flow*/
 
 			#if SIMDIM == 2
@@ -694,7 +729,7 @@ int ParticleCount(SIM &svar)
 	return partCount;
 }
 
-void GetAero(AERO& avar, const FLUID& fvar, const real rad)
+void GetYcoef(AERO& avar, const FLUID& fvar, const real rad)
 {
 	#if SIMDIM == 3
 		avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
@@ -711,7 +746,7 @@ void GetAero(AERO& avar, const FLUID& fvar, const real rad)
 
 	avar.Cdef = 1.0 - exp(-avar.tmax/avar.td)*(cos(avar.omega*avar.tmax)+
 		1/(avar.omega*avar.td)*sin(avar.omega*avar.tmax));
-	avar.ycoef = 0.5*avar.Cdef*(avar.Cf/(avar.Ck*avar.Cb))*(fvar.rhog*avar.L)/fvar.sig;
+	avar.ycoef = 0.5*avar.Cdef*(avar.Cf/(avar.Ck*avar.Cb))*(avar.rhog*avar.L)/fvar.sig;
 
 	// avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
 	
@@ -729,7 +764,7 @@ void GetAero(AERO& avar, const FLUID& fvar, const real rad)
 	//cout << avar.ycoef << "  " << avar.Cdef << "  " << avar.tmax << "  " << endl;
 }
 
-void Write_Input(SIM& svar, FLUID& fvar, AERO& avar, StateVecD& angle)
+void Write_Input(SIM const& svar, FLUID const& fvar, AERO const& avar, StateVecD& angle)
 {
 	// Open the file.
 	string file = svar.outfolder;
@@ -752,6 +787,7 @@ void Write_Input(SIM& svar, FLUID& fvar, AERO& avar, StateVecD& angle)
 	sett << svar.Pstep << setw(width) << "#Particle initial spacing" << endl;
 	sett << svar.Bstep << setw(width) << "#Boundary spacing factor" << endl;
 	sett << svar.Bcase << setw(width) << "#Boundary case" << endl;
+	sett << svar.Asource << setw(width) << "#Aerodynamic source" << endl; 
 	sett << avar.acase << setw(width) << "#Aerodynamic case" << endl;
 	sett << svar.ghost << setw(width) << "#Ghost particles?" << endl;
 	sett << svar.Start(0) << " " << svar.Start(1);
@@ -812,14 +848,14 @@ void Write_Input(SIM& svar, FLUID& fvar, AERO& avar, StateVecD& angle)
 	fluid << fvar.alpha << setw(width) << "#Artificial viscosity" << endl;
 	fluid << fvar.contangb << setw(width) << "#Contact angle" << endl;
 	fluid << fvar.rho0 << setw(width) << "#Fluid density" << endl;
-	fluid << fvar.rhog << setw(width) << "#Gas density" << endl;
+	fluid << avar.rhog << setw(width) << "#Gas density" << endl;
 	fluid << fvar.Cs << setw(width) << "#Speed of sound" << endl;
 	fluid << fvar.mu << setw(width) << "#Fluid viscosity" << endl;
-	fluid << fvar.mug << setw(width) << "#Gas viscosity" << endl;
+	fluid << avar.mug << setw(width) << "#Gas viscosity" << endl;
 	fluid << fvar.sig << setw(width) << "#Surface Tension" << endl;
-	fluid << fvar.gasVel << setw(width) << "#Gas reference velocity" << endl;
-	fluid << fvar.gasPress << setw(width) << "#Gas reference pressure" << endl;
-	fluid << fvar.T << setw(width) << "#Gas reference temperature" << endl;
+	fluid << avar.vRef << setw(width) << "#Gas reference velocity" << endl;
+	fluid << avar.pRef << setw(width) << "#Gas reference pressure" << endl;
+	fluid << avar.T << setw(width) << "#Gas reference temperature" << endl;
 	fluid << svar.meshfile << "   #Mesh face file" << endl;
 	fluid << svar.solfile << "   #Mesh Solution file" << endl;
 	fluid << svar.scale << setw(width) << "#Mesh scale" << endl;

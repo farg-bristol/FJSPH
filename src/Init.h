@@ -9,11 +9,11 @@
 #include "IO.h"
 #include "Add.h"
 
-void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
+void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& pnp1)
 {
-	if (svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
+	if (svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6 || svar.Bcase == 7)
 		cout << "Initialising simulation..." << endl;
-	else if (svar.Bcase == 5 || svar.Bcase == 7)
+	else if (svar.Bcase == 5 || svar.Bcase == 8)
 		cout << "Initialising simulation with " << svar.finPts << " points" << endl;
 	
 	
@@ -114,7 +114,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 	else if (svar.Bcase == 2)
 	{	/*Converging nozzle for jet spray*/
 		#if SIMDIM == 3
-			real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
+			real holeD = svar.Jet(0)+4*svar.dx; /*Diameter of hole (or width)*/
 			real stepb = (svar.Pstep*svar.Bstep);
 			
 
@@ -236,8 +236,8 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}
 		#endif
 	}
-	else if(svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
-	{	/*Jet in Crossflow*/
+	else if(svar.Bcase == 3)
+	{	/*Jet*/
 		#if SIMDIM == 3
 			real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
 			real stepb = (svar.Pstep*svar.Bstep);
@@ -258,7 +258,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 				}	
 			}
 		#else
-			real jetR = 0.5*(svar.Jet(0)+6*svar.dx); /*Radius of hole (or width)*/
+			real jetR = 0.5*(svar.Jet(0)+8*svar.dx); /*Radius of hole (or width)*/
 			real stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
@@ -280,7 +280,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 			}
 		#endif
 	}
-	else if (svar.Bcase == 7) 
+	else if (svar.Bcase == 5) 
 	{	
 		// #if SIMDIM == 3
 		// 	/*Piston driven flow*/
@@ -463,7 +463,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 
 
 	}
-	else if(svar.Bcase > 7) 
+	else if(svar.Bcase > 5) 
 	{
 		cerr << "Boundary case is not within the design. 0 <= Bcase <= 7." << endl;
 		exit(-1);
@@ -488,7 +488,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 		}
 		svar.clear = -svar.Jet[1] + 4*svar.dx;
 	}
-	else if (svar.Bcase == 3 || svar.Bcase == 4 || svar.Bcase == 6)
+	else if (svar.Bcase == 3)
 	{
 		/*Crossflow case*/
 		svar.simPts = 0;
@@ -511,7 +511,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 
 		svar.clear = -svar.Jet[1] + 4*svar.dx;
 	}
-	else if(svar.Bcase == 5)
+	else if(svar.Bcase == 4)
 	{
 		/*Droplet case*/
 		svar.simPts = 0;
@@ -522,8 +522,8 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 
 		CreateDroplet(svar,fvar,pn,pnp1);
 	}
-	else if (svar.Bcase == 7)
-	{
+	else if (svar.Bcase == 5)
+	{	/*Piston driven flow*/
 		svar.simPts = 0;
 		// #if SIMDIM == 3
 		// 	/*Create fluid in the reservoir*/
@@ -617,7 +617,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 #endif
 			pi.cellID = 0;
 			pi.cellV = avar.vInf;
-			pi.cellP = fvar.gasPress;
+			pi.cellP = avar.pRef;
 			// pi.cellRho = fvar.rho0 * pow((fvar.gasPress/fvar.B + 1),1/fvar.gam);
 		}
 
@@ -630,7 +630,7 @@ void InitSPH(SIM &svar, FLUID &fvar, AERO &avar, State &pn, State &pnp1)
 #endif
 			pi.cellID = 0;
 			pi.cellV = avar.vInf;
-			pi.cellP = fvar.gasPress;
+			pi.cellP = avar.pRef;
 			// pi.cellRho = fvar.rho0 * pow((fvar.gasPress/fvar.B + 1),1/fvar.gam);
 		}
 

@@ -17,11 +17,24 @@
 #include "Aero.h"
 #include "Add.h"
 
-real GetNumpartdens( SIM const& svar, FLUID const& fvar, State const& pnp1, outl const& outlist)
+vector<real> GetWeightedDistance(SIM const& svar, FLUID const& fvar, State const& pnp1, outl const& outlist)
+{
+	uint const& end = svar.totPts;
+	vector<real> wdiff(end,0.0);
+	#pragma omp parallel for
+	for (uint ii=0; ii< end; ++ii)
+	{
+		
+	}
+
+	return wdiff;
+}
+
+real GetNumpartdens(SIM const& svar, FLUID const& fvar, State const& pnp1, outl const& outlist)
 {
 	real npd = 0.0;
 	uint const& end = svar.totPts;
-	#pragma omp parallel for reduction(+:npd) shared(outlist)
+	#pragma omp parallel for reduction(+:npd)
 	for (uint ii=0; ii< end; ++ii)
 	{
 		StateVecD const& pi = pnp1[ii].xi;
@@ -80,9 +93,9 @@ StateVecD Base(FLUID const& fvar, Part const& pi, Part const& pj,
 {
 	/*Pressure and artificial viscosity - Monaghan (1994) p.400*/
 	real const vdotr = Vij.dot(Rij);
-	real const muij= fvar.H*vdotr/(r*r+0.01*fvar.HSQ);
+	real const muij= fvar.H*vdotr/(r*r+0.001*fvar.HSQ);
 	real pifac;
-	if (vdotr > 0.0 || pj.b == GHOST) 
+	if (vdotr > 0.0/* || pj.b == GHOST*/) 
 	{
 		pifac = 0.0;
 	}
@@ -162,8 +175,9 @@ StateVecD NormalBoundaryRepulsion(FLUID const& fvar, MESH const& cells, Part con
 
 ///**************** RESID calculation **************
 void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, State const& pnp1/*, State& airP*/,
-	 vector<vector<Part>> const& neighb, outl const& outlist,/* const vector<StateVecD>& vPert,*/
-	 vector<StateVecD>& RV, vector<real>& Rrho, std::vector<StateVecD> Af)
+	 vector<vector<Part>> const& neighb, outl const& outlist,
+	 vector<StateVecD>& RV, vector<real>& Rrho, std::vector<StateVecD>& Af/*, 
+	 vector<real>& wDiff, vector<StateVecD>& norm, vector<real>& curve*/)
 {
 	svar.maxmu=0; 					    /* CFL Parameter */
 	const size_t start = svar.bndPts;
@@ -178,13 +192,18 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 	// const uint piston = svar.psnPts;
 
 	/********* LOOP 1 - all points: Calculate numpartdens ************/
+	// wDiff = GetWeightedDistance(svar,fvar,pnp1,outlist);
 	// real numpartdens = GetNumpartdens(svar, fvar, pnp1, outlist);
 	// std::vector<StateVecD> cgrad(svar.totPts,StateVecD::Zero());
 	// cgrad = GetColourGrad(svar,fvar,pnp1,outlist);
 
 	// std::vector<StateVecD> ST(svar.totPts,StateVecD::Zero()); /*Surface tension force*/		
-	#pragma omp parallel /*shared(numpartdens)*/
+	#pragma omp parallel /*shared(Af, wDiff, norm, curve)*/
 	{
+
+		vector<real> wDiff(end,0.0);
+		vector<StateVecD> norm(end, StateVecD::Zero());
+		vector<real> curve(end,0.0);
 
 /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
 		// #pragma omp for reduction(+:Rrhocontr)
@@ -204,6 +223,8 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 		// 	pnp1[ii].Rrho = Rrhocontr[ii]; /*drho/dt*/
 		// }
 
+
+
 /******** LOOP 3 - Piston points: Calculate density and pressure. **********/		
 		#pragma omp for reduction(+:RV, Rrho) /*Reduction defs in Var.h*/
 		for (size_t ii=0; ii < start; ++ii)
@@ -211,7 +232,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 			Part const pi = pnp1[ii];
 			uint const size = outlist[ii].size();
 			// pnp1[ii].theta = real(size);
-			// pnp1[ii].theta = 0.0;
+			// pnp1[ii].theta = wDiff[ii];
 
 			std::vector<real> mu;  /*Vector to find largest mu value for CFL stability*/
 			mu.reserve(size+1);			
@@ -239,17 +260,19 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 		
 
 /******* LOOP 4 - All simulation points: Calculate forces on the fluid. *********/
-		#pragma omp for reduction(+:Rrho, RV/*, ST*/)  /*Reduction defs in Aero.h*/
+		#pragma omp for reduction(+:Rrho, RV /*, ST*/) schedule(static) nowait
 		for (size_t ii = start; ii < end; ++ii)
 		{
 			Part pi = pnp1[ii];
 			size_t size = outlist[ii].size();
 			// pnp1[ii].theta = real(size);
-			// pnp1[ii].theta = 0.0;
+			// pnp1[ii].theta = wDiff[ii];
 
 			vector<real> mu;  /*Vector to find largest mu value for CFL stability*/
 			mu.reserve(size+1);
 			mu.emplace_back(0);	/*Avoid dereference of empty vector*/		
+			real mj = 0.0;
+			StateVecD mRij = StateVecD::Zero();
 
 			for (Part const& pj:neighb[ii])
 			{	/* Neighbour list loop. */
@@ -268,36 +291,46 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				/*Momentum contribution - Monaghan (1994)*/
 				StateVecD const contrib = Base(fvar,pi,pj,Rij,Vij,r,Grad,mu);
-				
-				/*Laminar Viscosity - Morris (2003)*/
-				StateVecD const visc    = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
+				StateVecD visc = StateVecD::Zero();
 
 				if (pj.b != GHOST)
 				{
+				/*Laminar Viscosity - Morris (2003)*/
+				    visc = Viscosity(fvar,pi,pj,Rij,Vij,r,Grad);
+
+				
 					/*Surface Tension - Nair & Poeschel (2017)*/
 					// StateVecD SurfC   = SurfaceTens(fvar,pj,Rij,r,numpartdens);
 					// SurfC = HuST(fvar,pi,pj,Rij,r,cgrad[ii],cgrad[jj]);
-				
+					
+					/* Surface Tension calcs */
+					mRij+= (pi.m*pj.xi-pj.m*pi.xi);
+					mj+= pj.m;
+
+					// Find the normal vectors
+					norm[ii] += (pj.m/pj.rho) * W2GradK(Rij,r,fvar.H,fvar.correc);
+
 					/*drho/dt*/
 					Rrho[ii] -= pj.m*(Vij.dot(Grad));
 				}
 
 				RV[ii] += pj.m*contrib + pj.m*visc /*+ SurfC/pj.m*/;
-				// cout << Rij(0) << " " << Rij(1) << "  " << Vij(0) << "  " << Vij(1) << "  " << W2Kernel(r,fvar.H,fvar.correc)
-				// << "  " << Grad(0) << "  " << Grad(1) << "  " << pj.m << endl;
-				// if (pj.b == 4)
-				// {
-				// 	ST[ii] += pj.m*contrib + pj.m*visc;
-				// }
 
+
+				
+
+									
 				// ST[ii] += SurfC/pj.m;
 			}/*End of neighbours*/
 			
-			// if(pi.internal == 1)
-			// {
-			// 	Apply the normal boundary force
-			// 	RV[ii] += NormalBoundaryRepulsion(fvar, cells, pi);
-			// }
+			if(pi.internal == 1)
+			{	// Apply the normal boundary force
+				RV[ii] += NormalBoundaryRepulsion(fvar, cells, pi);
+			}
+
+			wDiff[ii] = mRij.norm()/(fvar.H*mj);
+
+			
 
 			RV[ii] += g;
 			//CFL f_cv Calc
@@ -305,11 +338,108 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 			if(it > svar.maxmu)
 				svar.maxmu = it;
 		} /*End of sim parts*/		
-	}	/*End of declare parallel */
 	
+
+	// Get the surface curvatures
+		#pragma omp for schedule(static) nowait /*reduction(+:RV, curve)*/
+		for (size_t ii = start; ii < end; ++ii) 
+		{
+			real woccl = 0.0;
+			// StateVecD norm = 0.0;
+			// real wDiff = 0.0;
+			StateVecD Vdiff;
+			Part const& pi = pnp1[ii];
+			size_t size = outlist[ii].size();
+			
+			if(pnp1[ii].b == FREE)
+			{	
+				// real kernsum = 0.0;
+				if (svar.Asource == 1 || svar.Asource == 2)
+				{
+					Vdiff = (pi.cellV+cells.cPertnp1[pi.cellID]) - pi.v;
+				}
+				else 
+				{
+					Vdiff = avar.vInf - pi.v;
+				}
+
+#if  SIMDIM == 3
+				if(svar.Asource == 3)
+				{	
+					StateVecD Vel = svar.vortex.getVelocity(pi.xi);
+					Vdiff = Vel- pi.v;
+				}
+#endif
+			}
+
+			// Check if interaction is between surface particles
+#if  SIMDIM == 2
+			if(real(outlist[ii].size()) < 5.26*wDiff[ii]+30)
+#else
+			if(real(outlist[ii].size()) < 297.25*wDiff[ii]+34)
+#endif
+			{	
+				
+				real correc = 0.0;
+				for (size_t const& jj:outlist[ii])
+				{	/* Neighbour list loop. */
+					Part const& pj = pnp1[jj];
+					StateVecD Rij = pj.xi - pi.xi;
+					if(pj.b != GHOST)
+					{
+
+#if  SIMDIM == 2
+						if(real(outlist[jj].size()) < 5.26*wDiff[jj]+30)
+#else
+						if(real(outlist[jj].size()) < 297.25*wDiff[jj]+34)
+#endif
+						{	
+							
+
+							curve[ii] -= (pj.m/pj.rho)*(norm[jj].normalized()-norm[ii].normalized()).dot(
+											W2GradK(Rij, Rij.norm(), fvar.H, fvar.correc));
+
+							correc += (pj.m/pj.rho)*W2Kernel(Rij.norm(),fvar.H,fvar.correc);
+						}
+
+						/*Occlusion for Gissler Aero Method*/
+						if (pi.b == FREE && (avar.acase == 4 || avar.acase == 1))
+						{
+							real const frac = -Vdiff.normalized().dot(Rij.normalized());
+							
+							// cout << num/denom << endl;
+							if (frac > woccl)
+							{
+								woccl = frac;
+							}
+						}
+					}
+				}
+
+				curve[ii] /= correc;
+				RV[ii] += fvar.sig/pi.rho * curve[ii] * norm[ii];
+
+				/*Find the aero force*/
+				if(pi.b == FREE)
+				{
+	#if  SIMDIM == 2
+					if(real(outlist[ii].size()) < 5.26*wDiff[ii]+30)
+	#else
+					if(real(outlist[ii].size()) < 297.25*wDiff[ii]+34)
+	#endif
+					{		
+						RV[ii] += CalcAeroForce(avar,pi,Vdiff,norm[ii],size,woccl);
+					}
+				}
+			}
+			
+
+		}
+
+	}	/*End of declare parallel */
 	/*Aerodynamic force*/
-	if(svar.Bcase > 1)
-		ApplyAero(svar,fvar,avar,cells,pnp1,outlist,/*vPert,*/RV,Af);
+	// if(svar.Bcase > 1)
+	// 	ApplyAero(svar,fvar,avar,cells,pnp1,outlist,RV,Af);
 	
 }
 

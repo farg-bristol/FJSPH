@@ -1,6 +1,6 @@
--0.01 0         #Start coordinate
+-0.01 -0.01         #Start coordinate
 0.6 0.5         #End coordinate
-6 7           #ijk counts
+300 500           #ijk counts
 128.5 0         #Mesh velocity
 98800           #Mesh pressure
 1.18            #Mesh density
