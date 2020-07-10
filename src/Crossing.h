@@ -381,7 +381,7 @@ uint CheckCell(size_t const& cell, MESH const& cells, StateVecD const& testp, ui
 uint Check_Pipe(Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& xi)
 {
     StateVecD testp = xi;
-    const size_t num_results = 20;
+    const size_t num_results = 100;
     vector<size_t> ret_indexes(num_results);
     vector<real> out_dists_sqr(num_results);
 

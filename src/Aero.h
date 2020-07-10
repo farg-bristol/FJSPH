@@ -30,60 +30,59 @@ StateVecD AeroForce(StateVecD const& Vdiff, AERO const& avar, real const mass)
 	return (0.5*avar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai/mass);
 }
 
+/*Gissler et al (2017)*/
 StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff, 
 				real const& mass, real const size, real const woccl)
 {
-	/*Gissler et al (2017)*/
 	real const nfull = avar.nfull;
-	// if(size < nfull)
-	// {	
-		real ymax = Vdiff.squaredNorm()*avar.ycoef;
-		// ymax = 0.0;
-		// if (ymax > 1.0)
-		// 	ymax = 1.0;
 
-		real const Re = 2.0*avar.rhog*Vdiff.norm()*avar.L/avar.mug;
-		real Cds;
+	real ymax = Vdiff.squaredNorm()*avar.ycoef;
+	// ymax = 0.0;
+	if (ymax > 1.0)
+		ymax = 1.0;
 
-		real const frac2 = real(size-1)
-						/(nfull);
-		real const frac1 = (1.0 - frac2);
+	real const Re = 2.0*avar.rhog*Vdiff.norm()*avar.L/avar.mug;
+	real Cds;
+
+	real const frac2 = real(size-1)
+					/(nfull);
+	real const frac1 = (1.0 - frac2);
 
 
-		// if (Re < 3500)
-		 	Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.00001));
-		// else
-		// 	Cds = 1.699e-05*pow(Re,1.92)*(24.0/(Re));
-		
-		// if( Re <= 1000.0)
-		// 	Cds = (24.0/Re)*(1+(1.0/6.0)*pow(Re,2.0/3.0));
-		// else 
-		// 	Cds = 0.424;
+	// if (Re < 3500)
+	 	Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.00001));
+	// else
+	// 	Cds = 1.699e-05*pow(Re,1.92)*(24.0/(Re));
+	
+	// if( Re <= 1000.0)
+	// 	Cds = (24.0/Re)*(1+(1.0/6.0)*pow(Re,2.0/3.0));
+	// else 
+	// 	Cds = 0.424;
 
-		real const Cdl = Cds*(1+2.632*ymax);
-		real const	Cdi = frac1*Cdl + /*1.37**/frac2;
+	real const Cdl = Cds*(1+2.632*ymax);
+	real const	Cdi = frac1*Cdl + /*1.37**/frac2;
 
-		#if SIMDIM == 3 
-			real const Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
-		#endif
-		#if SIMDIM == 2
-			real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax);
-		#endif
+	#if SIMDIM == 3 
+		real const Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
+		// real const Adrop = M_PI*pow(avar.L,2);
+	#endif
+	#if SIMDIM == 2
+		real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax);
+		// real const Adrop = 2*avar.L;
+	#endif
 
-		real const Aunocc = frac1*Adrop + frac2*avar.aPlate;
+	real const Aunocc = frac1*Adrop + frac2*avar.aPlate;
 
-		real const Ai = (1-woccl)/*correc*/*Aunocc;
+	real const Ai = (1-woccl)/*correc*/*Aunocc;
 
-		// cout << "Fractions: " << frac1 << "  " << frac2 << endl;
-		// cout << "Areas: " << Ai << "  " << Adrop << "  " << avar.aPlate << endl;
-		// cout << "Cds: " << Cdi << "  "  << Cdl << "  " << Cds << endl << endl;;
-		// cout << avar.ycoef << endl;
+	// cout << "Fractions: " << frac1 << "  " << frac2 << endl;
+	// cout << "Areas: " << Ai << "  " << Adrop << "  " << avar.aPlate << endl;
+	// cout << "Cds: " << Cdi << "  "  << Cdl << "  " << Cds << endl << endl;;
+	// cout << avar.ycoef << endl;
 
-		return 0.5*avar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai/mass;
+	return 0.5*avar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai/mass;
 
-	// }
 
-	return StateVecD::Zero();
 }
 
 StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff,
@@ -196,6 +195,7 @@ void ApplyAero(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells
 	// std::vector<StateVecD> Af(svar.totPts,StateVecD::Zero());
 	size_t const start = svar.bndPts;
 	size_t const end = svar.totPts; 
+	StateVecD Force = StateVecD::Zero();
 
 	#pragma omp parallel for shared(svar) /*reduction(+:res,Af)*/ 
 	for (size_t ii = start; ii < end; ++ii)
@@ -285,6 +285,7 @@ void ApplyAero(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells
 
 			Af[ii] += Fd;
 			res[ii] += Fd;
+			Force += Fd*pnp1[ii].m;
 			// }
 			// else 
 			// {
@@ -297,13 +298,9 @@ void ApplyAero(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells
 
 	}/*End of ii particles*/
 
-	StateVecD Force = StateVecD::Zero();
-	#pragma omp parallel for reduction(+:Force)
-	for (size_t ii = start; ii < end; ++ii)
-	{
-		Force += Af[ii]*pnp1[ii].m;
-	}
 	svar.AForce = Force;
+	
+	
 	
 
 }

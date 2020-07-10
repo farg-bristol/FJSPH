@@ -239,7 +239,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 	else if(svar.Bcase == 3)
 	{	/*Jet*/
 		#if SIMDIM == 3
-			real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
+			real holeD = svar.Jet(0)+8.1*svar.dx; /*Diameter of hole (or width)*/
 			real stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
@@ -258,11 +258,12 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 				}	
 			}
 		#else
-			real jetR = 0.5*(svar.Jet(0)+8*svar.dx); /*Radius of hole (or width)*/
+			real jetR = 0.5*(svar.Jet(0)+8.1*svar.dx); /*Radius of hole (or width)*/
 			real stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
-			for (real y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)			{
+			for (real y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)			
+			{
 				StateVecD xi(-jetR,y);
 				xi = svar.Rotate*xi;
 				xi += svar.Start;

@@ -143,13 +143,33 @@ void AddPoints(const real y, SIM &svar, const FLUID &fvar, const AERO &avar, Sta
 		}
 
 	#else 
+
+		StateVecD xi1(0,y);
+		xi1 = svar.Rotate*xi1;
+		xi1 += svar.Start;
+		StateVecD v1 = vavg*2;
+		pn.emplace_back(Particle(xi1,v1,rho,fvar.simM,press,START,pID));
+		pnp1.emplace_back(Particle(xi1,v1,rho,fvar.simM,press,START,pID));
+		++pID;
+		++svar.simPts;
+		++svar.nrefresh;
+
 		/*Create the simulation particles*/
-		for (real x = -jetR; x <= jetR; x+= svar.dx)
+		for (real x = svar.dx; x <= jetR; x+= svar.dx)
 		{ /*Do the centerline of points*/
 			StateVecD xi(x,y);
 			xi = svar.Rotate*xi;
 			xi += svar.Start;
 			StateVecD v = vavg*2*(1-(x*x)/(r*r));
+			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,START,pID));
+			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,START,pID));
+			++pID;
+			++svar.simPts;
+			++svar.nrefresh;
+
+			xi = StateVecD(-x,y);
+			xi = svar.Rotate*xi;
+			xi += svar.Start;
 			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,START,pID));
 			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,START,pID));
 			++pID;
@@ -267,7 +287,7 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 						++svar.simPts;
 						++svar.nrefresh;
 
-						xi = StateVecD(x,y,z);
+						xi = StateVecD(x,y,-z);
 						xi = svar.Rotate*xi;
 						xi += svar.Start;
 						pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));

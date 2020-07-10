@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
     real duration;
     real error = 0;
     cout.width(13);
-    cout << std::scientific << std::left << std::setprecision(2);
+    cout << std::scientific << std::left << std::setprecision(4);
 	
 	write_header();
     

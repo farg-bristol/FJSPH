@@ -51,7 +51,7 @@ using std::setw;
 
 /* Define data type. */
 #ifndef FOD
-#define FOD 1 /*0 = float, 1 = double*/
+#define FOD 0 /*0 = float, 1 = double*/
 #endif
 
 typedef unsigned int uint;
@@ -135,7 +135,8 @@ typedef struct SIM {
 	uint subits;                    /*Max number of sub-iterations*/
 	uint Nframe; 			        /*Max number of frames to output*/
 	uint frame;						/*Current frame number*/
-	real dt, t, framet;			    /*Timestep, Simulation + frame times*/
+	real dt, framet;			    /*Timestep, frame times*/
+	double t;                       /*Simulation time*/
 	real beta,gamma;				/*Newmark-Beta Parameters*/
 	real maxmu;                     /*Maximum viscosity component (CFL)*/
 	int Bcase, Bclosed, ghost;		/*What initial shape to take*/

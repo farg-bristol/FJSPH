@@ -298,20 +298,17 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   		fvar.mu = getDouble(fluid, lineno, "Fluid viscosity");
   		avar.mug = getDouble(fluid, lineno, "Air viscosity");
   		fvar.sig = getDouble(fluid, lineno, "Surface Tension");
+  		svar.outfolder = getString(fluid,lineno, "Output Folder name");
   		if(svar.Asource != 0)
   		{
+	  		svar.meshfile = getString(fluid, lineno, "Mesh input file");
+	  		svar.solfile = getString(fluid,lineno, "Mesh solution file");
+	  		svar.scale = getDouble(fluid,lineno, "Mesh scale");
 	  		avar.vRef = getDouble(fluid, lineno, "Gas ref Vel");
 	  		avar.pRef = getDouble(fluid, lineno, "Get ref Press");
 	  		avar.T = getDouble(fluid, lineno, "Gas ref Temp");
-
-	  		if(svar.Asource == 1 || svar.Asource == 2)
-	  		{
-		  		svar.meshfile = getString(fluid, lineno, "Mesh input file");
-		  		svar.solfile = getString(fluid,lineno, "Mesh solution file");
-		  		svar.scale = getDouble(fluid,lineno, "Mesh scale");
-	  		}
   		}
-  		svar.outfolder = getString(fluid,lineno, "Output Folder name");
+  		
 
 #ifdef DEBUG
 		dbout << "Closing fluid file"  << endl;
@@ -350,14 +347,31 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		if(svar.Bcase == 2 || svar.Bcase == 3)
 		{
 			// Defining dx to fit the pipe, then find rest spacing
-			svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
-			svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
+			if(svar.Jet(0)/svar.Pstep < 1.5)
+			{	/*spacing is too close to full size to use standard adjustment*/
+				cout << "Warning: particle spacing if of the same order of magintude of the jet diameter." << endl;
+				cout << "Consider a different size for accuracy." << endl;
+			}
+			else
+			{
+				svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
+				svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
+			}	
 	 	}
 	 	else
 	 	{
-	 		svar.nrad = ceil(abs(0.5*svar.Start(0)/svar.Pstep));
-	 		svar.dx = 0.5*(svar.Start(0))/real(svar.nrad);
+	 		if(svar.Jet(0)/svar.Pstep < 1.5)
+			{	/*spacing is too close to full size to use standard adjustment*/
+	 			svar.nrad = 1;
+	 			svar.dx = svar.Jet(0);
+			}
+			else
+			{
+		 		svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
+		 		svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
+	 		}
 	 	}
+
 
 	 	// svar.dx = svar.Pstep;	
 		svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/SIMDIM);
@@ -365,8 +379,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		// Correct the droplet to have the same volume as the original
 		if(svar.Bcase == 4)
 		{
-			int partCount = ParticleCount(svar);
-			cout << "Predicted particle count: " << partCount << endl;
+			// int partCount = ParticleCount(svar);
+			// cout << "Predicted particle count: " << partCount << endl;
 
 			
 // #if SIMDIM == 3
@@ -390,7 +404,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 			// real radius = svar.dx * real(svar.nrad);
 
 			// cout << "Old diameter: " << svar.Start(0) << "  New diameter: " << radius*2.0 << endl;
-			svar.diam = svar.Start(0);
+			cout << "Droplet Diameter: " << svar.Jet(0) << endl;
+			svar.diam = svar.Jet(0);
 			// svar.Start(0) = newstep*(2.0*real(svar.nrad)-1);
 
 			// cout << "New diameter: " <<  svar.Start(0) << endl;
@@ -529,12 +544,14 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 			}
 		#endif
 
-
-		GetYcoef(avar, fvar, fvar.H /*svar.Pstep*/);
+		
+		GetYcoef(avar, fvar, /*fvar.H*/ svar.Pstep);
 #if SIMDIM == 3
 		avar.aPlate = svar.Pstep*svar.Pstep;
+			// avar.aPlate = fvar.H*fvar.H;
 #else
 		avar.aPlate = svar.Pstep;
+			// avar.aPlate = fvar.H;
 #endif
 		// if(svar.restart!=1)
 		// 	Write_Input(svar,fvar,avar,angle);

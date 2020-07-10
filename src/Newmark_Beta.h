@@ -125,15 +125,39 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		air = vector<vector<Part>>(start,vector<Part>());
 		#pragma omp parallel shared(pnp1, outlist)
 		{
+			vector<real> wDiff(end,0.0);
+			#pragma omp for schedule(static) nowait
+			for(size_t ii = start; ii < end; ++ii)
+			{
+				real mj = 0.0;
+				StateVecD mRij = StateVecD::Zero();
+
+
+				for(size_t const& jj:outlist[ii])
+				{
+					/* Surface Tension calcs */
+					mRij+= (pnp1[ii].m*pnp1[jj].xi-pnp1[jj].m*pnp1[ii].xi);
+					mj+= pnp1[jj].m;
+				}
+
+				wDiff[ii] = mRij.norm()/(fvar.H*mj);
+			}
+
 			std::vector<std::vector<Part>> local;
 			#pragma omp for schedule(static) nowait
 			for (size_t ii = start; ii < end; ++ii)
 			{
 				std::vector<Part> temp;
-				if(pnp1[ii].b == FREE && outlist[ii].size() > 0.4*avar.nfull 
-					&& outlist[ii].size() < avar.nfull)
+				if(pnp1[ii].b == FREE && outlist[ii].size() > 0.4*avar.nfull)
 				{
-					temp = PoissonSample::generatePoissonPoints(svar,fvar,avar,ii,pnp1,outlist);
+#if  SIMDIM == 2
+					if(real(outlist[ii].size()) < 5.26*wDiff[ii]+30)
+#else
+					if(real(outlist[ii].size()) < 297.25*wDiff[ii]+34)
+#endif
+					{ 
+						temp = PoissonSample::generatePoissonPoints(svar,fvar,avar,ii,pnp1,outlist);
+					}
 				}
 				local.emplace_back(temp);
 			}
@@ -239,7 +263,7 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		// cout << "Start: " << start << "  End: " << end << endl;
 		Force = StateVecD::Zero();
 		svar.AForce = StateVecD::Zero();
- 		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,res,Rrho,Af/*,wDiff,norm,curve*/); /*Guess force at time n+1*/
+ 		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,res,Rrho,Af,Force/*,wDiff,norm,curve*/); /*Guess force at time n+1*/
 
 	
 		/*Previous State for error calc*/
@@ -638,73 +662,74 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		// cout << pn[0].cellV(0) << "  " << pn[0].cellV(1) << "  " << pn[0].cellV(2) << endl;
 		pertLog << svar.t << " " << tMom-(svar.tMom) << " " << aMomT-svar.aMom << " " << fMom << endl;
 	}
-	else if (svar.Bcase == 4)
+
+	if (svar.Bcase == 4)
 	{
-// 		// Calculate the force expected for a droplet of the same size.
-// 		svar.Force = Force;
+		// Calculate the force expected for a droplet of the same size.
+		svar.Force = Force;
 
-// #if SIMDIM == 3
-// 		real radius = svar.diam* std::cbrt(3.0/(4.0*M_PI));
-// #else
-// 		real radius = svar.diam / std::sqrt(M_PI);
-// #endif
-// 		// Average velocity of the particles
-// 		dropVel /= real(svar.totPts);
-// 		StateVecD Vdiff = avar.vInf - dropVel;
+#if SIMDIM == 3
+		real radius = svar.diam* std::cbrt(3.0/(4.0*M_PI));
+#else
+		real radius = svar.diam / std::sqrt(M_PI);
+#endif
+		// Average velocity of the particles
+		dropVel /= real(svar.totPts);
+		StateVecD Vdiff = avar.vInf - dropVel;
 
-// 		real Re = 2.0*avar.rhog*Vdiff.norm()*radius/avar.mug;
-// 		real Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
+		real Re = 2.0*avar.rhog*Vdiff.norm()*radius/avar.mug;
+		real Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
 
-// #if SIMDIM == 3
-// 		real Adrop = M_PI*radius*radius;
-// #else
-// 		real Adrop = radius;
-// #endif
+#if SIMDIM == 3
+		real Adrop = M_PI*radius*radius;
+#else
+		real Adrop = radius;
+#endif
 
-// 		// cout << Re << "  " << Cds << " " << Adrop << " " << Vdiff.norm() << "  " << svar.mass << endl;
+		// cout << Re << "  " << Cds << " " << Adrop << " " << Vdiff.norm() << "  " << svar.mass << endl;
 
-// 		// Undeformed drag
-// 		StateVecD dropForce = (0.5*avar.rhog*Vdiff.norm()*Vdiff*Cds*Adrop);
+		// Undeformed drag
+		StateVecD dropForce = (0.5*avar.rhog*Vdiff.norm()*Vdiff*Cds*Adrop);
 
-// 		// Calculate deformed drag
-// 		AERO bigdrop;
-// 		bigdrop.rhog = avar.rhog;
-// 		bigdrop.mug = avar.mug;
-// 		bigdrop.aPlate = radius*2;
-// 		bigdrop.nfull = avar.nfull;
+		// Calculate deformed drag
+		AERO bigdrop;
+		bigdrop.rhog = avar.rhog;
+		bigdrop.mug = avar.mug;
+		bigdrop.aPlate = radius*2;
+		bigdrop.nfull = avar.nfull;
 
-// 		// real temp = radius / std::cbrt(3.0/(4.0*M_PI));
-// 		GetYcoef(bigdrop,fvar,svar.diam);
+		// real temp = radius / std::cbrt(3.0/(4.0*M_PI));
+		GetYcoef(bigdrop,fvar,svar.diam);
 
-// 		real ymax = Vdiff.squaredNorm()*bigdrop.ycoef;
+		real ymax = Vdiff.squaredNorm()*bigdrop.ycoef;
 
-// 		Re = 2.0*avar.rhog*Vdiff.norm()*bigdrop.L/avar.mug;
-// 		Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
+		Re = 2.0*avar.rhog*Vdiff.norm()*bigdrop.L/avar.mug;
+		Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
 
-// 		// cout << bigdrop.ycoef << endl;
-// 		// cout << radius << "  "  << bigdrop.L << "  " << ymax << endl;
-// 		// cout << bigdrop.ycoef << endl;
+		// cout << bigdrop.ycoef << endl;
+		// cout << radius << "  "  << bigdrop.L << "  " << ymax << endl;
+		// cout << bigdrop.ycoef << endl;
 		
-// 		// if (ymax > 1.0)
-// 		// 	ymax = 1.0;
+		// if (ymax > 1.0)
+		// 	ymax = 1.0;
 
 
-// 		real const Cdl = Cds*(1+2.632*ymax);
+		real const Cdl = Cds*(1+2.632*ymax);
 
-// 		#if SIMDIM == 3 
-// 			Adrop = M_PI*pow((bigdrop.L + bigdrop.Cb*bigdrop.L*ymax),2);
+		#if SIMDIM == 3 
+			Adrop = M_PI*pow((bigdrop.L + bigdrop.Cb*bigdrop.L*ymax),2);
 
-// 		#endif
-// 		#if SIMDIM == 2
-// 			Adrop = 2*(bigdrop.L + bigdrop.Cb*bigdrop.L*ymax);
-// 		#endif
+		#endif
+		#if SIMDIM == 2
+			Adrop = 2*(bigdrop.L + bigdrop.Cb*bigdrop.L*ymax);
+		#endif
 
-// 		StateVecD dropDefForce =  0.5*avar.rhog*Vdiff.norm()*Vdiff*Cdl*Adrop;	
+		StateVecD dropDefForce =  0.5*avar.rhog*Vdiff.norm()*Vdiff*Cdl*Adrop;	
 
-// 		StateVecD test = GisslerForce(bigdrop, Vdiff, 1.0, 1.0, 0);
+		StateVecD test = GisslerForce(bigdrop, Vdiff, 1.0, 1.0, 0);
 
-// 		cout << "Time:  " << svar.t << "  " << dropForce.norm() << "  " << dropDefForce.norm() << "  " << test.norm() << "  " 
-// 			<< svar.Force.norm() << "  " << svar.Force(1) << endl;
+		cout << "Time:  " << svar.t << "  " << dropForce.norm() << "  " << dropDefForce.norm() << "  " << test.norm() << "  " 
+			<< svar.Force.norm() << "  " << svar.Force(1) << endl;
 	}
 
 	return log10(sqrt(errsum/(real(svar.totPts))))-logbase;
@@ -802,7 +827,9 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	// vector<StateVecD> norm(end,StateVecD::Zero());
 	// vector<real> curve(end,0.0);
 
-	Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,res,Rrho,Af/*,wDiff,norm,curve*/); /*Guess force at time n+1*/
+	StateVecD Force = StateVecD::Zero();
+
+	Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,res,Rrho,Af,Force/*,wDiff,norm,curve*/); /*Guess force at time n+1*/
 
 	/*Find maximum safe timestep*/
 	vector<StateVecD>::iterator maxfi = std::max_element(res.begin(),res.end(),
@@ -826,6 +853,9 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		// pnp1[ii].theta = wDiff[ii];
 		pnp1[ii].nNeigb = real(outlist[ii].size());
 		
+
+		// Force += res[ii];
+		// dropVel += pnp1[ii].v;
 
 
 // #if SIMDIM == 2
@@ -872,6 +902,83 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	
 		dbout << "Exiting first step. Error: " << error << endl;
 #endif
+
+	if (svar.Bcase == 4)
+	{
+		// Calculate the force expected for a droplet of the same size.
+		svar.Force = Force;
+
+#if SIMDIM == 3
+		real radius = 2*svar.diam* std::cbrt(3.0/(4.0*M_PI));
+#else
+		real radius = svar.diam / std::sqrt(M_PI);
+#endif
+		// Average velocity of the particles
+		
+		StateVecD Vdiff = avar.vInf;
+
+		real Re = 2.0*avar.rhog*Vdiff.norm()*radius/avar.mug;
+		// real Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
+
+		real Cds;
+		if( Re <= 1000.0)
+			Cds = (24.0/Re)*(1+(1.0/6.0)*pow(Re,2.0/3.0));
+		else 
+			Cds = 0.424;
+
+#if SIMDIM == 3
+		real Adrop = M_PI*radius*radius;
+#else
+		real Adrop = 2*radius;
+#endif
+
+		cout << Re << "  " << Cds << " " << Adrop << " " << Vdiff.norm() << "  " << svar.mass << endl;
+
+		// Undeformed drag
+		StateVecD dropForce = (0.5*avar.rhog*Vdiff.norm()*Vdiff*Cds*Adrop);
+
+		// Calculate deformed drag
+		AERO bigdrop;
+		bigdrop.rhog = avar.rhog;
+		bigdrop.mug = avar.mug;
+		bigdrop.aPlate = radius*2;
+		bigdrop.nfull = avar.nfull;
+
+		// real temp = radius / std::cbrt(3.0/(4.0*M_PI));
+		GetYcoef(bigdrop,fvar,radius);
+
+		real ymax = Vdiff.squaredNorm()*bigdrop.ycoef;
+		if (ymax > 1)
+			ymax = 1;
+
+		Re = 2.0*avar.rhog*Vdiff.norm()*bigdrop.L/avar.mug;
+		Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
+
+		// cout << bigdrop.ycoef << endl;
+		// cout << radius << "  "  << bigdrop.L << "  " << ymax << endl;
+		// cout << bigdrop.ycoef << endl;
+		
+		// if (ymax > 1.0)
+		// 	ymax = 1.0;
+
+
+		real const Cdl = Cds*(1+2.632*ymax);
+
+		#if SIMDIM == 3 
+			Adrop = M_PI*pow((bigdrop.L + bigdrop.Cb*bigdrop.L*ymax),2);
+
+		#endif
+		#if SIMDIM == 2
+			Adrop = 2*(bigdrop.L + bigdrop.Cb*bigdrop.L*ymax);
+		#endif
+
+		StateVecD dropDefForce =  0.5*avar.rhog*Vdiff.norm()*Vdiff*Cdl*Adrop;	
+
+		// StateVecD test = GisslerForce(bigdrop, Vdiff, 1.0, 1.0, 0);
+
+		cout << endl << "Time:  " << svar.t << "  Theoretical Force: " << dropForce.norm() << "  Theoretical deformed force: "
+		 << dropDefForce.norm() << endl  << "Calculated Force: " << Force.norm() << " Calculated Force: " << svar.AForce.norm() << endl  << endl;
+	}
 }
 
 #endif
