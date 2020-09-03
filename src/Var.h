@@ -51,7 +51,7 @@ using std::setw;
 
 /* Define data type. */
 #ifndef FOD
-#define FOD 0 /*0 = float, 1 = double*/
+#define FOD 1 /*0 = float, 1 = double*/
 #endif
 
 typedef unsigned int uint;
@@ -74,11 +74,11 @@ typedef float real;
 /****** Eigen vector definitions ************/
 typedef Eigen::Matrix<real,SIMDIM,1> StateVecD;
 typedef Eigen::Matrix<int,SIMDIM,1> StateVecI;
-typedef Eigen::Matrix<real,SIMDIM,SIMDIM> RotMat;
+typedef Eigen::Matrix<real,SIMDIM,SIMDIM> StateMatD;
 
 /*Vector definitions for Density reinitialisation*/
-typedef Eigen::Matrix<real, SIMDIM+1,1> DensVecD;
-typedef Eigen::Matrix<real, SIMDIM+1, SIMDIM+1> DensMatD;
+typedef Eigen::Matrix<real, SIMDIM+1,1> StateP1VecD;
+typedef Eigen::Matrix<real, SIMDIM+1, SIMDIM+1> StateP1MatD;
 
 #if SIMDIM == 3
 	#include "VLM.h"
@@ -129,8 +129,8 @@ typedef struct SIM {
 	uint nfull;						/*Full neighbour list amount*/
 	StateVecD Box;					/*Box dimensions*/
 	StateVecD Start; 				/*Sim box bottom left coordinate*/
-	RotMat Rotate;				    /*Starting rotation matrix*/ 
-	RotMat Transp;                  /*Transpose of rotation matrix*/
+	StateMatD Rotate;				    /*Starting rotation matrix*/ 
+	StateMatD Transp;                  /*Transpose of rotation matrix*/
 	Eigen::Vector2d Jet;			/*Jet properties*/
 	uint subits;                    /*Max number of sub-iterations*/
 	uint Nframe; 			        /*Max number of frames to output*/
@@ -187,6 +187,11 @@ typedef struct FLUID {
 	real contangb;				/*Boundary contact angle*/
 	real resVel;				/*Reservoir velocity*/
 	//real front, height, height0;		/*Dam Break validation parameters*/
+
+	/*delta SPH terms*/
+	real delta; /*delta-SPH contribution*/
+	real dCont; /*delta-SPH continuity constant term, since density and speed of sound are constant*/
+	real dMom;  /*delta-SPH momentum constant term (dCont * rho0)*/
 }FLUID;
 
 /*Aerodynamic Properties*/
@@ -213,7 +218,7 @@ typedef class AERO
 		real aPlate;                    /*Area of a plate*/
 
 					/* Gas Properties*/
-		real qRef, vRef, pRef;      /*Reference gas values*/
+		real qInf, vRef, pRef;      /*Reference gas values*/
 		real rhog, mug;
 		real gasM;					/*A gas particle mass*/
 		real T;						/*Temperature*/

@@ -521,7 +521,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		for (auto p: pn)
 			pnp1.emplace_back(p);
 
-		CreateDroplet(svar,fvar,pn,pnp1);
+		CreateRDroplet(svar,fvar,pn,pnp1);
 	}
 	else if (svar.Bcase == 5)
 	{	/*Piston driven flow*/
@@ -606,7 +606,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		// svar.simPts++;
 
 
-		CreateDroplet(svar,fvar,pn,pnp1);
+		CreateRDroplet(svar,fvar,pn,pnp1);
 		// Perturb so that the points are at numerical zero. 
 		real pturb = 1e-1;
 		for (auto& pi:pnp1)
@@ -640,7 +640,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 	}
 	else
 	{	
-		press =fvar.pPress;
+		press = fvar.pPress;
 		rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
 		#if SIMDIM == 3
 			/*Create the simulation pn*/

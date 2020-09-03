@@ -256,7 +256,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	  			avar.b = getDouble(in, lineno, "b");
 	  			avar.h2 = getDouble(in, lineno, "h2");
 	  		}
-	  		if(avar.acase > 5)
+	  		if(avar.acase > 6)
 	  		{
 	  			cout << "Aerodynamic case is not in design. Stopping..." << endl;
 	  			exit(-1);
@@ -317,7 +317,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 
   		if(svar.Asource == 3)
   		{
-  			avar.vRef=avar.vInf(1);
+  			avar.vRef=avar.vInf.norm();
   		}
 	}
 	else 
@@ -343,8 +343,11 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		real rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
 
 		svar.nrad = 1;
-
-		if(svar.Bcase == 2 || svar.Bcase == 3)
+		if(svar.Bcase == 0 || svar.Bcase == 1)
+		{
+			svar.dx = svar.Pstep;
+		}
+		else if(svar.Bcase == 2 || svar.Bcase == 3)
 		{
 			// Defining dx to fit the pipe, then find rest spacing
 			if(svar.Jet(0)/svar.Pstep < 1.5)
@@ -357,6 +360,19 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 				svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
 				svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
 			}	
+	 	}
+	 	else if (svar.Bcase == 4)
+	 	{
+	 		if(svar.Jet(0)/svar.Pstep < 1.5)
+			{	/*spacing is too close to full size to use standard adjustment*/
+	 			svar.nrad = 1;
+	 			svar.dx = svar.Jet(0);
+			}
+			else
+			{
+		 		svar.nrad = ceil(abs(svar.Jet(0)*M_PI/svar.Pstep));
+		 		svar.dx = svar.Jet(0)*M_PI/real(svar.nrad);
+	 		}
 	 	}
 	 	else
 	 	{
@@ -430,7 +446,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		fvar.simM = fvar.rho0*pow(svar.Pstep,SIMDIM); 
 		fvar.bndM = fvar.simM;
 		avar.gasM = avar.rhog*pow(svar.Pstep,SIMDIM);
-		avar.qRef = 0.5*avar.rhog*avar.vRef;
+		avar.qInf = 0.5*avar.rhog*avar.vRef*avar.vRef;
 
 		svar.addcount = 0;
 	  	svar.dt = 2E-010; 			/*Initial timestep*/
@@ -444,6 +460,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	  	svar.delNum = 0;
 	  	svar.intNum = 0;
 
+	  	fvar.dCont = fvar.delta * fvar.H * fvar.Cs;
+	  	fvar.dMom = fvar.dCont * fvar.rho0;
 
 #if SIMDIM == 2
 				fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
@@ -517,7 +535,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 			cout << "Reference velocity: " << avar.vRef << endl;
 			cout << "Reference pressure: " << avar.pRef << endl;
 			cout << "Reference temperature: " << avar.T << endl;
-			cout << "Gas dynamic pressure: " << avar.qRef << endl << endl;
+			cout << "Gas dynamic pressure: " << avar.qInf << endl << endl;
 		}
 		cout << "Gas density: " << avar.rhog << endl;
 		cout << "Gas viscosity: " << avar.mug << endl << endl;
@@ -550,7 +568,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		avar.aPlate = svar.Pstep*svar.Pstep;
 			// avar.aPlate = fvar.H*fvar.H;
 #else
-		avar.aPlate = svar.Pstep;
+		avar.aPlate = svar.Pstep/**svar.Pstep*/ /** pow(avar.L,0.5)*/;
 			// avar.aPlate = fvar.H;
 #endif
 		// if(svar.restart!=1)

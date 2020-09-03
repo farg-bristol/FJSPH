@@ -25,7 +25,7 @@ void Write_Containment(vector<size_t> const& ret_indexes, MESH const& cells, Sta
 
     
     uint intersects = 0;
-    DensMatD vol1, vol2;
+    StateP1MatD vol1, vol2;
     for (auto const& findex:cell)
     {
         cout << "Face: " << findex << " left: " << cells.leftright[findex].first << " right: "
@@ -76,7 +76,7 @@ void Write_Containment(vector<size_t> const& ret_indexes, MESH const& cells, Sta
             vtx1 = verts[face[0]];
 
             /*Find initial volume size*/
-            DensMatD vol;
+            StateP1MatD vol;
             vol.row(0) << testp(0), testp(1), testp(2), 1.0;
             vol.row(1) << vtx0(0), vtx0(1), vtx0(2), 1.0;
             vol.row(2) << vtx1(0), vtx1(1), vtx1(2), 1.0;
@@ -87,7 +87,7 @@ void Write_Containment(vector<size_t> const& ret_indexes, MESH const& cells, Sta
             if(LessThanREError(vol))
             {
                 cout << "Volume needs perturbing" << endl;
-                DensMatD pert = vol;
+                StateP1MatD pert = vol;
 
                 pert.row(0) << testp(0)+PERTURB(0,1),testp(1)+PERTURB(0,2),testp(2)+PERTURB(0,3),1.0;
 
@@ -110,7 +110,7 @@ void Write_Containment(vector<size_t> const& ret_indexes, MESH const& cells, Sta
                 if(LessThanREError(vol))
                 {
                     cout << "Volume needs perturbing" << endl;
-                    DensMatD pert = vol;
+                    StateP1MatD pert = vol;
 
                     pert.row(0) << testp(0)+PERTURB(0,1),testp(1)+PERTURB(0,2),testp(2)+PERTURB(0,3),1.0;
 

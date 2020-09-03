@@ -353,8 +353,8 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 		#pragma omp parallel for
 		for(uint ii = start; ii < end; ++ii)
 		{
-			vx[ii-start] = pnp1[ii].v(0);
-			vy[ii-start] = pnp1[ii].v(1);
+			vx[ii-start] = pnp1[ii].bNorm(0);
+			vy[ii-start] = pnp1[ii].bNorm(1);
 			ax[ii-start] = pnp1[ii].f(0);
 			ay[ii-start] = pnp1[ii].f(1);
 			
@@ -435,7 +435,7 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 		  		v[ii-start] = pnp1[ii].v.norm();
 		  		a[ii-start] = pnp1[ii].f.norm();
 		  		nNb[ii-start] = pnp1[ii].theta;
-		  		aF[ii-start] = pnp1[ii].vPert.norm();
+		  		aF[ii-start] = pnp1[ii].surf;
 	  		}
 
 	  		INTEGER4 IsFloat = 0;

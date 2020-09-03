@@ -188,7 +188,7 @@ vector<real> CpToPressure(vector<real> const& Cp, AERO const& avar)
 	#pragma omp parallel for shared(Cp)
 	for (uint ii = 0; ii < Cp.size(); ++ii)
 	{
-		press[ii] = Cp[ii]*avar.qRef /*+ fvar.gasPress*/;
+		press[ii] = Cp[ii]*avar.qInf /*+ fvar.gasPress*/;
 	}
 	return press;
 }

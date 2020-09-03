@@ -479,6 +479,64 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 	svar.totPts += svar.nrefresh;
 }
 
+void CreateRDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
+{
+	uint pID = svar.totPts;
+	StateVecD v = StateVecD::Zero();
+	real rho = fvar.simM/pow(svar.dx,SIMDIM);
+	// real rho = fvar.rho0;
+	real press = fvar.pPress;
+	// real press = 0.0;
+	svar.nrefresh = 0;	
+	real radius = 0.5*svar.Jet(0);
+
+
+
+#if SIMDIM == 3
+
+#else 
+	/*Create particles in a circle*/
+	int ii = 0;
+	for(real rad = radius; rad > 0.1*svar.dx; rad-= sqrt(3)*svar.dx/2)
+	{
+		real dtheta = atan(svar.dx/rad);
+		real nrad = floor(abs(2*M_PI/dtheta));
+		dtheta = 2.0*M_PI/(nrad);
+		
+
+		real tstart = 0.0;
+		if(ii % 2 == 0)
+		{
+			tstart += dtheta/2;
+		}
+
+		for(real theta = tstart; theta < 2*M_PI-0.2*dtheta; theta += dtheta)
+		{
+			real x = rad*sin(theta);
+			real y = rad*cos(theta);
+			StateVecD xi(x,y);
+
+			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+			++pID;
+			++svar.simPts;
+			++svar.nrefresh;
+		}
+		++ii;
+
+	}
+
+	StateVecD xi = StateVecD::Zero();
+	pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+	pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,FREE,pID));
+	++pID;
+	++svar.simPts;
+	++svar.nrefresh;
+
+#endif
+
+}
+
 
 namespace PoissonSample
 {

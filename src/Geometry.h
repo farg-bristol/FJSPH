@@ -10,11 +10,11 @@
 #define X 0
 #define Y 1
 
-RotMat GetRotationMat(StateVecD& angles)
+StateMatD GetRotationMat(StateVecD& angles)
 {
     if (SIMDIM == 3)
     {
-        RotMat rotx, roty, rotz;
+        StateMatD rotx, roty, rotz;
         rotx << 1.0, 0.0            , 0.0           ,
                 0.0, cos(angles(0)) , sin(angles(0)),
                 0.0, -sin(angles(0)), cos(angles(0));
@@ -31,14 +31,14 @@ RotMat GetRotationMat(StateVecD& angles)
     }
     else if (SIMDIM == 2)
     {
-        RotMat rot;
+        StateMatD rot;
         rot << cos(angles(0)), -sin(angles(0)),
                sin(angles(0)),  cos(angles(0));
 
         return rot;
     }
 
-    return RotMat::Zero();
+    return StateMatD::Zero();
 
 }
 
@@ -66,7 +66,7 @@ std::pair<StateVecD,StateVecD> Find_MinMax(SIM& svar, const State& pnp1)
 
 
 /*Crossing test for 3 dimensions.*/
-int LessThanREError(DensMatD const& A)
+int LessThanREError(StateP1MatD const& A)
 {
     real a1, a2, a3;
 
@@ -189,7 +189,7 @@ int Crossings3D(vector<StateVecD> const& verts, vector<size_t> const& face,
     /*https://www.nas.nasa.gov/publications/software/docs/cart3d/pages/bool_intersection.html*/
     StateVecD const testp = point; 
     StateVecD const rayp = point2;
-    DensMatD vol1;
+    StateP1MatD vol1;
     int flag1, flag2;
     vol1 << testp(0)         , testp(1)         , testp(2)         , 1.0,
             verts[face[0]](0), verts[face[0]](1), verts[face[0]](2), 1.0,
@@ -219,7 +219,7 @@ int Crossings3D(vector<StateVecD> const& verts, vector<size_t> const& face,
     /*Now check if the line drawn by the two points intersects inside the bounds of the triangle plane*/
     if(flag1 != flag2)
     {   
-        DensMatD vol;     
+        StateP1MatD vol;     
         int flag3, flag4;
 
         StateVecD vtx0, vtx1;
@@ -278,7 +278,7 @@ real Cell_Volume( vector<StateVecD> const& verts, vector<vector<size_t>> const& 
 	if(elems.size() == 4)
 	{
 		// Cell is a tetrahedron. Volume is trivial
-		DensMatD vol;
+		StateP1MatD vol;
 
 		vol << verts[elems[0]](0), verts[elems[0]](1), verts[elems[0]](2), 1.0,
 	           verts[elems[1]](0), verts[elems[1]](1), verts[elems[1]](2), 1.0,
@@ -294,7 +294,7 @@ real Cell_Volume( vector<StateVecD> const& verts, vector<vector<size_t>> const& 
 	
 	for(auto const& faceID:cell)
 	{
-		DensMatD vol;
+		StateP1MatD vol;
 
 		const vector<size_t> face = faces[faceID];
 
@@ -311,7 +311,7 @@ real Cell_Volume( vector<StateVecD> const& verts, vector<vector<size_t>> const& 
 
     if(elems.size() == 3)
     {
-        DensMatD vol;
+        StateP1MatD vol;
 
         vol << verts[elems[0]](0), verts[elems[0]](1), 1.0,
                verts[elems[1]](0), verts[elems[1]](1), 1.0,
@@ -324,7 +324,7 @@ real Cell_Volume( vector<StateVecD> const& verts, vector<vector<size_t>> const& 
     real sum = 0.0;
     for(auto const& faceID:cell)
     {
-        DensMatD vol;
+        StateP1MatD vol;
         
         vector<size_t> const& face = faces[faceID];
 

@@ -748,19 +748,6 @@ void GetYcoef(AERO& avar, const FLUID& fvar, const real rad)
 		1/(avar.omega*avar.td)*sin(avar.omega*avar.tmax));
 	avar.ycoef = 0.5*avar.Cdef*(avar.Cf/(avar.Ck*avar.Cb))*(avar.rhog*avar.L)/fvar.sig;
 
-	// avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
-	
-	// avar.td = (2.0*fvar.rho0*pow(avar.L,2))/(avar.Cd*fvar.mu);
-
-	// avar.omega = sqrt((avar.Ck*fvar.sig)/(fvar.rho0*pow(avar.L,3))-1.0/pow(avar.td,2.0));
-
-	// avar.tmax = -2.0 *(atan(sqrt(pow(avar.td*avar.omega,2.0)+1)
-	// 				+avar.td*avar.omega) - M_PI)/avar.omega;
-
-	// avar.Cdef = 1.0 - exp(-avar.tmax/avar.td)*(cos(avar.omega*avar.tmax)+
-	// 	1/(avar.omega*avar.td)*sin(avar.omega*avar.tmax));
-	// avar.ycoef = 0.5*avar.Cdef*(avar.Cf/(avar.Ck*avar.Cb))*(fvar.rhog*avar.L)/fvar.sig;
-
 	//cout << avar.ycoef << "  " << avar.Cdef << "  " << avar.tmax << "  " << endl;
 }
 

@@ -67,11 +67,11 @@ StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff,
 		// real const Adrop = M_PI*pow(avar.L,2);
 	#endif
 	#if SIMDIM == 2
-		real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax);
+		real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax) * pow(avar.L,1);
 		// real const Adrop = 2*avar.L;
 	#endif
 
-	real const Aunocc = frac1*Adrop + frac2*avar.aPlate;
+	real const Aunocc = (frac1*Adrop + frac2*avar.aPlate);
 
 	real const Ai = (1-woccl)/*correc*/*Aunocc;
 
@@ -120,10 +120,10 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 		}
 		
 	}
-	else if(avar.acase == 3)	/*Case 2, plus a correction based on number of neighbours*/
+	else if(avar.acase == 3)
 	{
 
-			real ymax = Vdiff.squaredNorm()*avar.ycoef;
+			// real ymax = Vdiff.squaredNorm()*avar.ycoef;
 
 			// Fd = AeroForce(Vdiff, avar, pi.m);
 			// real correc = 1.0;
@@ -149,10 +149,12 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 
 
 #if SIMDIM == 3 
-			real const Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
+			// real const Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
+			real const Adrop = M_PI*pow(avar.L,2);
 #endif
 #if SIMDIM == 2
-			real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax);
+			// real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax);
+			real const Adrop = 2*avar.L;
 #endif
 
 			real const Aunocc = frac1*Adrop + frac2*avar.aPlate;
