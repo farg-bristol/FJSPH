@@ -50,6 +50,8 @@ para
 
 # Folders
 Outputs/*
+src/Eigen/*
+src/NanoFLANN/*
 
 
 # Output files
