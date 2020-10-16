@@ -293,20 +293,22 @@ vector<StateVecD> Get_Coordinates(NcFile& fin)
 #ifdef DEBUG
 	dbout << "Checking which dimension to ignore" << endl;
 #endif
+	double tolerance = 1e-6;
+
 	uint counts[3] = {0};
 	for(uint ii = 0; ii < nPts; ++ii)
 	{
-		if(coordX[ii] == 0 || coordX[ii] == -1 || coordX[ii] == 1)
+		if(abs(coordX[ii]) < tolerance || (abs(coordX[ii]) < 1+tolerance && abs(coordX[ii]) > 1-tolerance))
 		{
 			counts[0]++;
 		}
 
-		if(coordY[ii] == 0 || coordY[ii] == -1 || coordY[ii] == 1)
+		if(abs(coordY[ii]) < tolerance || (abs(coordY[ii]) < 1+tolerance && abs(coordY[ii]) > 1-tolerance))
 		{
 			counts[1]++;
 		}
 
-		if(coordZ[ii] == 0 || coordZ[ii] == -1 || coordZ[ii] == 1)
+		if(abs(coordZ[ii]) < tolerance || (abs(coordZ[ii]) < 1+tolerance && abs(coordZ[ii]) > 1-tolerance))
 		{
 			counts[2]++;
 		}
@@ -319,7 +321,10 @@ vector<StateVecD> Get_Coordinates(NcFile& fin)
 	else if (counts[2] == nPts)
 		ignore = 3;
 	else
+	{
 		cout << "Couldn't determine which dimension is false." << endl;
+		exit(-1);
+	}
 
 #ifdef DEBUG
 	dbout << "Ignored dimension: " << ignore << endl;

@@ -9,8 +9,8 @@
 ///**************** Update neighbour list **************
 void FindNeighbours(const Sim_Tree& NP1_INDEX, const FLUID& fvar, const State& pnp1, outl& outlist)
 {
-	const static nanoflann::SearchParams params(0,0,false);
-	const static real search_radius = fvar.sr;
+	const nanoflann::SearchParams params(0,0,false);
+	const real search_radius = fvar.sr;
 	outlist.clear();
 	outlist.reserve(pnp1.size());
 	

@@ -3,15 +3,15 @@
 0.3                  #Aritificial Viscosity factor
 150.0                #Boundary contact angle
 997                  #Rho_jet
-1.18               #Rho_gas
-1000                  #Speed of Sound C_s
-0.000894              #Liquid dynamic viscosity
-0.0000185           #Gas dynamic viscosity
-0.0708               #Surface tension (not on)
-128.5                #Reference gas airspeed
-98800                #Reference gas pressure
-298                  #Reference gas temperature
+1.18                 #Rho_gas
+300                  #Speed of Sound C_s
+0.000894             #Liquid dynamic viscosity
+0.0000185            #Gas dynamic viscosity
+0.0708               #Surface tension
+Solution2            #Output folder name
 mesh.faces           #Input Mesh File
 sol                  #Input Solution File
 1                    #Input mesh scale
-Solution2             #Output folder name
+128.5                #Reference gas airspeed
+98800                #Reference gas pressure
+298                  #Reference gas temperature

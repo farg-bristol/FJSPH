@@ -239,8 +239,8 @@ void Write_Containment(vector<size_t> const& ret_indexes, MESH const& cells, Sta
     real  ty, tx;
     StateVecD vtx0, vtx1;
 
-    tx = testp[X];
-    ty = testp[Y];
+    tx = testp[0];
+    ty = testp[1];
 
     inside_flag = 0;
 
@@ -250,8 +250,8 @@ void Write_Containment(vector<size_t> const& ret_indexes, MESH const& cells, Sta
         vtx0 = verts[edge[0]];
         vtx1 = verts[edge[1]];
         /* Move to the next pair of vertices, retaining info as possible. */
-        yflag0 = ( vtx0[Y] >= ty );
-        yflag1 = ( vtx1[Y] >= ty );
+        yflag0 = ( vtx0[1] >= ty );
+        yflag1 = ( vtx1[1] >= ty );
 
         cout << "Left vertex: " << vtx0(0) << "  " << vtx0(1) << endl;
         cout << "Right vertex: " << vtx1(0) << "  " << vtx1(1) << endl;
@@ -259,11 +259,11 @@ void Write_Containment(vector<size_t> const& ret_indexes, MESH const& cells, Sta
         cout << "yflag0:  " << yflag0 << "  yflag1: " << yflag1 << endl;
         if ( yflag0 != yflag1 ) 
         {
-            cout << "Left side: " << (vtx1[Y]-ty) * (vtx1[X]-vtx0[X]) << "  Right side: "
-            << (vtx1[X]-tx) * (vtx1[Y]-vtx0[Y]) << endl;
+            cout << "Left side: " << (vtx1[1]-ty) * (vtx1[0]-vtx0[0]) << "  Right side: "
+            << (vtx1[0]-tx) * (vtx1[1]-vtx0[1]) << endl;
 
-            if ( ((vtx1[Y]-ty) * (vtx1[X]-vtx0[X]) >=
-              (vtx1[X]-tx) * (vtx1[Y]-vtx0[Y])) == yflag1 )
+            if ( ((vtx1[1]-ty) * (vtx1[0]-vtx0[0]) >=
+              (vtx1[0]-tx) * (vtx1[1]-vtx0[1])) == yflag1 )
             {
                 cout << "Crosses face!" << endl;
                 inside_flag = !inside_flag;
@@ -601,7 +601,7 @@ void FindCell(SIM& svar, real const sr, KDTREE& TREE, MESH& cells, State& pnp1, 
     #pragma omp for schedule(static) nowait 
     for (size_t ii = start; ii < end; ++ii)
     {
-        if (pnp1[ii].b == FREE)
+        if (pnp1[ii].b == PartState.FREE_)
         {   
             StateVecD testp = pnp1[ii].xi;  
             uint inside_flag = 0;

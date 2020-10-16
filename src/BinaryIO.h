@@ -21,6 +21,15 @@ enum fileType_e { FULL = 0, GRID = 1, SOLUTION = 2 };
 /*************************************************************************/
 /**************************** BINARY INPUTS ******************************/
 /*************************************************************************/
+int Read_Real_Value(void* const& inputHandle, int32_t const& frame, int32_t const& varCount, 
+					int64_t const& iMax, vector<real>& var)
+{
+#if FOD == 1
+	return tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &var[0]);
+#else
+	return tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &var[0]);
+#endif
+}
 
 vector<StateVecD> Read_Binary_Vector(void* inputHandle, INTEGER4& frame, 
 		INTEGER4& varCount, INTEGER8& iMax)
@@ -28,31 +37,19 @@ vector<StateVecD> Read_Binary_Vector(void* inputHandle, INTEGER4& frame,
 	INTEGER4 I;
 	vector<real> xVar(iMax);
 	vector<real> yVar(iMax);
-#if FOD == 1
+
     // cout << "Trying to get vector x-component. Var: " << varCount << endl;
-	I = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &xVar[0]);
+	I = Read_Real_Value(inputHandle, frame, varCount, iMax, xVar);
 	++varCount;
     // cout << "Trying to get vector y-component. Var: " << varCount << endl;
-	I = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &yVar[0]);
+	I = Read_Real_Value(inputHandle, frame, varCount, iMax, yVar);
 	++varCount;
 
 #if SIMDIM == 3
 	vector<real> zVar(iMax);
 	// cout << "Trying to get vector z-component. Var: " << varCount << endl;
-	I = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &zVar[0]);
+	I = Read_Real_Value(inputHandle, frame, varCount, iMax, zVar);
 	++varCount;
-#endif
-#else
-	I = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &xVar[0]);
-	++varCount;
-	I = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &yVar[0]);
-	++varCount;
-
-#if SIMDIM == 3
-	vector<real> zVar(iMax);
-	I = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &zVar[0]);
-	++varCount;
-#endif
 #endif
 
 	vector<StateVecD> vec(iMax);
@@ -76,6 +73,7 @@ vector<StateVecD> Read_Binary_Vector(void* inputHandle, INTEGER4& frame,
 
 	return vec;
 }
+
 
 void Read_Binary_Timestep(void* inputHandle, SIM& svar, INTEGER4 frame, State& pn)
 {
@@ -103,109 +101,70 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, INTEGER4 frame, State& p
 	vector<real> m(iMax);
 	vector<StateVecD> vel(iMax);
 	vector<StateVecD> acc(iMax);
-	vector<real> b(iMax);
+	vector<uint8_t> b(iMax);
 	vector<StateVecD> cellV;
 	vector<real> cellP;
-	vector<real> cellRho;
-	vector<real> cellID;
+	// vector<real> cellRho;
+	vector<int32_t> cellID;
 	INTEGER4 varCount = 1;
 
-#if FOD == 1
+
 	xi = Read_Binary_Vector(inputHandle, frame, varCount, iMax);
 
 	/*Get density and mass*/
 	// cout << "Trying to get variable: " << varCount << endl;
-	I = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &rho[0]);
+	I = Read_Real_Value(inputHandle, frame, varCount, iMax, rho);
 	++varCount;
 	// cout << "Trying to get variable: " << varCount << endl;
-	I = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &Rrho[0]);
+	I = Read_Real_Value(inputHandle, frame, varCount, iMax, Rrho);
 	++varCount;  
 	// cout << "Trying to get variable: " << varCount << endl;
-	I = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &m[0]);
+	I = Read_Real_Value(inputHandle, frame, varCount, iMax, m);
 	++varCount;  
 
 	vel = Read_Binary_Vector(inputHandle, frame, varCount, iMax); 
 
 	acc = Read_Binary_Vector(inputHandle, frame, varCount, iMax);
 
-	I = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &b[0]);
+	I = tecZoneVarGetUInt8Values(inputHandle, frame, varCount, 1, iMax, &b[0]);
 	++varCount; 
 
 	if(svar.outform == 3)
 	{	/*Get the cell information for the points*/
-		
-		cellV = Read_Binary_Vector(inputHandle, frame, varCount, iMax);
-		cellRho = vector<real>(iMax);
+		cellV = vector<StateVecD>(iMax);
 		cellP = vector<real>(iMax);
-		cellID = vector<real>(iMax);
-		/*Get density and pressure*/
+		cellID = vector<int32_t>(iMax);
+
+		cellV = Read_Binary_Vector(inputHandle, frame, varCount, iMax);
+		
+		/*Get pressure*/
 		// cout << "Trying to get variable: " << varCount << endl;
-		I = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &cellRho[0]);
+		I = Read_Real_Value(inputHandle, frame, varCount, iMax, cellP);
 		++varCount;
 		// cout << "Trying to get variable: " << varCount << endl;
-		I = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &cellP[0]);
-		++varCount;
-		// cout << "Trying to get variable: " << varCount << endl;
-		I = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &cellID[0]);
+		I = tecZoneVarGetInt32Values(inputHandle, frame, varCount, 1, iMax, &cellID[0]);
 		++varCount;
 	}
 	else if (svar.outform == 5)
 	{
 		// cout << "Trying to get variable: " << varCount << endl;
-		cellID = vector<real>(iMax);
-		I = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &cellID[0]);
+		cellID = vector<int32_t>(iMax);
+		I = tecZoneVarGetInt32Values(inputHandle, frame, varCount, 1, iMax, &cellID[0]);
 		++varCount;
 	}
 	
-#else
-	
-	xi = Read_Binary_Vector(inputHandle, frame, varCount, iMax);
-
-	/*Get density and mass*/
-	I = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &rho[0]);
-	++varCount;
-	I = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &Rrho[0]);
-	++varCount;
-	I = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &m[0]);
-	++varCount;  
-
-	vel = Read_Binary_Vector(inputHandle, frame, varCount, iMax); 
-
-	acc = Read_Binary_Vector(inputHandle, frame, varCount, iMax);
-
-	if(svar.outform == 3)
-	{	/*Get the cell information for the points*/
-		
-		cellV = Read_Binary_Vector(inputHandle, frame, varCount, iMax);
-		cellRho = vector<real>(iMax);
-		cellP = vector<real>(iMax);
-		/*Get density and pressure*/
-		I = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &cellRho[0]);
-		++varCount;
-		I = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &cellP[0]);
-		++varCount;
-		I = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &cellID[0]);
-		++varCount;
-	}
-	else if (svar.outform == 5)
-	{
-		I = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &cellID[0]);
-		++varCount;
-	}
-#endif
-
 	pn = vector<Particle>(iMax);
 	/*Now put it into the state vector*/
 	for(size_t ii= 0; ii < static_cast<size_t>(iMax); ++ii)
 	{
 		pn[ii].xi = xi[ii];
+		pn[ii].rho = rho[ii];
+		pn[ii].Rrho = Rrho[ii];
+		pn[ii].m = m[ii];
 		pn[ii].v = vel[ii];
 		pn[ii].f = acc[ii];
-		pn[ii].xi = xi[ii];
-		pn[ii].Rrho = Rrho[ii];
-		pn[ii].rho = rho[ii];
-		pn[ii].m = m[ii];
-		pn[ii].b = static_cast<uint>(b[ii]);
+		pn[ii].b = static_cast<uint>(std::round(b[ii]));
+
 		if(svar.outform == 5 || svar.outform == 3)
 		{
 			pn[ii].cellID = static_cast<size_t>(cellID[ii]);
@@ -215,82 +174,51 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, INTEGER4 frame, State& p
 				pn[ii].cellP = cellP[ii];
 			}
 		}		
-	}
-    
+	} 
 }
 
 
 /*************************************************************************/
 /*************************** BINARY OUTPUTS ******************************/
 /*************************************************************************/
-
-void Write_Binary_Timestep(const SIM& svar, const State& pnp1, 
-	uint const start, uint const end, char const* group, INTEGER4 const StrandID)
+int Write_Real_Value(void* const& fileHandle, int32_t& outputZone, int32_t const& var, int64_t const& size,
+						vector<real>& varVec)
 {
-	if(StrandID == 0)
-	{
-		INTEGER4 File = 2;
-		TECFIL142(&File);
-	}
-	else
-		TECFIL142(&StrandID);
-
-	uint const size = end - start;
-
-	#ifdef DEBUG
-		
-	#endif
-
-	INTEGER4 const IMax = size;
-	INTEGER4 const JMax = 1;
-	INTEGER4 const KMax = 1;
-	INTEGER4 const ICellMax                 = 0;
-	INTEGER4 const JCellMax                 = 0;
-	INTEGER4 const KCellMax                 = 0;
-#if FOD == 0
-	INTEGER4 const DIsDouble                = 0;
+#if FOD == 1
+	return tecZoneVarWriteDoubleValues(fileHandle, outputZone, var, 0, size, &varVec[0]);
 #else
-	INTEGER4 const DIsDouble                = 1;
-#endif
-	double const   SolTime                  = svar.t;     
-	INTEGER4 const ParentZn                 = 0;
-	INTEGER4 const IsBlock                  = 1;      /* Block */
-	INTEGER4 const NFConns                  = 0;
-	INTEGER4 const FNMode                   = 0;
-	INTEGER4 const TotalNumFaceNodes        = 0;
-	INTEGER4 const TotalNumBndryFaces       = 0;
-	INTEGER4 const TotalNumBndryConnections = 0;
-	INTEGER4 const ShrConn                  = 0;
-	INTEGER4 const ZoneType = 0;
-	INTEGER4 I = 0;
+	return tecZoneVarWriteFloatValues(fileHandle, outputZone, var, 0, size, &varVec[0]);
+#endif	
+}
 
 
-	I = TECZNE142(group,
-	              &ZoneType,
-	              &IMax,
-	              &JMax,
-	              &KMax,
-	              &ICellMax,
-	              &JCellMax,
-	              &KCellMax,
-	              &SolTime,
-	              &StrandID,
-	              &ParentZn,
-	              &IsBlock,
-	              &NFConns,
-	              &FNMode,
-	              &TotalNumFaceNodes,
-	              &TotalNumBndryFaces,
-	              &TotalNumBndryConnections,
-	              NULL,
-	              NULL,
-	              NULL,
-	              &ShrConn);
+void Write_Binary_Timestep(SIM const& svar, State const& pnp1, 
+	uint const start, uint const end, char const* group, int32_t const& strandID, void* const& fileHandle)
+{
+	int64_t const size = end - start;
+
+	double solTime = svar.t;     
+	int32_t outputZone;
+	int I = 0;
+
+	// Get zone data types
+	vector<int32_t> varTypes = svar.varTypes;
+	vector<int32_t> shareVarFromZone(varTypes.size(),0);
+    vector<int32_t> valueLocation(varTypes.size(),1);
+    vector<int32_t> passiveVarList(varTypes.size(),0);
+
+	I = tecZoneCreateIJK(fileHandle,group,size,1,1,&varTypes[0],
+		&shareVarFromZone[0],&valueLocation[0],&passiveVarList[0],0,0,0,&outputZone);
+
 	if(I == -1)
 		exit(-1);
 
+	if(strandID != 0)
+		I = tecZoneSetUnsteadyOptions(fileHandle, outputZone, solTime, strandID);
+
 	/*Write the basic position data present for all outputs*/
-	real* x = new real[size];
+	vector<real> x(size);
+	int32_t var = 1;
 
 	for(uint dim = 0; dim < SIMDIM; ++dim)
 	{
@@ -298,14 +226,15 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 		for(uint ii = start; ii < end; ++ii)
 			x[ii-start] = pnp1[ii].xi(dim)/svar.scale;
 
-		I   = TECDAT142(&IMax, x, &DIsDouble);
+		I = Write_Real_Value(fileHandle, outputZone, var, size, x);
+		var++;
 	}
 
 	if(svar.outform != 0)
 	{
-		real* rho = new real[size];
-		real* Rrho = new real[size];
-		real* m = new real[size];
+		vector<real> rho(size);
+		vector<real> Rrho(size);
+		vector<real> m(size);
 
 		#pragma omp parallel for
 	  	for(uint ii = start; ii < end; ++ii)
@@ -317,15 +246,18 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 			m[ii-start] = pnp1[ii].m;
 		}
 
-			I   = TECDAT142(&IMax, rho, &DIsDouble);
-			I   = TECDAT142(&IMax, Rrho, &DIsDouble);
-			I   = TECDAT142(&IMax, m, &DIsDouble);
+			I = Write_Real_Value(fileHandle, outputZone, var, size, rho);
+			var++;
+			I = Write_Real_Value(fileHandle, outputZone, var, size, Rrho);
+			var++;
+			I = Write_Real_Value(fileHandle, outputZone, var, size, m);
+			var++;
 	}
 
-	if(svar.outform == 1)
+	if(svar.outform == 1 || svar.outform == 4)
 	{
-		real* v = new real[size];
-		real* a = new real[size];
+		vector<real> v(size);
+		vector<real> a(size);
 		
 		#pragma omp parallel for
 		for(uint ii = start; ii < end; ++ii)
@@ -334,27 +266,47 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 			a[ii-start] = pnp1[ii].f.norm();
 		}
 
-		I   = TECDAT142(&IMax, v, &DIsDouble);
-	  I   = TECDAT142(&IMax, a, &DIsDouble);
+		I = Write_Real_Value(fileHandle, outputZone, var, size, v);
+		var++;
+		I = Write_Real_Value(fileHandle, outputZone, var, size, a);
+		var++;
+
+		if(svar.outform == 4)
+		{
+			vector<real> nNb(size);
+			vector<real> aF(size);
+
+			#pragma omp parallel for
+		  	for(uint ii = start; ii < end; ++ii)
+		  	{
+		  		nNb[ii-start] = pnp1[ii].theta;
+		  		aF[ii-start] = pnp1[ii].surf;
+	  		}
+
+			I = Write_Real_Value(fileHandle, outputZone, var, size, nNb);
+			var++;
+			I = Write_Real_Value(fileHandle, outputZone, var, size, aF);
+			var++;
+		}
 	}
 	else if (svar.outform == 2 || svar.outform == 3 || svar.outform == 5)
 	{
 
-		real* vx = new real[size];
-		real* vy = new real[size];
-		real* ax = new real[size];
-		real* ay = new real[size];
+		vector<real> vx(size);
+		vector<real> vy(size);
+		vector<real> ax(size);
+		vector<real> ay(size);
 #if SIMDIM == 3
-		real* az = new real[size];
-		real* vz = new real[size];
+		vector<real> vz(size);
+		vector<real> az(size);
 #endif
-		real* b = new real[size];
+		vector<uint8_t> b(size);
 
 		#pragma omp parallel for
 		for(uint ii = start; ii < end; ++ii)
 		{
-			vx[ii-start] = pnp1[ii].bNorm(0);
-			vy[ii-start] = pnp1[ii].bNorm(1);
+			vx[ii-start] = pnp1[ii].v(0);
+			vy[ii-start] = pnp1[ii].v(1);
 			ax[ii-start] = pnp1[ii].f(0);
 			ay[ii-start] = pnp1[ii].f(1);
 			
@@ -362,177 +314,215 @@ void Write_Binary_Timestep(const SIM& svar, const State& pnp1,
 			vz[ii-start] = pnp1[ii].v(2);
 			az[ii-start] = pnp1[ii].f(2);
 #endif
-  		b[ii-start] = static_cast<real>(pnp1[ii].b);
+  			b[ii-start] = static_cast<uint8_t>(pnp1[ii].b);
   	}
 
-		I   = TECDAT142(&IMax, vx, &DIsDouble);
-		I   = TECDAT142(&IMax, vy, &DIsDouble);
+  		I = Write_Real_Value(fileHandle, outputZone, var, size, vx);
+		var++;
+		I = Write_Real_Value(fileHandle, outputZone, var, size, vy);
+		var++;
 #if SIMDIM == 3
-		I   = TECDAT142(&IMax, vz, &DIsDouble);
+		I = Write_Real_Value(fileHandle, outputZone, var, size, vz);
+		var++;
 #endif
-		I   = TECDAT142(&IMax, ax, &DIsDouble);
-		I   = TECDAT142(&IMax, ay, &DIsDouble);
+  		I = Write_Real_Value(fileHandle, outputZone, var, size, ax);
+		var++;
+		I = Write_Real_Value(fileHandle, outputZone, var, size, ay);
+		var++;
 #if SIMDIM == 3
-		I   = TECDAT142(&IMax, az, &DIsDouble);
+		I = Write_Real_Value(fileHandle, outputZone, var, size, az);
+		var++;
 #endif
-		I   = TECDAT142(&IMax, b, &DIsDouble);
+		I = tecZoneVarWriteUInt8Values(fileHandle, outputZone, var, 0, size, &b[0]);
+		var++;
 
 		if (svar.outform == 3)
 		{
-			real* cID = new real[size];
-			real* cVx = new real[size];
-			real* cVy = new real[size];
-			real* cP = new real[size];
+			vector<int32_t> cID(size);
+			vector<real> cVx(size);
+			vector<real> cVy(size);
+			vector<real> cP(size);
 
 			#pragma omp parallel for
 			for(uint ii = start; ii < end; ++ii)
 			{
-				cID[ii-start] = static_cast<real>(pnp1[ii].cellID);
+				cID[ii-start] = static_cast<int32_t>(pnp1[ii].cellID);
 				cVx[ii-start] = pnp1[ii].cellV(0);
 				cVy[ii-start] = pnp1[ii].cellV(1);
 				cP[ii-start] = pnp1[ii].cellP;
 			}
 
-			I   = TECDAT142(&IMax, cVx, &DIsDouble);
-			I   = TECDAT142(&IMax, cVy, &DIsDouble);
+			I = Write_Real_Value(fileHandle, outputZone, var, size, cVx);
+			var++;
+			I = Write_Real_Value(fileHandle, outputZone, var, size, cVy);
+			var++;
 
 			#if SIMDIM == 3
-				real* cVz = new real[size];
+				vector<real> cVz(size);
 				#pragma omp parallel for
 				for(uint ii = start; ii < end; ++ii)
 					cVz[ii-start] = pnp1[ii].cellV(2);
-				I   = TECDAT142(&IMax, cVz, &DIsDouble);
+				I = Write_Real_Value(fileHandle, outputZone, var, size, cVz);
+				var++;
 			#endif
 
-			I   = TECDAT142(&IMax, cP, &DIsDouble);
-			I   = TECDAT142(&IMax, cID, &DIsDouble);
+			I = Write_Real_Value(fileHandle, outputZone, var, size, cP);
+			var++;
+			I = tecZoneVarWriteInt32Values(fileHandle, outputZone, var, 0, size, &cID[0]);
+			var++;
 		}
 		else if (svar.outform == 5)
 		{
-			real* cID = new real[size];
+			vector<int32_t> cID(size);
 			#pragma omp parallel for
 			for(uint ii = start; ii < end; ++ii)
 			{
-				cID[ii-start] = static_cast<real>(pnp1[ii].cellID);
+				cID[ii-start] = static_cast<int32_t>(pnp1[ii].cellID);
 			}
 
-			I   = TECDAT142(&IMax, cID, &DIsDouble);
+			I = tecZoneVarWriteInt32Values(fileHandle, outputZone, var, 0, size, &cID[0]);
+			var++;
 		}
 	    
 	}
-	else if (svar.outform == 4)
-		{
-			// variables = "x y z rho P m v a b Neighbours Aero";
-
-			real* v = new real[size];
-			real* a = new real[size];
-			float* nNb = new float[size];
-			real* aF = new real[size];
-
-			#pragma omp parallel for
-		  	for(uint ii = start; ii < end; ++ii)
-		  	{
-		  		v[ii-start] = pnp1[ii].v.norm();
-		  		a[ii-start] = pnp1[ii].f.norm();
-		  		nNb[ii-start] = pnp1[ii].theta;
-		  		aF[ii-start] = pnp1[ii].surf;
-	  		}
-
-	  		INTEGER4 IsFloat = 0;
-			I   = TECDAT142(&IMax, v, &DIsDouble);
-			I   = TECDAT142(&IMax, a, &DIsDouble);
-			I   = TECDAT142(&IMax, nNb, &IsFloat);
-			I   = TECDAT142(&IMax, aF, &DIsDouble);
-		}
+	
     // cout << "Flushing results." << endl;
-    INTEGER4 numZonesToRetain = 0;
-    I = TECFLUSH142(&numZonesToRetain,NULL);
+    // INTEGER4 numZonesToRetain = 0;
+    I = tecFileWriterFlush(fileHandle,0,NULL);
 }
 
-void Init_Binary_PLT(const SIM &svar, const string& filename, const string& zoneName)
+void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, void* &fileHandle)
 {
-#if DEBUG
-		INTEGER4 const Debug = 1;
-#else 
-		INTEGER4 const Debug = 0;
-#endif
-#if FOD == 0
-    INTEGER4 const VIsDouble  = 0;
-#else
-	INTEGER4 const VIsDouble  = 1;
-#endif
-    
-    INTEGER4 const FileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/
-    INTEGER4 const fileFormat = 1; // 0 == PLT, 1 == SZPLT
-    INTEGER4 I          = 0; /* Used to track return codes */
+    int32_t FileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/
+    int32_t fileFormat = 1; // 0 == PLT, 1 == SZPLT
+    int I          = 0; /* Used to track return codes */
 
     string file = svar.outfolder;
     file.append(filename);
+
     /*
      * Open the file and write the tecplot datafile
      * header information
      */
 #if SIMDIM == 2
-    	std::string variables = "X Z";	
+    	std::string variables = "X,Z";	
 		if (svar.outform == 1)
 		{
-			variables = "X Z rho Rrho m v a";
+			variables = "X,Z,rho,Rrho,m,v,a";
 		}
 		else if (svar.outform == 2)
 		{
-			variables = "X Z rho Rrho m v_x v_z a_x a_z b";
+			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b";
 		}
 		else if (svar.outform == 3)
 		{
-			variables = "X Z rho Rrho m v_x v_z a_x a_z b Cell_Vx Cell_Vz Cell_P Cell_ID";
+			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_Vx,Cell_Vz,Cell_P,Cell_ID";
 		}
 		else if (svar.outform == 4)
 		{
-			variables = "X Z rho Rrho m v a Neighbours Aero";
+			variables = "X,Z,rho,Rrho,m,v,a,Neighbours,Aero";
 		}
 		else if (svar.outform == 5)
 		{
-			variables = "X Z rho Rrho m v_x v_z a_x a_z b Cell_ID";
+			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_ID";
 		}
 #endif
 
 #if SIMDIM == 3
-		std::string variables = "X Y Z";  
+		std::string variables = "X,Y,Z";  
 		if (svar.outform == 1)
 		{
-			variables = "X Y Z rho Rrho m v a";
+			variables = "X,Y,Z,rho,Rrho,m,v,a";
 		}
 		else if (svar.outform == 2)
 		{
-			variables = "X Y Z rho Rrho m v_x v_y v_z a_x a_y a_z b";
+			variables = "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b";
 		}
 		else if (svar.outform == 3)
 		{
 			variables = 
-		"X Y Z rho Rrho m v_x v_y v_z a_x a_y a_z b Cell_Vx Cell_Vy Cell_Vz Cell_P Cell_ID";
+		"X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_ID";
 		}
 		else if (svar.outform == 4)
 		{
-			variables = "X Y Z rho Rrho m v a Neighbours Aero";
+			variables = "X,Y,Z,rho,Rrho,m,v,a,Neighbours,Aero";
 		}
 		else if (svar.outform == 5)
 		{
-			variables = "X Y Z rho Rrho m v_x v_y v_z a_x a_y a_z b Cell_ID";
+			variables = "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_ID";
 		}
 #endif
 
-	I = TECINI142(  zoneName.c_str(), 
-					variables.c_str(),  
-		            file.c_str(),
-		            svar.outfolder.c_str(),      /* Scratch Directory */
-		            &fileFormat,
-		            &FileType,
-		            &Debug,
-		            &VIsDouble);
+	vector<int32_t> varTypes;
+#if FOD == 1
+	int32_t realType = 2;
+#else
+	int32_t realType = 1;
+#endif
+
+	varTypes.emplace_back(realType);
+	varTypes.emplace_back(realType);
+#if SIMDIM == 3
+	varTypes.emplace_back(realType);	//x,y,z
+#endif
+	if(svar.outform != 0)
+	{
+		varTypes.emplace_back(realType);  //rho
+		varTypes.emplace_back(realType);  //Rrho
+		varTypes.emplace_back(realType);  //m
+
+		if(svar.outform == 1 || svar.outform == 4)
+		{
+			varTypes.emplace_back(realType);  //vmag
+			varTypes.emplace_back(realType);  //amag
+
+			if(svar.outform == 4)
+			{
+				varTypes.emplace_back(realType);  //Nneighb
+				varTypes.emplace_back(realType);  //vy
+			}
+		}
+		else if (svar.outform == 2 || svar.outform == 3 || svar.outform == 5)
+		{
+			varTypes.emplace_back(realType);  //vx
+			varTypes.emplace_back(realType);  //vy
+			varTypes.emplace_back(realType);  //ax
+			varTypes.emplace_back(realType);  //ay
+#if SIMDIM == 3
+			varTypes.emplace_back(realType);  //vz
+			varTypes.emplace_back(realType);  //az
+#endif
+			varTypes.emplace_back(5);  //b
+
+			if(svar.outform == 3)
+			{
+				varTypes.emplace_back(realType);  //cell_Vx
+				varTypes.emplace_back(realType);  //cell_Vy
+				#if SIMDIM == 3
+				varTypes.emplace_back(realType);  //cell_Vz
+				#endif
+				varTypes.emplace_back(realType);  //cell_P
+				varTypes.emplace_back(3);  //cell_ID
+			}
+
+			if(svar.outform == 5)
+			{
+				varTypes.emplace_back(3);  //cell_ID
+			}
+
+		}
+	}
+	svar.varTypes = varTypes;
+
+	I = tecFileWriterOpen(file.c_str(),zoneName.c_str(),variables.c_str(),fileFormat,FileType,1,NULL,&fileHandle);
+
+#ifdef DEBUG
+	I = tecFileSetDiagnosticsLevel(fileHandle, 1);
+#endif
 
     if(I == -1)
     {
-    	cout << "Failed to open Fuel.szplt" << endl;
+    	cout << "Failed to open " << file << endl;
     	exit(-1);
     }
 }

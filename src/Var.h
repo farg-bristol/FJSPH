@@ -54,13 +54,13 @@ using std::setw;
 #define FOD 1 /*0 = float, 1 = double*/
 #endif
 
-typedef unsigned int uint;
-
 #if FOD == 1
 typedef double real;
 #else
 typedef float real;
 #endif
+
+typedef unsigned int uint;
 
 /*Get machine bit precision for Simulation of Simplicity*/
 #ifndef MEPSILON
@@ -98,21 +98,45 @@ typedef Eigen::Matrix<real, SIMDIM+1, SIMDIM+1> StateP1MatD;
                     initializer(omp_priv = omp_orig) 
 
 /*Define particle type indexes*/
-#define BOUND 0
-#define PISTON 1
-#define BACK 2            
-#define START 3
-#define PIPE 4
-#define FREE 5
-#define GHOST 6
+typedef struct PState{
+	PState()
+	{
+		BOUND_ = 0;
+	    PISTON_ = 1;
+		BACK_ = 2; 
+		START_ = 3;
+		PIPE_ = 4;
+		FREE_ = 5;
+		GHOST_ = 6;
+	}
+
+	size_t BOUND_ ,
+    PISTON_,
+	BACK_,            
+	START_,
+	PIPE_,
+	FREE_,
+	GHOST_;
+} PState;
 
 #ifndef TRUE
 #define TRUE  1
 #define FALSE 0
 #endif
 
+PState PartState;
+
 /*Simulation parameters*/
 typedef struct SIM {
+	SIM()
+	{
+#if SIMDIM == 3
+		nfull = 257;
+#else
+		nfull = 48;
+#endif
+	}
+
 	StateVecI xyPART; 				/*Starting sim particles in x and y box*/
 	size_t simPts,bndPts,totPts;	/*Simulation particles, Boundary particles, total particles*/
 	size_t finPts;					/*How many points there will be at simulation end*/
@@ -129,8 +153,9 @@ typedef struct SIM {
 	uint nfull;						/*Full neighbour list amount*/
 	StateVecD Box;					/*Box dimensions*/
 	StateVecD Start; 				/*Sim box bottom left coordinate*/
-	StateMatD Rotate;				    /*Starting rotation matrix*/ 
-	StateMatD Transp;                  /*Transpose of rotation matrix*/
+	StateVecD Angle;				/*Rotations in degrees*/
+	StateMatD Rotate;				/*Starting rotation matrix*/ 
+	StateMatD Transp;               /*Transpose of rotation matrix*/
 	Eigen::Vector2d Jet;			/*Jet properties*/
 	uint subits;                    /*Max number of sub-iterations*/
 	uint Nframe; 			        /*Max number of frames to output*/
@@ -140,14 +165,19 @@ typedef struct SIM {
 	real beta,gamma;				/*Newmark-Beta Parameters*/
 	real maxmu;                     /*Maximum viscosity component (CFL)*/
 	int Bcase, Bclosed, ghost;		/*What initial shape to take*/
-	int Asource;                      /*Source of aerodynamic solution*/
+	int Asource;                     /*Source of aerodynamic solution*/
 	uint outtype;                   /*ASCII or binary output*/
 	uint outform, boutform, gout;   /*Output type. Fluid properties or Research.*/
 	uint framecount;                /*How many frames have been output*/
 	vector<size_t> back;            /*Particles at the back of the pipe*/
 
-	std::string infolder, outfolder;
+	std::string infolder, outfolder, outdir;
 	std::string meshfile, bmapfile, solfile;
+	void* boundFile; /*TECIO file handles*/
+	void* fuelFile;
+	void* ghostFile;
+	vector<int32_t> varTypes;
+
 	real scale;			
 	#if SIMDIM == 3
 		VLM vortex;
@@ -163,8 +193,8 @@ typedef struct SIM {
 	uint afterSim;
 	uint sliceOrSet;
 	StateVecD planeOrigin, planeNorm; /*Plane conditions if in 3D*/
-	real cellSize;				/*Size of each cell to make*/
-	StateVecD maxC, minC;			/*Max and min coords to make grid*/
+	real cellSize;				      /*Size of each cell to make*/
+	StateVecD maxC, minC;			  /*Max and min coords to make grid*/
 	uint numVars, wrongDim;
 	real postRadius;
 } SIM;
@@ -204,6 +234,11 @@ typedef class AERO
 			Ck = 8;
 			Cd = 5;
 			Cb = 0.5;
+#if SIMDIM == 3		
+			nfull = 1.713333e+02;
+#else
+			nfull = 28;
+#endif
 		}
 		real L;							/*Gissler Parameters*/
 		real td;							/* }*/
@@ -341,10 +376,10 @@ typedef class Particle {
 		}
 
 		/*To add particles dynamically for boundary layer*/
-		Particle(StateVecD const& X, Particle const& pj, size_t const pID)
+		Particle(StateVecD const& X, Particle const& pj, size_t const pID, int const bound)
 		{
 			xi = X;	v = pj.v; 
-			rho = pj.rho; m = pj.m; b = pj.b;
+			rho = pj.rho; m = pj.m; b = bound;
 			partID = pID;
 			f = StateVecD::Zero();
 			Sf = StateVecD::Zero(); 

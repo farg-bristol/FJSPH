@@ -12,10 +12,11 @@
 #ifdef WINDOWS
     #include <direct.h>
     #define GetCurrentDir _getcwd
+	#define stat _stat
 #else
     #include <unistd.h>
     #define GetCurrentDir getcwd
- #endif
+#endif
 
 void write_header() 
 {
@@ -70,7 +71,26 @@ void check_folder(string pathname)
 	}
 }
 
-int MakeOutputDir(int argc, char *argv[], SIM &svar)
+void Combine_SZPLT(string& file)
+{
+	string cmd = "exec szcombine \"";
+	cmd.append(file);
+	cmd.append("\"");
+
+#ifdef DEBUG
+	dbout << "Attempting to combine szplt." << endl;
+	dbout << "Command: " << cmd << endl;
+#endif
+	if(system(cmd.c_str()))
+	{
+    	cout << "System command failed to execute." << endl;
+    	cout << "Command: " << cmd << endl;
+    	exit(-1);
+	}
+	
+}
+
+int MakeOutputDir(int argc, char *argv[], SIM& svar)
 {
 	char cCurrentPath[FILENAME_MAX];
 	if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
@@ -108,6 +128,8 @@ int MakeOutputDir(int argc, char *argv[], SIM &svar)
   		struct stat info;
   		if(stat( file.c_str(), &info ) == 0)
   		{
+  			// cout << "Split files exist..." << endl;
+
 			if(svar.restart == 0)
 			{	// Delete if not restarting
 		  		string cmd = "exec rm -r \"";
@@ -127,58 +149,104 @@ int MakeOutputDir(int argc, char *argv[], SIM &svar)
 			else
 			{
 				// Check if there is the constructed szplt
-				file = pathname;
+				file = pathname;				
 				file.append("Fuel.szplt");
 				if(stat( file.c_str(), &info ) != 0)
-		  		{
-		  			// File needs creating.
-		  			string cmd = "exec szcombine \"";
-			  		cmd.append(file);
-			  		cmd.append("\"");
-
-#ifdef DEBUG
-			  		dbout << "Attempting to combine szplt." << endl;
-			  		dbout << "Command: " << cmd << endl;
-#endif
-			  		if(system(cmd.c_str()))
-			  		{
-				    	cout << "System command failed to execute." << endl;
-				    	cout << "Command: " << cmd << endl;
-				    	exit(-1);
-				    }
-		  		}
-
-		  		file = pathname;
-				file.append("Boundary.szplt");
-				if(stat( file.c_str(), &info ) != 0)
-		  		{
-		  			// Check if szplt files exist
-		  			string szplt = file;
-		  			szplt.append(".szdat");
-		  			if(stat( szplt.c_str(), &info ) == 0)
-		  			{
-			  			// File needs creating.
-			  			string cmd = "exec szcombine \"";
-				  		cmd.append(file);
-				  		cmd.append("\"");
-
-#ifdef DEBUG
-				  		dbout << "Attempting to combine szplt." << endl;
-				  		dbout << "Command: " << cmd << endl;
-#endif
-				  		if(system(cmd.c_str()))
-				  		{
-					    	cout << "System command failed to execute." << endl;
-					    	cout << "Command: " << cmd << endl;
-					    	exit(-1);
-					    }
-					}
-					else if(svar.Bcase != 0 && svar.Bcase != 4)
+		  		{	/*Fuel.szplt does not exist - needs creating*/
+					Combine_SZPLT(file);
+					
+					if(svar.Bcase != 0 && svar.Bcase !=4)
 					{
-						cout << "Boundary files cannot be found. Stopping" << endl;
-						exit(-1);
-					}
+			  			file = pathname;
+						file.append("Boundary.szplt");
+						if(stat( file.c_str(), &info ) != 0)
+				  		{ /*Boundary.szplt also doesn't exist - needs creating*/
+							
+					  			string szplt = file;
+								szplt.append(".szdat");
+								if(stat( szplt.c_str(), &info ) == 0)
+								{
+									Combine_SZPLT(file);
+								}
+								else
+								{	//Boundaries should exist but don't.
+									cout << "Boundary files cannot be found. Stopping" << endl;
+									exit(-1);
+								}
+						}
+						
+			  		}
 		  		}
+		  		else
+		  		{	// Both the combined and split szplt exist - check which is more recent.
+		  			// cout << "Both file types exist" << endl << endl;
+		  			auto sztime = info.st_mtime;
+		  			file.append(".szdat");
+					if(stat(file.c_str(), &info) == 0)
+					{
+						auto szdattime = info.st_mtime;
+
+						// cout << sztime << "   " << szdattime << endl;
+ 
+						if (szdattime > sztime)
+						{
+							// combine the files
+							file = pathname;
+							file.append("Fuel.szplt");
+							Combine_SZPLT(file);
+
+							if(svar.Bcase != 0 && svar.Bcase !=4)
+							{	//Check if files exist
+								file = pathname;
+								file.append("Boundary.szplt.szdat");
+								if(stat( file.c_str(), &info ) == 0)
+						  		{
+									file = pathname;
+									file.append("Boundary.szplt");
+									Combine_SZPLT(file);
+								}
+								else
+								{
+									cout << "Boundary files cannot be found. Stopping" << endl;
+									exit(-1);
+								}
+							}
+
+						}
+					}
+
+					// Do the same check for the boundary file
+					file = pathname;
+					file.append("Boundary.szplt");
+					if(stat(file.c_str(),&info) == 0)
+					{   //File exists, so get the modify time
+						auto bsztime = info.st_mtime;
+
+						file.append(".szdat");
+
+						if(stat( file.c_str(), &info ) == 0)
+				  		{   // data file also exists, so see which is more recent.
+				  			auto bszdattime = info.st_mtime;
+
+				  			if( bszdattime > bsztime)
+				  			{
+								file = pathname;
+								file.append("Boundary.szplt");
+								Combine_SZPLT(file);
+							}
+						}
+					}
+					else
+					{
+						file.append(".szdat");
+						if(stat( file.c_str(), &info ) == 0)
+				  		{   // data file exists
+				  			file = pathname;
+							file.append("Boundary.szplt");
+							Combine_SZPLT(file);
+				  		}
+					}
+		  		}	  		
 
 			}
 		}
@@ -391,10 +459,22 @@ std::ifstream& GotoLine(std::ifstream& file, unsigned int num)
     return file;
 }
 
-void CheckContents(void* inputHandle, SIM& svar)
+void CheckContents(void* const& inputHandle, SIM& svar)
 {
-	INTEGER4 numVars, numZones, I;
+	int32_t numVars, numZones, I;
 	I = tecDataSetGetNumVars(inputHandle, &numVars);
+
+	std::ostringstream outputStream;
+    for (int32_t var = 1; var <= numVars; ++var)
+    {
+        char* name = NULL;
+        I = tecVarGetName(inputHandle, var, &name);
+        outputStream << name;
+        if (var < numVars)
+            outputStream << ',';
+        tecStringFree(&name);
+    }
+
 	if (I == -1)
 	{
 		cout << "Couldn't obtain number of variables. Stopping" << endl;
@@ -402,54 +482,45 @@ void CheckContents(void* inputHandle, SIM& svar)
 	}
 
 	cout << "Number of variables in output file: " << numVars << endl;
-	uint dataType = 0;
-#if SIMDIM == 2
-	if(numVars == 2)
-    {
-    	cout << "Only basic data has been output. Cannot restart." << endl;
-    	exit(-1);
-    }
-    else if (numVars == 6)
-    {
-    	cout << "Cannot restart. No components" << endl;
-    	exit(-1);
-    }
-    else if (numVars == 9)
-    {
-    	cout << "Cannot restart. No components" << endl;
-    	exit(-1);
-    }
-#else
-    if( numVars == 3)
-    {
-    	cout << "Only basic data has been output. Cannot restart." << endl;
-    	exit(-1);
-    }
-    else if ( numVars == 7)
-    {
-    	cout << "Cannot restart. No components" << endl;
-    	exit(-1);
-    }
-    else if (numVars == 10)
-    {
-    	cout << "Cannot restart. No components" << endl;
-    	exit(-1);
-    }
 
-#endif
-    
-    if(numVars == 10 || numVars == 13)
-    {	
-    	dataType = 2;
-    }
-    else if(numVars == 15 || numVars == 19)
-    {
-    	dataType = 3;
-    }
-    else if(numVars == 11 || numVars == 14)
-    {
-    	dataType = 5;
-    }
+	uint dataType = 0;
+
+	if( outputStream.str() == "X,Z" || outputStream.str() == "X,Y,Z")
+	{
+		dataType = 0;
+	}
+	else if (outputStream.str() == "X,Z,rho,Rrho,m,v,a" ||
+			outputStream.str() == "X,Y,Z,rho,Rrho,m,v,a")
+	{
+		dataType = 1;
+	}
+	else if (outputStream.str() == "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b")
+	{
+		dataType = 2;	
+	}
+	else if (outputStream.str() == "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_Vx,Cell_Vz,Cell_P,Cell_ID" ||
+		outputStream.str() == "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_ID")
+	{
+		dataType = 3;
+	}
+	else if (outputStream.str() == "X,Z,rho,Rrho,m,v,a,Neighbours,Aero" ||
+		outputStream.str() == "X,Y,Z,rho,Rrho,m,v,a,Neighbours,Aero")
+	{
+		dataType = 4;
+	}
+	else if (outputStream.str() == "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_ID" ||
+			outputStream.str() == "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_ID")
+	{
+		dataType = 5;
+	}
+
+	cout << outputStream.str() << "  " << dataType << endl;
+
+	if(dataType == 0 || dataType == 1 || dataType == 4)
+	{
+		cout << "Cannot restart. File does not contain the correct information." << endl;
+		exit(-1);
+	}
 
     if(dataType!= svar.outform)
     {
@@ -667,8 +738,6 @@ int ParticleCount(SIM &svar)
 				for (real y = 0; y <= radius; y+=svar.dx)
 				{	
 					++simCount;
-					
-
 					for (real x = svar.dx; x <= radius ; x+=svar.dx)
 					{ /*Do the either side of the centerline*/
 							if(((x*x) + (y*y)) <= (radius*radius))
@@ -682,8 +751,6 @@ int ParticleCount(SIM &svar)
 				for (real y = -svar.dx; y >= -radius; y-=svar.dx)
 				{	
 					++simCount;
-					
-
 					for (real x = svar.dx; x <= radius ; x+=svar.dx)
 					{ /*Do the either side of the centerline*/
 							if(((x*x) + (y*y)) <= (radius*radius))
@@ -729,14 +796,17 @@ int ParticleCount(SIM &svar)
 	return partCount;
 }
 
-void GetYcoef(AERO& avar, const FLUID& fvar, const real rad)
+void GetYcoef(AERO& avar, const FLUID& fvar, const real diam)
 {
-	#if SIMDIM == 3
-		avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
-	#endif
-	#if SIMDIM == 2
-		avar.L = rad/sqrt(M_PI);
-	#endif
+	// #if SIMDIM == 3
+	// 	avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
+	// #endif
+	// #if SIMDIM == 2
+	// 	avar.L = rad/sqrt(M_PI);
+	// #endif
+
+	avar.L = diam / 2.0;
+	
 	avar.td = (2.0*fvar.rho0*pow(avar.L,SIMDIM-1))/(avar.Cd*fvar.mu);
 
 	avar.omega = sqrt((avar.Ck*fvar.sig)/(fvar.rho0*pow(avar.L,SIMDIM))-1.0/pow(avar.td,2.0));
@@ -751,11 +821,11 @@ void GetYcoef(AERO& avar, const FLUID& fvar, const real rad)
 	//cout << avar.ycoef << "  " << avar.Cdef << "  " << avar.tmax << "  " << endl;
 }
 
-void Write_Input(SIM const& svar, FLUID const& fvar, AERO const& avar, StateVecD& angle)
+void Write_Input(SIM const& svar, FLUID const& fvar, AERO const& avar)
 {
 	// Open the file.
 	string file = svar.outfolder;
-	file.append("Settings.dat");
+	file.append("Settings");
 	uint width = 50;
 	std::ofstream sett(file);
 
@@ -768,7 +838,6 @@ void Write_Input(SIM const& svar, FLUID const& fvar, AERO const& avar, StateVecD
 	sett << svar.gout << setw(width) << "#Ghost particle output" << endl;
 	sett << svar.subits << setw(width) << "#Maximum sub iterations" << endl;
 	sett << svar.nmax << setw(width) << "#Maximum number of particles" << endl;
-	sett << svar.afterSim << setw(width) << "#Do post processing?" << endl;
 	sett << svar.cellSize << setw(width) << "#Post processing mesh size" << endl;
 	sett << svar.postRadius << setw(width) << "#Post processing support radius" << endl;
 	sett << svar.Pstep << setw(width) << "#Particle initial spacing" << endl;
@@ -798,13 +867,13 @@ void Write_Input(SIM const& svar, FLUID const& fvar, AERO const& avar, StateVecD
 	}
 	else
 	{
-		sett << angle(0) << " " << angle(1);
+		sett << svar.Angle(0) << " " << svar.Angle(1);
 #if SIMDIM == 3
-		sett << " " << angle(2);
+		sett << " " << svar.Angle(2);
 #endif
 		sett << "  #Fluid start rotation" << endl;
 		sett << svar.Jet(0) << " " << svar.Jet(1) << setw(width) << "#Jet dimensions" << endl;
-		sett << fvar.pPress << setw(width) << "#Ghost particles?" << endl;
+		sett << fvar.pPress << setw(width) << "#Pipe Pressure" << endl;
 		sett << avar.vJet(1) << setw(width) << "#Jet velocity" << endl;
 		sett << avar.vInf(0) << " " << avar.vInf(1);
 #if SIMDIM == 3
@@ -826,7 +895,7 @@ void Write_Input(SIM const& svar, FLUID const& fvar, AERO const& avar, StateVecD
 
 	/*Write fluid file now*/
 	file = svar.outfolder;
-	file.append("Fluid.dat");
+	file.append("Fluid");
 
 	std::ofstream fluid(file);
 
@@ -840,14 +909,16 @@ void Write_Input(SIM const& svar, FLUID const& fvar, AERO const& avar, StateVecD
 	fluid << fvar.mu << setw(width) << "#Fluid viscosity" << endl;
 	fluid << avar.mug << setw(width) << "#Gas viscosity" << endl;
 	fluid << fvar.sig << setw(width) << "#Surface Tension" << endl;
+	fluid << svar.outdir << setw(width) << "#Output Folder" << endl;
+	fluid << svar.meshfile << "   #Mesh edge/face file" << endl;
+	fluid << svar.solfile << "   #Mesh Solution file" << endl;
+	fluid << svar.scale << setw(width) << "#Mesh scale" << endl;
 	fluid << avar.vRef << setw(width) << "#Gas reference velocity" << endl;
 	fluid << avar.pRef << setw(width) << "#Gas reference pressure" << endl;
 	fluid << avar.T << setw(width) << "#Gas reference temperature" << endl;
-	fluid << svar.meshfile << "   #Mesh face file" << endl;
-	fluid << svar.solfile << "   #Mesh Solution file" << endl;
-	fluid << svar.scale << setw(width) << "#Mesh scale" << endl;
-
+	
 	fluid.close();
 }
+
 
 #endif

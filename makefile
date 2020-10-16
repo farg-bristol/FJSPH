@@ -7,7 +7,7 @@ CX8=g++-8
 LIBS=-ltecio -lnetcdf_c++4 #-lH5hut -lhdf5
 #-lgmpxx -lgmp
 # Compiler flags. If desired add -g for debugging info.
-CFLAGS=-std=c++11 -Wall -ffast-math -funroll-loops -O3 -fopenmp
+CFLAGS=-std=c++14 -Wall -ffast-math -funroll-loops -O3 -fopenmp
 
 INC=#-I/usr/include/hdf5/serial/
 LLINK=#-L/usr/lib/x86_64-linux-gnu/hdf5/serial/

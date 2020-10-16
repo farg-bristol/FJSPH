@@ -4,11 +4,12 @@
 #include "Eigen/Core"
 #include "Eigen/Geometry"
 #include "Var.h"
+#include "IOFunctions.h"
 
 #define PERTURB(i,j) pow(MEPSILON,pow(2,i*SIMDIM-j))
 
-#define X 0
-#define Y 1
+// #define X 0
+// #define Y 1
 
 StateMatD GetRotationMat(StateVecD& angles)
 {
@@ -139,16 +140,16 @@ bool get_line_intersection(vector<StateVecD> const& verts, vector<size_t> const&
         real  ty, tx;
         StateVecD vtx0, vtx1;
 
-        tx = point[X];
-        ty = point[Y];
+        tx = point[0];
+        ty = point[1];
 
         inside_flag = 0;
 
         vtx0 = verts[edge[0]];
         vtx1 = verts[edge[1]];
         /* Move to the next pair of vertices, retaining info as possible. */
-        yflag0 = ( vtx0[Y] >= ty );
-        yflag1 = ( vtx1[Y] >= ty );
+        yflag0 = ( vtx0[1] >= ty );
+        yflag1 = ( vtx1[1] >= ty );
 
         /* Check if endpoints straddle (are on opposite sides) of X axis
          * (i.e. the Y's differ); if so, +X ray could intersect this edge.
@@ -164,8 +165,8 @@ bool get_line_intersection(vector<StateVecD> const& verts, vector<size_t> const&
              * by Joseph Samosky's and Mark Haigh-Hutchinson's different
              * polygon inclusion tests.
              */
-            if ( ((vtx1[Y]-ty) * (vtx1[X]-vtx0[X]) >=
-              (vtx1[X]-tx) * (vtx1[Y]-vtx0[Y])) == yflag1 )
+            if ( ((vtx1[1]-ty) * (vtx1[0]-vtx0[0]) >=
+              (vtx1[0]-tx) * (vtx1[1]-vtx0[1])) == yflag1 )
             {
               inside_flag = !inside_flag;
             }
@@ -462,5 +463,103 @@ void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
 
 }
 
+
+void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
+{
+
+    if(svar.Bcase == 4)
+    {
+        real volume = pow(svar.Pstep,SIMDIM)*svar.totPts;
+    #if SIMDIM == 3
+        real dvol = (4.0*M_PI/3.0)*pow(0.5*svar.diam,3.0);
+    #else
+        real dvol = M_PI*pow(0.5*svar.diam,2.0);
+    #endif
+        
+        cout << "SPH Volume: " << volume << "  Droplet expected volume: " << dvol << endl;
+        cout << std::scientific;
+        svar.mass = pnp1[0].m * svar.totPts;
+
+        cout << "SPH Mass:    " << svar.mass << "     Droplet expected mass: " << dvol*fvar.rho0;   
+
+        cout << " Error: " << std::fixed << 100.0*(dvol*fvar.rho0-svar.mass)/(dvol*fvar.rho0) << "%" << endl;   
+        cout << std::scientific;
+
+        cout << "Old SPH particle mass: " << fvar.simM << "  spacing: " << svar.Pstep << endl;
+        // Adjust mass and spacing to create the correct mass/volume for the droplet.
+
+        fvar.simM = dvol*fvar.rho0/svar.totPts;
+        // svar.Pstep = pow(fvar.simM/fvar.rho0,1.0/SIMDIM);
+
+
+
+    }
+    else if (svar.Bcase == 3)
+    {   /*Jet flow*/
+        /*Take the height of the jet, and find the volume of the cylinder*/
+#if SIMDIM == 3 
+        real cVol = 6.0*svar.Pstep * (M_PI * pow((svar.Jet(0)/2.0),2));
+#else
+        real cVol = 6.0*svar.Pstep * svar.Jet(0);
+#endif
+        real volume = pow(svar.Pstep,SIMDIM)*real(svar.simPts);
+
+        cout << "SPH Volume: " << volume << "  Starting jet expected volume: " << cVol << endl;
+        cout << std::scientific;
+        svar.mass = pnp1[0].m * real(svar.simPts);
+
+        cout << "SPH Mass:    " << svar.mass << "     Starting jet expected mass: " << cVol*fvar.rho0;   
+
+        cout << " Error: " << std::fixed << 100.0*(cVol*fvar.rho0-svar.mass)/(cVol*fvar.rho0) << "%" << endl;   
+        cout << std::scientific;
+
+        cout << "Old SPH particle mass: " << fvar.simM << "  spacing: " << svar.Pstep << endl;
+        // Adjust mass and spacing to create the correct mass/volume for the droplet.
+
+        fvar.simM = cVol*fvar.rho0/real(svar.simPts);
+
+    }
+
+#if SIMDIM == 3
+    svar.Pstep = 2*pow((3.0*fvar.simM)/(4.0*M_PI*fvar.rho0),1.0/3.0);
+#else
+    svar.Pstep = 2*sqrt(fvar.simM/(fvar.rho0*M_PI));
+#endif
+
+    GetYcoef(avar, fvar, /*fvar.H*/ svar.Pstep);
+    fvar.H = fvar.Hfac*svar.Pstep;
+    fvar.HSQ = fvar.H*fvar.H; 
+
+    fvar.sr = 4*fvar.HSQ;   /*KDtree search radius*/
+
+    fvar.dCont = fvar.delta * fvar.H * fvar.Cs;
+    fvar.dMom = fvar.dCont * fvar.rho0;
+
+#if SIMDIM == 2
+    fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
+#endif
+#if SIMDIM == 3
+    fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+#endif
+
+#if SIMDIM == 3
+    avar.pVol = 4.0/3.0 * M_PI * pow(avar.L,SIMDIM);
+    // avar.aPlate = svar.Pstep*svar.Pstep;
+    avar.aPlate = 4.0*avar.L*avar.L;
+#else
+    avar.pVol = M_PI* avar.L*avar.L/4.0;
+    // avar.aPlate = svar.Pstep;
+    avar.aPlate = 2.0*avar.L;
+#endif
+
+    for(size_t ii = 0; ii < svar.totPts; ii++)
+    {
+        pn[ii].m = fvar.simM;
+        pnp1[ii].m = fvar.simM;
+    }
+
+    svar.mass = pnp1[0].m * svar.totPts;
+    cout << "New SPH particle mass: " << fvar.simM << "  spacing: " << svar.Pstep << endl;
+}
 
 #endif

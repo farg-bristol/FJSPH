@@ -98,22 +98,16 @@ int main(int argc, char *argv[])
 
   	if(svar.restart == 1)
   	{
-  		Restart(svar,pn,cells);
-  		// Initialise the pressure
-  		for(size_t ii = 0 ; ii < svar.totPts; ii++)
-  		{
-  			pn[ii].p =  fvar.B*(pow(pn[ii].rho/fvar.rho0,fvar.gam)-1);
-  		}
-  		pnp1 = pn;
-  		// Define svar.clear to state a particle is clear of the starting area
-  		if (svar.Bcase == 2 || svar.Bcase == 3 || svar.Bcase == 5)
-  			svar.clear = -svar.Jet[1] + 4*svar.dx;
-  		else
-  			svar.clear = 0.0;
-
+  		Restart(svar,fvar,avar,pn,pnp1,cells);
   	}
   	else
+  	{
   		InitSPH(svar,fvar,avar,pn,pnp1);
+
+  		// Redefine the mass and spacing to make sure the required mass is conserved
+  		if(svar.Bcase == 4 || svar.Bcase == 3)
+	  		Set_Mass(svar,fvar,avar,pn,pnp1);
+  	}
 
 	// Check if cells have been initialsed before making a tree off it
 	if(cells.cCentre.size() == 0)
@@ -132,9 +126,7 @@ int main(int argc, char *argv[])
 		cells.cPertn.emplace_back();
 		cells.cPertnp1.emplace_back();
 	}
-
-	// Vec_Tree CELL_INDEX(SIMDIM,cells.cCentre,20);
-		
+	
 	cout << "Starting counts: " << endl;
 	cout << "Boundary: " << svar.bndPts << "  Sim: " << svar.simPts << endl;
 	
@@ -144,60 +136,20 @@ int main(int argc, char *argv[])
 	TREE.CELL.index->buildIndex();
 	TREE.NP1.index->buildIndex();
 
-	// if(svar.Bcase == 6)
-	// {
-	// 	cout << "Building cell neighbours..." << endl;
-	// 	FindCellNeighbours(TREE.CELL, cells.cCentre, cells.cNeighb);
-	// }
-
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
-	#if SIMDIM == 3
-		// avar.nfull = (2.0/3.0) * real(nfull->size());
-		avar.nfull = 1.713333e+02;
-		svar.nfull = 257;
+	
+	// real aMom = 0.0;
+	// for(size_t ii = 0; ii < cells.size(); ii++)
+	// {
+	// 	// Find the total momentum of the cells
+	// 	aMom += cells.cMass[ii]*(cells.cVel[ii]).norm();
+	// }
 
-		// avar.nfull = 170;
-		// svar.nfull = 257;
-	#endif
-	#if SIMDIM == 2
-		avar.nfull = 36;
-		svar.nfull = 48;
+	// svar.aMom = aMom;
+	// svar.tMom = aMom;
 
-		// avar.nfull = 37;
-		// svar.nfull = 48;
 
-	#endif
-
-	real aMom = 0.0;
-	for(size_t ii = 0; ii < cells.size(); ii++)
-	{
-		// Find the total momentum of the cells
-		aMom += cells.cMass[ii]*(cells.cVel[ii]).norm();
-	}
-
-	svar.aMom = aMom;
-	svar.tMom = aMom;
-
-	if(svar.Bcase == 4)
-	{
-		real volume = pow(svar.Pstep,SIMDIM)*svar.totPts;
-	#if SIMDIM == 3
-		real dvol = (4.0*M_PI/3.0)*pow(0.5*svar.diam,3);
-	#else
-		real dvol = M_PI*pow(0.5*svar.diam,2);
-	#endif
-		cout << "SPH Volume: " << volume << "  Droplet expected volume: " << 
-		dvol;
-		cout << " Error: " << std::fixed << 100.0*(dvol-volume)/dvol << "%"  << endl;
-		cout << std::scientific;
-		svar.mass = pnp1[0].m * svar.totPts;
-
-		cout << "SPH Mass: " << svar.mass << "  Droplet expected mass: " << dvol*fvar.rho0;	
-
-		cout << " Error: " << std::fixed << 100.0*(dvol*fvar.rho0-svar.mass)/(dvol*fvar.rho0) << "%" << endl;	
-		cout << std::scientific;
-	}
 
 	///*** Perform an iteration to populate the vectors *****/
 	if(svar.restart == 0)
@@ -222,113 +174,14 @@ int main(int argc, char *argv[])
 	else
 		ghost_strand = 3;
 
-
-	if(svar.outtype == 0 )
-	{
-		/*Write sim particles*/
-		
-		Init_Binary_PLT(svar,"Fuel.szplt","Simulation Particles");
-		if(svar.restart == 0)
-		{
-			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1);
-		}
-
-		if (svar.Bcase != 0 && svar.Bcase !=4)
-		{
-			/*Write boundary particles*/
-			Init_Binary_PLT(svar,"Boundary.szplt","Boundary Particles");
-
-			if(svar.boutform == 0 && svar.restart == 0)
-			{   //Don't write a strand, so zone is static. 
-				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",0); 
-				TECEND142();			
-			}
-			else if(svar.restart == 0)
-				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2); 
-		}	
-
-		if (svar.ghost == 1 && svar.gout == 1)
-		{
-			/*Write boundary particles*/
-			Init_Binary_PLT(svar,"Ghost.szplt","Ghost Particles");		
-		}	
-	}
-	else if (svar.outtype == 1)
-	{
-
-		if (svar.Bcase != 0 && svar.Bcase != 4 &&  svar.restart == 0)
-		{	/*If the boundary exists, write it.*/
-			string bfile = svar.outfolder;
-			bfile.append("Boundary.plt");
-			fb.open(bfile, std::ios::out);
-			if(fb.is_open())
-			{
-				Write_ASCII_header(fb,svar);
-				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");
-				if(svar.boutform == 0)
-					fb.close();
-			}
-			else
-			{
-				cerr << "Error opening boundary file." << endl;
-				exit(-1);
-			}
-		}
-
-		/* Write first timestep */
-		string mainfile = svar.outfolder;
-		mainfile.append("Fuel.plt");
-		f1.open(mainfile, std::ios::out);
-		if(f1.is_open())
-		{
-			Write_ASCII_header(f1,svar);
-			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,"Fuel");
-		}
-		else
-		{
-			cerr << "Failed to open fuel.plt. Stopping." << endl;
-			exit(-1);
-		}
-
-		if(svar.ghost == 1 && svar.gout == 1)
-		{
-			string ghostfile = svar.outfolder;
-			ghostfile.append("Ghost.plt");
-			fg.open(ghostfile,std::ios::out);
-			if(fg.is_open())
-			{
-				Write_ASCII_header(fg,svar);
-				Write_ASCII_Timestep(fg,svar,airP,0,0,airP.size(),"Ghost");
-			}
-		}
-	}
-	// else if (svar.outtype == 2)
-	// {
-	// 	string mainfile = svar.outfolder;
-	// 	mainfile.append("/Fuel.h5part");
-	// 	fn = new NcFile(mainfile, NcFile::replace);
-	// 	Write_CDF_File(*fn,svar,pnp1);
-	// 	if (svar.Bcase != 0 && svar.Bcase !=5)
-	// 		Write_Boundary_CDF(svar, pnp1);
-	// }
-	// else if (svar.outtype == 3)
-	// {
-	// 	fh5 = H5OpenFile("testfile.h5part", H5_O_WRONLY, H5_PROP_DEFAULT);
-	// 	H5SetStepNameFormat(fh5,"Step",6);
-	// 	Write_H5_File(fh5,svar,pnp1);
-	// }
-	else
-	{
-		cerr << "Output type ambiguous. Please select 0 or 1 for output data type." << endl;
-		exit(-1);
-	}
+	Write_First_Step(f1,fb,fg,svar,pnp1,airP);
+	
 	if(svar.restart == 0)
 	{
 		if(svar.Bcase == 3 && (svar.Asource == 1 || svar.Asource == 2))
 		{// Check if the pipe is inside the mesh
 			cout << "Checking Pipe..." << endl;
 			real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
-			real stepb = (svar.Pstep*svar.Bstep);
 			real r = 0.5*holeD;
 #if SIMDIM == 3
 	    	real dtheta = atan((stepb)/(r));
@@ -348,7 +201,7 @@ int main(int argc, char *argv[])
 
 	    	}
 #else
-	    	for(real x = -r; x <= r; x+=stepb)
+	    	for(real x = -r; x <= r; x+=svar.Pstep)
 	    	{
 
 	    		StateVecD xi(x,0.0);
@@ -396,19 +249,11 @@ int main(int argc, char *argv[])
 		<< " Comp Time: " << std::fixed << duration << " Error: " << 0 << " Sub-iterations: " 
 	    << 0 << endl;
 		f2 << "Deleted particles: " << svar.delNum << " Internal collisions: " << svar.intNum <<  endl;
-		
 
-		// f2 << "Minimum Coords:" << endl << std::scientific << std::setprecision(8) 
-		// 	<< svar.minC(0) << " " << svar.minC(1) << " ";
-		// #if SIMDIM ==3
-		// f2 << svar.minC(2) << " ";
-		// #endif
-		// f2 << endl << "Maximum Coords:" << endl  << svar.maxC(0) << " " << svar.maxC(1);
-		// #if SIMDIM ==3
-		// f2 <<  " " << svar.maxC(2); 
-		// #endif
-		// f2 << endl;
+		// Write a settings file in the solution folder.
+		Write_Input(svar,fvar,avar);
 	}
+
 	///************************* MAIN LOOP ********************/
 	
 #ifdef DEBUG
@@ -472,37 +317,7 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-
-		if (svar.outtype == 0)
-		{
-			if(svar.Bcase != 0 && svar.Bcase != 4 && svar.boutform == 1)
-			{	/*Write boundary particles*/
-				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2); 
-			}
-			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1); /*Write sim particles*/
-			if(svar.ghost == 1 && svar.gout == 1 && airP.size() != 0)
-				Write_Binary_Timestep(svar,airP,0,airP.size(),"Ghost",ghost_strand);
-		} 
-		else if (svar.outtype == 1)
-		{
-			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,"Fuel");
-			if(svar.Bcase != 0 && svar.Bcase != 4 && svar.boutform == 1)
-			{
-				State empty;
-				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");
-			}
-
-			if(svar.ghost == 1 && svar.gout == 1)
-				Write_ASCII_Timestep(fg,svar,airP,0,0,airP.size(),"Ghost");
-		}
-		// else if (svar.outtype == 2)
-		// {
-		// 	Write_CDF_File(*fn,svar,pnp1);
-		// }
-		// else if (svar.outtype == 3)
-		// {
-		// 	Write_H5_File(fh5,svar,pnp1);
-		// }
+		Write_Timestep(f1,fb,fg,ghost_strand,svar,pnp1,airP);
 	}
 
 	/*Wrap up simulation files and close them*/
@@ -519,14 +334,18 @@ int main(int argc, char *argv[])
 	
 	if(svar.outtype == 0)
 	{
-		if(TECEND142())
+		if(tecFileWriterClose(&svar.fuelFile))
 			exit(-1);
+
+		if(svar.boutform == 1)
+			if(tecFileWriterClose(&svar.boundFile))
+				exit(-1);
+
+		if(svar.gout == 1)
+			if(tecFileWriterClose(&svar.ghostFile))
+				exit(-1);
 	}
-	// else if (svar.outtype == 3)
-	// {
-	// 	if(H5CloseFile(fh5))
-	// 		exit(-1);
-	// }
+
 	
 	cout << "Simulation complete!" << endl;
     cout << "Time taken:\t" << duration << " seconds" << endl;

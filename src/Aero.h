@@ -44,13 +44,14 @@ StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff,
 	real const Re = 2.0*avar.rhog*Vdiff.norm()*avar.L/avar.mug;
 	real Cds;
 
-	real const frac2 = real(size-1)
+	real const frac2 = std::min(nfull,real(size-1))
 					/(nfull);
 	real const frac1 = (1.0 - frac2);
 
 
 	// if (Re < 3500)
-	 	Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.00001));
+ 	Cds = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.00001));
+
 	// else
 	// 	Cds = 1.699e-05*pow(Re,1.92)*(24.0/(Re));
 	
@@ -62,18 +63,17 @@ StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff,
 	real const Cdl = Cds*(1+2.632*ymax);
 	real const	Cdi = frac1*Cdl + /*1.37**/frac2;
 
-	#if SIMDIM == 3 
-		real const Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
-		// real const Adrop = M_PI*pow(avar.L,2);
-	#endif
-	#if SIMDIM == 2
-		real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax) * pow(avar.L,1);
-		// real const Adrop = 2*avar.L;
-	#endif
+#if SIMDIM == 3 
+	real const Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
+	// real const Adrop = M_PI*pow(avar.L,2);
+#else
+	real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax) * pow(avar.L,1);
+	// real const Adrop = 2*avar.L;
+#endif
 
 	real const Aunocc = (frac1*Adrop + frac2*avar.aPlate);
 
-	real const Ai = (1-woccl)/*correc*/*Aunocc;
+	real const Ai = (1-woccl)*Aunocc;
 
 	// cout << "Fractions: " << frac1 << "  " << frac2 << endl;
 	// cout << "Areas: " << Ai << "  " << Adrop << "  " << avar.aPlate << endl;
@@ -86,7 +86,7 @@ StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff,
 }
 
 StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff,
-		StateVecD const& norm, uint const size, real const woccl)
+		StateVecD const& norm, uint const size, real const woccl, real const Pbasei)
 {
 	StateVecD Fd= StateVecD::Zero();
 
@@ -167,7 +167,11 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 
 			real press = 0.5*avar.rhog*Vdiff.squaredNorm()*Cp;
 
+#if SIMDIM == 3
+			Fd = -7.5*norm.normalized()*Aunocc*press/pi.m;
+#else
 			Fd = -norm.normalized()*Aunocc*press/pi.m;
+#endif
 
 			// if (theta <= 1.0  && theta >= -1.0)
 			// {
@@ -187,11 +191,57 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 	{	
 		Fd = GisslerForce(avar,Vdiff,pi.m,size,woccl);
 	}
+	else if(avar.acase == 5)
+	{
+							
+		real theta = acos(norm.normalized().dot(Vdiff.normalized()));
+		
+		real Cp = 0.0;
+
+		// if(abs(theta) < 2.48073)
+		// {
+		// 	Cp = 1- 4*pow(sin(abs(theta)),3);
+		// }
+		// else
+		// {
+		// 	Cp = 0.075;
+		// }
+
+		if(abs(theta) < 2.6399)
+		{
+			Cp = 1- 4*pow(sin(abs(theta)),2);
+		}
+		else
+		{
+			Cp = 0.075;
+		}
+
+		real Plocali = 0.5*avar.rhog*Vdiff.squaredNorm()*Cp;
+		// cout << Plocalj << endl;
+
+		real Pi = (Plocali+Pbasei);
+
+		// real sph_d = sqrt(pi.m/pi.rho);
+
+		real const Re = avar.rhog*Vdiff.norm()*avar.L/avar.mug;
+		real const Cdi = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.000001));
+
+
+		// cout << Cdi << endl;
+		StateVecD F_drop = 0.5*avar.rhog*Vdiff.norm()*Vdiff*(M_PI*avar.L*avar.L/4)*Cdi/pi.m;
+		// aeroD = -Pi * avar.aPlate * norm[ii].normalized();
+		StateVecD F_kern = 0.006*(Pi/pi.rho) * norm;
+
+		real const frac1 = real(size-1)/(avar.nfull);
+
+		Fd = frac1*F_kern + (1-frac1)*F_drop;
+
+	}
 
 	return Fd;
 }
 
-void ApplyAero(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
+void ApplyAero(SIM & svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
 	State const& pnp1, outl const& outlist, vector<StateVecD>& res, std::vector<StateVecD>& Af)
 {
 	// std::vector<StateVecD> Af(svar.totPts,StateVecD::Zero());
@@ -202,7 +252,7 @@ void ApplyAero(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells
 	#pragma omp parallel for shared(svar) /*reduction(+:res,Af)*/ 
 	for (size_t ii = start; ii < end; ++ii)
 	{
-		if(pnp1[ii].b == FREE)
+		if(pnp1[ii].b == PartState.FREE_)
 		{	
 			size_t size = outlist[ii].size();
 			Part pi(pnp1[ii]);
@@ -264,7 +314,7 @@ void ApplyAero(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells
 			} /*End of neighbours*/
 
 			/*Find the aero force*/
-			StateVecD Fd = CalcAeroForce(avar,pi,Vdiff,pi.normal,size,woccl);
+			StateVecD Fd = CalcAeroForce(avar,pi,Vdiff,pi.normal,size,woccl,0.0);
 			// StateVecD Fd = GisslerForce(svar,fvar,avar,Vdiff,pi.m,size,woccl);
 
 			// cout << Fd(0) << "  " << Fd(1) << endl;
@@ -299,12 +349,6 @@ void ApplyAero(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells
 		}/*End of if*/
 
 	}/*End of ii particles*/
-
-	svar.AForce = Force;
-	
-	
-	
-
 }
 
 #endif

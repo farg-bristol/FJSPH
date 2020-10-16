@@ -8,10 +8,10 @@
 0.00142               #Liquid dynamic viscosity
 0.00001716            #Gas dynamic viscosity
 0.0256                #Surface tension
+Solution              #Output folder name
+2DJSM_Pipe2.grid.edges #Input Mesh File
+soleq2.pval.unsteady_8000     #Input Solution File
+1                     #Input mesh scale
 83.16                 #Reference gas airspeed
 97000                 #Reference gas pressure
 306.55                #Reference gas temperature
-2DJSM_Pipe.grid.edges #Input Mesh File
-soleq2.pval.50000     #Input Solution File
-1                     #Input mesh scale
-Solution              #Output folder name

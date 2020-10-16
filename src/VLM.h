@@ -102,7 +102,7 @@ typedef class VLM
 		void GetGamma(StateVecD inf)
 		{
 			Freestream = inf;
-			/*Find the inflence matrix, and invert it to find gamma*/
+			/*Find the influence matrix, and invert it to find gamma*/
 
 			/*Find the influence matrix aInf*/
  			for(int i=0; i < npanels; ++i)
