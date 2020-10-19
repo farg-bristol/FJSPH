@@ -7,7 +7,7 @@ CX8=g++-8
 LIBS=-ltecio -lnetcdf_c++4 #-lH5hut -lhdf5
 #-lgmpxx -lgmp
 # Compiler flags. If desired add -g for debugging info.
-CFLAGS=-std=c++11 -Wall -ffast-math -funroll-loops -O3 -fopenmp
+CFLAGS=-std=c++14 -Wall -ffast-math -funroll-loops -O3 -fopenmp
 
 INC=#-I/usr/include/hdf5/serial/
 LLINK=#-L/usr/lib/x86_64-linux-gnu/hdf5/serial/
@@ -37,6 +37,12 @@ debug2:
 debug3:
 	$(CXX) -g -DDEBUG -DSIMDIM=3 ${FLAGS} $(CFLAGS) $(INC) $(LLINK) $(SOURCE) $(LIBS) -o $(TARGET)
 
+post:
+	$(CXX) ${FLAGS} $(CFLAGS) $(INC) $(LLINK) src/Post.cpp $(LIBS) -o SPHPost
+
+debugP:
+	$(CXX) -g -DDEBUG ${FLAGS} $(CFLAGS) $(INC) $(LLINK) src/Post.cpp $(LIBS) -o SPHPost
+
 c2f:
 	$(CXX) $(FLAGS) $(CFLAGS) $(INC) $(LLINK) src/Cell2Face.cpp $(LIBS) -o Cell2Face
 
@@ -48,6 +54,12 @@ c2e:
 
 c2eD:
 	$(CXX) -g -DDEBUG $(FLAGS) $(CFLAGS) $(INC) $(LLINK) src/Cell2Edge.cpp $(LIBS) -o Cell2Edge
+
+mesh:
+	$(CXX) $(FLAGS) $(CFLAGS) $(INC) src/MakeMesh.cpp -lnetcdf_c++4 -o MakeMesh
+
+meshD:
+	$(CXX) -g -DDEBUG $(FLAGS) $(CFLAGS) $(INC) src/MakeMesh.cpp -lnetcdf_c++4 -o MakeMesh
 
 clean:
 	$(RM) $(TARGET)

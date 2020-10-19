@@ -4,410 +4,175 @@
 #ifndef IO_H
 #define IO_H
 
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <stdio.h>  /* defines FILENAME_MAX */
-#include <dirent.h>
+
 #include "Eigen/Core"
 #include "Eigen/StdVector"
 #include "Eigen/LU"
 #include "Var.h"
-#include "BinaryIO.h"
+#include "IOFunctions.h"
 #include "CDFIO.h"
 // #include "TauIO.h"
 
-#ifdef WINDOWS
-    #include <direct.h>
-    #define GetCurrentDir _getcwd
-#else
-    #include <unistd.h>
-    #define GetCurrentDir getcwd
- #endif
-
-#ifndef M_PI
-#define M_PI (4.0*atan(1.0))
-#endif
-
-using std::cout;
-using std::cerr;
-using std::ifstream;
-using std::ofstream;
-using std::endl;
-using std::string; 
-using std::setw;
 
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
 /*************************************************************************/
-
-
-void write_header() 
+void Read_SIM_Var(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 {
-	cout << "******************************************************************" << endl << endl;
-	cout << "                              WCSPH                               " << endl << endl;
-	cout << "        Weakly Compressible Smoothed Particle Hydrodynamics       " << endl;
-	cout << "                      for Fuel Jettison case                      " << endl << endl;
-	cout << "                         James O. MacLeod                         " << endl;
-	cout << "                    University of Bristol, U.K.                   " << endl << endl;
-	cout << "******************************************************************" << endl << endl;
-}
-
-inline bool file_exists (const std::string& name) {
-  struct stat buffer;   
-  return (stat (name.c_str(), &buffer) == 0); 
-}
-
-void check_folder(string pathname)
-{	
+	svar.infolder = infolder;
+	string file = infolder;
+	file.append("Settings");
 #ifdef DEBUG
-	dbout << "Checking existence of folder:" << pathname << endl;
+	dbout << "Reading settings file. Path:" << endl << file << endl;
 #endif
-
-	struct stat info;
-	if( stat( pathname.c_str(), &info ) != 0 )
-  	{	/*Output directory doesn't exist, so create it*/
-		pathname.insert(0,"\"");
-		pathname.append("\"");
-  		string cmd = "mkdir ";
-	  	cmd.append(pathname);
-#ifdef DEBUG
-		dbout << "Folder doesn't exist. Trying to create folder. Command:" << endl;
-		dbout << cmd << endl;
-#endif
-	    if(system(cmd.c_str()))
-	    {
-	    	cout << "System command failed to execute." << endl;
-	    	cout << "Command: " << cmd << endl;
-	    	exit(-1);
-	    }
+	std::ifstream in(file);
+  	if(!in.is_open()) 
+  	{	
+  		cerr << "Error opening the settings file." << endl;
+	    exit(-1);
   	}
-	else if( info.st_mode & S_IFDIR ) 
-	{	/*If it exists, Check that directory can be accessed*/
-		DIR *dir;
-		if ((dir = opendir (pathname.c_str())) != NULL) 
-		    closedir (dir);
+
+	/*Simulation parameters*/
+	cout << "Input file opened. Reading settings..." << endl;
+  	uint lineno = 0;
+  	svar.scale = 1.0;
+	svar.framet = getDouble(in, lineno, "Frame time");
+	svar.Nframe = getInt(in, lineno, "Number of frames");
+	svar.outframe = getInt(in, lineno, "Output frame info");
+	svar.outtype = getInt(in, lineno, "Output data type");
+	svar.outform = getInt(in, lineno, "Output contents");
+	svar.boutform = getInt(in, lineno, "Boundary time output");
+	svar.gout = getInt(in, lineno, "Output ghost particles to file");
+	svar.subits = getInt(in, lineno, "Max sub iterations");
+	svar.nmax = getInt(in, lineno, "Max particle add rounds");
+	/*Get post processing options*/
+	svar.cellSize = getDouble(in, lineno, "Post processing mesh size");
+	svar.postRadius = getDouble(in, lineno, "Post processing support radius");
+	/*Particle settings*/	
+	svar.Pstep = getDouble(in, lineno, "Particle initial spacing");
+	svar.Bstep = getDouble(in, lineno, "Boundary spacing factor");
+	svar.Bcase = getInt(in, lineno, "Simulation initial case");
+	svar.Asource = getInt(in, lineno, "Simulation aerodynamic solution source");
+	avar.acase = getInt(in, lineno, "Simulation aerodynamic case");
+	svar.ghost = getInt(in, lineno, "Ghost particles?");
+	svar.Start = getDVector(in, lineno, "Starting position");
+	if(svar.Bcase < 2)
+	{
+		svar.xyPART = getIVector(in, lineno, "Particles in each coordinate");
+		svar.Box= getDVector(in, lineno, "Box dimensions");
+		fvar.pPress = getDouble(in, lineno, "Pipe pressure");
+		if(svar.Box(0) < 0 || svar.Box(1) < 0 
+		#if SIMDIM == 3
+			|| svar.Box(2) < 0
+		#endif
+		)
+		{
+			cout << "Box dimensions are negative. Please check the input and try again." << endl;
+			cout << "Line " << lineno << endl;
+			exit(-1);
+		}
+	}
+	else if(svar.Bcase > 1 && svar.Bcase < 8)
+	{	
+		StateVecD angles = getDVector(in, lineno, "Starting angle");
+		svar.Angle = angles;
+		angles = angles*M_PI/180;
+		svar.Rotate = GetRotationMat(angles);
+		svar.Transp = svar.Rotate.transpose();
+		svar.Jet = getvector(in, lineno, "Jet dimensions");
+		fvar.pPress = getDouble(in, lineno, "Pipe pressure");
+		avar.vJet = StateVecD::Zero(); avar.vInf = StateVecD::Zero();
+		avar.vJet(1) = getDouble(in, lineno, "Jet velocity");  
+		avar.vJet = svar.Rotate*avar.vJet;
+		avar.vInf = getDVector(in, lineno, "Freestream velocity");
+		if(avar.acase == 2 || avar.acase == 3)
+		{
+			avar.a = getDouble(in, lineno, "a");
+			avar.h1 = getDouble(in, lineno, "h1");
+			avar.b = getDouble(in, lineno, "b");
+			avar.h2 = getDouble(in, lineno, "h2");
+		}
+		if(avar.acase > 6)
+		{
+			cout << "Aerodynamic case is not in design. Stopping..." << endl;
+			exit(-1);
+		}
 	}
 	else
 	{
-	    cerr << "Can't access or create output directory. Stopping." << endl;
+		cout << "Boundary case not within design. Stopping." << endl;
+		exit(-1);
+	}
+	
+
+#ifdef DEBUG
+	dbout << "Closing settings file"  << endl;
+#endif
+	in.close();	
+}
+
+void Read_FLUID_Var(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
+{
+	string file = infolder;
+	file.append("Fluid");
+#ifdef DEBUG
+	dbout << "Reading fluid file. Path:" << endl << file << endl;
+#endif
+	std::ifstream fluid(file);
+	if (!fluid.is_open())
+	{	
+		cerr << "Error opening the fluid file." << endl;
 	    exit(-1);
 	}
-}
 
-int MakeOutputDir(int argc, char *argv[], SIM &svar)
-{
-	char cCurrentPath[FILENAME_MAX];
-	if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
-	return errno;
+	/*Fluid parameters read*/
+	uint lineno = 0;
+	Eigen::Vector2d nb = getvector(fluid, lineno, "Newmark-Beta terms");
+	svar.beta = nb[0];	svar.gamma = nb[1];
+	fvar.Hfac = getDouble(fluid, lineno, "Smoothing length factor"); /*End of state read*/
 
-	/*Open an output directory in the name of the input file, under Outputs*/
-	string pathname = cCurrentPath;
-  	string input = argv[1];
-  	uint pos1 = input.find("/"); 	uint pos2 = input.find(".");
-  	string file = input.substr(pos1+1,pos2-pos1-1);
-  	pathname.append("/Outputs/");
-
-  
-  	/*Check for output file name*/
-	if(argc == 2)
-	{	
-		pathname.append(file);
-		string path = pathname;
-		check_folder(pathname);
-	}
-	else if(argc == 3)
-	{	/*Open that file if it has*/
-		pathname.append(argv[2]);
-		string path = pathname;
-		check_folder(pathname);
-	}
-	else
-	{	/*Otherwise, open a standard file name*/
-		cout << "\tWARNING: no files provided. Stopping..." << endl;
-		exit(-1);
-	}
-
-	/*Check if there is a slash at the end.*/
-
-  	if (pathname.back() != '/')
-  	{
-  		pathname.append("/");
-  	}
-
-  	svar.outfolder = pathname;
-
-  	/*Check output folder for any prexisting files*/
-  	if(svar.outtype == 0)
-  	{
-  		string file = pathname;
-  		file.append("Fuel.szplt.szdat");
-#ifdef DEBUG
-  		dbout << "Checking for existence of previous szplt files." << endl;
-  		dbout << "Path: " << file << endl;
-#endif
-  		struct stat info;
-  		if(stat( file.c_str(), &info ) == 0)
-  		{
-	  		string cmd = "exec rm -r \"";
-	  		cmd.append(pathname);
-	  		cmd.append("\"*.szplt.sz*");
-#ifdef DEBUG
-  		dbout << "Files found. Attempting to remove." << endl;
-  		dbout << "Command: " << cmd << endl;
-#endif
-	  		if(system(cmd.c_str()))
-	  		{
-		    	cout << "System command failed to execute." << endl;
-		    	cout << "Command: " << cmd << endl;
-		    	exit(-1);
-		    }
-		}
-  	}
-  	else if(svar.outtype == 2)
-  	{	/*Create h5 folder*/
-  		pathname.append("h5/");
-  		check_folder(pathname);
-  		string file = pathname;
-  		file.append("fuel_0.00e+00.h5part");
-  		struct stat info;
-  		if(stat( file.c_str(), &info ) == 0)
-  		{
-	  		string cmd = "exec rm -r \"";
-	  		cmd.append(pathname);
-	  		cmd.append("\"*.h5part");
-	  		if(system(cmd.c_str()))
-	  		{
-		    	cout << "System command failed to execute." << endl;
-		    	cout << "Command: " << cmd << endl;
-		    	exit(-1);
-		    }
-		}
-  	}
-
-	return 0;
-}
-
-int getInt(ifstream& In, uint& lineno, const string& name)
-{
-	string line;
-	getline(In,line);
-	lineno++;
-	std::stringstream sstr;
-	sstr << line;
-	int i;
-	if(sstr >> i)
+  	fvar.alpha = getDouble(fluid, lineno, "Artificial visc");
+	fvar.contangb = getDouble(fluid, lineno, "contact angle");
+	fvar.rho0 = getDouble(fluid, lineno, "Fluid density rho0");
+	avar.rhog = getDouble(fluid, lineno, "Air density rhog");
+	fvar.Cs = getDouble(fluid, lineno, "Speed of sound");
+	fvar.mu = getDouble(fluid, lineno, "Fluid viscosity");
+	avar.mug = getDouble(fluid, lineno, "Air viscosity");
+	fvar.sig = getDouble(fluid, lineno, "Surface Tension");
+	svar.outfolder = getString(fluid,lineno, "Output Folder name");
+	svar.outdir = svar.outfolder;
+	if(svar.Asource != 0)
 	{
-#ifdef DEBUG
-		dbout << name << ": " << i << endl;
-#endif	
-		return i; 
-	}
-	else
-	{
-		cout << "Line does not contain a value. Please check your input." << endl;
-		cout << "Expecting: " << name << endl;
+		svar.meshfile = getString(fluid, lineno, "Mesh input file");
+  		svar.solfile = getString(fluid,lineno, "Mesh solution file");
+  		svar.scale = getDouble(fluid,lineno, "Mesh scale");
+  		avar.vRef = getDouble(fluid, lineno, "Gas ref Vel");
+  		avar.pRef = getDouble(fluid, lineno, "Get ref Press");
+  		avar.T = getDouble(fluid, lineno, "Gas ref Temp");
 	}
 		
-	return 0;
-}
 
-double getDouble(ifstream& In, uint& lineno, const string& name)
-{
-	string line;
-	getline(In,line);
-	lineno++;
-	std::stringstream sstr;
-	sstr << line;
-	double d;
-	if(sstr >> d)
-	{
 #ifdef DEBUG
-		dbout << name << ": " << d << endl;
-#endif	
-		return d; 
-	}
-	else
-	{
-		cout << "Line does not contain a value. Please check your input." << endl;
-		cout << "Expecting: " << name << endl;
-	}
-		
-	return 0;
-}
-
-std::string getString(ifstream& In, uint& lineno, const string& name)
-{
-	string line;
-	getline(In,line);
-	lineno++;
-	size_t ptr = line.find_first_of(' ');
-	string result = line.substr(0,ptr);
-#ifdef DEBUG
-	dbout << name << ": " << result << endl;
-#endif	
-	return result; 
-}
-
-StateVecI getIVector(ifstream& In, uint& lineno, const string& name)
-{
-	string line;
-	getline(In,line);
-
-	lineno++;
-	std::istringstream sline(line);
-	// cout << sline.str() << endl;
-	StateVecI x;
-	sline >> x(0); sline >> x(1); 
-
-	#if SIMDIM == 2
-		int temp;
-		if(sline >> temp)
-		{
-			cout << "\tWARNING: 3D Input provided for a 2D Simulation." << endl;
-			cout << "\t         The third dimension shall be ignored." << endl;
-			cout << "\tLine " << lineno << ": " << endl;
-			cout << "\t" << sline.str() << endl;
-		}
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1) << endl;
-#endif	
+	dbout << "Closing fluid file"  << endl;
 #endif
-#if SIMDIM == 3
-	sline >> x(2);
-	if (!sline)
-	{	
-		cout << "2D input provided. Please provide a 3D file." << endl;
-		cout << "Incorrect line " << lineno << ": " << endl;
-		cout << sline.str() << endl;
-		exit(-1);
-	}
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1) << "  " << x(2) << endl;
-#endif	
-#endif
+	fluid.close();
 
-	return x;
-}
-
-StateVecD getDVector(ifstream& In, uint& lineno, const string& name)
-{
-	string line;
-	getline(In,line);
-	lineno++;
-	std::istringstream sline(line);
-	
-	StateVecD x;
-	sline >> x(0); sline >> x(1);
-
-#if SIMDIM == 2
-	double temp;
-	if(sline >> temp)
+	if(svar.Asource == 3)
 	{
-		cout << "\tWARNING: 3D Input provided for a 2D Simulation." << endl;
-		cout << "\t         The third dimension shall be ignored." << endl;
-		cout << "\tLine " << lineno << ": " << endl;
-		cout << "\t" << sline.str() << endl;
+		avar.vRef=avar.vInf.norm();
 	}
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1) << endl;
-#endif	
-#endif
-#if (SIMDIM == 3)
-	sline >> x(2);
-	if (!sline)
-	{	
-		cout << "2D input provided. Please provide a 3D file." << endl;
-		cout << "Incorrect line " << lineno << ": " << endl;
-		cout << sline.str() << endl;
-		exit(-1);
-	}
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1) << "  " << x(2) << endl;
-#endif	
-#endif	
-
-	return x;
 }
 
-/*Function for a 2D Vector (e.g. Newmark Beta parameters)*/
-Eigen::Vector2d getvector(ifstream& In, uint& lineno, const string& name)
-{
-	string line;
-	getline(In,line);
-	lineno++;
-	std::istringstream sline(line);
-	
-	Eigen::Vector2d x;
-	sline >> x[0]; sline >> x[1]; 
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1) << endl;
-#endif	
-	return x;
-}
-
-void GetAero(AERO& avar, const FLUID& fvar, const ldouble rad)
-{
-	#if SIMDIM == 3
-		avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
-	#endif
-	#if SIMDIM == 2
-		avar.L = 2*rad;
-	#endif
-	avar.td = (2.0*fvar.rho0*pow(avar.L,SIMDIM-1))/(avar.Cd*fvar.mu);
-
-	avar.omega = sqrt((avar.Ck*fvar.sig)/(fvar.rho0*pow(avar.L,SIMDIM))-1.0/pow(avar.td,2.0));
-
-	avar.tmax = -2.0 *(atan(sqrt(pow(avar.td*avar.omega,2.0)+1)
-					+avar.td*avar.omega) - M_PI)/avar.omega;
-
-	avar.Cdef = 1.0 - exp(-avar.tmax/avar.td)*(cos(avar.omega*avar.tmax)+
-		1/(avar.omega*avar.td)*sin(avar.omega*avar.tmax));
-	avar.ycoef = 0.5*avar.Cdef*(avar.Cf/(avar.Ck*avar.Cb))*(fvar.rhog*avar.L)/fvar.sig;
-
-	//cout << avar.ycoef << "  " << avar.Cdef << "  " << avar.tmax << "  " << endl;
-}
-
-RotMat GetRotationMat(StateVecD& angles)
-{
-	if (SIMDIM == 3)
-	{
-		RotMat rotx, roty, rotz;
-		rotx << 1.0, 0.0            , 0.0           ,
-			    0.0, cos(angles(0)) , sin(angles(0)),
-				0.0, -sin(angles(0)), cos(angles(0));
-
-		roty << cos(angles(1)) , 0.0 , -sin(angles(1)),
-			    0.0            , 1.0 , 0.0            ,
-				sin(angles(1)) , 0.0 , cos(angles(1));
-
-		rotz << cos(angles(2)) , sin(angles(2)) , 0.0 ,
-			    -sin(angles(2)), cos(angles(2)) , 0.0 ,
-				0.0            , 0.0            , 1.0 ;
-
-		return rotx*roty*rotz;
-	}
-	else if (SIMDIM == 2)
-	{
-		RotMat rot;
-		rot << cos(angles(0)), -sin(angles(0)),
-		       sin(angles(0)),  cos(angles(0));
-
-		return rot;
-	}
-
-	return RotMat::Zero();
-
-}
 
 void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 {
-	uint justPost = 0;
-	double Hfac = 0;
+	svar.restart = 0;
+	StateVecD angle;
 	if (argc > 3) 
 	{	/*Check number of input arguments*/
-		cout << "\tWARNING: only two input arguments accepted,\n";
-		cout << "1: Input file directoy   2: Output file directory.\n";
-		cout << "Other inputs will be ignored." << endl;
+		cout << "\tWARNING: only a maximum of two input arguments accepted,\n";
+		cout << "1: Input file directory\n";
+		cout << "Other inputs will be ignored." << endl << endl;
 	}
 
 	if (argc == 1)
@@ -415,286 +180,458 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
     	cout << "\tERROR: No inputs provided. Stopping... \n";
     	exit(-1);    	
     }
-    else if (argc > 1)
-    {	/*Get parameters if it has been provided*/
-    	// cout << argv[1] << endl;
-    	string file = argv[1];
-    	
-    	
-    	if(file == "-post")
-    	{
-    		cout << "Post processing option selected." << endl;
-    		justPost = 1;
-    		file = argv[2];
-    	}
 
-
-    	if(file.back() != '/')
-	    	file.append("/");
-
-	    svar.infolder = file;
-		file.append("Settings.dat");
-#ifdef DEBUG
-		dbout << "Reading settings file. Path:" << endl << file << endl;
-#endif
-    	std::ifstream in(file);
-	  	if(in.is_open()) 
-	  	{	/*Simulation parameters*/
-	  		cout << "Input file opened. Reading settings..." << endl;
-		  	uint lineno = 0;
-	  		svar.framet = getDouble(in, lineno, "Frame time");
-	  		svar.Nframe = getInt(in, lineno, "Number of frames");
-	  		svar.outframe = getInt(in, lineno, "Output frame info");
-	  		svar.outtype = getInt(in, lineno, "Output data type");
-	  		svar.outform = getInt(in, lineno, "Output contents");
-	  		svar.boutform = getInt(in, lineno, "Boundary time output");
-	  		svar.gout = getInt(in, lineno, "Output ghost particles to file");
-	  		svar.subits = getInt(in, lineno, "Max sub iterations");
-	  		svar.nmax = getInt(in, lineno, "Max particle add rounds");	
-	  		svar.xyPART = getIVector(in, lineno, "Particles in each coordinate");
-	  		svar.Pstep = getDouble(in, lineno, "Particle initial spacing");
-	  		svar.Bstep = getDouble(in, lineno, "Boundary spacing factor");
-	  		svar.Bcase = getInt(in, lineno, "Simulation boundary case");
-	  		avar.acase = getInt(in, lineno, "Simulation Aerodynamic case");
-	  		svar.ghost = getInt(in, lineno, "Ghost particles?");
-	  		svar.Start = getDVector(in, lineno, "Starting position");
-	  		if(svar.Bcase < 2)
-	  		{
-	  			svar.Box= getDVector(in, lineno, "Box dimensions");
-	  			(void)getDouble(in, lineno, "Skip");
-	  			fvar.pPress = getDouble(in, lineno, "Pipe pressure");
-	  			if(svar.Box(0) < 0 || svar.Box(1) < 0 
-	  			#if SIMDIM == 3
-	  				|| svar.Box(2) < 0
-  				#endif
-	  			)
-	  			{
-	  				cout << "Box dimensions are negative. Please check the input and try again." << endl;
-	  				cout << "Line " << lineno << endl;
-	  				exit(-1);
-	  			}
-	  		}
-	  		else if(svar.Bcase > 1 && svar.Bcase < 8)
-	  		{	
-	  			StateVecD angles = getDVector(in, lineno, "Starting angle");
-	  			angles = angles *M_PI/180;
-	  			svar.Rotate = GetRotationMat(angles);
-	  			svar.Transp = svar.Rotate.transpose();
-		  		svar.Jet = getvector(in, lineno, "Jet dimensions");
-		  		fvar.pPress = getDouble(in, lineno, "Pipe pressure");
-		  		avar.vJet = StateVecD::Zero(); avar.vInf = StateVecD::Zero();
-		  		avar.vJet(1) = getDouble(in, lineno, "Jet velocity");  
-		  		avar.vJet = svar.Rotate*avar.vJet;
-		  		avar.vInf = getDVector(in, lineno, "Freestream velocity");
-		  		if(avar.acase == 2 || avar.acase == 3)
-		  		{
-		  			avar.a = getDouble(in, lineno, "a");
-		  			avar.h1 = getDouble(in, lineno, "h1");
-		  			avar.b = getDouble(in, lineno, "b");
-		  			avar.h2 = getDouble(in, lineno, "h2");
-		  		}
-		  		if(avar.acase > 5)
-		  		{
-		  			cout << "Aerodynamic case is not in design. Stopping..." << endl;
-		  			exit(-1);
-		  		}
-	  		}
-	  		else
-	  		{
-	  			cout << "Boundary case not within design. Stopping." << endl;
-	  			exit(-1);
-	  		}
-	  		/*Get post processing options*/
-	  		svar.afterSim = getInt(in, lineno, "Post processing");
-	  		svar.cellSize = getDouble(in, lineno, "Post processing mesh size");
-	  		svar.postRadius = getDouble(in, lineno, "Post processing support radius");
-
-#ifdef DEBUG
-			dbout << "Closing settings file"  << endl;
-#endif
-			in.close();
-	  	}
-	  	else {
-		    cerr << "Error opening the settings file." << endl;
-		    exit(-1);
-	  	}
-	}
-
-	/*Get fluid properties from fluid.dat*/
-	svar.scale = 1.0;
-	string file = svar.infolder;
-	file.append("Fluid.dat");
-#ifdef DEBUG
-	dbout << "Reading fluid file. Path:" << endl << file << endl;
-#endif
-	std::ifstream fluid(file);
-	if (fluid.is_open())
-	{	/*Fluid parameters read*/
-		uint lineno = 0;
-		Eigen::Vector2d nb = getvector(fluid, lineno, "Newmark-Beta terms");
-		svar.beta = nb[0];	svar.gamma = nb[1];
-		Hfac = getDouble(fluid, lineno, "Smoothing length factor"); /*End of state read*/
-
-	  	fvar.alpha = getDouble(fluid, lineno, "Artificial visc");
-  		fvar.contangb = getDouble(fluid, lineno, "contact angle");
-  		fvar.rho0 = getDouble(fluid, lineno, "Fluid density rho0");
-  		fvar.rhog = getDouble(fluid, lineno, "Air density rhog");
-  		fvar.Cs = getDouble(fluid, lineno, "Speed of sound");
-  		fvar.mu = getDouble(fluid, lineno, "Fluid viscosity");
-  		fvar.mug = getDouble(fluid, lineno, "Air viscosity");
-  		fvar.sig = getDouble(fluid, lineno, "Surface Tension");
-  		if(svar.Bcase == 6 || svar.Bcase == 4)
-  		{
-	  		fvar.gasVel = getDouble(fluid, lineno, "Gas ref Vel");
-	  		fvar.gasPress = getDouble(fluid, lineno, "Get ref Press");
-	  		fvar.T = getDouble(fluid, lineno, "Gas ref Temp");
-
-	  		if(svar.Bcase == 6)
-	  		{
-		  		svar.meshfile = getString(fluid, lineno, "Mesh input file");
-		  		svar.solfile = getString(fluid,lineno, "Mesh solution file");
-		  		svar.scale = getDouble(fluid,lineno, "Mesh scale");
-	  		}
-  		}
-#ifdef DEBUG
-		dbout << "Closing fluid file"  << endl;
-#endif
-  		fluid.close();
-
-  		if(svar.Bcase == 4)
-  		{
-  			fvar.gasVel=avar.vInf(1);
-  		}
-	}
-	else 
+	/*Get parameters if it has been provided*/
+	// cout << argv[1] << endl;
+	string file = argv[1];
+	    	
+	if(file == "-r")
 	{
-		cerr << "Fluid.dat not found. Assuming standard set of parameters (water)." << endl;
-		svar.beta = 0.25;	svar.gamma = 0.5;
-		fvar.H= 2.0*svar.Pstep;
-	  	fvar.alpha = 0.1;
-  		fvar.contangb = 150.0;
-  		fvar.rho0 = 1000.0;
-  		fvar.Cs = 100.0;
-  		fvar.mu = 1.0;
-  		fvar.sig = 0.0728;
-  		fvar.rhog = 1.225;
-  		fvar.mug = 18.5E-06;
+		cout << "Restart option selected." << endl;
+		file = argv[2];
+    	svar.restart = 1; 
 	}
 
-	  	/*Universal parameters based on input values*/
-	  	
+	if(file.back() != '/')
+    	file.append("/");
 
-	  	
-		fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
-		fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
+  	Read_SIM_Var(file,svar,fvar,avar);
+	
+	/*Get fluid properties from fluid.dat*/
+	Read_FLUID_Var(file,svar,fvar,avar);
+	
 
-		/*Pipe Pressure calc*/
-		ldouble rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
+  	/*Universal parameters based on input values*/
+	fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
+	fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
 
-		/*Defining pstep then finding dx*/
-		// fvar.Simmass = fvar.rho0*pow(svar.Pstep,SIMDIM);
-		// svar.dx = pow(fvar.Simmass/rho, 1.0/double(SIMDIM));
-		
+	/*Pipe Pressure calc*/
+	real rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
 
+	svar.nrad = 1;
+	if(svar.Bcase == 0 || svar.Bcase == 1)
+	{
+		svar.dx = svar.Pstep;
+	}
+	else if(svar.Bcase == 2 || svar.Bcase == 3)
+	{
 		// Defining dx to fit the pipe, then find rest spacing
-		uint ndiam = ceil(abs(svar.Jet(0)/svar.Pstep));
-		svar.dx = 0.999*svar.Jet(0)/ldouble(ndiam);	
+		if(svar.Jet(0)/svar.Pstep < 1.5)
+		{	/*spacing is too close to full size to use standard adjustment*/
+			cout << "Warning: particle spacing if of the same order of magintude of the jet diameter." << endl;
+			cout << "Consider a different size for accuracy." << endl;
+		}
+		else
+		{
+			svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
+			svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
+		}	
+ 	}
+ 	else if (svar.Bcase == 4)
+ 	{
+ 		if(svar.Jet(0)/svar.Pstep < 1.5)
+		{	/*spacing is too close to full size to use standard adjustment*/
+ 			svar.nrad = 1;
+ 			svar.dx = svar.Jet(0);
+		}
+		else
+		{
+	 		svar.nrad = ceil(abs(svar.Jet(0)*M_PI/svar.Pstep));
+	 		svar.dx = svar.Jet(0)*M_PI/real(svar.nrad);
+ 		}
+ 	}
+ 	else
+ 	{
+ 		if(svar.Jet(0)/svar.Pstep < 1.5)
+		{	/*spacing is too close to full size to use standard adjustment*/
+ 			svar.nrad = 1;
+ 			svar.dx = svar.Jet(0);
+		}
+		else
+		{
+	 		svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
+	 		svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
+ 		}
+ 	}
 
-	 	svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/3.0);
 
-	 	/*Mass from spacing and density*/
-		fvar.Simmass = fvar.rho0*pow(svar.Pstep,SIMDIM); 
-		fvar.Boundmass = fvar.Simmass;
-		fvar.gasDynamic = 0.5*fvar.rhog*fvar.gasVel;
+ 	// svar.dx = svar.Pstep;	
+	svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/SIMDIM);
 
-		svar.addcount = 0;
-	  	svar.dt = 2E-010; 			/*Initial timestep*/
-	  	svar.t = 0.0;				/*Total simulation time*/
-	  	fvar.H = Hfac*svar.Pstep;
-	  	fvar.HSQ = fvar.H*fvar.H; 
+	// Correct the droplet to have the same volume as the original
+	if(svar.Bcase == 4)
+	{
+		cout << "Droplet Diameter: " << svar.Jet(0) << endl;
+		svar.diam = svar.Jet(0);
+	}
 
-		fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
-		svar.Bclosed = 0; 		/*Boundary begins open*/
-		svar.psnPts = 0; 		/*Start with no pitson points*/
 
+#if SIMDIM == 3
+ 	avar.pVol = 4.0/3.0 * M_PI * pow(svar.Pstep,SIMDIM);
+#else
+ 	avar.pVol = M_PI* svar.Pstep*svar.Pstep;
+#endif
+
+ 	/*Mass from spacing and density*/
+	fvar.simM = fvar.rho0*pow(svar.Pstep,SIMDIM); 
+	fvar.bndM = fvar.simM;
+	avar.gasM = avar.rhog*pow(svar.Pstep,SIMDIM);
+	avar.qInf = 0.5*avar.rhog*avar.vRef*avar.vRef;
+
+	svar.addcount = 0;
+  	svar.dt = 2E-010; 			/*Initial timestep*/
+  	svar.t = 0.0;				/*Total simulation time*/
+  	fvar.H = fvar.Hfac*svar.Pstep;
+  	fvar.HSQ = fvar.H*fvar.H; 
+
+	fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
+	svar.Bclosed = 0; 		/*Boundary begins open*/
+	svar.psnPts = 0; 		/*Start with no pitson points*/
+  	svar.delNum = 0;
+  	svar.intNum = 0;
+
+  	fvar.dCont = 2.0 * fvar.delta * fvar.H * fvar.Cs;
+  	fvar.dMom = fvar.dCont * fvar.rho0;
 
 #if SIMDIM == 2
-				fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
-				svar.simPts = svar.xyPART[0]*svar.xyPART[1];
+	fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
+	svar.simPts = svar.xyPART[0]*svar.xyPART[1];
 #endif
 #if SIMDIM == 3
-				fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
-				svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
+	fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+	svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
 #endif
 
 #ifdef DEBUG
-		dbout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
-		dbout << "Pipe rho: " << rho << endl;
-		// dbout << "Number of fluid particles along diameter: " << ndiam << endl;
-		dbout << "Pipe step (dx): " << svar.dx << endl;
-		dbout << "Particle mass: " << fvar.Simmass << endl;
-		dbout << "Freestream initial spacing: " << svar.Pstep << endl;
-		dbout << "Support Radius: " << fvar.H << endl;
-		dbout << "Gas Dynamic pressure: " << fvar.gasDynamic << endl << endl;
+	dbout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
+	dbout << "Pipe rho: " << rho << endl;
+	dbout << "Number of fluid particles along diameter: " << 2*svar.nrad+1 << endl;
+	dbout << "Pipe step (dx): " << svar.dx << endl;
+	dbout << "Particle mass: " << fvar.simM << endl;
+	dbout << "Freestream initial spacing: " << svar.Pstep << endl;
+	dbout << "Support Radius: " << fvar.H << endl;
+	dbout << "Gas Dynamic pressure: " << avar.qInf << endl << endl;
 #endif
 
-		cout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
-		cout << "Pipe rho: " << rho << endl;
-		// dbout << "Number of fluid particles along diameter: " << ndiam << endl;
-		cout << "Pipe step (dx): " << svar.dx << endl;
-		cout << "Particle mass: " << fvar.Simmass << endl;
-		cout << "Freestream initial spacing: " << svar.Pstep << endl;
-		cout << "Support Radius: " << fvar.H << endl;
-		cout << "Gas Dynamic pressure: " << fvar.gasDynamic << endl << endl;
+	cout << "****** SIMULATION SETTINGS *******" << endl;
+	cout << "Tait gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
+	cout << "Newmark-Beta parameters: " << svar.beta << ", " << svar.gamma << endl;
+	cout << "Boundary case: " << svar.Bcase << endl;
+	cout << "Aerodynamic source: " << svar.Asource << endl;
+	cout << "Aerodynamic case: " << avar.acase << endl;
+	cout << "Speed of sound: " << fvar.Cs << endl;
+	cout << endl;
+	cout << "****** PIPE SETTINGS *******" << endl;
+	cout << "Pipe pressure: " << fvar.pPress << endl;
+	cout << "Pipe density: " << rho << endl;
+	cout << "Pipe step (dx): " << svar.dx << endl;
+	cout << "Pipe diameter: " << svar.Jet(0) << endl;
+	cout << "Number of fluid particles along diameter: " << 2*svar.nrad+1 << endl;
+	cout << "Pipe start position: " << svar.Start(0) << "  " << svar.Start(1);
+	#if SIMDIM == 3
+	cout << "  " << svar.Start(2);
+	#endif
+	cout << endl;
+	cout << "Pipe start rotation: " << svar.Angle(0) << "  " << svar.Angle(1);
+	#if SIMDIM == 3
+	cout << "  " << svar.Angle(2);
+	#endif
+	cout << endl;
+	cout << "Jet velocity: " << avar.vJet.norm() << endl;
 
-		#if SIMDIM == 3
-			if(svar.Bcase == 4)
-			{
-				svar.vortex.Init(svar.infolder);	
-				svar.vortex.GetGamma(avar.vInf);	
-			}
-		#endif
-
-		GetAero(avar, fvar, fvar.H);
-	
-	if (justPost==1)
+	cout << endl;		
+	cout << "****** RESTING FUEL SETTINGS *******" << endl;
+	cout << "Particle spacing: " << svar.Pstep << endl;
+	cout << "Support radius: " << fvar.H << endl;
+	cout << "Particle mass: " << fvar.simM << endl;
+	cout << "Liquid viscosity: " << fvar.mu << endl;
+	cout << "Resting density: " << fvar.rho0 << endl;
+	cout << endl;
+	cout << "****** FREESTREAM SETTINGS ******" << endl;
+	if(svar.Asource != 1 || svar.Asource != 2)
 	{
-		cout << "Starting post processing from output of the same case." << endl;
-	
-		svar.afterSim = 0;
-		/*Open an output directory in the name of the input file, under Outputs*/
-		char cCurrentPath[FILENAME_MAX];
-		if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
-			exit(-1);
-
-		/*Check the folder for the grid szplt files*/
-
-		string pathname = cCurrentPath;
-	  	string input = argv[2];
-	  	uint pos1 = input.find("/"); 	uint pos2 = input.find(".");
-	  	string file = input.substr(pos1+1,pos2-pos1-1);
-	  	pathname.append("/Outputs/");
-	  	pathname.append(file);
-	  	svar.outfolder = pathname;
-
-	  	fvar.H = svar.postRadius;
-	  	fvar.HSQ = fvar.H*fvar.H; 
-		fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
-
-	  	// cout << "Found path: " << pathname << endl;
-		TECMESH postgrid;
-
-		postgrid.DoPostProcessing(svar,fvar);
-
-		cout << "Post Processing complete!" << endl;
-		exit(0);
+		cout << "Gas Velocity: " << avar.vInf(0) << "  " << avar.vInf(1);
+#if SIMDIM == 3
+		cout << "  " << avar.vInf(2);
+#endif
+		cout << endl;
 	}
+
+	if(svar.Asource == 1 || svar.Asource == 2)
+	{
+		cout << "Mesh filename: " << svar.meshfile << endl;
+		cout << "Solution filename: " << svar.solfile << endl;
+		cout << "Reference velocity: " << avar.vRef << endl;
+		cout << "Reference pressure: " << avar.pRef << endl;
+		cout << "Reference temperature: " << avar.T << endl;
+		cout << "Gas dynamic pressure: " << avar.qInf << endl << endl;
+	}
+	cout << "Gas density: " << avar.rhog << endl;
+	cout << "Gas viscosity: " << avar.mug << endl << endl;
+	
+
+	cout << "******** FILE SETTINGS ********" << endl;
+	cout << "Input folder: " << svar.infolder << endl;
+	if(svar.Asource == 1 || svar.Asource == 2)
+	{
+		cout << "Input mesh face file: " << svar.meshfile  << endl;
+		cout << "Input solution file: " << svar.solfile << endl;
+	}
+
+	cout << "Output folder: " << svar.outfolder << endl << endl;
+	
+
+
+
+	#if SIMDIM == 3
+		if(svar.Asource == 3)
+		{
+			svar.vortex.Init(svar.infolder);	
+			svar.vortex.GetGamma(avar.vInf);	
+		}
+	#endif
+
+	
+	GetYcoef(avar, fvar, /*fvar.H*/ svar.Pstep);
+#if SIMDIM == 3
+	avar.aPlate = svar.Pstep*svar.Pstep;
+		// avar.aPlate = fvar.H*fvar.H;
+#else
+	avar.aPlate = svar.Pstep/**svar.Pstep*/ /** pow(avar.L,0.5)*/;
+		// avar.aPlate = fvar.H;
+#endif
+	// if(svar.restart!=1)
+	// 	Write_Input(svar,fvar,avar,angle);
 }
+
+
+void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& cells)
+{	
+	// Read the values from the solution folder, then check. 
+
+	// Check that a restart can be performed. 
+	if(svar.outform == 0 || svar.outform == 1 || svar.outform == 4)
+	{
+		cout << "Output type cannot be restarted from. Make sure that you have the correct output selected." << endl;
+		exit(-1);
+	}
+
+	if(svar.outform == 2)
+	{
+		if(svar.Bcase == 6)
+		{
+			cout << "No cell information. Cannot restart" << endl;
+			exit(-1);
+		}
+	}
+	// if(svar.boutform == 0)
+	// {
+	// 	cout << "No boundary time output, so can't be certain of forces from the boundary." << endl;
+	// 	exit(-1);
+	// }
+
+	if(svar.boutform == 0 && (svar.Bcase != 4 && svar.Bcase !=0))
+	{
+		cout << "Time data for the boundary has not been output. Cannot restart." << endl;
+		exit(-1);
+	}
+
+#ifdef DEBUG
+	dbout << "Reading frame info file for restart information." << endl;
+#endif
+
+	// Re-read the settings and fluid file
+	// cout << svar.outfolder << endl;
+
+	string outdir = svar.outfolder;
+	if(outdir.back() != '/')
+    	outdir.append("/");
+
+
+  	Read_SIM_Var(outdir,svar,fvar,avar);
+
+  	Read_FLUID_Var(outdir,svar,fvar,avar);
+
+  	svar.outfolder = outdir;
+
+	// Now get the data from the files. Start with the boundary
+	if(svar.outtype == 0)
+	{
+		State boundary, fuel;
+
+		string file;
+		INTEGER4 I;
+		INTEGER4 frameNo;
+		
+
+		// Read the fuel
+		void* fuelHandle = NULL;
+		string fuelf = outdir;
+		fuelf.append("Fuel.szplt");
+
+		// cout << fuelf << endl;
+		// fuelf = "Droplet2D/solution/Fuel.szplt";
+		I = tecFileReaderOpen(fuelf.c_str(),&fuelHandle);
+		if(I == -1)
+		{
+			cout << "Error opening szplt file. Path:" << endl;
+			cout << file << endl;
+			exit(-1);
+		}
+
+		cout << "Checking Fuel file..." << endl;
+		CheckContents(fuelHandle,svar);
+
+	    // Read the actual data.
+	    frameNo = svar.frame+1;
+
+		cout << endl << "Attempting to read the fuel..." << endl;
+		Read_Binary_Timestep(fuelHandle,svar,frameNo,fuel);
+
+		if (svar.Bcase != 4 && svar.Bcase !=0)
+		{
+			void* boundHandle = NULL;
+			string boundf = outdir;
+			boundf.append("Boundary.szplt");
+
+			I = tecFileReaderOpen(boundf.c_str(),&boundHandle);
+			if(I == -1)
+			{
+				cout << "Error opening szplt file. Path:" << endl;
+				cout << file << endl;
+				exit(-1);
+			}
+
+			cout << "Checking Boundary file..." << endl;
+			CheckContents(boundHandle,svar);
+
+			cout << "Attempting to read the boundary..." << endl;
+			Read_Binary_Timestep(boundHandle,svar,frameNo,boundary);
+		
+		}
+
+		pn = boundary;
+		svar.bndPts = boundary.size();
+		svar.simPts = fuel.size();
+		pn.insert(pn.end(),fuel.begin(),fuel.end());	
+		svar.totPts = pn.size();
+		
+		if(svar.simPts + svar.bndPts != svar.totPts)
+		{
+			cout << "Mismatch of array sizes. Total array is not the sum of the others" << endl;
+			exit(-1);
+		}
+
+		// if(svar.totPts != totPts || svar.bndPts != bndPts || svar.simPts != simPts)
+		// {
+		// 	cout << "Mismatch of the particle numbers in the frame file and data file." << endl;
+		// }
+	}
+	else
+	{
+		// TODO: ASCII Restart.
+		// Particle numbers can be found from frame file.
+		// Find EOF, then walk back from there how many particles.
+	}
+
+	// Go through the particles giving them the properties of the cell
+	#pragma omp parallel for 
+	for(size_t ii = 0; ii < svar.totPts; ++ii)
+	{
+		pn[ii].partID = ii;
+		pn[ii].p =  fvar.B*(pow(pn[ii].rho/fvar.rho0,fvar.gam)-1);
+
+		if((svar.Asource == 1 || svar.Asource == 2) && svar.outform == 5)
+		{
+			if(pn[ii].b == PartState.FREE_)
+			{
+				pn[ii].cellV = cells.cVel[pn[ii].cellID];
+				pn[ii].cellP = cells.cP[pn[ii].cellID];
+			}
+		}
+
+		if(pn[ii].b == PartState.BACK_)
+		{
+			svar.back.emplace_back(ii);
+		}
+	}
+	
+	pnp1 = pn;
+	// Define svar.clear to state a particle is clear of the starting area
+	if (svar.Bcase == 2 || svar.Bcase == 3 || svar.Bcase == 5)
+		svar.clear = -svar.Jet[1] + 4*svar.dx;
+	else
+		svar.clear = 0.0;
+
+	// int width = 15;
+
+	// for(size_t ii = 0; ii < svar.totPts; ++ii)
+	// {
+	// 	cout << setw(5) << pnp1[ii].partID << setw(width) << pnp1[ii].xi(0) << setw(width) << pnp1[ii].xi(1) << setw(width) <<
+	// 	pnp1[ii].rho << setw(width) << pnp1[ii].Rrho << setw(width) << pnp1[ii].m << setw(width) << pnp1[ii].v(0) << 
+	// 	setw(width) << pnp1[ii].v(1) << setw(width) << pnp1[ii].f(0) << setw(width) << pnp1[ii].f(1) << setw(4) << 
+	// 	pnp1[ii].b << setw(width) << pnp1[ii].cellV(0) << setw(width) << pnp1[ii].cellV(1) << setw(width) << pnp1[ii].cellP
+	// 	<< setw(width) << pnp1[ii].cellID << endl;
+	// }
+}
+
 
 /*************************************************************************/
 /**************************** ASCII OUTPUTS ******************************/
 /*************************************************************************/
-void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1, 
+void Write_ASCII_header(std::fstream& fp, SIM &svar)
+{
+	string variables;
+
+#if SIMDIM == 2
+	variables = "\"X\", \"Z\"";  
+	if (svar.outform == 1)
+	{
+		variables = "\"X\", \"Z\", \"rho\", \"P\", \"m\", \"v\", \"a\"";
+	}
+	else if (svar.outform == 2)
+	{
+		variables = "\"X\", \"Z\", \"rho\", \"P\", \"m\", \"v_x\", \"v_z\", \"a_x\", \"a_z\"";
+	}
+	else if (svar.outform == 3)
+	{
+		variables = 
+"\"X\", \"Z\", \"rho\", \"P\", \"m\", \"v_x\", \"v_z\", \"a_x\", \"a_z\", \"Cell_Vx\", \"Cell_Vz\", \"Cell_P\", \"Cell_ID\"";
+	}
+	else if (svar.outform == 4)
+	{
+		variables = "\"X\", \"Z\", \"rho\", \"P\", \"m\", \"v\", \"a\", \"b\", \"Neighbours\", \"Aero\"";
+	}
+
+#endif
+
+#if SIMDIM == 3
+	variables = "\"X\", \"Y\", \"Z\"";  
+	if (svar.outform == 1)
+	{
+		variables = "\"X\", \"Y\", \"Z\", \"rho\", \"P\", \"m\", \"v\", \"a\"";
+	}
+	else if (svar.outform == 2)
+	{
+		variables = "\"X\", \"Y\", \"Z\", \"rho\", \"P\", \"m\", \"v_x\", \"v_y\", \"v_z\", \"a_x\", \"a_y\", \"a_z\"";
+	}
+	else if (svar.outform == 3)
+	{
+		variables = 
+"\"X\", \"Y\", \"Z\", \"rho\", \"P\", \"m\", \"v_x\", \"v_y\", \"v_z\", \"a_x\", \"a_y\", \"a_z\", \"Cell_Vx\", \"Cell_Vy\", \"Cell_Vz\", \"Cell_P\", \"Cell_ID\"";
+	}
+	else if (svar.outform == 4)
+	{
+		variables = "\"X\", \"Y\", \"Z\", \"rho\", \"P\", \"m\", \"v\", \"a\", \"b\", \"Neighbours\", \"Aero\"";
+	}
+
+#endif
+
+	fp << "VARIABLES = " << variables << "\n";
+}
+
+
+void Write_ASCII_Timestep(std::fstream& fp, SIM &svar, const State &pnp1, 
 	const uint bwrite, const uint start, const uint end, const string& name)
 {
 	if(bwrite == 1)
@@ -814,7 +751,7 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1,
 	        for(uint i = 0; i < SIMDIM; ++i)
 				fp << setw(width) << p->cellV(i);
 
-			fp << setw(width) << p->cellRho << setw(width) << p->cellP;
+			fp << setw(width) << p->cellP;
 	        fp << setw(width) << p->cellID << "\n"; 
 	  	}
     }
@@ -836,97 +773,123 @@ void Write_ASCII_Timestep(std::ofstream& fp, SIM &svar, const State &pnp1,
     }
 }
 
-void Write_ASCII_header(std::ofstream& fp, SIM &svar)
+void Write_First_Step(std::fstream& f1, std::fstream& fb, std::fstream& fg, 
+						SIM& svar, State const& pnp1, State const& airP)
 {
-	string variables;
-
-#if SIMDIM == 2
-	variables = "\"X\" \"Z\"";  
-	if (svar.outform == 1)
+	if(svar.outtype == 0 )
 	{
-		variables = "\"X\" \"Z\" \"rho\" \"P\" \"m\" \"v\" \"a\"";
-	}
-	else if (svar.outform == 2)
-	{
-		variables = "\"X\" \"Z\" \"rho\" \"P\" \"m\" \"v_x\" \"v_z\" \"a_x\" \"a_z\"";
-	}
-	else if (svar.outform == 3)
-	{
-		variables = 
-"\"X\" \"Z\" \"rho\" \"P\" \"m\" \"v_x\" \"v_z\" \"a_x\" \"a_z\" \"Cell_Vx\" \"Cell_Vz\" \"Cell_Rho\" \"Cell_P\" \"Cell_ID\"";
-	}
-	else if (svar.outform == 4)
-	{
-		variables = "\"X\" \"Z\" \"rho\" \"P\" \"m\" \"v\" \"a\" \"b\" \"Neighbours\" \"Aero\"";
-	}
-
-#endif
-
-#if SIMDIM == 3
-	variables = "\"X\" \"Y\" \"Z\"";  
-	if (svar.outform == 1)
-	{
-		variables = "\"X\" \"Y\" \"Z\" \"rho\" \"P\" \"m\" \"v\" \"a\"";
-	}
-	else if (svar.outform == 2)
-	{
-		variables = "\"X\" \"Y\" \"Z\" \"rho\" \"P\" \"m\" \"v_x\" \"v_y\" \"v_z\" \"a_x\" \"a_y\" \"a_z\"";
-	}
-	else if (svar.outform == 3)
-	{
-		variables = 
-"\"X\" \"Y\" \"Z\" \"rho\" \"P\" \"m\" \"v_x\" \"v_y\" \"v_z\" \"a_x\" \"a_y\" \"a_z\" \"Cell_Vx\" \"Cell_Vy\" \"Cell_Vz\" \"Cell_Rho\" \"Cell_P\" \"Cell_ID\"";
-	}
-	else if (svar.outform == 4)
-	{
-		variables = "\"X\" \"Y\" \"Z\" \"rho\" \"P\" \"m\" \"v\" \"a\" \"b\" \"Neighbours\" \"Aero\"";
-	}
-
-#endif
-
-	fp << variables << "\n";
-}
-
-void Write_Boundary_ASCII(std::ofstream& fp, SIM &svar, State &pnp1)
-{	
-	
-		Write_ASCII_header(fp,svar);
-		fp <<  "ZONE T=\"Boundary Data\"" << ", I=" << svar.bndPts << ", F=POINT" << "\n";
-		if (svar.outform == 0)
+		/*Write sim particles*/
+		
+		Init_Binary_PLT(svar,"Fuel.szplt","Simulation Particles",svar.fuelFile);
+		if(svar.restart == 0)
 		{
-		  	for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
-			{
-		        for(uint i = 0; i < SIMDIM; ++i)
-		        	fp << b->xi(i) << " "; 
-		        fp << "\n";
-		  	}
+			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1,svar.fuelFile);
 		}
-		if (svar.outform == 1)
-		{	/*Fluid Data*/
-		    for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
-			{	
-				for(uint i = 0; i < SIMDIM; ++i)
-		        	fp << b->xi(i) << " "; 
-		        
-		        fp << b->v.norm() << " ";
-		        fp << b->f.norm() << " ";
-		        fp << b->rho << " "  << b->p << "\n";
-		  	}
-		}
-		if (svar.outform == 2)
-		{	/*Research Data*/    
-	        for (auto b=pnp1.begin(); b!=std::next(pnp1.begin(),svar.bndPts); ++b)
-			{
-		        for(uint i = 0; i < SIMDIM; ++i)
-    				fp << b->xi(i) << " "; 
-		        
-		        fp << b->f.norm() << " " << b->Af.norm() << " " << b->Sf.norm() << " "; 
-		        for(uint i = 0; i < SIMDIM; ++i)
-		        	fp << b->Af(i) << " ";
 
-		        fp << b->b << " " << b->theta << "\n"; 
-		  	}		  	
+		if (svar.Bcase != 0 && svar.Bcase !=4)
+		{
+			/*Write boundary particles*/
+			Init_Binary_PLT(svar,"Boundary.szplt","Boundary Particles",svar.boundFile);
+
+			if(svar.boutform == 0 && svar.restart == 0)
+			{   //Don't write a strand, so zone is static. 
+				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",0,svar.boundFile); 
+				int32_t i = tecFileWriterClose(&svar.boundFile);			
+				if(i == -1)
+					exit(-1);
+			}
+			else if(svar.restart == 0)
+				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2,svar.boundFile); 
+		}	
+
+		if (svar.ghost == 1 && svar.gout == 1)
+		{
+			/*Write boundary particles*/
+			Init_Binary_PLT(svar,"Ghost.szplt","Ghost Particles",svar.ghostFile);		
+		}	
+	}
+	else if (svar.outtype == 1)
+	{
+
+		if (svar.Bcase != 0 && svar.Bcase != 4 &&  svar.restart == 0)
+		{	/*If the boundary exists, write it.*/
+			string bfile = svar.outfolder;
+			bfile.append("Boundary.plt");
+			fb.open(bfile, std::ios::out);
+			if(fb.is_open())
+			{
+				Write_ASCII_header(fb,svar);
+				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");
+				if(svar.boutform == 0)
+					fb.close();
+			}
+			else
+			{
+				cerr << "Error opening boundary file." << endl;
+				exit(-1);
+			}
 		}
+
+		/* Write first timestep */
+		string mainfile = svar.outfolder;
+		mainfile.append("Fuel.plt");
+		f1.open(mainfile, std::ios::out);
+		if(f1.is_open())
+		{
+			Write_ASCII_header(f1,svar);
+			Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,"Fuel");
+		}
+		else
+		{
+			cerr << "Failed to open fuel.plt. Stopping." << endl;
+			exit(-1);
+		}
+
+		if(svar.ghost == 1 && svar.gout == 1)
+		{
+			string ghostfile = svar.outfolder;
+			ghostfile.append("Ghost.plt");
+			fg.open(ghostfile,std::ios::out);
+			if(fg.is_open())
+			{
+				Write_ASCII_header(fg,svar);
+				Write_ASCII_Timestep(fg,svar,airP,0,0,airP.size(),"Ghost");
+			}
+		}
+	}
+	else
+	{
+		cerr << "Output type ambiguous. Please select 0 or 1 for output data type." << endl;
+		exit(-1);
+	}
 }
+
+void Write_Timestep(std::fstream& f1, std::fstream& fb, std::fstream& fg, uint ghost_strand, 
+				SIM& svar, State const& pnp1, State const& airP)
+{
+	if (svar.outtype == 0)
+	{
+		if(svar.Bcase != 0 && svar.Bcase != 4 && svar.boutform == 1)
+		{	/*Write boundary particles*/
+			Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2,svar.boundFile); 
+		}
+		Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1,svar.fuelFile); /*Write sim particles*/
+		if(svar.ghost == 1 && svar.gout == 1 && airP.size() != 0)
+			Write_Binary_Timestep(svar,airP,0,airP.size(),"Ghost",ghost_strand,svar.ghostFile);
+	} 
+	else if (svar.outtype == 1)
+	{
+		Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,"Fuel");
+		if(svar.Bcase != 0 && svar.Bcase != 4 && svar.boutform == 1)
+		{
+			State empty;
+			Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");
+		}
+
+		if(svar.ghost == 1 && svar.gout == 1)
+			Write_ASCII_Timestep(fg,svar,airP,0,0,airP.size(),"Ghost");
+	}
+}
+
 
 #endif

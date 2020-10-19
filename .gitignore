@@ -43,15 +43,21 @@
 *.bmap
 *.edges
 *.faces
+*.grid*
+
 para
 
 
 # Folders
 Outputs/*
+src/Eigen/*
+src/NanoFLANN/*
 
 
 # Output files
 *.plt
+*.szplt*
+*.dat
 *.lpk
 *.sty
 *.lay
@@ -77,4 +83,7 @@ Inputs/3/3.dat
 Inputs/2D220/3D_220.dat
 Inputs/2D220/220.dat
 Inputs/220/3D_220.dat
+
+SPHPost
+*sol
 

@@ -152,10 +152,7 @@ vector<int> Find_Bmap_Markers(const string& bmapIn, int& symPlane1, int& symPlan
 				if(line.find("Markers:")!=string::npos)
 				{
 					// cout << "Found a boundary marker" << endl;
-					std::stringstream sstr;
-
-					sstr << line;
-
+					std::stringstream sstr(line);
 					string temp;
 					int found;
 
@@ -296,20 +293,22 @@ vector<StateVecD> Get_Coordinates(NcFile& fin)
 #ifdef DEBUG
 	dbout << "Checking which dimension to ignore" << endl;
 #endif
+	double tolerance = 1e-6;
+
 	uint counts[3] = {0};
 	for(uint ii = 0; ii < nPts; ++ii)
 	{
-		if(coordX[ii] == 0 || coordX[ii] == -1)
+		if(abs(coordX[ii]) < tolerance || (abs(coordX[ii]) < 1+tolerance && abs(coordX[ii]) > 1-tolerance))
 		{
 			counts[0]++;
 		}
 
-		if(coordY[ii] == 0 || coordY[ii] == -1)
+		if(abs(coordY[ii]) < tolerance || (abs(coordY[ii]) < 1+tolerance && abs(coordY[ii]) > 1-tolerance))
 		{
 			counts[1]++;
 		}
 
-		if(coordZ[ii] == 0 || coordZ[ii] == -1)
+		if(abs(coordZ[ii]) < tolerance || (abs(coordZ[ii]) < 1+tolerance && abs(coordZ[ii]) > 1-tolerance))
 		{
 			counts[2]++;
 		}
@@ -322,7 +321,10 @@ vector<StateVecD> Get_Coordinates(NcFile& fin)
 	else if (counts[2] == nPts)
 		ignore = 3;
 	else
+	{
 		cout << "Couldn't determine which dimension is false." << endl;
+		exit(-1);
+	}
 
 #ifdef DEBUG
 	dbout << "Ignored dimension: " << ignore << endl;
@@ -749,6 +751,7 @@ void Recast_Data(EDGE& edata)
 	cout << "vertInUse size: " << vertInUse.size() << endl;
 	/*Now the edges need recasting to the index of the vector*/
 	vector<StateVecD> newVerts(vertInUse.size());
+	#pragma omp parallel for schedule(static)
 	for(uint ii = 0; ii < vertInUse.size(); ++ii)
 	{
 		for(auto& edge:edata.edges)
@@ -858,6 +861,127 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 
 }
 
+void Write_Edge_Tecplot(const EDGE& edata)
+{
+	#ifdef DEBUG
+	dbout << "Entering Write_Edge_Tecplot..." << endl;
+	cout << "Attempting write output file." << endl;
+	cout << "File: " << "griduns.dat" << endl;
+	#endif
+	std::ofstream fout("griduns.dat",std::ios::out);
+	if(!fout.is_open())
+	{
+		cout << "Couldn't open the output file." << endl;
+		exit(-1);
+	}
+
+
+	fout << "VARIABLES= \"X\" \"Z\" " << endl;
+	fout << "ZONE T=\"FEPOLYGON Test\"" << endl;
+	fout << "ZONETYPE=FEPOLYGON" << endl;
+	fout << "NODES=" << edata.numPoint << " ELEMENTS=" << edata.numElem << " FACES=" << edata.numEdges << endl;
+	fout << "NumConnectedBoundaryFaces=0 TotalNumBoundaryConnections=0" << endl;
+
+	uint w = 15;
+	uint preci = 6;
+	fout << std::left << std::scientific << std::setprecision(preci);
+	
+	/*Write vertices in block format (Each dimension in turn)*/
+	uint newl = 0;
+	fout << std::setw(1);
+	for(uint DIM = 0; DIM < SIMDIM; ++DIM)
+	{
+		for(uint ii = 0; ii < edata.verts.size(); ++ii)
+		{
+			fout << std::setw(w) << edata.verts[ii](DIM);
+			newl++;
+
+			if(newl>4)
+			{
+				fout << endl;
+				fout << " ";
+				newl=0;
+			}
+		}
+	}
+	fout << endl;
+	
+
+	fout << std::left << std::fixed;
+	w = 9;
+	// /*Inform of how many vertices in each face*/
+	// fout << "#node count per face" << endl;
+	// newl = 0;
+	// for (uint ii = 0; ii < edata.edges.size(); ++ii)
+	// {
+	// 	fout << std::setw(w) << edata.edges[ii].size();
+	// 	newl++;
+
+	// 	if(newl>4)
+	// 	{
+	// 		fout << endl;
+	// 		newl=0;
+	// 	}
+	// }
+	// fout << endl;
+
+	/*Write the face data*/
+	fout << "#face nodes" << endl;
+	for (uint ii = 0; ii < edata.edges.size(); ++ii)
+	{
+		for(auto const& vertex:edata.edges[ii])
+		{	/*Write face vertex indexes*/
+			fout << std::setw(w) << vertex+1;
+			if (vertex > edata.numPoint)
+			{
+				cout << "Trying to write a vertex outside of the number of points." << endl;
+			}
+		}
+		fout << endl;
+	}
+
+	/*Write face left and right*/
+	newl = 0;
+	fout << "#left elements" << endl;
+	for (uint ii = 0; ii < edata.celllr.size(); ++ii)
+	{
+		fout << std::setw(w) << edata.celllr[ii].first+1 ;
+		newl++;
+
+		if(newl>4)
+		{
+			fout << endl;
+			newl=0;
+		}
+	}
+	fout << endl;
+
+	fout << "#right elements" << endl;
+	newl = 0;
+	for (uint ii = 0; ii < edata.celllr.size(); ++ii)
+	{
+		if(edata.celllr[ii].second < 0)
+			fout<< std::setw(w) << 0 ;
+		else
+			fout << std::setw(w) << edata.celllr[ii].second+1;
+
+
+		newl++;
+
+		if(newl>4)
+		{
+			fout << endl;
+			newl=0;
+		}
+	}
+
+	fout.close();
+
+	#ifdef DEBUG
+	dbout << "Exiting Write_Edge_Tecplot..." << endl;
+	#endif
+}
+
 
 int main (int argc, char** argv)
 {
@@ -902,6 +1026,8 @@ int main (int argc, char** argv)
 
 	Recast_Data(edata);
 
+
+	Write_Edge_Tecplot(edata);
 	Write_Edge_Data(meshIn,edata);
 	return 0;
 }

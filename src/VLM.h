@@ -13,6 +13,7 @@
 #include "Eigen/StdVector"
 #include "Eigen/LU"
 #include "Eigen/Geometry"
+#include "Var.h"
 // #include "IO.h"
 
 // Define pi
@@ -25,14 +26,14 @@
 typedef struct Panel
 { /*A and B are 1/4 chord bounds for the vortex.
 	C is the control Point location*/
-	Panel(Eigen::Vector3d A, Eigen::Vector3d B, Eigen::Vector3d C,
-			Eigen::Vector3d p1, Eigen::Vector3d p2, Eigen::Vector3d p3, Eigen::Vector3d p4)
+	Panel(StateVecD A, StateVecD B, StateVecD C,
+			StateVecD p1, StateVecD p2, StateVecD p3, StateVecD p4)
 	: A(A), B(B), C(C), p1(p1), p2(p2), p3(p3), p4(p4) 
 	{norm =  (C-A).cross(C-B).normalized();}
 
-	Eigen::Vector3d A, B, C;
-	Eigen::Vector3d p1, p2, p3, p4;
-	Eigen::Vector3d norm;
+	StateVecD A, B, C;
+	StateVecD p1, p2, p3, p4;
+	StateVecD norm;
 }Panel;
 
 typedef class VLM
@@ -50,7 +51,7 @@ typedef class VLM
 				/*Define x and y end coordinates of the wing*/
 				coords = getvec(filein);
 
-				/*Split it up into this many panels (Will be doubled on the other side)*/
+				/*Split it up into this many panels (Will be reald on the other side)*/
 				panels = getIVec(filein);
 				npanels = 2*panels[0]*panels[1];
 
@@ -81,9 +82,9 @@ typedef class VLM
 			
 			/*Initialise matrices*/
 			panelData.reserve(npanels);
-			aInf = Eigen::MatrixXd(npanels,npanels);
-			gamma = Eigen::VectorXd(npanels);
-			RHS = Eigen::VectorXd(npanels);
+			aInf = Eigen::Matrix<real,Eigen::Dynamic,Eigen::Dynamic>(npanels,npanels);
+			gamma = Eigen::Matrix<real,Eigen::Dynamic,1>(npanels);
+			RHS = Eigen::Matrix<real,Eigen::Dynamic,1>(npanels);
 
 			
 			// panelxyz.reserve(nverts);
@@ -98,10 +99,10 @@ typedef class VLM
 			MakeMatrix();
 		}
 
-		void GetGamma(Eigen::Vector3d inf)
+		void GetGamma(StateVecD inf)
 		{
 			Freestream = inf;
-			/*Find the inflence matrix, and invert it to find gamma*/
+			/*Find the influence matrix, and invert it to find gamma*/
 
 			/*Find the influence matrix aInf*/
  			for(int i=0; i < npanels; ++i)
@@ -109,7 +110,7 @@ typedef class VLM
  				for(int j=0; j < npanels; ++j)
  				{
  					/*aInf[i,j] = the influence of vortex j on control point i*/
- 					Eigen::Vector3d A, B, C;
+ 					StateVecD A, B, C;
  					A = panelData[i].A;
  					B = panelData[i].B;
  					C = panelData[j].C;
@@ -120,7 +121,7 @@ typedef class VLM
 			RHS(i) = -Freestream.dot(panelData[i].norm);
 			}
 			/*Find Gamma */
-			Eigen::FullPivLU<Eigen::MatrixXd> lu(aInf);
+			Eigen::FullPivLU<Eigen::Matrix<real,Eigen::Dynamic,Eigen::Dynamic>> lu(aInf);
 			if (lu.isInvertible())
  				gamma = lu.solve(RHS);
  			else
@@ -132,9 +133,9 @@ typedef class VLM
  			// }
  		}
 
-		Eigen::Vector3d getVelocity(const Eigen::Vector3d pos)
+		StateVecD getVelocity(const StateVecD pos)
 		{	/*Find velocity for a particle at its position*/
-			Eigen::Vector3d vel = Eigen::Vector3d::Zero();
+			StateVecD vel = StateVecD::Zero();
 
 			for(int i = 0; i<npanels; ++i)
 				vel += gamma(i)*FindInfluence(panelData[i].A,panelData[i].B,pos);
@@ -206,11 +207,11 @@ typedef class VLM
 			return i;
 		}
 
-		double getD(std::ifstream& In)
+		real getD(std::ifstream& In)
 		{
 			std::string line;
 			getline(In,line);
-			double d = stod(line);
+			real d = stod(line);
 			return d; 
 		}
 
@@ -234,13 +235,13 @@ typedef class VLM
 		}
 
 		/*Function for a 2D Vector*/
-		Eigen::Vector2d getvec(std::ifstream& In)
+		Eigen::Matrix<real,2,1> getvec(std::ifstream& In)
 		{
 			std::string line;
 			getline(In,line);
 			std::istringstream sline(line);
 			
-			Eigen::Vector2d x;
+			Eigen::Matrix<real,2,1> x;
 			sline >> x[0]; sline >> x[1]; 
 				
 			return x;
@@ -261,48 +262,48 @@ typedef class VLM
 		void MakeMatrix(void)
 		{
 			/*Define the steps for each dimension*/
-			double dr0 = coords[1]/double(panels[1]);
-			double dx0 = (coords[0]/double(panels[0]))*cos(sweep);
-			double dy0 = cos(AoA)*dr0;
-			double dz0 = sin(AoA)*dr0;
+			real dr0 = coords[1]/real(panels[1]);
+			real dx0 = (coords[0]/real(panels[0]))*cos(sweep);
+			real dy0 = cos(AoA)*dr0;
+			real dz0 = sin(AoA)*dr0;
 			
-			double x0 = 0.0;
-			double y0 = cos(AoA)*coords[1];
-			double z0 = sin(AoA)*coords[1];
+			real x0 = 0.0;
+			real y0 = cos(AoA)*coords[1];
+			real z0 = sin(AoA)*coords[1];
 			
-			double xend = coords[0]*cos(sweep);
+			real xend = coords[0]*cos(sweep);
 			
 			/*Find 1/4 panel points (assuming symmetry) */
 			/*Find 3/4 Control Points*/
 			for(int i = -panels[0]; i < panels[0]; ++i)
 			{	/*i = count in z, (spanwise)*/
 				/*X coordinates*/
-				double x1 = double(i)*dx0;
-				double x2 = double(i+1)*dx0;
-				double xhalf = (double(i)+0.5)*dx0;
+				real x1 = real(i)*dx0;
+				real x2 = real(i+1)*dx0;
+				real xhalf = (real(i)+0.5)*dx0;
 				
 				/*x and y values at j = 0 to apply sweep*/
-				double yi = tan(sweep)*(fabs(x1)-x0);
-				double zi = sin(AoA)*sin(sweep)*(fabs(x1)-x0);
-				double yip1 = tan(sweep)*(fabs(x2)-x0);
-				double zip1 = sin(AoA)*sin(sweep)*(fabs(x2)-x0);
+				real yi = tan(sweep)*(fabs(x1)-x0);
+				real zi = sin(AoA)*sin(sweep)*(fabs(x1)-x0);
+				real yip1 = tan(sweep)*(fabs(x2)-x0);
+				real zip1 = sin(AoA)*sin(sweep)*(fabs(x2)-x0);
 
 				/*Vertex 1 deltas (i)*/
-				double frac1 = (fabs(x1)-x0)/(xend-x0);
-				double dy1 =  dy0*(1-frac1) + dy0*taper*frac1;
-				double dz1 =  dz0*(1-frac1) + dz0*taper*frac1;
+				real frac1 = (fabs(x1)-x0)/(xend-x0);
+				real dy1 =  dy0*(1-frac1) + dy0*taper*frac1;
+				real dz1 =  dz0*(1-frac1) + dz0*taper*frac1;
 				
 				/*Vertex 2 deltas (i+1)*/
-				double frac2 = (fabs(x2)-x0)/(xend-x0);
-				double dy2 =  dy0*(1-frac2) + dy0*taper*frac2;
-				double dz2 =  dz0*(1-frac2) + dz0*taper*frac2;
+				real frac2 = (fabs(x2)-x0)/(xend-x0);
+				real dy2 =  dy0*(1-frac2) + dy0*taper*frac2;
+				real dz2 =  dz0*(1-frac2) + dz0*taper*frac2;
 
 				/*Halfway values (i+1/2) for control point*/
-				double frac3 = (fabs(xhalf)-x0)/(xend-x0);
-				double yhalf = tan(sweep)*(fabs(xhalf)-x0);
-				double zhalf = sin(AoA)*sin(sweep)*(fabs(xhalf)-x0);
-				double dzhalf = dz0*(1-frac3) + dz0*taper*frac3;
-				double dyhalf =  dy0*(1-frac3) + dy0*taper*frac3;
+				real frac3 = (fabs(xhalf)-x0)/(xend-x0);
+				real yhalf = tan(sweep)*(fabs(xhalf)-x0);
+				real zhalf = sin(AoA)*sin(sweep)*(fabs(xhalf)-x0);
+				real dzhalf = dz0*(1-frac3) + dz0*taper*frac3;
+				real dyhalf =  dy0*(1-frac3) + dy0*taper*frac3;
 
 				int jend;
 				int doflap = 0; /*0 = no flap, 1 = flap*/
@@ -326,51 +327,51 @@ typedef class VLM
 				for (int j=0; j < jend; ++j)
 				{	/*j = count in x and y, (chordwise)*/
 					/*Panel Verticies (for visual)*/
-					Eigen::Vector3d p1(x1, dy1*(double(j))-y0+yi    , z0-zi-dz1*(double(j)));
-					Eigen::Vector3d p2(x1, dy1*(double(j+1))-y0+yi  , z0-zi-dz1*(double(j+1)));
-					Eigen::Vector3d p3(x2, dy2*(double(j+1))-y0+yip1, z0-zip1-dz2*(double(j+1)));
-					Eigen::Vector3d p4(x2, dy2*(double(j))-y0+yip1  , z0-zip1-dz2*(double(j)));
+					StateVecD p1(x1, dy1*(real(j))-y0+yi    , z0-zi-dz1*(real(j)));
+					StateVecD p2(x1, dy1*(real(j+1))-y0+yi  , z0-zi-dz1*(real(j+1)));
+					StateVecD p3(x2, dy2*(real(j+1))-y0+yip1, z0-zip1-dz2*(real(j+1)));
+					StateVecD p4(x2, dy2*(real(j))-y0+yip1  , z0-zip1-dz2*(real(j)));
 
 					/*1/4 chord points*/
-					Eigen::Vector3d A(x1, dy1*(0.25+double(j))-y0+yi  , z0-zi-dz1*(0.25+double(j)));
-					Eigen::Vector3d B(x2, dy2*(0.25+double(j))-y0+yip1, z0-zip1-dz2*(0.25+double(j)));
+					StateVecD A(x1, dy1*(0.25+real(j))-y0+yi  , z0-zi-dz1*(0.25+real(j)));
+					StateVecD B(x2, dy2*(0.25+real(j))-y0+yip1, z0-zip1-dz2*(0.25+real(j)));
 					/*3/4 control point*/
-					Eigen::Vector3d C(xhalf, dyhalf*(0.75+double(j))-y0+yhalf,z0-zhalf-dzhalf*(0.75+double(j)));
+					StateVecD C(xhalf, dyhalf*(0.75+real(j))-y0+yhalf,z0-zhalf-dzhalf*(0.75+real(j)));
 					panelData.push_back(Panel(A,B,C,p1,p2,p3,p4));
 				}
 
 				if(doflap == 1)
 				{
 					/*Flap delta parameters*/
-					double dzflap1 = (sin(beta+AoA))*dr0*(1-frac1) + (sin(beta+AoA))*dr0*taper*frac1;
-					double dyflap1 = (cos(beta+AoA))*dr0*(1-frac1) + (cos(beta+AoA))*dr0*taper*frac1;
-					double dzflap2 = (sin(beta+AoA))*dr0*(1-frac2) + (sin(beta+AoA))*dr0*taper*frac2;
-					double dyflap2 = (cos(beta+AoA))*dr0*(1-frac2) + (cos(beta+AoA))*dr0*taper*frac2;
-					double dzflaphalf = (sin(beta+AoA))*dr0*(1-frac3) + (sin(beta+AoA))*dr0*taper*frac3;
-					double dyflaphalf = (cos(beta+AoA))*dr0*(1-frac3) + (cos(beta+AoA))*dr0*taper*frac3;
+					real dzflap1 = (sin(beta+AoA))*dr0*(1-frac1) + (sin(beta+AoA))*dr0*taper*frac1;
+					real dyflap1 = (cos(beta+AoA))*dr0*(1-frac1) + (cos(beta+AoA))*dr0*taper*frac1;
+					real dzflap2 = (sin(beta+AoA))*dr0*(1-frac2) + (sin(beta+AoA))*dr0*taper*frac2;
+					real dyflap2 = (cos(beta+AoA))*dr0*(1-frac2) + (cos(beta+AoA))*dr0*taper*frac2;
+					real dzflaphalf = (sin(beta+AoA))*dr0*(1-frac3) + (sin(beta+AoA))*dr0*taper*frac3;
+					real dyflaphalf = (cos(beta+AoA))*dr0*(1-frac3) + (cos(beta+AoA))*dr0*taper*frac3;
 
 					/*Flap start position*/
-					double zflap1 = z0-zi-double(panels(1)-flap(2))*dz1;
-					double yflap1 = double(panels(1)-flap(2))*dy1 + yi - y0;
-					double zflap2 = z0 - zip1-double(panels(1)-flap(2))*dz2;
-					double yflap2 = double(panels(1)-flap(2))*dy2 + yip1 - y0;
-					double zflaphalf = z0-zhalf-double(panels(1)-flap(2))*dzhalf;
-					double yflaphalf = double(panels(1)-flap(2))*dyhalf + yhalf - y0;
+					real zflap1 = z0-zi-real(panels(1)-flap(2))*dz1;
+					real yflap1 = real(panels(1)-flap(2))*dy1 + yi - y0;
+					real zflap2 = z0 - zip1-real(panels(1)-flap(2))*dz2;
+					real yflap2 = real(panels(1)-flap(2))*dy2 + yip1 - y0;
+					real zflaphalf = z0-zhalf-real(panels(1)-flap(2))*dzhalf;
+					real yflaphalf = real(panels(1)-flap(2))*dyhalf + yhalf - y0;
 
 					for (int j = 0; j < flap(2); ++j)
 					{
 						/*j = count in x and y, (chordwise)*/
 						/*Panel Verticies (for visual)*/
-						Eigen::Vector3d p1(x1, yflap1+dyflap1*(double(j))  , zflap1-dzflap1*(double(j)));
-						Eigen::Vector3d p2(x1, yflap1+dyflap1*(double(j+1)), zflap1-dzflap1*(double(j+1)));
-						Eigen::Vector3d p3(x2, yflap2+dyflap2*(double(j+1)), zflap2-dzflap2*(double(j+1)));
-						Eigen::Vector3d p4(x2, yflap2+dyflap2*(double(j))  , zflap2-dzflap2*(double(j)));
+						StateVecD p1(x1, yflap1+dyflap1*(real(j))  , zflap1-dzflap1*(real(j)));
+						StateVecD p2(x1, yflap1+dyflap1*(real(j+1)), zflap1-dzflap1*(real(j+1)));
+						StateVecD p3(x2, yflap2+dyflap2*(real(j+1)), zflap2-dzflap2*(real(j+1)));
+						StateVecD p4(x2, yflap2+dyflap2*(real(j))  , zflap2-dzflap2*(real(j)));
 
 						/*1/4 chord points*/
-						Eigen::Vector3d A(x1, yflap1+dyflap1*(0.25+double(j)), zflap1-dzflap1*(0.25+double(j)));
-						Eigen::Vector3d B(x2, yflap2+dyflap2*(0.25+double(j)), zflap2-dzflap2*(0.25+double(j)));
+						StateVecD A(x1, yflap1+dyflap1*(0.25+real(j)), zflap1-dzflap1*(0.25+real(j)));
+						StateVecD B(x2, yflap2+dyflap2*(0.25+real(j)), zflap2-dzflap2*(0.25+real(j)));
 						/*3/4 control point*/
-						Eigen::Vector3d C(xhalf, yflaphalf+dyflaphalf*(0.75+double(j)),zflaphalf-dzflaphalf*(0.75+double(j)));
+						StateVecD C(xhalf, yflaphalf+dyflaphalf*(0.75+real(j)),zflaphalf-dzflaphalf*(0.75+real(j)));
 						panelData.push_back(Panel(A,B,C,p1,p2,p3,p4));
 					}
 				}
@@ -379,12 +380,12 @@ typedef class VLM
 			/*End initialisation*/
 		}
 
-		Eigen::Vector3d FindInfluence(Eigen::Vector3d A, Eigen::Vector3d B, Eigen::Vector3d C)
+		StateVecD FindInfluence(StateVecD A, StateVecD B, StateVecD C)
  		{	
-			Eigen::Vector3d r0, r1, r2, inf;
+			StateVecD r0, r1, r2, inf;
 
 			/*Bounded Vortex*/
-			Eigen::Vector3d coefAB;
+			StateVecD coefAB;
 
 			r0 = B-A;
 			r1 = C-A;
@@ -395,7 +396,7 @@ typedef class VLM
 
 
 			/*Horseshoe vortex from point A*/
-			Eigen::Vector3d coefA;
+			StateVecD coefA;
 		
 			inf = A + Freestream;
 			r2 = C - A;
@@ -406,7 +407,7 @@ typedef class VLM
 					(1-r0.dot(r2)/(r0.norm()*r2.norm()));
 
 			/*Horseshoe vortex from point B*/
-			Eigen::Vector3d coefB;
+			StateVecD coefB;
 
 			/*Vector B to infinity*/
 			inf = B + Freestream;
@@ -423,19 +424,19 @@ typedef class VLM
  		std::vector<Panel> panelData;
 
 		int npanels, nverts;
-		double AoA, sweep, taper, beta;
+		real AoA, sweep, taper, beta;
 		
-		Eigen::MatrixXd aInf;
+		Eigen::Matrix<real,Eigen::Dynamic,Eigen::Dynamic> aInf;
 
-		Eigen::VectorXd gamma;
-		Eigen::VectorXd RHS;
+		Eigen::Matrix<real,Eigen::Dynamic,1> gamma;
+		Eigen::Matrix<real,Eigen::Dynamic,1> RHS;
 
-		Eigen::Vector2d coords;
+		Eigen::Matrix<real,2,1> coords;
 		Eigen::Vector2i panels;
 		
 		Eigen::Vector3i flap;
 
-		Eigen::Vector3d Freestream;
+		StateVecD Freestream;
 }VLM;
 
 #endif
