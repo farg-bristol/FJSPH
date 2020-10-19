@@ -67,6 +67,7 @@ src/NanoFLANN/*
 *.stackdump
 *.log
 FailedCellContainment.dat
+
 WCSPH
 Cell2Edge
 Cell2Face
@@ -82,5 +83,7 @@ Inputs/3/3.dat
 Inputs/2D220/3D_220.dat
 Inputs/2D220/220.dat
 Inputs/220/3D_220.dat
+
 SPHPost
 *sol
+
