@@ -262,22 +262,26 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			real stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
-			for (real y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)			
+			for(size_t ii = 0; ii < 4; ii++)
 			{
-				StateVecD xi(-jetR,y);
-				xi = svar.Rotate*xi;
-				xi += svar.Start;
-				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-				pID++;
-			}
+				real x = jetR + real(ii)*stepb;
+				for (real y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)			
+				{
+					StateVecD xi(-x,y);
+					xi = svar.Rotate*xi;
+					xi += svar.Start;
+					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pID++;
+				}
 
-			for (real y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)
-			{
-				StateVecD xi(jetR,y);
-				xi = svar.Rotate*xi;
-				xi += svar.Start;
-				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-				pID++;
+				for (real y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)
+				{
+					StateVecD xi(x,y);
+					xi = svar.Rotate*xi;
+					xi += svar.Start;
+					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pID++;
+				}
 			}
 		#endif
 	}

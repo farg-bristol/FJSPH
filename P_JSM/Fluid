@@ -4,7 +4,7 @@
 150.0                 #Boundary contact angle
 810                   #Rho_jet
 1.1025                #Rho_gas
-500                  #Speed of Sound C_s
+50                  #Speed of Sound C_s
 0.00142               #Liquid dynamic viscosity
 0.00001716            #Gas dynamic viscosity
 0.0256                #Surface tension

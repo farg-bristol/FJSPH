@@ -27,9 +27,18 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	// Find maximum safe timestep
 	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin(),pnp1.end(),
 		[](Particle p1, Particle p2){return p1.f.norm()< p2.f.norm();});
-	real maxf = maxfi->f.norm();
-	real dtf = sqrt(fvar.H/maxf);
-	real dtcv = fvar.H/(fvar.Cs+svar.maxmu);
+
+	vector<Particle>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
+		[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
+
+	real maxf = maxfi->f.squaredNorm();
+	real maxU = maxUi->v.norm();
+	real dtv = 0.125*fvar.HSQ * fvar.rho0/fvar.mu;
+	real dtf = 0.25*sqrt(fvar.H/maxf);
+	// real dtc = 1.5*fvar.H/(fvar.Cs);
+
+	real dtc = 0.15*fvar.H/(maxU);
+
 
 	// Only use if -fno-finite-math-only is on
 	// if (std::isinf(maxf))
@@ -41,15 +50,14 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 /***********************************************************************************/
 /***********************************************************************************/
 /***********************************************************************************/
-	svar.dt = 0.3*std::min(dtf,dtcv);
+	svar.dt = std::min(dtf,std::min(dtc,dtv));
 /***********************************************************************************/
 /***********************************************************************************/
 /***********************************************************************************/
 
-#ifdef DEBUG
-	cout << "time: " << svar.t << " dt: " << svar.dt << "  dtf: " << dtf << "  dtcv: " << dtcv << " maxmu: " << svar.maxmu 
-	<< " Maxf: " << maxf << endl;
-#endif
+// #ifdef DEBUG
+	cout << "time: " << svar.t << " dt: " << svar.dt << "  dtf: " << dtf << "  dtcv: " << dtc << " Maxf: " << maxf << endl;
+// #endif
 
 	// cout << svar.framet * (svar.frame+1) << "  " << svar.t  << endl;
 
@@ -362,7 +370,8 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 					
 					
 					pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
-					pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
+					// pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
+					pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
 					
 					
 					Force += res[ii]*pnp1[ii].m;
@@ -568,11 +577,118 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		error2 = error1;
 		
 	} /*End of subits*/
-	// cout << "Out of the parallel loop." << endl;
-	// RestartCount = 0;
-	/*Add time to global*/
 
+
+
+	/*Implement particle shifting technique - Sun, Colagrossi, Marrone, Zhang (2016)*/
+	maxUi = std::max_element(pnp1.begin(),pnp1.end(),
+		[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
+
+	maxU = maxUi->v.norm();
+
+	#pragma omp parallel
+	{
+		vector<StateMatD> Lmat(end,StateMatD::Zero());
+		vector<StateVecD> norm(end,StateVecD::Zero());
+		vector<real> lamb(end,0.0);
+
+		#pragma omp for
+		for(size_t ii = 0; ii < end; ++ii)
+		{
+			StateMatD Lmat_ = StateMatD::Zero();
+			Part const& pi(pnp1[ii]);
+
+			for(size_t const& jj:outlist[ii])
+			{
+				Part pj(pnp1[jj]);
+				/*Check if the position is the same, and skip the particle if yes*/
+				if(pi.partID == pj.partID)
+					continue;
+
+				if(pj.b != PartState.GHOST_)
+				{
+					StateVecD const Rij = pj.xi - pi.xi;
+					real const r = Rij.norm();
+					real volj = pj.m/pj.rho;
+					StateVecD Grad = W2GradK(-Rij,r,fvar.H,fvar.correc);
+
+					Lmat_ += volj * Rij * Grad.transpose();
+
+					// norm_ -= volj*Grad;	
+				}
+			}
+
+			Eigen::FullPivLU<StateMatD> lu(Lmat_);
+			/*If only 1 particle is in the neighbourhood, tensile instability can occur*/
+			/*In this case, L becomes singular, and invertability needs to be checked.*/
+			if(lu.isInvertible())
+			{	
+				Lmat[ii] = lu.inverse();
+				// norm[ii] = lu.inverse() * norm_;
+				
+				Eigen::SelfAdjointEigenSolver<StateMatD> es;
+		        es.computeDirect(Lmat_);
+		        lamb[ii] = (es.eigenvalues()).minCoeff(); //1 inside fluid, 0 outside fluid    
+			}
+			else
+			{	/*In a sparse neighbourhood if singular, so mark as a surface*/
+				lamb[ii] = 0.0;
+				Lmat[ii](0,0) = 1;
+			}
+		}
+
+
+		#pragma omp for 
+		for(size_t ii = start; ii < end; ++ii)
+		{
+
+			Part pi(pnp1[ii]);
+			StateVecD deltaR = StateVecD::Zero();
+			StateVecD deltaU = StateVecD::Zero();
+
+			StateVecD gradLam = StateVecD::Zero();
+			for (size_t const& jj:outlist[ii])
+			{	/* Neighbour list loop. */
+				Part pj(pnp1[jj]);
+
+				StateVecD const Rij = pj.xi-pi.xi;
+				real const r = Rij.norm();
+				real const kern = W2Kernel(r,fvar.H,fvar.correc);
+				StateVecD const gradK = W2GradK(Rij,r,fvar.H,fvar.correc);
+
+				deltaR += (1+0.2*pow(kern/W2Kernel(svar.Pstep,fvar.H,fvar.correc),4.0))*gradK*(pj.m/(pi.rho+pj.rho));
+				deltaU += (pj.m/pj.rho) * gradK;
+
+				gradLam += (lamb[ii]-lamb[jj])*Lmat[ii]*gradK*pj.m/pj.rho;
+			}
+
+			deltaR *= -4.0 *svar.dt * maxU * fvar.H;
+			deltaU *= -2.0 * maxU * fvar.H;
+
+			gradLam = gradLam.normalized();
+
+			/*Apply the partial shifting*/
+			if(lamb[ii] < 0.75 && lamb[ii] > 0.4)
+			{	/*Particle in the surface region, so apply a partial shifting*/
+				StateMatD shift = StateMatD::Identity() - gradLam*gradLam.transpose();
+
+				pnp1[ii].xi += shift*deltaR;
+				pnp1[ii].v += shift*deltaU;
+			}
+			else if (lamb[ii] >= 0.75)
+			{   /*Particle in the body of fluid, so treat as normal*/
+				pnp1[ii].xi +=deltaR;
+				pnp1[ii].v += deltaU;
+			}
+			/*Otherwise, particle is a surface, and don't shift.*/
+		}	
+	}
+
+
+	/*Add time to global*/
 	svar.t+=svar.dt;
+
+
 	// cout << "Timestep Params: " << maxf << " " << fvar.Cs + svar.maxmu << " " << dtf << " " << dtcv << endl;
 	// cout << "New Time: " << svar.t << endl;
 
@@ -873,6 +989,7 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			pnp1[ii].Af = Af[ii]; 
 			pnp1[ii].rho = pn[ii].rho+dt*(svar.gamma*Rrho[ii]);
 			pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
+			// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
 						
 			xih[ii] = pnp1[ii].xi + dt*pnp1[ii].v;
 

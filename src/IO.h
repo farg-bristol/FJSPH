@@ -291,7 +291,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   	svar.intNum = 0;
 
   	fvar.dCont = 2.0 * fvar.delta * fvar.H * fvar.Cs;
-  	fvar.dMom = fvar.dCont * fvar.rho0;
+  	fvar.dMom = fvar.alpha * fvar.H * fvar.Cs * fvar.rho0;
 
 #if SIMDIM == 2
 	fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
