@@ -13,6 +13,329 @@
 #include "Resid.h"
 #include "Crossing.h"
 
+
+void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
+	size_t const& start, size_t const& end, 
+	real const& a, real const& b, real const& c, real const& d, real const& B, real const& gam,
+	MESH& cells, vector<size_t> const& cellsused,
+	vector<vector<Part>> const& neighb, outl const& outlist, 
+	State& pn, State& pnp1, State& airP, StateVecD& Force, StateVecD& dropVel)
+{
+	/*Update the state at time n+1*/
+	#pragma omp parallel shared(pn,svar,fvar) /*reduction(+:Force,dropVel)*/
+	{
+		// cout << "K: " << k << endl;
+		// cout << "Calculating forces" << endl;
+		vector<StateVecD> res(end,StateVecD::Zero());
+		vector<StateVecD> Af(end,StateVecD::Zero());
+		vector<real> Rrho(end,0.0);
+		vector<real> wDiff(end,0.0);
+		vector<StateVecD> norm(end, StateVecD::Zero());
+		// vector<real> curve(end,0.0);
+
+		/*Calculate Di term for delta-SPH*/
+		// vector<real> Di(end,0.0);
+		// vector<real> isSurf(end,0.0);
+		// dSPH_PreStep(fvar,start,end,pnp1,outlist,Di,isSurf);
+
+		// cout << "Neighbour list size: " << neighb.size() << "  Outlist size: " << outlist.size() << endl;
+		// cout << "Start: " << start << "  End: " << end << endl;
+		Force = StateVecD::Zero();
+		svar.AForce = StateVecD::Zero();
+		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist/*,Di,isSurf*/,res,Rrho,Af,Force,wDiff,norm/*,curve*/); /*Guess force at time n+1*/
+
+		const real dt = svar.dt;
+		const real dt2 = dt*dt;
+
+		if(svar.Asource == 2)
+		{
+			#pragma omp for schedule(static) nowait
+			for(size_t const& ii : cellsused)
+			{
+					cells.fNum[ii] = 0;
+					cells.fMass[ii] = 0.0;
+					cells.vFn[ii] = StateVecD::Zero();
+					cells.vFnp1[ii] = StateVecD::Zero();
+			}
+		}
+
+		#pragma omp for schedule(static) nowait
+		for (size_t ii=0; ii < start; ++ii)
+		{	/****** BOUNDARY PARTICLES ***********/
+			pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+Rrho[ii]);
+			pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
+			// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
+			// pnp1[ii].p = fvar.pPress;
+			// pnp1[ii].rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
+			pnp1[ii].f = res[ii];
+			pnp1[ii].Rrho = Rrho[ii];
+		}
+
+
+		#pragma omp for schedule(static) nowait 
+		for (size_t ii=start; ii < end; ++ii)
+		{	/****** FLUID PARTICLES **************/
+			
+			/* START = pipe particle receiving prescribed motion            */
+			/* BACK = the latest particle in that column                    */
+			/* PIPE = in the pipe, with free motion                         */
+			/* FREE = free of the pipe and receives an aero force           */
+
+			/*Check if the particle is clear of the starting area*/
+			if(pnp1[ii].b == PartState.START_ || pnp1[ii].b == PartState.BACK_)
+			{   
+				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
+				if(vec(1) > svar.clear)
+				{	/*Tag it as clear if it's higher than the plane of the exit*/
+					pnp1[ii].b=PartState.PIPE_;
+				}
+				else
+				{	/*For the particles marked 1, perform a prescribed motion*/
+					pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
+					// pnp1[ii].f = res[ii];
+					// pnp1[ii].Rrho = Rrho[ii];
+					// pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
+					// pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
+					// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
+				}
+			}				
+
+			if(pnp1[ii].b > PartState.START_)
+			{	
+
+				if(pnp1[ii].b == PartState.PIPE_)
+				{	/*Do a check to see if it needs to be given an aero force*/
+					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
+					if(vec(1) > 0.0)
+					{
+						pnp1[ii].b = PartState.FREE_;
+						if(svar.Asource == 1 || svar.Asource == 2)
+						{
+							/*retrieve the cell it's in*/
+							FirstCell(svar,end,ii,TREE.CELL, cells, pnp1, pn);
+						}
+					}	
+				}
+
+
+				/*For any other particles, intergrate as normal*/
+				pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(c*pn[ii].f+d*res[ii]);
+				pnp1[ii].v =  pn[ii].v +dt*(a*pn[ii].f+b*res[ii]);
+				pnp1[ii].f = res[ii];
+				pnp1[ii].Af = Af[ii];
+				pnp1[ii].Rrho = Rrho[ii];
+				
+				pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
+				pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
+				// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
+				
+				
+				Force += res[ii]*pnp1[ii].m;
+				dropVel += pnp1[ii].v;
+				
+				// pnp1[ii].theta = wDiff[ii];
+				// pnp1[ii].nNeigb = real(outlist[ii].size());
+
+// #if SIMDIM == 2
+// 					if(real(outlist[ii].size()) < 5.26 * wDiff[ii] +30)
+// 					{
+// 						pnp1[ii].normal = norm[ii];
+// 						pnp1[ii].surf = curve[ii];
+// 						pnp1[ii].theta = 1.0;
+// 					}
+// 					else
+// 					{
+// 						pnp1[ii].normal = StateVecD::Zero();
+// 						pnp1[ii].surf = 0.0;
+// 						pnp1[ii].theta = 0.0;
+// 					}
+// #else
+// 					if(real(outlist[ii].size()) < 297.25 * wDiff[ii] + 34)
+// 					{
+// 						pnp1[ii].theta = wDiff[ii];
+// 						pnp1[ii].normal = norm[ii];
+// 						pnp1[ii].surf = curve[ii];
+// 					}
+// 					else
+// 					{
+// 						pnp1[ii].normal = StateVecD::Zero();
+// 						pnp1[ii].surf = 0.0;
+// 						pnp1[ii].theta = 0.0;
+// 					}
+// #endif
+
+				
+				// if(svar.Asource == 2 && pnp1[ii].b == PartState.FREE_)
+				// {
+				// 	#pragma omp atomic
+				// 	cells.fNum[pnp1[ii].cellID]++;
+				// 	#pragma omp atomic
+				// 	cells.fMass[pnp1[ii].cellID] += pnp1[ii].m;
+
+				// 	#pragma omp critical
+				// 	{
+				// 		cells.vFn[pnp1[ii].cellID] += pn[ii].v;
+				// 		cells.vFnp1[pnp1[ii].cellID] += pnp1[ii].v;
+				// 	}	
+				// }
+				
+
+			}
+
+			pnp1[ii].theta = wDiff[ii];
+			pnp1[ii].surf = outlist[ii].size();
+
+			// pnp1[ii].theta = wDiff[ii];
+			pnp1[ii].nNeigb = real(outlist[ii].size());
+			pnp1[ii].bNorm = norm[ii];
+			
+		} /*End fluid particles*/
+
+
+		if(svar.Asource == 2)
+		{
+			#pragma omp for schedule(static) nowait
+			for(size_t const& ii : cellsused)
+			{
+				// Work out the mass and volume fractions
+				if(cells.fNum[ii] != 0)
+				{
+					real fVol = real(cells.fNum[ii]) * avar.pVol;
+
+					real aFrac = (cells.cVol[ii]-fVol)/cells.cVol[ii];
+
+					
+					if (aFrac < 0.1)
+						continue;
+					
+					real aMass = cells.cMass[ii]*aFrac;
+
+					// Do the momentum exchange
+					StateVecD newPert = (cells.fMass[ii]/aMass)*(cells.vFnp1[ii]-cells.vFn[ii])/real(cells.fNum[ii]);
+					// StateVecD diffusion = 0.2*cells.cPertn[ii];
+					cells.cPertnp1[ii] = cells.cPertn[ii]*0.9 - newPert;
+
+	// 				#pragma omp critical
+	// 				{
+	// 				cout << "Cell " << ii << ":" << endl;
+
+	// 				cout << "pertnp1: " << cells.cPertnp1[ii](0) << "  "
+	// 						<< cells.cPertnp1[ii](1) 
+	// #if SIMDIM == 3
+	// 				 		<< "  " << cells.cPertnp1[ii](2)
+	// #endif
+	// 						<< endl;
+
+	// 				cout << "pertn:   " << cells.cPertn[ii](0) << "  "
+	// 				 		<< cells.cPertn[ii](1) 
+	// #if SIMDIM == 3
+	// 				 		<< "  " << cells.cPertn[ii](2)
+	// #endif
+	// 						<< endl;
+	// 				cout << "Update: " << newPert(0) << "  " << newPert(1) 
+	// #if SIMDIM == 3
+	// 				<< "  " << newPert(2)
+	// #endif
+	// 				 << endl; 
+
+	// 				cout << "Fuel count: " << cells.fNum[ii] << endl;
+	// 				cout << "Mass fraction: " << cells.fMass[ii]/aMass << endl;
+	// 				// cout << "Fuel Volume: " << fVol << " Fuel Mass: " << cells.fMass[ii] << endl;
+	// 				// // cout << "Cell Volume: " << cells.cVol[ii] << " Air fraction: " << aFrac << "  Air Mass: " << aMass << endl;
+	// 				cout << "Fuel Vel difference: " << cells.vFnp1[ii](0)-cells.vFn[ii](0) << "  " << cells.vFnp1[ii](1)-cells.vFn[ii](1)
+	// #if SIMDIM == 3
+	// 					<< "  " << cells.vFnp1[ii](2)-cells.vFn[ii](2)
+	// #endif
+	// 				 	<< endl << endl;
+	// 				}
+				}
+				// else
+				// {
+				// 	cout << "Cell with no fuel in it considered" << endl;
+				// }
+			}
+		}
+
+	}/*End pragma omp parallel*/
+
+}
+
+int Check_Error(KDTREE& TREE, SIM& svar, FLUID const& fvar, size_t const& start, size_t const& end, 
+		real& error1, real& error2, real& logbase, 
+		vector<size_t>& cellsused, outl& outlist, vector<StateVecD> const& xih,
+		State& pn, State& pnp1, uint& k)
+{
+	/****** FIND ERROR ***********/
+	real errsum = 0.0;
+	#pragma omp parallel for reduction(+:errsum) schedule(static) shared(pnp1,xih)
+	for (size_t ii = start; ii < end; ++ii)
+	{
+		StateVecD r = pnp1[ii].xi-xih[ii];
+		errsum += r.squaredNorm();
+	}
+
+	if(k == 0)
+		logbase=log10(sqrt(errsum/(real(svar.totPts))));
+
+	error1 = log10(sqrt(errsum/(real(svar.totPts)))) - logbase;
+	// cout << RestartCount << "  " << k << "  " << error1  << "  " << svar.dt << endl;
+	// cout << k << "  " << error1 << "  " << svar.dt << endl;
+
+	if (error1-error2 > 0.0 /*|| std::isnan(error1)*/)
+	{	/*If simulation starts diverging, then reduce the timestep and try again.*/
+		
+		pnp1 = pn;
+		
+		TREE.NP1.index->buildIndex();
+		FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+
+		if(svar.Asource == 2)
+		{
+			cellsused.clear();
+			#pragma omp parallel shared(pnp1)
+			{
+				std::vector<size_t> local;
+				#pragma omp for schedule(static) nowait
+				for (size_t ii = start; ii < end; ++ii)
+				{	
+					if(pnp1[ii].b == PartState.FREE_)
+						local.emplace_back(pnp1[ii].cellID);
+				}
+
+				#pragma omp for schedule(static) ordered
+				for(int i=0; i<omp_get_num_threads(); i++)
+				{
+					#pragma omp ordered
+					cellsused.insert(cellsused.end(),local.begin(),local.end());
+				}
+			}
+
+			// Sort the vector and remove unique values.
+			std::unordered_set<size_t> s;
+			for(size_t const& ii:cellsused)
+				s.insert(ii);
+
+			cellsused.assign(s.begin(),s.end());
+			std::sort(cellsused.begin(),cellsused.end());
+		}
+
+		svar.dt = 0.5*svar.dt;
+		cout << "Unstable timestep. New dt: " << svar.dt << endl;
+		k = 0;
+		error1 = 0.0;
+		// RestartCount++;
+		return -1;
+	}	/*Check if we've exceeded the maximum iteration count*/
+	else if (k > svar.subits)
+	{
+		return 1;
+	}
+
+	/*Otherwise, roll forwards*/
+	return 0;
+	
+}
+
 ///**************** Integration loop **************///
 real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar, 
 	MESH& cells, State& pn, State& pnp1, State& airP, outl& outlist)
@@ -33,12 +356,9 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	real maxf = maxfi->f.squaredNorm();
 	real maxU = maxUi->v.norm();
-	real dtv = 0.125*fvar.HSQ * fvar.rho0/fvar.mu;
-	real dtf = 0.25*sqrt(fvar.H/maxf);
-	// real dtc = 1.5*fvar.H/(fvar.Cs);
-
-	real dtc = 0.15*fvar.H/(maxU);
-
+	real dtv = fvar.HSQ * fvar.rho0/fvar.mu;
+	real dtf = sqrt(fvar.H/maxf);
+	real dtc = fvar.H/(maxU);
 
 	// Only use if -fno-finite-math-only is on
 	// if (std::isinf(maxf))
@@ -50,24 +370,20 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 /***********************************************************************************/
 /***********************************************************************************/
 /***********************************************************************************/
-	svar.dt = std::min(dtf,std::min(dtc,dtv));
+	svar.dt = 0.125*std::min(dtf,std::min(dtc,dtv));
 /***********************************************************************************/
 /***********************************************************************************/
 /***********************************************************************************/
 
 // #ifdef DEBUG
-	cout << "time: " << svar.t << " dt: " << svar.dt << "  dtf: " << dtf << "  dtcv: " << dtc << " Maxf: " << maxf << endl;
+	cout << "time: " << svar.t << " dt: " << svar.dt << "  dtv: " << dtv <<  "  dtf: " << dtf << "  dtc: " << dtc << " Maxf: " << maxf << endl;
 // #endif
-
-	// cout << svar.framet * (svar.frame+1) << "  " << svar.t  << endl;
 
 	if (svar.dt > (svar.frame+1)*svar.framet-svar.t)
 	{
 		svar.dt = (svar.frame+1)*svar.framet-svar.t;
-		// cout << "New dt: " << svar.dt << endl;
 	}
-
-
+	
 	// Check if the particle has moved to a new cell
 	if (svar.Asource == 1 || svar.Asource == 2)
 	{
@@ -199,7 +515,68 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	StateVecD dropVel = StateVecD::Zero();
 	StateVecD Force = StateVecD::Zero();
 
+	/****** UPDATE TREE ***********/
+	TREE.NP1.index->buildIndex();
+	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 	
+	// airP.clear();
+	std::vector<std::vector<Part>> neighb;
+	neighb.reserve(end);
+	
+	dropVel = StateVecD::Zero();
+
+
+	#pragma omp parallel shared(pnp1, outlist, air)
+	{
+		std::vector<std::vector<Part>> local;
+		if(svar.ghost == 1 )
+		{
+			#pragma omp for schedule(static) nowait
+			for (size_t ii = 0; ii < end; ++ii)
+			{
+				std::vector<Part> temp;
+				temp.reserve(outlist[ii].size());
+				for(auto jj:outlist[ii])
+					temp.push_back(Part(pnp1[jj])); 
+
+				if(air[ii].size()>0)
+				{
+					temp.insert(temp.end(), air[ii].begin(), air[ii].end());
+				}
+				local.push_back(temp);
+			}
+		}
+		else
+		{
+			#pragma omp for schedule(static) nowait
+			for (size_t ii = 0; ii < end; ++ii)
+			{
+				std::vector<Part> temp;
+				temp.reserve(outlist[ii].size());
+				for(auto jj:outlist[ii])
+					temp.push_back(Part(pnp1[jj])); 
+
+				local.push_back(temp);
+			}
+		}
+
+		#pragma omp for schedule(static) ordered
+    	for(int i=0; i<omp_get_num_threads(); i++)
+    	{
+    		#pragma omp ordered
+    		neighb.insert(neighb.end(),local.begin(),local.end());
+    	}
+	}
+
+	/*Previous State for error calc*/
+	#pragma omp parallel for shared(pnp1)
+	for (size_t  ii=0; ii < end; ++ii)
+		xih[ii] = pnp1[ii].xi;
+
+	/*Get preliminary new state to find neighbours, then freeze*/
+	Get_Resid(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
+		cells,cellsused,neighb,outlist,pn,pnp1,airP,Force,dropVel);
+
 
 
 	while (log10(sqrt(errsum/(real(svar.totPts)))) - logbase > -7.0)
@@ -213,7 +590,6 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		neighb.reserve(end);
 		
 		dropVel = StateVecD::Zero();
-
 
 		#pragma omp parallel shared(pnp1, outlist, air)
 		{
@@ -256,331 +632,37 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	    		neighb.insert(neighb.end(),local.begin(),local.end());
 	    	}
 		}
-				
-		// cout << "K: " << k << endl;
-		// cout << "Calculating forces" << endl;
-		vector<StateVecD> res(end,StateVecD::Zero());
-		vector<StateVecD> Af(end,StateVecD::Zero());
-		vector<real> Rrho(end,0.0);
-		vector<real> wDiff(end,0.0);
-		vector<StateVecD> norm(end, StateVecD::Zero());
-		// vector<real> curve(end,0.0);
 
-		/*Calculate Di term for delta-SPH*/
-		// vector<real> Di(end,0.0);
-		// vector<real> isSurf(end,0.0);
-		// dSPH_PreStep(fvar,start,end,pnp1,outlist,Di,isSurf);
-
-		// cout << "Neighbour list size: " << neighb.size() << "  Outlist size: " << outlist.size() << endl;
-		// cout << "Start: " << start << "  End: " << end << endl;
-		Force = StateVecD::Zero();
-		svar.AForce = StateVecD::Zero();
- 		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist/*,Di,isSurf*/,res,Rrho,Af,Force,wDiff,norm/*,curve*/); /*Guess force at time n+1*/
-
-	
 		/*Previous State for error calc*/
 		#pragma omp parallel for shared(pnp1)
 		for (size_t  ii=0; ii < end; ++ii)
 			xih[ii] = pnp1[ii].xi;
 
-		const real dt = svar.dt;
-		const real dt2 = dt*dt;
+		Get_Resid(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
+			cells,cellsused,neighb,outlist,pn,pnp1,airP,Force,dropVel);
 
-		/*Update the state at time n+1*/
-		#pragma omp parallel shared(pn,res,Rrho,svar,fvar) /*reduction(+:Force,dropVel)*/
+		int errstate = Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
+							cellsused,outlist,xih,pn,pnp1,k);
+
+		if (errstate < 0)	/*Had to restart the simulation*/
 		{
-			if(svar.Asource == 2)
-			{
-				#pragma omp for schedule(static) nowait
-				for(size_t const& ii : cellsused)
-				{
-						cells.fNum[ii] = 0;
-						cells.fMass[ii] = 0.0;
-						cells.vFn[ii] = StateVecD::Zero();
-						cells.vFnp1[ii] = StateVecD::Zero();
-				}
-			}
-			// #pragma omp for schedule(static) nowait
-			// for (size_t ii = 0; ii < piston; ++ii)
-			// {	/****** PISTON PARTICLES *************/
-			// 	pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+Rrho[ii]);
-			// 	pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-			// 	pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-			// 	pnp1[ii].f = res[ii];
-			// 	pnp1[ii].Rrho = Rrho[ii];
-			// }
-
-			#pragma omp for schedule(static) nowait
-			for (size_t ii=0/*piston*/; ii < start; ++ii)
-			{	/****** BOUNDARY PARTICLES ***********/
-				pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+Rrho[ii]);
-				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-				// pnp1[ii].p = fvar.pPress;
-				// pnp1[ii].rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
-				pnp1[ii].f = res[ii];
-				pnp1[ii].Rrho = Rrho[ii];
-			}
-
-
-			#pragma omp for schedule(static) nowait 
-			for (size_t ii=start; ii < end; ++ii)
-			{	/****** FLUID PARTICLES **************/
-				/*Check if the particle is clear of the starting area*/
-				if(pnp1[ii].b == PartState.START_ || pnp1[ii].b == PartState.BACK_)
-				{   /* START = pipe particle receiving prescribed motion            */
-					/* BACK = the latest particle in that column                    */
-					/* PIPE = in the pipe, with free motion                         */
-					/* FREE = free of the pipe and receives an aero force           */
-					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
-					if(vec(1) > svar.clear)
-					{	/*Tag it as clear if it's higher than the plane of the exit*/
-						pnp1[ii].b=PartState.PIPE_;
-					}
-					else
-					{	/*For the particles marked 1, perform a prescribed motion*/
-						pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-						// pnp1[ii].f = res[ii];
-						// pnp1[ii].Rrho = Rrho[ii];
-						// pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
-						// pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
-					}
-				}
-
-				if(pnp1[ii].b == PartState.PIPE_)
-				{	/*Do a check to see if it needs to be given an aero force*/
-					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
-					if(vec(1) > 0.0)
-					{
-						pnp1[ii].b = PartState.FREE_;
-						if(svar.Asource == 1 || svar.Asource == 2)
-						{
-							/*retrieve the cell it's in*/
-							FirstCell(svar,end,ii,TREE.CELL, cells, pnp1, pn);
-						}
-					}	
-				}
-
-				if(pnp1[ii].b > PartState.START_)
-				{	/*For any other particles, intergrate as normal*/
-					pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(c*pn[ii].f+d*res[ii]);
-					pnp1[ii].v =  pn[ii].v +dt*(a*pn[ii].f+b*res[ii]);
-					pnp1[ii].f = res[ii];
-					pnp1[ii].Af = Af[ii];
-					pnp1[ii].Rrho = Rrho[ii];
-					
-					
-					pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
-					// pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
-					pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
-					
-					
-					Force += res[ii]*pnp1[ii].m;
-					dropVel += pnp1[ii].v;
-
-					pnp1[ii].theta = wDiff[ii];
-					pnp1[ii].surf = outlist[ii].size();
-
-					// pnp1[ii].theta = wDiff[ii];
-					pnp1[ii].nNeigb = real(outlist[ii].size());
-					pnp1[ii].bNorm = norm[ii];
-
-					
-					// pnp1[ii].theta = wDiff[ii];
-					// pnp1[ii].nNeigb = real(outlist[ii].size());
-
-// #if SIMDIM == 2
-// 					if(real(outlist[ii].size()) < 5.26 * wDiff[ii] +30)
-// 					{
-// 						pnp1[ii].normal = norm[ii];
-// 						pnp1[ii].surf = curve[ii];
-// 						pnp1[ii].theta = 1.0;
-// 					}
-// 					else
-// 					{
-// 						pnp1[ii].normal = StateVecD::Zero();
-// 						pnp1[ii].surf = 0.0;
-// 						pnp1[ii].theta = 0.0;
-// 					}
-// #else
-// 					if(real(outlist[ii].size()) < 297.25 * wDiff[ii] + 34)
-// 					{
-// 						pnp1[ii].theta = wDiff[ii];
-// 						pnp1[ii].normal = norm[ii];
-// 						pnp1[ii].surf = curve[ii];
-// 					}
-// 					else
-// 					{
-// 						pnp1[ii].normal = StateVecD::Zero();
-// 						pnp1[ii].surf = 0.0;
-// 						pnp1[ii].theta = 0.0;
-// 					}
-// #endif
-
-					
-					if(svar.Asource == 2 && pnp1[ii].b == PartState.FREE_)
-					{
-						#pragma omp atomic
-						cells.fNum[pnp1[ii].cellID]++;
-						#pragma omp atomic
-						cells.fMass[pnp1[ii].cellID] += pnp1[ii].m;
-
-						#pragma omp critical
-						{
-							cells.vFn[pnp1[ii].cellID] += pn[ii].v;
-							cells.vFnp1[pnp1[ii].cellID] += pnp1[ii].v;
-						}	
-					}
-					
-
-				}
-				
-			} /*End fluid particles*/
-
-
-			if(svar.Asource == 2)
-			{
-				#pragma omp for schedule(static) nowait
-				for(size_t const& ii : cellsused)
-				{
-					// Work out the mass and volume fractions
-					if(cells.fNum[ii] != 0)
-					{
-						real fVol = real(cells.fNum[ii]) * avar.pVol;
-
-						real aFrac = (cells.cVol[ii]-fVol)/cells.cVol[ii];
-
-						
-						if (aFrac < 0.1)
-							continue;
-						
-						real aMass = cells.cMass[ii]*aFrac;
-
-						// Do the momentum exchange
-						StateVecD newPert = (cells.fMass[ii]/aMass)*(cells.vFnp1[ii]-cells.vFn[ii])/real(cells.fNum[ii]);
-						// StateVecD diffusion = 0.2*cells.cPertn[ii];
-						cells.cPertnp1[ii] = cells.cPertn[ii]*0.9 - newPert;
-
-		// 				#pragma omp critical
-		// 				{
-		// 				cout << "Cell " << ii << ":" << endl;
-
-		// 				cout << "pertnp1: " << cells.cPertnp1[ii](0) << "  "
-		// 						<< cells.cPertnp1[ii](1) 
-		// #if SIMDIM == 3
-		// 				 		<< "  " << cells.cPertnp1[ii](2)
-		// #endif
-		// 						<< endl;
-
-		// 				cout << "pertn:   " << cells.cPertn[ii](0) << "  "
-		// 				 		<< cells.cPertn[ii](1) 
-		// #if SIMDIM == 3
-		// 				 		<< "  " << cells.cPertn[ii](2)
-		// #endif
-		// 						<< endl;
-		// 				cout << "Update: " << newPert(0) << "  " << newPert(1) 
-		// #if SIMDIM == 3
-		// 				<< "  " << newPert(2)
-		// #endif
-		// 				 << endl; 
-
-		// 				cout << "Fuel count: " << cells.fNum[ii] << endl;
-		// 				cout << "Mass fraction: " << cells.fMass[ii]/aMass << endl;
-		// 				// cout << "Fuel Volume: " << fVol << " Fuel Mass: " << cells.fMass[ii] << endl;
-		// 				// // cout << "Cell Volume: " << cells.cVol[ii] << " Air fraction: " << aFrac << "  Air Mass: " << aMass << endl;
-		// 				cout << "Fuel Vel difference: " << cells.vFnp1[ii](0)-cells.vFn[ii](0) << "  " << cells.vFnp1[ii](1)-cells.vFn[ii](1)
-		// #if SIMDIM == 3
-		// 					<< "  " << cells.vFnp1[ii](2)-cells.vFn[ii](2)
-		// #endif
-		// 				 	<< endl << endl;
-		// 				}
-					}
-					// else
-					// {
-					// 	cout << "Cell with no fuel in it considered" << endl;
-					// }
-				}
-			}
-
-		}/*End pragma omp parallel*/
-
-		/****** FIND ERROR ***********/
-		errsum = 0.0;
-		#pragma omp parallel for reduction(+:errsum) schedule(static) shared(pnp1,xih)
-		for (size_t ii = start; ii < end; ++ii)
-		{
-			StateVecD r = pnp1[ii].xi-xih[ii];
-			errsum += r.squaredNorm();
+			
 		}
-	
-		if(k == 0)
-			logbase=log10(sqrt(errsum/(real(svar.totPts))));
-
-
-		error1 = log10(sqrt(errsum/(real(svar.totPts)))) - logbase;
-		// cout << RestartCount << "  " << k << "  " << error1  << "  " << svar.dt << endl;
-		// cout << k << "  " << error1 << "  " << svar.dt << endl;
-
-		if (error1-error2 > 0.0 /*|| std::isnan(error1)*/)
-		{	/*If simulation starts diverging, then reduce the timestep and try again.*/
-			
-			pnp1 = pn;
-			
-			TREE.NP1.index->buildIndex();
-			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-
-			if(svar.Asource == 2)
-			{
-				cellsused.clear();
-				#pragma omp parallel shared(pnp1)
-				{
-					std::vector<size_t> local;
-					#pragma omp for schedule(static) nowait
-					for (size_t ii = start; ii < end; ++ii)
-					{	
-						if(pnp1[ii].b == PartState.FREE_)
-							local.emplace_back(pnp1[ii].cellID);
-					}
-
-					#pragma omp for schedule(static) ordered
-					for(int i=0; i<omp_get_num_threads(); i++)
-					{
-						#pragma omp ordered
-						cellsused.insert(cellsused.end(),local.begin(),local.end());
-					}
-				}
-
-				// Sort the vector and remove unique values.
-				std::unordered_set<size_t> s;
-				for(size_t const& ii:cellsused)
-					s.insert(ii);
-
-				cellsused.assign(s.begin(),s.end());
-				std::sort(cellsused.begin(),cellsused.end());
-			}
-
-
-			
-
-			svar.dt = 0.1*svar.dt;
-			// cout << "Unstable timestep. New dt: " << svar.dt << endl;
-			k = 0;
-			error1 = 0.0;
-			// RestartCount++;
-		}	/*Check if we've exceeded the maximum iteration count*/
-		else if (k > svar.subits)
+		else if (errstate == 1)	/*Sub iterations exceeded*/
 			break;
-		else
-		{	/*Otherwise, roll forwards*/
-			++k;
-		}
+		else	/*Continue iterating*/
+			k++;
+
+
 
 		error2 = error1;
 		
 	} /*End of subits*/
 
-
-
 	/*Implement particle shifting technique - Sun, Colagrossi, Marrone, Zhang (2016)*/
+
+	// TREE.NP1.index->buildIndex();
+	// FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 	maxUi = std::max_element(pnp1.begin(),pnp1.end(),
 		[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
 
@@ -589,10 +671,10 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	#pragma omp parallel
 	{
 		vector<StateMatD> Lmat(end,StateMatD::Zero());
-		vector<StateVecD> norm(end,StateVecD::Zero());
 		vector<real> lamb(end,0.0);
+	
 
-		#pragma omp for
+		#pragma omp for /*schedule(static)*/
 		for(size_t ii = 0; ii < end; ++ii)
 		{
 			StateMatD Lmat_ = StateMatD::Zero();
@@ -600,22 +682,20 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 			for(size_t const& jj:outlist[ii])
 			{
-				Part pj(pnp1[jj]);
+				Part const& pj(pnp1[jj]);
 				/*Check if the position is the same, and skip the particle if yes*/
 				if(pi.partID == pj.partID)
 					continue;
 
-				if(pj.b != PartState.GHOST_)
-				{
+				// if(pj.b != PartState.GHOST_)
+				// {
 					StateVecD const Rij = pj.xi - pi.xi;
 					real const r = Rij.norm();
 					real volj = pj.m/pj.rho;
 					StateVecD Grad = W2GradK(-Rij,r,fvar.H,fvar.correc);
 
-					Lmat_ += volj * Rij * Grad.transpose();
-
-					// norm_ -= volj*Grad;	
-				}
+					Lmat_ += volj * Rij * Grad.transpose();	
+				// }
 			}
 
 			Eigen::FullPivLU<StateMatD> lu(Lmat_);
@@ -623,66 +703,77 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			/*In this case, L becomes singular, and invertability needs to be checked.*/
 			if(lu.isInvertible())
 			{	
-				Lmat[ii] = lu.inverse();
+				Lmat[ii] = -lu.inverse();
 				// norm[ii] = lu.inverse() * norm_;
 				
 				Eigen::SelfAdjointEigenSolver<StateMatD> es;
 		        es.computeDirect(Lmat_);
-		        lamb[ii] = (es.eigenvalues()).minCoeff(); //1 inside fluid, 0 outside fluid    
+		        lamb[ii] = (es.eigenvalues()).minCoeff(); //1 inside fluid, 0 outside fluid   
 			}
 			else
 			{	/*In a sparse neighbourhood if singular, so mark as a surface*/
 				lamb[ii] = 0.0;
 				Lmat[ii](0,0) = 1;
 			}
+
 		}
 
 
-		#pragma omp for 
+		#pragma omp for /*schedule(static)*/
 		for(size_t ii = start; ii < end; ++ii)
 		{
+			// #pragma omp critical
+			// 	cout  << ii << "  " << lamb[ii] << endl;
 
-			Part pi(pnp1[ii]);
+			Part const& pi(pnp1[ii]);
 			StateVecD deltaR = StateVecD::Zero();
-			StateVecD deltaU = StateVecD::Zero();
-
 			StateVecD gradLam = StateVecD::Zero();
+
 			for (size_t const& jj:outlist[ii])
 			{	/* Neighbour list loop. */
-				Part pj(pnp1[jj]);
+				Part const& pj(pnp1[jj]);
 
-				StateVecD const Rij = pj.xi-pi.xi;
+				if(pj.partID == pi.partID)
+					continue;
+
+				StateVecD const Rij = pi.xi-pj.xi;
 				real const r = Rij.norm();
 				real const kern = W2Kernel(r,fvar.H,fvar.correc);
-				StateVecD const gradK = W2GradK(Rij,r,fvar.H,fvar.correc);
+				StateVecD const gradK = Lmat[ii] * W2GradK(Rij,r,fvar.H,fvar.correc);
 
 				deltaR += (1+0.2*pow(kern/W2Kernel(svar.Pstep,fvar.H,fvar.correc),4.0))*gradK*(pj.m/(pi.rho+pj.rho));
-				deltaU += (pj.m/pj.rho) * gradK;
 
-				gradLam += (lamb[ii]-lamb[jj])*Lmat[ii]*gradK*pj.m/pj.rho;
+				gradLam += (lamb[jj]-lamb[ii])*Lmat[ii]*gradK*pj.m/pj.rho;
 			}
 
-			deltaR *= -4.0 *svar.dt * maxU * fvar.H;
-			deltaU *= -2.0 * maxU * fvar.H;
+			
+			deltaR *= 1.5 * maxU * fvar.sr / fvar.Cs;
+			// deltaU *= -2.0 * maxU * fvar.H;
 
-			gradLam = gradLam.normalized();
+			if(pi.b != PartState.START_ && pi.b != PartState.BACK_)
+			{
+				gradLam = gradLam.normalized();
+				// cout << gradLam(0) << "  " << gradLam(1) << endl;
 
-			/*Apply the partial shifting*/
-			if(lamb[ii] < 0.75 && lamb[ii] > 0.4)
-			{	/*Particle in the surface region, so apply a partial shifting*/
-				StateMatD shift = StateMatD::Identity() - gradLam*gradLam.transpose();
-
-				pnp1[ii].xi += shift*deltaR;
-				pnp1[ii].v += shift*deltaU;
-			}
-			else if (lamb[ii] >= 0.75)
-			{   /*Particle in the body of fluid, so treat as normal*/
-				pnp1[ii].xi +=deltaR;
-				pnp1[ii].v += deltaU;
-			}
-			/*Otherwise, particle is a surface, and don't shift.*/
-		}	
+				/*Apply the partial shifting*/
+				if(lamb[ii] < 0.75 && lamb[ii] > 0.4)
+				{	/*Particle in the surface region, so apply a partial shifting*/
+					StateMatD shift = StateMatD::Identity() - gradLam*gradLam.transpose();
+					pnp1[ii].xi += shift*deltaR;
+					// #pragma omp critical
+					// 	cout << gradLam(0) << "  " << gradLam(1) << endl;
+					// cout << "Particle in surface area" << endl;
+				}
+				else if (lamb[ii] >= 0.75)
+				{   /*Particle in the body of fluid, so treat as normal*/
+					pnp1[ii].xi +=deltaR;
+				}
+				/*Otherwise, particle is a surface, and don't shift.*/
+			}	
+		}
 	}
+
+
 
 
 	/*Add time to global*/
@@ -862,8 +953,6 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	return log10(sqrt(errsum/(real(svar.totPts))))-logbase;
 }
 
-
-
 void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar, 
 	MESH& cells, outl& outlist, State& pnp1, State& pn, State& airP)
 {
@@ -988,8 +1077,8 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			pnp1[ii].Rrho = Rrho[ii];
 			pnp1[ii].Af = Af[ii]; 
 			pnp1[ii].rho = pn[ii].rho+dt*(svar.gamma*Rrho[ii]);
-			pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
-			// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
+			// pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
+			pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
 						
 			xih[ii] = pnp1[ii].xi + dt*pnp1[ii].v;
 

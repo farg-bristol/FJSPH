@@ -194,7 +194,7 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 	else if(avar.acase == 5)
 	{
 							
-		real theta = acos(norm.normalized().dot(Vdiff.normalized()));
+		real theta = acos(-norm.normalized().dot(Vdiff.normalized()));
 		
 		real Cp = 0.0;
 
@@ -209,7 +209,7 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 
 		if(abs(theta) < 2.6399)
 		{
-			Cp = 1- 4*pow(sin(abs(theta)),2);
+			Cp = 1.0 - 4.0*pow(sin(abs(theta)),2.0);
 		}
 		else
 		{
@@ -230,9 +230,12 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 		// cout << Cdi << endl;
 		StateVecD F_drop = 0.5*avar.rhog*Vdiff.norm()*Vdiff*(M_PI*avar.L*avar.L/4)*Cdi/pi.m;
 		// aeroD = -Pi * avar.aPlate * norm[ii].normalized();
-		StateVecD F_kern = 0.006*(Pi/pi.rho) * norm;
+		StateVecD F_kern = -1500.0*(Pi/(pi.m*pi.rho)) * norm;
 
-		real const frac1 = real(size-1)/(avar.nfull);
+		real const frac1 = std::min(real(size-1),avar.nfull)/(avar.nfull);
+
+		// cout << F_kern.norm() << "  " << F_drop.norm() << endl;
+		// cout << avar.nfull << "  " << frac1  << "  " << real(size-1) << endl;
 
 		Fd = frac1*F_kern + (1-frac1)*F_drop;
 
@@ -337,7 +340,7 @@ void ApplyAero(SIM & svar, FLUID const& fvar, AERO const& avar, MESH const& cell
 
 			Af[ii] += Fd;
 			res[ii] += Fd;
-			Force += Fd*pnp1[ii].m;
+			Force += Fd/**pnp1[ii].m*/;
 			// }
 			// else 
 			// {

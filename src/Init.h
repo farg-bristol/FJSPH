@@ -245,17 +245,26 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			/*Create a bit of the pipe downward.*/
 			real r = 0.5*holeD;
 	    	real dtheta = atan((stepb)/(r));
-			for (real y = 0; y >= -svar.Jet(1)-stepb; y-=stepb)			
-			{	
-				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
-				{
-					StateVecD xi(r*sin(theta), y, r*cos(theta));
-					/*Apply Rotation...*/
-					xi = svar.Rotate*xi;
-					xi += svar.Start;
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-					pID++;
-				}	
+
+	    	int ncirc = floor(2.0*M_PI/dtheta);
+	    	dtheta = 2.0*M_PI/real(ncirc);
+
+	    	for(size_t ii = 0; ii < 4; ii++)
+			{
+				r = 0.5*holeD + real(ii)*stepb;
+
+				for (real y = 0; y >= -svar.Jet(1)-stepb; y-=stepb)			
+				{	
+					for(real theta = 0; theta < 2*M_PI; theta += dtheta)
+					{
+						StateVecD xi(r*sin(theta), y, r*cos(theta));
+						/*Apply Rotation...*/
+						xi = svar.Rotate*xi;
+						xi += svar.Start;
+						pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+						pID++;
+					}	
+				}
 			}
 		#else
 			real jetR = 0.5*(svar.Jet(0)+8.1*svar.dx); /*Radius of hole (or width)*/

@@ -291,7 +291,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   	svar.intNum = 0;
 
   	fvar.dCont = 2.0 * fvar.delta * fvar.H * fvar.Cs;
-  	fvar.dMom = fvar.alpha * fvar.H * fvar.Cs * fvar.rho0;
+  	// fvar.dMom = fvar.alpha * fvar.H * fvar.Cs * fvar.rho0;
+  	fvar.dMom = 2.0*(SIMDIM + 2.0);
 
 #if SIMDIM == 2
 	fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
@@ -371,6 +372,11 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	
 
 	cout << "******** FILE SETTINGS ********" << endl;
+	char cCurrentPath[FILENAME_MAX];
+	if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
+		cerr << "Failed to get current working directory." << endl;
+	
+	cout << "Working directory: " << cCurrentPath << endl;
 	cout << "Input folder: " << svar.infolder << endl;
 	if(svar.Asource == 1 || svar.Asource == 2)
 	{

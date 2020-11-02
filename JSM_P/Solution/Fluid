@@ -3,15 +3,15 @@
 0.1                             #Artificial viscosity
 150                                    #Contact angle
 810                                    #Fluid density
-0.4648                                      #Gas density
-150                                   #Speed of sound
+1.1226                                      #Gas density
+300                                   #Speed of sound
 0.00142                                  #Fluid viscosity
 1.716e-05                                    #Gas viscosity
 0.0256                                  #Surface Tension
 Solution                                    #Output Folder
-2DJSM_Pipe2.grid.edges   #Mesh edge/face file
-soleq2.pval.unsteady_8000   #Mesh Solution file
+   #Mesh edge/face file
+   #Mesh Solution file
 1                                       #Mesh scale
-35.27                           #Gas reference velocity
-101353                           #Gas reference pressure
-288                        #Gas reference temperature
+0                           #Gas reference velocity
+7.90505e-323                           #Gas reference pressure
+1.00449e-318                        #Gas reference temperature

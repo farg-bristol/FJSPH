@@ -498,9 +498,9 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
     {   /*Jet flow*/
         /*Take the height of the jet, and find the volume of the cylinder*/
 #if SIMDIM == 3 
-        real cVol = 6.0*svar.Pstep * (M_PI * pow((svar.Jet(0)/2.0),2));
+        real cVol = 5.0*svar.Pstep * (M_PI * pow((svar.Jet(0)/2.0),2));
 #else
-        real cVol = 6.0*svar.Pstep * svar.Jet(0);
+        real cVol = 5.0*svar.Pstep * svar.Jet(0);
 #endif
         real volume = pow(svar.Pstep,SIMDIM)*real(svar.simPts);
 
@@ -521,9 +521,11 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
     }
 
 #if SIMDIM == 3
-    svar.Pstep = 2*pow((3.0*fvar.simM)/(4.0*M_PI*fvar.rho0),1.0/3.0);
+    // svar.Pstep = 2*pow((3.0*fvar.simM)/(4.0*M_PI*fvar.rho0),1.0/3.0);
+    svar.Pstep = pow(fvar.simM/fvar.rho0,1.0/3.0);
 #else
-    svar.Pstep = 2*sqrt(fvar.simM/(fvar.rho0*M_PI));
+    // svar.Pstep = 2*sqrt(fvar.simM/(fvar.rho0*M_PI));
+    svar.Pstep = pow(fvar.simM/fvar.rho0,1.0/2.0);
 #endif
 
     GetYcoef(avar, fvar, /*fvar.H*/ svar.Pstep);

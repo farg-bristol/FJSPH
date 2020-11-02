@@ -19,131 +19,131 @@
 #include "Eigen/LU"
 #include "Eigen/Eigenvalues"
 
-/*Numerical particle density for Nair & Poeschel (2017) surface tension*/
-real GetNumpartdens(SIM const& svar, FLUID const& fvar, State const& pnp1, outl const& outlist)
-{
-	real npd = 0.0;
-	uint const& end = svar.totPts;
-	#pragma omp parallel for reduction(+:npd)
-	for (uint ii=0; ii< end; ++ii)
-	{
-		StateVecD const& pi = pnp1[ii].xi;
-		for (auto jj:outlist[ii])
-		{ /* Surface Tension calcs */
-			StateVecD const& pj = pnp1[jj].xi;
-			real const r = (pj-pi).norm();
-			npd += W2Kernel(r,fvar.H,fvar.correc);
-		}
-	}
-	return npd/real(svar.totPts);
-}
-
-/*Surface Tension - Nair & Poeschel (2017)*/
-StateVecD SurfaceTens(FLUID const& fvar, Part const& pj, StateVecD const& Rij, 
-					  real const& r, real const& npd)
-{
-	/*Surface tension factor*/
-	real const lam = (6.0/81.0*pow((2.0*fvar.H),3.0)/pow(M_PI,4.0)*
-							(9.0/4.0*pow(M_PI,3.0)-6.0*M_PI-4.0));
-
-	real fac=1.0; /*Boundary Correction Factor*/
-	if(pj.b==PartState.BOUND_) fac=(1+0.5*cos(M_PI*(fvar.contangb/180))); 
-
-	/*npd = numerical particle density (see code above) */
-	real const sij = 0.5*pow(npd,-2.0)*(fvar.sig/lam)*fac;
-	return -(Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*fvar.H));
-}
-
-/* Colour field gradient in He et al (2014) method, note the bottom variable to account for no air*/
-std::vector<StateVecD> GetColourGrad(SIM const& svar, FLUID const& fvar, State const& pnp1, outl const& outlist)
-{
-	std::vector<StateVecD> cgrad(svar.totPts, StateVecD::Zero());
-	const uint& start = svar.bndPts;
-	const uint& end = svar.totPts;
-
-	#pragma omp parallel for shared(outlist) reduction(+:cgrad)
-	for(uint ii=start; ii < end; ++ii)
-	{
-		StateVecD const& pi = pnp1[ii].xi;
-		real bottom = 0.0;
-		
-		for(auto jj:outlist[ii])
-		{	/*Find the denominator to correct absence of second phase*/
-			Part const& pj = pnp1[jj];
-			real const r = (pj.xi-pi).norm();
-			bottom +=(pj.m/pj.rho)*W2Kernel(r,fvar.H,fvar.correc);
-		}
-
-		for(auto jj:outlist[ii])
-		{	/*Find the numerator and sum*/
-			Part const& pj = pnp1[jj];
-			StateVecD const Rij = pj.xi-pi;
-			real const r = Rij.norm();
-			cgrad[ii] += (pj.m/pj.rho)*W2GradK(Rij,r,fvar.H,fvar.correc);
-		}
-		
-		cgrad[ii] = cgrad[ii]/bottom;
-	}
-
-	return cgrad;
-}
-
-/*Diffuse interface method from He et al (2014) for surface tension*/
-StateVecD HeST(FLUID const& fvar, Part const& pi, Part const& pj, 
-			  StateVecD const& Rij, real const& r, StateVecD const& cgradi, StateVecD const& cgradj)
-{
-	return (0.01/2.0)*(pi.m/pi.rho)*(pj.m/pj.rho)*((cgradi.squaredNorm()+cgradj.squaredNorm())/2.0)
-		*W2GradK(Rij,r,fvar.H,fvar.correc);
-}
-
-
-StateVecD BasePos(real const& Pi, real const& Pj, real const& Vj, StateVecD const& gradK)
-{
-	/* Positive Pressure - Sun, Colagrossi, Marrone, Zhang (2016)*/
-	return gradK * Vj * (Pj + Pi);
-}
-
-StateVecD BaseNeg(real const& Pi, real const& Pj, real const& Vj, StateVecD const& gradK)
-{
-	/* Negative Pressure - Sun, Colagrossi, Marrone, Zhang (2016)*/
-	return gradK * Vj * (Pj - Pi);
-}
-
-StateVecD ArtVisc(StateVecD const& Rij, StateVecD const& Vij, real const r, 
-	 StateVecD const& gradK, real const& Vj)
-{
-    return gradK * Vj * Vij.dot(Rij) / (r*r);
-}
-
-// StateVecD BasePos(Part const& pi, Part const& pj, StateVecD const& gradK)
+// /*Numerical particle density for Nair & Poeschel (2017) surface tension*/
+// real GetNumpartdens(SIM const& svar, FLUID const& fvar, State const& pnp1, outl const& outlist)
 // {
-// 	/* Positive Pressure - Monaghan (1994)*/
-// 	return gradK * (pj.p*pow(pj.rho,-2)+pi.p*pow(pi.rho,-2));
-// }
-
-// StateVecD BaseNeg(Part const& pi, Part const& pj, StateVecD const& gradK)
-// {
-// 	/* Negative Pressure - Monaghan (1994)*/
-// 	return gradK * (pj.p*pow(pj.rho,-2)-pi.p*pow(pi.rho,-2));
-// }
-
-// StateVecD ArtVisc(Part const& pi, Part const& pj, FLUID const& fvar, StateVecD const& Rij, StateVecD const& Vij, real const r, 
-// 	 StateVecD const& gradK)
-// {
-// 	real const vdotr = Vij.dot(Rij);
-
-// 	if (vdotr > 0.0) 
+// 	real npd = 0.0;
+// 	uint const& end = svar.totPts;
+// 	#pragma omp parallel for reduction(+:npd)
+// 	for (uint ii=0; ii< end; ++ii)
 // 	{
-// 		return StateVecD::Zero();
+// 		StateVecD const& pi = pnp1[ii].xi;
+// 		for (auto jj:outlist[ii])
+// 		{ /* Surface Tension calcs */
+// 			StateVecD const& pj = pnp1[jj].xi;
+// 			real const r = (pj-pi).norm();
+// 			npd += W2Kernel(r,fvar.H,fvar.correc);
+// 		}
 // 	}
-// 	else
-// 	{
-// 		real const muij= fvar.H*vdotr/(r*r+0.0001*fvar.HSQ);
-// 		real const rhoij = 0.5*(pi.rho+pj.rho);
-// 		real const cbar = 0.5*(sqrt((fvar.B*fvar.gam)/pi.rho)+sqrt((fvar.B*fvar.gam)/pj.rho));
-// 		return gradK * fvar.alpha*cbar*muij/rhoij;
-// 	}
+// 	return npd/real(svar.totPts);
 // }
+
+// /*Surface Tension - Nair & Poeschel (2017)*/
+// StateVecD SurfaceTens(FLUID const& fvar, Part const& pj, StateVecD const& Rij, 
+// 					  real const& r, real const& npd)
+// {
+// 	/*Surface tension factor*/
+// 	real const lam = (6.0/81.0*pow((2.0*fvar.H),3.0)/pow(M_PI,4.0)*
+// 							(9.0/4.0*pow(M_PI,3.0)-6.0*M_PI-4.0));
+
+// 	real fac=1.0; /*Boundary Correction Factor*/
+// 	if(pj.b==PartState.BOUND_) fac=(1+0.5*cos(M_PI*(fvar.contangb/180))); 
+
+// 	/*npd = numerical particle density (see code above) */
+// 	real const sij = 0.5*pow(npd,-2.0)*(fvar.sig/lam)*fac;
+// 	return -(Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*fvar.H));
+// }
+
+// /* Colour field gradient in He et al (2014) method, note the bottom variable to account for no air*/
+// std::vector<StateVecD> GetColourGrad(SIM const& svar, FLUID const& fvar, State const& pnp1, outl const& outlist)
+// {
+// 	std::vector<StateVecD> cgrad(svar.totPts, StateVecD::Zero());
+// 	const uint& start = svar.bndPts;
+// 	const uint& end = svar.totPts;
+
+// 	#pragma omp parallel for shared(outlist) reduction(+:cgrad)
+// 	for(uint ii=start; ii < end; ++ii)
+// 	{
+// 		StateVecD const& pi = pnp1[ii].xi;
+// 		real bottom = 0.0;
+		
+// 		for(auto jj:outlist[ii])
+// 		{	/*Find the denominator to correct absence of second phase*/
+// 			Part const& pj = pnp1[jj];
+// 			real const r = (pj.xi-pi).norm();
+// 			bottom +=(pj.m/pj.rho)*W2Kernel(r,fvar.H,fvar.correc);
+// 		}
+
+// 		for(auto jj:outlist[ii])
+// 		{	/*Find the numerator and sum*/
+// 			Part const& pj = pnp1[jj];
+// 			StateVecD const Rij = pj.xi-pi;
+// 			real const r = Rij.norm();
+// 			cgrad[ii] += (pj.m/pj.rho)*W2GradK(Rij,r,fvar.H,fvar.correc);
+// 		}
+		
+// 		cgrad[ii] = cgrad[ii]/bottom;
+// 	}
+
+// 	return cgrad;
+// }
+
+// /*Diffuse interface method from He et al (2014) for surface tension*/
+// StateVecD HeST(FLUID const& fvar, Part const& pi, Part const& pj, 
+// 			  StateVecD const& Rij, real const& r, StateVecD const& cgradi, StateVecD const& cgradj)
+// {
+// 	return (0.01/2.0)*(pi.m/pi.rho)*(pj.m/pj.rho)*((cgradi.squaredNorm()+cgradj.squaredNorm())/2.0)
+// 		*W2GradK(Rij,r,fvar.H,fvar.correc);
+// }
+
+
+// StateVecD BasePos(real const& Pi, real const& Pj, real const& Vj, StateVecD const& gradK)
+// {
+// 	/* Positive Pressure - Sun, Colagrossi, Marrone, Zhang (2016)*/
+// 	return gradK * Vj * (Pj + Pi);
+// }
+
+// StateVecD BaseNeg(real const& Pi, real const& Pj, real const& Vj, StateVecD const& gradK)
+// {
+// 	/* Negative Pressure - Sun, Colagrossi, Marrone, Zhang (2016)*/
+// 	return gradK * Vj * (Pj - Pi);
+// }
+
+// StateVecD ArtVisc(StateVecD const& Rij, StateVecD const& Vij, real const r, 
+// 	 StateVecD const& gradK, real const& Vj)
+// {
+//     return Vij.dot(Rij) * Vj * gradK / (r*r);
+// }
+
+StateVecD BasePos(Part const& pi, Part const& pj, StateVecD const& gradK)
+{
+	/* Positive Pressure - Monaghan (1994)*/
+	return gradK * (pj.p*pow(pj.rho,-2)+pi.p*pow(pi.rho,-2));
+}
+
+StateVecD BaseNeg(Part const& pi, Part const& pj, StateVecD const& gradK)
+{
+	/* Negative Pressure - Monaghan (1994)*/
+	return gradK * (pj.p*pow(pj.rho,-2)-pi.p*pow(pi.rho,-2));
+}
+
+StateVecD ArtVisc(Part const& pi, Part const& pj, FLUID const& fvar, StateVecD const& Rij, StateVecD const& Vij, real const r, 
+	 StateVecD const& gradK)
+{
+	real const vdotr = Vij.dot(Rij);
+
+	if (vdotr > 0.0) 
+	{
+		return StateVecD::Zero();
+	}
+	else
+	{
+		real const muij= fvar.H*vdotr/(r*r+0.0001*fvar.HSQ);
+		real const rhoij = 0.5*(pi.rho+pj.rho);
+		real const cbar = 0.5*(sqrt((fvar.B*fvar.gam)/pi.rho)+sqrt((fvar.B*fvar.gam)/pj.rho));
+		return gradK * fvar.alpha*cbar*muij/rhoij;
+	}
+}
 
 /*Laminar Viscosity - Morris (2003)*/
 StateVecD Viscosity(FLUID const& fvar, Part const& pi, Part const& pj, 
@@ -163,7 +163,7 @@ StateVecD NormalBoundaryRepulsion(FLUID const& fvar, MESH const& cells, Part con
 
 /*L matrix for delta-SPH calculation*/
 void dSPH_PreStep(FLUID const& fvar, size_t const& start, size_t const& end, State const& pnp1, 
-		vector<vector<Part>> const& neighb, vector<StateVecD>& norm, vector<StateVecD>& gradRho,  vector<real>& isSurf, vector<StateMatD>& Lmat)
+		vector<vector<Part>> const& neighb, vector<real>& kernsum, vector<StateVecD>& norm, vector<StateVecD>& gradRho,  vector<real>& isSurf, vector<StateMatD>& Lmat)
 {
 	/************   RENORMALISATION MATRIX CALCULATION    ************/
 	
@@ -175,6 +175,8 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& start, size_t const& end, Sta
 			StateMatD Lmat_ = StateMatD::Zero();
 			StateVecD gradRho_ = StateVecD::Zero();
 			StateVecD norm_ = StateVecD::Zero();
+			real kernsum_ = 0.0;
+
 			Part const& pi(pnp1[ii]);
 
 			for(Part const& pj:neighb[ii])
@@ -183,19 +185,19 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& start, size_t const& end, Sta
 				if(pi.partID == pj.partID)
 					continue;
 
-				if(pj.b != PartState.GHOST_)
-				{
-					StateVecD const Rij = pj.xi - pi.xi;
-					real const r = Rij.norm();
-					real volj = pj.m/pj.rho;
-					StateVecD Grad = W2GradK(-Rij,r,fvar.H,fvar.correc);
+				StateVecD const Rij = pj.xi - pi.xi;
+				real const r = Rij.norm();
+				real const volj = pj.m/pj.rho;
+				real const kern = W2Kernel(r,fvar.H,fvar.correc);
+				StateVecD const Grad = W2GradK(-Rij,r,fvar.H,fvar.correc);
 
-					Lmat_ += volj * Rij * Grad.transpose();
+				Lmat_ += volj * Rij * Grad.transpose();
 
-					gradRho_ -= volj * (pj.rho - pi.rho)*Grad;
+				gradRho_ += volj * (pj.rho - pi.rho)*Grad;
 
-					norm_ -= volj*Grad;	
-				}
+				norm_ += volj*Grad;	
+
+				kernsum_ += volj * kern;
 			}
 
 			Eigen::FullPivLU<StateMatD> lu(Lmat_);
@@ -203,113 +205,25 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& start, size_t const& end, Sta
 			/*In this case, L becomes singular, and invertability needs to be checked.*/
 			if(lu.isInvertible())
 			{	
-				Lmat[ii] = lu.inverse();
-				norm[ii] = lu.inverse() * norm_;
-				gradRho[ii] = lu.inverse() * gradRho_;
+				Lmat[ii] = -lu.inverse();
+				norm[ii] = -lu.inverse() * norm_;
+				gradRho[ii] = -lu.inverse() * gradRho_;
 				
 				Eigen::SelfAdjointEigenSolver<StateMatD> es;
 		        es.computeDirect(Lmat_);
 		        isSurf[ii] = (es.eigenvalues()).minCoeff(); //1 inside fluid, 0 outside fluid    
+		        // #pragma omp critical
+		        // cout << (es.eigenvalues()).minCoeff() << "  " << (es.eigenvalues()).maxCoeff() << endl;
 			}
 			else
 			{	/*In a sparse neighbourhood if singular, so mark as a surface*/
 				isSurf[ii] = 0.0;
+				norm[ii] = norm_;
 				Lmat[ii](0,0) = 1;
 			}
+
+			kernsum[ii] = kernsum_;
 		}
-	}
-
-}
-
-/*Di term for delta-SPH calculation*/
-void dSPH_Di_Term(FLUID const& fvar, size_t const& start, size_t const& end, State const& pnp1, 
-		outl const& outlist, vector<real>& Di,  vector<real>& isSurf, vector<StateMatD>& Lmat)
-{
-	/************   RENORMALISATION MATRIX CALCULATION    ************/
-	vector<StateVecD> gradRho(end, StateVecD::Zero());
-	// vector<real> isSurf(end, 0.0);
-
-	#pragma omp parallel
-	{
-		#pragma omp for
-		for(size_t ii = 0; ii < end; ++ii)
-		{
-			StateMatD Lmat_ = StateMatD::Zero();
-			StateVecD gradRho_ = StateVecD::Zero();
-			
-			Part const& pi(pnp1[ii]);
-
-			for(size_t const& jj:outlist[ii])
-			{
-				Part const& pj(pnp1[jj]);
-				/*Check if the position is the same, and skip the particle if yes*/
-				if(pi.partID == pj.partID)
-					continue;
-
-				if(pj.b != PartState.GHOST_)
-				{
-					StateVecD const Rij = pj.xi - pi.xi;
-					real const r = Rij.norm();
-					real volj = pj.m/pj.rho;
-					StateVecD Grad = W2GradK(Rij,r,fvar.H,fvar.correc);
-
-					Lmat_ += volj * Grad * Rij.transpose();
-
-					gradRho_ += volj * (pj.rho - pi.rho)*Grad;	
-				}
-			}
-
-			// Lmat[ii] = Lmat_;
-
-			Eigen::FullPivLU<StateMatD> lu(Lmat_);
-			/*If only 1 particle is in the neighbourhood, tensile instability can occur*/
-			/*In this case, L becomes singular, and invertability needs to be checked.*/
-			if(lu.isInvertible())
-			{	
-				gradRho[ii] = lu.inverse() * gradRho_;
-				Eigen::SelfAdjointEigenSolver<StateMatD> es;
-		        es.computeDirect(Lmat_);
-		        isSurf[ii] = (es.eigenvalues()).minCoeff(); //1 inside fluid, 0 outside fluid
-
-		        Lmat[ii] = lu.inverse();
-			}
-			else
-			{	/*In a sparse neighbourhood if singular, so mark as a surface*/
-				isSurf[ii] = 0.0;
-				Lmat[ii](0,0) = 1;
-			}
-		}
-
-		#pragma omp for
-		for(size_t ii = 0; ii < end; ++ii)
-		{
-			real Di_ = 0.0;
-			Part const& pi(pnp1[ii]);
-
-			for(size_t const& jj:outlist[ii])
-			{
-				Part const& pj(pnp1[jj]);
-				/*Check if the position is the same, and skip the particle if yes*/
-				if(pi.partID == pj.partID)
-					continue;
-
-				if(pj.b != PartState.GHOST_)
-				{
-
-					
-					StateVecD const Rij = pj.xi - pi.xi;
-					real const r = Rij.norm();
-					real const rsq = Rij.squaredNorm();
-					StateVecD gradK = W2GradK(Rij,r,fvar.H,fvar.correc);
-
-					StateVecD psi_ij = ((pi.rho - pj.rho) + 0.5*(gradRho[pi.partID] + gradRho[pj.partID]).dot(Rij)) * Rij/(rsq);
-
-					Di_+= 2*psi_ij.dot(gradK) * pj.m/pj.rho;
-				}
-			}
-			Di[ii] = Di_;
-		}
-
 	}
 
 }
@@ -335,7 +249,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 	 vector<vector<Part>> const& neighb, outl const& outlist, 
 	 // vector<real> const& Di, vector<real> const& isSurf,
 	 vector<StateVecD>& RV, vector<real>& Rrho, std::vector<StateVecD>& Af,
-	 StateVecD& Force, vector<real>& kern, vector<StateVecD>& normal/*, vector<real>& curve*/)
+	 StateVecD& Force, vector<real>& kernel, vector<StateVecD>& normal/*, vector<real>& curve*/)
 {
 	svar.maxmu=0; 					    /* CFL Parameter */
 	const size_t start = svar.bndPts;
@@ -346,9 +260,9 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 	/*Gravity Vector*/
 	#if SIMDIM == 3
-		StateVecD const g = StateVecD(0.0,-9.81,0.0);
+		StateVecD const g = StateVecD(0.0,0.0,0.0);
 	#else
-		StateVecD const g = StateVecD(0.0,-9.81);
+		StateVecD const g = StateVecD(0.0,0.0);
 	#endif
 	// const uint piston = svar.psnPts;
 
@@ -358,21 +272,24 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 	// std::vector<StateVecD> const cgrad = GetColourGrad(svar,fvar,pnp1,outlist);
 	// std::vector<StateVecD> ST(svar.totPts,StateVecD::Zero()); /*Surface tension force*/		
 
-	vector<StateVecD> norm(end, StateVecD::Zero());
-	vector<StateVecD> gradRho(end,StateVecD::Zero());
-	vector<real> isSurf(end,0.0);
-	vector<StateMatD> Lmat(end,StateMatD::Zero());
-	vector<StateVecD> avgV(end,StateVecD::Zero());
+	
 
-	dSPH_PreStep(fvar,start,end,pnp1,neighb,norm,gradRho,isSurf,Lmat);
+	// for(size_t ii = 0; ii < end; ++ii)
+	// {
+	// 	cout << ii << "  " << kernsum[ii] << endl;
+	// }
 
 	#pragma omp parallel /*shared(Af, wDiff, norm, curve)*/
 	{
-		// real npd = 0.0;
-		// vector<real> wDiff(end,0.0);
-		
 		vector<real> kernsum(end,0.0);
-		// vector<real> curve(end,0.0);
+		vector<StateVecD> norm(end, StateVecD::Zero());
+		vector<StateVecD> gradRho(end,StateVecD::Zero());
+		vector<real> isSurf(end,0.0);
+		vector<StateMatD> Lmat(end,StateMatD::Zero());
+		vector<StateVecD> avgV(end,StateVecD::Zero());
+
+		dSPH_PreStep(fvar,start,end,pnp1,neighb,kernsum,norm,gradRho,isSurf,Lmat);
+
 
 /******** LOOP 2 - Piston points: Calculate density and pressure. **********/
 		// #pragma omp for reduction(+:Rrhocontr)
@@ -417,12 +334,33 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				real const volj = pj.m/pj.rho;
 				StateVecD const gradK = Lmat[ii] * W2GradK(Rij, r,fvar.H, fvar.correc);
 
-				// StateVecD contrib = BasePos(pi.p,pj.p,volj,Grad);
+				// StateVecD contrib = BasePos(pi.p,pj.p,volj,gradK);
+				StateVecD contrib = BasePos(pi,pj,gradK);
+
+				// StateVecD contrib;
+				// if(pi.p < 0 && isSurf[ii] > 0.75)
+				// {
+				// 	contrib = BaseNeg(pi.p,pj.p,volj,gradK);
+				// }
+				// else
+				// {
+				// 	contrib = BasePos(pi.p,pj.p,volj,gradK);
+				// }
+
+				// StateVecD contrib;
+				// if(pi.p < 0 && isSurf[ii] > 0.75)
+				// {
+				// 	contrib = BaseNeg(pi,pj,gradK);
+				// }
+				// else
+				// {
+				// 	contrib = BasePos(pi,pj,gradK);
+				// }
 
 				/*drho/dt*/
 				Rrhoi -= pj.m*(Vij.dot(gradK));
 				Rrhod -= Continuity_dSPH(Rij, r, gradK, volj, gradRho, pi, pj);
-				// RV[ii] += pj.m*contrib;
+				RV[ii] -= pj.m*contrib;
 			}/*End of neighbours*/
 			
 			Rrho[ii] = Rrhoi + fvar.dCont * Rrhod;
@@ -455,39 +393,43 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 					continue;
 				}
 
+
 				StateVecD const Rij = pj.xi-pi.xi;
 				StateVecD const Vij = pj.v-pi.v;
 				real const r = Rij.norm();
+
+				
 				real const volj = pj.m/pj.rho;
-				real const kern = W2Kernel(r,fvar.H,fvar.correc);
-				kernsum[ii] += kern;
+				real const kern = W2Kernel(r,fvar.H,fvar.correc)/kernsum[ii];
 				StateVecD const gradK = Lmat[ii]*W2GradK(Rij,r,fvar.H,fvar.correc);
 
 				/*Momentum contribution -  Sun, Colagrossi, Marrone, Zhang (2016)*/
-				StateVecD contrib;
-				if(pi.p < 0 && isSurf[ii] > 0.75)
-				{
-					contrib = BaseNeg(pi.p,pj.p,volj,gradK);
-				}
-				else
-				{
-					contrib = BasePos(pi.p,pj.p,volj,gradK);
-				}
-				
-				StateVecD const aVisc = ArtVisc(Rij,Vij,r,gradK,volj);
-
-				/*Momentum contribution -  Monaghan (1994)*/
 				// StateVecD contrib;
-				// if(pi.p < 0 && isSurf[ii] < 0.75)
+				// if(pi.p < 0 && isSurf[ii] > 0.75)
 				// {
-				// 	contrib = BaseNeg(pi,pj,gradK);
+				// 	contrib = BaseNeg(pi.p,pj.p,volj,gradK);
 				// }
 				// else
 				// {
-				// 	contrib = BasePos(pi,pj,gradK);
+				// 	contrib = BasePos(pi.p,pj.p,volj,gradK);
 				// }
+				
+				// contrib = BasePos(pi.p,pj.p,volj,gradK);
 
-				// StateVecD const aVisc = ArtVisc(pi,pj,fvar,Rij,Vij,r,gradK);
+				// StateVecD const aVisc = ArtVisc(Rij,Vij,r,gradK,volj);
+
+				/*Momentum contribution -  Monaghan (1994)*/
+				StateVecD contrib;
+				if(pi.p < 0 && isSurf[ii] > 0.75)
+				{
+					contrib = BaseNeg(pi,pj,gradK);
+				}
+				else
+				{
+					contrib = BasePos(pi,pj,gradK);
+				}
+
+				StateVecD const aVisc = ArtVisc(pi,pj,fvar,Rij,Vij,r,gradK);
 
 				StateVecD visc = StateVecD::Zero();
 				// StateVecD SurfC = StateVecD::Zero();
@@ -506,14 +448,15 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 					normi +=  kern * volj * norm[ii];
 
 					/*Base WCSPH continuity drho/dt*/
-					Rrhoi -= volj*(Vij.dot(gradK));
+					Rrhoi -= pj.m*(Vij.dot(gradK));
 					Rrhod -= Continuity_dSPH(Rij, r, gradK, volj, gradRho, pi, pj);
 				// }
 	
 				avgV_ += pj.v * volj * kern;
 
-				RVi += (-contrib + fvar.mu * fvar.dMom * aVisc)/pi.rho +  pj.m*visc;
-				// RVi += pj.m*(-contrib +  aVisc + visc);
+				// RVi += (-contrib + fvar.mu * fvar.dMom * aVisc)/pi.rho +  pj.m*visc;
+				RVi += pj.m*(-contrib + aVisc + visc);
+				
 
 			}/*End of neighbours*/
 			
@@ -524,13 +467,13 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 
 			RV[ii] = RVi + g;
-			Rrho[ii] = pi.rho*Rrhoi + fvar.dCont * Rrhod;
+			Rrho[ii] = /*pi.rho**/Rrhoi/* + fvar.dCont * Rrhod*/;
 
-			norm[ii] =  normi/kernsum[ii];;
-			normal[ii] =  normi/kernsum[ii];
+			norm[ii] =  normi;
+			normal[ii] =  normi;
 			// wDiff[ii] = mRij.norm()/(fvar.H*mj);
 
-			avgV[ii] = avgV_/kernsum[ii];
+			avgV[ii] = avgV_;
 
 		} /*End of sim parts*/		
 	
@@ -545,15 +488,13 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 			Part const& pi = pnp1[ii];
 			size_t size = outlist[ii].size();
 			
-			kern[ii] = isSurf[ii];
+			kernel[ii] = isSurf[ii];
 
 			// Check if interaction is between surface particles
-			if(isSurf[ii] < 0.66)
+			if(isSurf[ii] < 0.7)
 			{	
 				real curve = 0.0;
 				real correc = 0.0;
-				StateVecD aeroD = StateVecD::Zero();
-				// StateVecD normi = StateVecD::Zero();
 
 				StateVecD Vdiff;
 				real Pbasei = 0.0;
@@ -586,12 +527,12 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 					StateVecD const Rij = pj.xi - pi.xi;
 					
 					real const volj = (pj.m/pj.rho);
-					StateVecD const divW = volj*W2GradK(Rij, Rij.norm(), fvar.H, fvar.correc);
+					StateVecD const divW = Lmat[ii] *volj*W2GradK(Rij, Rij.norm(), fvar.H, fvar.correc);
 					/*Surface Tension - Ordoubadi (2014) CSF*/
-					if(isSurf[jj] < 0.66)
+					if(isSurf[jj] < 0.7)
 					{	
-						curve -= (norm[jj].normalized()-norm[ii].normalized()).dot(Lmat[ii] *divW);
-						correc += volj * W2Kernel(Rij.norm(),fvar.H,fvar.correc);
+						curve -= (norm[jj].normalized()-norm[ii].normalized()).dot(divW);
+						correc += volj * W2Kernel(Rij.norm(),fvar.H,fvar.correc)/kernsum[ii];
 					}
 
 					/*Occlusion for Gissler Aero Method*/
@@ -607,25 +548,8 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 					}
 				}
 
-				// real theta = norm[ii].normalized().dot(Vdiff.normalized());
 
-				// real Cp = 1-4*pow(sin(theta),2);
-
-				// real aPress = 0.5*avar.rhog*Vdiff.squaredNorm()*Cp;
-
-
-				// Rrho[ii] += 1e-2*(pi.p - aPress);
-				// RV[ii] += (fvar.sig/pi.rho * curve * norm[ii])/correc;
-				
-				// aeroD *= Pi/pi.rho;
-				// aeroD *= pi.m/pi.rho* pi.m/pi.rho;
-
-				// #pragma omp critical
-				// cout << aeroD[0] << "  " << aeroD[1] << "  " << endl;
-				RV[ii] += aeroD/*/correc*//*/pi.m*/;
-				Force += aeroD*pi.m;
-				// normal[ii] = normi;
-				// aeroF += (1-woccl)*aeroD/correc;
+				RV[ii] += (fvar.sig/pi.rho * curve * norm[ii])/correc;
 				
 	// 			/*Find the aero force*/
 				if(pi.b == PartState.FREE_)

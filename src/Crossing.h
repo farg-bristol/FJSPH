@@ -432,7 +432,7 @@ uint Check_Pipe(Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& xi)
 
 
 
-void FirstCell(SIM& svar, size_t end, uint const ii, Vec_Tree& CELL_INDEX,
+void FirstCell(SIM& svar, size_t end, uint const ii, Vec_Tree const& CELL_INDEX,
      MESH const& cells, State& pnp1, State& pn)
 {
 

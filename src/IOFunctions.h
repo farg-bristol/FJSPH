@@ -94,13 +94,12 @@ int MakeOutputDir(int argc, char *argv[], SIM& svar)
 {
 	char cCurrentPath[FILENAME_MAX];
 	if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
-	return errno;
+		return errno;
 
 	/*Open an output directory in the name of the input file, under Outputs*/
 	string pathname = cCurrentPath;
-  	string input = svar.infolder;
   	pathname.append("/");
-  	pathname.append(input);
+  	pathname.append(svar.infolder);
   	pathname.append(svar.outfolder);
   	pathname.append("/");
   

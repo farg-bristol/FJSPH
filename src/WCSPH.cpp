@@ -184,6 +184,7 @@ int main(int argc, char *argv[])
 			real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
 			real r = 0.5*holeD;
 #if SIMDIM == 3
+			real stepb = (svar.Pstep*svar.Bstep);
 	    	real dtheta = atan((stepb)/(r));
 			for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 			{
@@ -198,12 +199,10 @@ int main(int argc, char *argv[])
 			    	cout << "Fuel will be excessively close to begin." << endl;
 			    	exit(-1);
 			    }
-
 	    	}
 #else
 	    	for(real x = -r; x <= r; x+=svar.Pstep)
 	    	{
-
 	    		StateVecD xi(x,0.0);
 	    		xi = svar.Rotate*xi;
 				xi += svar.Start;
