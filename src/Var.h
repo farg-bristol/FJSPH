@@ -349,6 +349,80 @@ typedef struct MESH
 
 }MESH;
 
+/*Container for delta-plus SPH calculations*/
+typedef class DELTAP {
+	public: 
+		DELTAP(size_t const& size)
+		{
+			L = vector<StateMatD>(size,StateMatD::Zero());
+			gradRho = vector<StateVecD>(size,StateVecD::Zero());
+			norm = vector<StateVecD>(size,StateVecD::Zero());
+			
+			lam = vector<real>(size,0.0);
+			kernsum = vector<real>(size,0.0);
+		}
+
+		DELTAP(){}
+
+		void realloc(size_t const& size)
+		{
+			if(L.size() != 0)
+				clear();
+
+			alloc(size);
+		}
+
+		void update(vector<StateMatD> const& L_, vector<StateVecD> const& gradRho_, 
+			vector<StateVecD> const& norm_, vector<StateVecD> const& avgV_,
+			vector<real> const& lam_, vector<real> const& kernsum_)
+		{
+			// #pragma omp parallel
+			// {
+			// 	size_t const size = L_.size();
+			// 	// #pragma omp for schedule(static) 
+			// 	for(size_t ii = 0; ii < size; ++ii)
+			// 	{
+			// 		L[ii] = L_[ii];
+			// 		gradRho[ii] = gradRho_[ii];
+			// 		norm[ii] = norm_[ii];
+			// 		avgV[ii] = avgV_[ii];
+			// 		lam[ii] = lam_[ii];
+			// 		kernsum[ii] = kernsum_[ii];
+			// 	}
+			// }
+
+			L = L_; gradRho = gradRho_; norm = norm_; 
+			avgV = avgV_; lam = lam_; kernsum = kernsum_;
+
+		}
+
+		vector<StateMatD> L;
+		vector<StateVecD> gradRho;
+		vector<StateVecD> norm;
+		vector<StateVecD> avgV;
+
+		vector<real> lam;
+		vector<real> kernsum;
+
+	private:
+
+		void alloc(size_t const& size)
+		{
+			L = vector<StateMatD>(size);
+			gradRho = vector<StateVecD>(size);
+			norm = vector<StateVecD>(size);
+			avgV = vector<StateVecD>(size);
+			lam = vector<real>(size);
+			kernsum = vector<real>(size);
+		}
+
+		void clear()
+		{
+			L.clear(); gradRho.clear(); norm.clear(); 
+			avgV.clear(); lam.clear(); kernsum.clear(); 
+		}
+}DELTAP;
+
 /*Particle data class*/
 typedef class Particle {
 	public:

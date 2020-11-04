@@ -9,7 +9,7 @@
 80000                      #Maximum number of particles
 0.0002                        #Post processing mesh size
 0.008                   #Post processing support radius
-9.9257e-05                         #Particle initial spacing
+0.00039014                         #Particle initial spacing
 0.7                          #Boundary spacing factor
 4                                    #Boundary case
 0                               #Aerodynamic source

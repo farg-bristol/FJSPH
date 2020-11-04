@@ -18,7 +18,7 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 	size_t const& start, size_t const& end, 
 	real const& a, real const& b, real const& c, real const& d, real const& B, real const& gam,
 	MESH& cells, vector<size_t> const& cellsused,
-	vector<vector<Part>> const& neighb, outl const& outlist, 
+	vector<vector<Part>> const& neighb, outl const& outlist, DELTAP const& dp,
 	State& pn, State& pnp1, State& airP, StateVecD& Force, StateVecD& dropVel)
 {
 	/*Update the state at time n+1*/
@@ -42,7 +42,7 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 		// cout << "Start: " << start << "  End: " << end << endl;
 		Force = StateVecD::Zero();
 		svar.AForce = StateVecD::Zero();
-		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist/*,Di,isSurf*/,res,Rrho,Af,Force,wDiff,norm/*,curve*/); /*Guess force at time n+1*/
+		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force); /*Guess force at time n+1*/
 
 		const real dt = svar.dt;
 		const real dt2 = dt*dt;
@@ -338,7 +338,7 @@ int Check_Error(KDTREE& TREE, SIM& svar, FLUID const& fvar, size_t const& start,
 
 ///**************** Integration loop **************///
 real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar, 
-	MESH& cells, State& pn, State& pnp1, State& airP, outl& outlist)
+	MESH& cells, DELTAP& dp, State& pn, State& pnp1, State& airP, outl& outlist)
 {
 	// cout << "Entered Newmark_Beta" << endl;
 	uint   k = 0;	
@@ -568,78 +568,94 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
     	}
 	}
 
-	/*Previous State for error calc*/
-	#pragma omp parallel for shared(pnp1)
-	for (size_t  ii=0; ii < end; ++ii)
-		xih[ii] = pnp1[ii].xi;
+	
 
 	/*Get preliminary new state to find neighbours, then freeze*/
 	Get_Resid(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
-		cells,cellsused,neighb,outlist,pn,pnp1,airP,Force,dropVel);
+		cells,cellsused,neighb,outlist,dp,pn,pnp1,airP,Force,dropVel);
 
+	int errstate = Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
+							cellsused,outlist,xih,pn,pnp1,k);
 
-
-	while (log10(sqrt(errsum/(real(svar.totPts)))) - logbase > -7.0)
+	if(errstate < 0)
 	{
-		/****** UPDATE TREE ***********/
-		TREE.NP1.index->buildIndex();
-		FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-		
-		// airP.clear();
-		std::vector<std::vector<Part>> neighb;
-		neighb.reserve(end);
-		
-		dropVel = StateVecD::Zero();
 
-		#pragma omp parallel shared(pnp1, outlist, air)
+	}
+	else if (errstate == 1)
+	{
+		/*Already converged...*/
+	}
+
+	/****** UPDATE TREE ***********/
+	TREE.NP1.index->buildIndex();
+	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+	
+	// airP.clear();
+	neighb.clear();
+	neighb.reserve(end);
+	
+	dropVel = StateVecD::Zero();
+
+	#pragma omp parallel shared(pnp1, outlist, air)
+	{
+		std::vector<std::vector<Part>> local;
+		if(svar.ghost == 1 )
 		{
-			std::vector<std::vector<Part>> local;
-			if(svar.ghost == 1 )
+			#pragma omp for schedule(static) nowait
+			for (size_t ii = 0; ii < end; ++ii)
 			{
-				#pragma omp for schedule(static) nowait
-				for (size_t ii = 0; ii < end; ++ii)
-				{
-					std::vector<Part> temp;
-					temp.reserve(outlist[ii].size());
-					for(auto jj:outlist[ii])
-						temp.push_back(Part(pnp1[jj])); 
+				std::vector<Part> temp;
+				temp.reserve(outlist[ii].size());
+				for(auto jj:outlist[ii])
+					temp.push_back(Part(pnp1[jj])); 
 
-					if(air[ii].size()>0)
-					{
-						temp.insert(temp.end(), air[ii].begin(), air[ii].end());
-					}
-					local.push_back(temp);
+				if(air[ii].size()>0)
+				{
+					temp.insert(temp.end(), air[ii].begin(), air[ii].end());
 				}
+				local.push_back(temp);
 			}
-			else
+		}
+		else
+		{
+			#pragma omp for schedule(static) nowait
+			for (size_t ii = 0; ii < end; ++ii)
 			{
-				#pragma omp for schedule(static) nowait
-				for (size_t ii = 0; ii < end; ++ii)
-				{
-					std::vector<Part> temp;
-					temp.reserve(outlist[ii].size());
-					for(auto jj:outlist[ii])
-						temp.push_back(Part(pnp1[jj])); 
+				std::vector<Part> temp;
+				temp.reserve(outlist[ii].size());
+				for(auto jj:outlist[ii])
+					temp.push_back(Part(pnp1[jj])); 
 
-					local.push_back(temp);
-				}
+				local.push_back(temp);
 			}
-
-			#pragma omp for schedule(static) ordered
-	    	for(int i=0; i<omp_get_num_threads(); i++)
-	    	{
-	    		#pragma omp ordered
-	    		neighb.insert(neighb.end(),local.begin(),local.end());
-	    	}
 		}
 
+		#pragma omp for schedule(static) ordered
+    	for(int i=0; i<omp_get_num_threads(); i++)
+    	{
+    		#pragma omp ordered
+    		neighb.insert(neighb.end(),local.begin(),local.end());
+    	}
+	}
+
+	dSPH_PreStep(fvar,start,end,pnp1,outlist,dp);
+
+while (log10(sqrt(errsum/(real(svar.totPts)))) - logbase > -7.0)
+	{
+
+	
+
+	
+
+	
 		/*Previous State for error calc*/
 		#pragma omp parallel for shared(pnp1)
 		for (size_t  ii=0; ii < end; ++ii)
 			xih[ii] = pnp1[ii].xi;
 
+		
 		Get_Resid(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
-			cells,cellsused,neighb,outlist,pn,pnp1,airP,Force,dropVel);
+			cells,cellsused,neighb,outlist,dp,pn,pnp1,airP,Force,dropVel);
 
 		int errstate = Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
 							cellsused,outlist,xih,pn,pnp1,k);
@@ -653,8 +669,6 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		else	/*Continue iterating*/
 			k++;
 
-
-
 		error2 = error1;
 		
 	} /*End of subits*/
@@ -663,117 +677,69 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	// TREE.NP1.index->buildIndex();
 	// FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-	maxUi = std::max_element(pnp1.begin(),pnp1.end(),
-		[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
+	// maxUi = std::max_element(pnp1.begin(),pnp1.end(),
+	// 	[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
 
-	maxU = maxUi->v.norm();
+	// maxU = maxUi->v.norm();
 
-	#pragma omp parallel
-	{
-		vector<StateMatD> Lmat(end,StateMatD::Zero());
-		vector<real> lamb(end,0.0);
-	
+	// #pragma omp parallel
+	// {
+	// 	#pragma omp for /*schedule(static)*/
+	// 	for(size_t ii = start; ii < end; ++ii)
+	// 	{
+	// 		// #pragma omp critical
+	// 		// 	cout  << ii << "  " << lamb[ii] << endl;
 
-		#pragma omp for /*schedule(static)*/
-		for(size_t ii = 0; ii < end; ++ii)
-		{
-			StateMatD Lmat_ = StateMatD::Zero();
-			Part const& pi(pnp1[ii]);
+	// 		Part const& pi(pnp1[ii]);
+	// 		StateVecD deltaR = StateVecD::Zero();
+	// 		StateVecD gradLam = StateVecD::Zero();
 
-			for(size_t const& jj:outlist[ii])
-			{
-				Part const& pj(pnp1[jj]);
-				/*Check if the position is the same, and skip the particle if yes*/
-				if(pi.partID == pj.partID)
-					continue;
+	// 		for (size_t const& jj:outlist[ii])
+	// 		{	/* Neighbour list loop. */
+	// 			Part const& pj(pnp1[jj]);
 
-				// if(pj.b != PartState.GHOST_)
-				// {
-					StateVecD const Rij = pj.xi - pi.xi;
-					real const r = Rij.norm();
-					real volj = pj.m/pj.rho;
-					StateVecD Grad = W2GradK(-Rij,r,fvar.H,fvar.correc);
+	// 			if(pj.partID == pi.partID || pj.b == PartState.BOUND_)
+	// 				continue;
 
-					Lmat_ += volj * Rij * Grad.transpose();	
-				// }
-			}
+	// 			StateVecD const Rij = pj.xi-pi.xi;
+	// 			real const r = Rij.norm();
+	// 			real const kern = W2Kernel(r,fvar.H,fvar.correc);
+	// 			StateVecD const gradK = W2GradK(Rij,r,fvar.H,fvar.correc);
 
-			Eigen::FullPivLU<StateMatD> lu(Lmat_);
-			/*If only 1 particle is in the neighbourhood, tensile instability can occur*/
-			/*In this case, L becomes singular, and invertability needs to be checked.*/
-			if(lu.isInvertible())
-			{	
-				Lmat[ii] = -lu.inverse();
-				// norm[ii] = lu.inverse() * norm_;
-				
-				Eigen::SelfAdjointEigenSolver<StateMatD> es;
-		        es.computeDirect(Lmat_);
-		        lamb[ii] = (es.eigenvalues()).minCoeff(); //1 inside fluid, 0 outside fluid   
-			}
-			else
-			{	/*In a sparse neighbourhood if singular, so mark as a surface*/
-				lamb[ii] = 0.0;
-				Lmat[ii](0,0) = 1;
-			}
+	// 			deltaR += (1+0.2*pow(kern/W2Kernel(svar.Pstep,fvar.H,fvar.correc),4.0))*gradK*(pj.m/(pi.rho+pj.rho));
 
-		}
-
-
-		#pragma omp for /*schedule(static)*/
-		for(size_t ii = start; ii < end; ++ii)
-		{
-			// #pragma omp critical
-			// 	cout  << ii << "  " << lamb[ii] << endl;
-
-			Part const& pi(pnp1[ii]);
-			StateVecD deltaR = StateVecD::Zero();
-			StateVecD gradLam = StateVecD::Zero();
-
-			for (size_t const& jj:outlist[ii])
-			{	/* Neighbour list loop. */
-				Part const& pj(pnp1[jj]);
-
-				if(pj.partID == pi.partID)
-					continue;
-
-				StateVecD const Rij = pi.xi-pj.xi;
-				real const r = Rij.norm();
-				real const kern = W2Kernel(r,fvar.H,fvar.correc);
-				StateVecD const gradK = Lmat[ii] * W2GradK(Rij,r,fvar.H,fvar.correc);
-
-				deltaR += (1+0.2*pow(kern/W2Kernel(svar.Pstep,fvar.H,fvar.correc),4.0))*gradK*(pj.m/(pi.rho+pj.rho));
-
-				gradLam += (lamb[jj]-lamb[ii])*Lmat[ii]*gradK*pj.m/pj.rho;
-			}
+	// 			gradLam += (dp.lam[jj]-dp.lam[ii]) * dp.L[ii]*gradK*pj.m/pj.rho;
+	// 		}
 
 			
-			deltaR *= 1.5 * maxU * fvar.sr / fvar.Cs;
-			// deltaU *= -2.0 * maxU * fvar.H;
+	// 		deltaR *= -1 * fvar.sr * maxU / fvar.Cs;
+	// 		// deltaU *= -2.0 * maxU * fvar.H;
 
-			if(pi.b != PartState.START_ && pi.b != PartState.BACK_)
-			{
-				gradLam = gradLam.normalized();
-				// cout << gradLam(0) << "  " << gradLam(1) << endl;
+	// 		if(pi.b != PartState.START_ && pi.b != PartState.BACK_)
+	// 		{
+	// 			gradLam = gradLam.normalized();
+	// 			// cout << gradLam(0) << "  " << gradLam(1) << endl;
 
-				/*Apply the partial shifting*/
-				if(lamb[ii] < 0.75 && lamb[ii] > 0.4)
-				{	/*Particle in the surface region, so apply a partial shifting*/
-					StateMatD shift = StateMatD::Identity() - gradLam*gradLam.transpose();
-					pnp1[ii].xi += shift*deltaR;
-					// #pragma omp critical
-					// 	cout << gradLam(0) << "  " << gradLam(1) << endl;
-					// cout << "Particle in surface area" << endl;
-				}
-				else if (lamb[ii] >= 0.75)
-				{   /*Particle in the body of fluid, so treat as normal*/
-					pnp1[ii].xi +=deltaR;
-				}
-				/*Otherwise, particle is a surface, and don't shift.*/
-			}	
-		}
-	}
+	// 			/*Apply the partial shifting*/
+	// 			if(dp.lam[ii] < 0.8 && dp.lam[ii] > 0.4)
+	// 			{	/*Particle in the surface region, so apply a partial shifting*/
+	// 				StateMatD shift = StateMatD::Identity() - gradLam*gradLam.transpose();
+	// 				pnp1[ii].xi += shift*deltaR;
+	// 			}
+	// 			else if (dp.lam[ii] >= 0.8)
+	// 			{   /*Particle in the body of fluid, so treat as normal*/
+	// 				pnp1[ii].xi +=deltaR;
+	// 			}
+	// 			/*Otherwise, particle is a surface, and don't shift.*/
+	// 		}	
+	// 	}
+	// }
 
-
+	// for(size_t ii = start; ii < end; ++ii)
+	// {
+	// 	cout << "L Mag: " << dp.L[ii].determinant() << "  gradRho: " << dp.gradRho[ii].norm() << "  norm: " << dp.norm[ii].norm() 
+	// 	<< "  avgV: " << dp.avgV[ii].norm() << "  lam: " << dp.lam[ii] << "  kernsum: " << dp.kernsum[ii] << endl;
+	// }
 
 
 	/*Add time to global*/
@@ -954,7 +920,7 @@ real Newmark_Beta(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 }
 
 void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar, 
-	MESH& cells, outl& outlist, State& pnp1, State& pn, State& airP)
+	MESH& cells, outl& outlist, DELTAP& dp, State& pnp1, State& pn, State& airP)
 {
 	const size_t start = svar.bndPts;
 	const size_t end = svar.totPts;
@@ -986,7 +952,8 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	for(size_t ii = 0; ii < start; ++ii)
 		neighb.emplace_back();
 
-	
+	TREE.NP1.index->buildIndex();
+	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
 	/*Check if a particle is running low on neighbours, and add ficticious particles*/
 	vector<vector<Part>> air;
@@ -1004,8 +971,8 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 			localA.emplace_back(temp);
 
-			for(auto j:outlist[ii])
-				temp.emplace_back(Part(pnp1[j]));
+			for(auto jj:outlist[ii])
+				temp.emplace_back(Part(pnp1[jj]));
 
 			localN.emplace_back(temp);
 		}
@@ -1033,42 +1000,83 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	StateVecD Force = StateVecD::Zero();
 
+	
+	dSPH_PreStep(fvar,start,end,pnp1,outlist,dp);
+	/*Guess force at time n+1*/
+	vector<StateVecD> res(end,StateVecD::Zero());
+	vector<StateVecD> Af(end,StateVecD::Zero());
+	vector<real> Rrho(svar.totPts,0.0);
+
+	Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force);
+
+	/*Previous State for error calc*/
+	vector<StateVecD> xih(svar.totPts);
+	#pragma omp parallel for shared(pnp1)
+	for (size_t  ii=0; ii < end; ++ii)
+		xih[ii] = pnp1[ii].xi;
+
+	real dt = svar.dt;
+
+	#pragma omp parallel for shared(res, Rrho, Af/*, wDiff, norm, curve*/)
+	for(size_t ii = 0; ii < end; ++ii)
+	{
+		pnp1[ii].f = res[ii];
+		pnp1[ii].Rrho = Rrho[ii];
+		pnp1[ii].Af = Af[ii]; 
+		pnp1[ii].rho = pn[ii].rho+dt*(svar.gamma*Rrho[ii]);
+		// pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
+		pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
+					
+		xih[ii] = pnp1[ii].xi + dt*pnp1[ii].v;
+
+		// pnp1[ii].theta = kern[ii]/ 5.51645e+009;
+		pnp1[ii].theta = dp.kernsum[ii];
+		pnp1[ii].surf = outlist[ii].size();
+
+		// pnp1[ii].theta = wDiff[ii];
+		pnp1[ii].nNeigb = real(outlist[ii].size());
+		pnp1[ii].bNorm = dp.norm[ii];
+
+		// Force += res[ii];
+		// dropVel += pnp1[ii].v;
+
+	}
+
+	/*Find maximum safe timestep*/
+	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin(),pnp1.end(),
+		[](Particle p1, Particle p2){return p1.f.norm()< p2.f.norm();});
+
+	vector<Particle>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
+		[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
+
+	real maxf = maxfi->f.squaredNorm();
+	real maxU = maxUi->v.norm();
+	real dtv = fvar.HSQ * fvar.rho0/fvar.mu;
+	real dtf = sqrt(fvar.H/maxf);
+	real dtc = fvar.H/(maxU);
+
+/***********************************************************************************/
+/***********************************************************************************/
+/***********************************************************************************/
+	dt = 0.125*std::min(dtf,std::min(dtc,dtv));
+	svar.dt = dt;
+/***********************************************************************************/
+/***********************************************************************************/
+/***********************************************************************************/
+
+	TREE.NP1.index->buildIndex();
+	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+	dSPH_PreStep(fvar,start,end,pnp1,outlist,dp);
+
+
 	while (log10(sqrt(errsum/(real(svar.totPts)))) - logbase > -7.0)
 	{
-		TREE.NP1.index->buildIndex();
-		FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-
-		/*Previous State for error calc*/
-		vector<StateVecD> xih(svar.totPts);
-		#pragma omp parallel for shared(pnp1)
-		for (size_t  ii=0; ii < end; ++ii)
-			xih[ii] = pnp1[ii].xi;
-
-		/*Calculate Di term for delta-SPH*/
-		// vector<real> Di(end,0.0);
-		// vector<real> isSurf(end,0.0);
-		// dSPH_PreStep(fvar,start,end,pnp1,outlist,Di,isSurf);
-		
-		// vector<StateVecD> vPert(end,StateVecD::Zero());
 		vector<StateVecD> res(end,StateVecD::Zero());
 		vector<StateVecD> Af(end,StateVecD::Zero());
 		vector<real> Rrho(svar.totPts,0.0);
-		vector<real> kern(end,0.0);
-		// vector<real> wDiff(end,0.0);
-		vector<StateVecD> norm(end,StateVecD::Zero());
-		// vector<real> curve(end,0.0);
 
 		Force = StateVecD::Zero();
-
-		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist/*,Di,isSurf*/,res,Rrho,Af,Force,kern,norm/*,wDiff,norm,curve*/); /*Guess force at time n+1*/
-
-		/*Find maximum safe timestep*/
-		vector<StateVecD>::iterator maxfi = std::max_element(res.begin(),res.end(),
-			[](StateVecD p1, StateVecD p2){return p1.norm() < p2.norm();});
-		real maxf = maxfi->norm();
-		real dtf = sqrt(fvar.H/maxf);
-		real dtcv = fvar.H/(fvar.Cs+svar.maxmu);
-		const real dt = 0.3*std::min(dtf,dtcv);
+		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force);
 
 		#pragma omp parallel for shared(res, Rrho, Af/*, wDiff, norm, curve*/)
 		for(size_t ii = 0; ii < end; ++ii)
@@ -1083,61 +1091,35 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			xih[ii] = pnp1[ii].xi + dt*pnp1[ii].v;
 
 			// pnp1[ii].theta = kern[ii]/ 5.51645e+009;
-			pnp1[ii].theta = kern[ii];
+			pnp1[ii].theta = dp.kernsum[ii];
 			pnp1[ii].surf = outlist[ii].size();
 
 			// pnp1[ii].theta = wDiff[ii];
 			pnp1[ii].nNeigb = real(outlist[ii].size());
-			pnp1[ii].bNorm = norm[ii];
-
-			// Force += res[ii];
-			// dropVel += pnp1[ii].v;
-
+			pnp1[ii].bNorm = dp.norm[ii];
 		}
 
-		errsum = 0.0;
-		#pragma omp parallel for reduction(+:errsum) schedule(static) shared(pnp1,xih)
-		for (size_t ii = start; ii < end; ++ii)
+		vector<size_t> cellsused;
+
+		int errstate = Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
+							cellsused,outlist,xih,pn,pnp1,k);
+
+		if (errstate < 0)	/*Had to restart the simulation*/
 		{
-			StateVecD r = pnp1[ii].xi-xih[ii];
-			errsum += r.squaredNorm();
-		}
-	
-		if(k == 0)
-			logbase=log10(sqrt(errsum/(real(svar.totPts))));
-
-
-		error1 = log10(sqrt(errsum/(real(svar.totPts)))) - logbase;
-
-
-		for (size_t ii = start; ii < end; ++ii)
-		{
-			StateVecD r = xih[ii]-pnp1[ii].xi;
-			errsum += r.squaredNorm();
-		}
-
-		if (error1-error2 > 0.0 /*|| std::isnan(error1)*/)
-		{	/*If simulation starts diverging, then reduce the timestep and try again.*/
 			
-			pnp1 = pn;
-			
-			TREE.NP1.index->buildIndex();
-			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-
-			svar.dt = 0.1*svar.dt;
-			// cout << "Unstable timestep. New dt: " << svar.dt << endl;
-			k = 0;
-			error1 = 0.0;
-			// RestartCount++;
-		}	/*Check if we've exceeded the maximum iteration count*/
-		else if (k > svar.subits)
+		}
+		else if (errstate == 1)	/*Sub iterations exceeded*/
 			break;
-		else
-		{	/*Otherwise, roll forwards*/
-			++k;
-		}
+		else	/*Continue iterating*/
+			k++;
 
 	}
+
+	// for(size_t ii = start; ii < end; ++ii)
+	// {
+	// 	cout << "L Mag: " << dp.L[ii].determinant() << "  gradRho: " << dp.gradRho[ii].norm() << "  norm: " << dp.norm[ii].norm() 
+	// 	<< "  avgV: " << dp.avgV[ii].norm() << "  lam: " << dp.lam[ii] << "  kernsum: " << dp.kernsum[ii] << endl;
+	// }
 
 #if DEBUG 	
 		dbout << "Exiting first step. Error: " << error1 << endl;

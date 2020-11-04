@@ -1,4 +1,4 @@
-2.5e-05                              #Frame time interval
+1e-05                              #Frame time interval
 1200                                 #Number of frames
 1                                #Output frame info
 0                                 #Output data type
@@ -9,7 +9,7 @@
 1000000                      #Maximum number of particles
 500                        #Post processing mesh size
 0.0005                   #Post processing support radius
-0.000489343                         #Particle initial spacing
+0.000951113                         #Particle initial spacing
 0.7                          #Boundary spacing factor
 3                                    #Boundary case
 0                               #Aerodynamic source

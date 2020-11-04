@@ -82,6 +82,7 @@ int main(int argc, char *argv[])
 	State pn;	    /*Particles at n   */
 	State pnp1; 	/*Particles at n+1 */
 	State airP;
+	DELTAP dp;
 
 	if(svar.Bcase == 2 || svar.Bcase == 3)
 	{
@@ -136,7 +137,7 @@ int main(int argc, char *argv[])
 	TREE.CELL.index->buildIndex();
 	TREE.NP1.index->buildIndex();
 
-	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+	// FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
 	
 	// real aMom = 0.0;
@@ -153,7 +154,7 @@ int main(int argc, char *argv[])
 
 	///*** Perform an iteration to populate the vectors *****/
 	if(svar.restart == 0)
-		First_Step(TREE,svar,fvar,avar,cells,outlist,pnp1,pn,airP);
+		First_Step(TREE,svar,fvar,avar,cells,outlist,dp,pnp1,pn,airP);
 
 	///*************** Open simulation files ***************/
 	std::fstream f1,f2,f3,fb,fg;
@@ -277,7 +278,7 @@ int main(int argc, char *argv[])
 		
 		while (stept+ MERROR <svar.framet)
 		{
-		    error = Newmark_Beta(TREE,svar,fvar,avar,cells,pn,pnp1,airP,outlist);
+		    error = Newmark_Beta(TREE,svar,fvar,avar,cells,dp,pn,pnp1,airP,outlist);
 		    stept+=svar.dt;
 		    ++stepits;
 		}

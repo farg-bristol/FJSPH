@@ -1,4 +1,4 @@
-0.000025         #Frame output timestep
+0.00001         #Frame output timestep
 1200              #number of frames
 1              #Output Frame Interval (if 0, suppresses framewise output)
 0              #Output encoding (0 = Binary, 1 = ASCII)
@@ -9,7 +9,7 @@
 1000000           #Max particles
 500          #Post process Mesh grid max length division
 0.0005          #Mesh support radius
-0.0005         #Initial Particle spacing
+0.001         #Initial Particle spacing
 0.7            #Boundary particle spacing factor (of part spacing)
 3              #Boundary case (0 = none, 1 = Rectangle, 3 = jet, 4 = VLM, 5 = droplet, 6 = TAU mesh)
 0              #Aerodynamic solution source (0 = constant vel, 1 = mesh, 2 = mesh + momentum corr, 3 = VLM infl.)

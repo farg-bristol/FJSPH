@@ -12,6 +12,6 @@ solution                                    #Output Folder
    #Mesh edge/face file
    #Mesh Solution file
 1                                       #Mesh scale
-0                           #Gas reference velocity
-7.90505e-323                           #Gas reference pressure
-1.00449e-318                        #Gas reference temperature
+6.92301e-310                           #Gas reference velocity
+6.95251e-310                           #Gas reference pressure
+6.92301e-310                        #Gas reference temperature
