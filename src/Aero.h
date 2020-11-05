@@ -233,7 +233,7 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 #if SIMDIM == 3
 		StateVecD F_kern = -1500.0*(Pi/(pi.m*pi.rho)) * norm;
 #else
-		StateVecD F_kern = -(Pi/(pi.m*pi.rho)) * norm;
+		StateVecD F_kern = -(Pi/(/*pi.m**/pi.rho)) * norm;
 #endif
 
 		real const frac1 = std::min(real(size-1),avar.nfull)/(avar.nfull);

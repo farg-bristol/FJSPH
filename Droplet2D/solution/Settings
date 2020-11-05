@@ -13,7 +13,7 @@
 0.7                          #Boundary spacing factor
 4                                    #Boundary case
 0                               #Aerodynamic source
-4                                 #Aerodynamic case
+5                                 #Aerodynamic case
 0                                 #Ghost particles?
 0.03 0.06                             #Fluid start position
 0 0  #Fluid start rotation

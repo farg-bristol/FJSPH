@@ -19,148 +19,6 @@
 #include "Eigen/LU"
 #include "Eigen/Eigenvalues"
 
-// /*Numerical particle density for Nair & Poeschel (2017) surface tension*/
-// real GetNumpartdens(SIM const& svar, FLUID const& fvar, State const& pnp1, outl const& outlist)
-// {
-// 	real npd = 0.0;
-// 	uint const& end = svar.totPts;
-// 	#pragma omp parallel for reduction(+:npd)
-// 	for (uint ii=0; ii< end; ++ii)
-// 	{
-// 		StateVecD const& pi = pnp1[ii].xi;
-// 		for (auto jj:outlist[ii])
-// 		{ /* Surface Tension calcs */
-// 			StateVecD const& pj = pnp1[jj].xi;
-// 			real const r = (pj-pi).norm();
-// 			npd += W2Kernel(r,fvar.H,fvar.correc);
-// 		}
-// 	}
-// 	return npd/real(svar.totPts);
-// }
-
-// /*Surface Tension - Nair & Poeschel (2017)*/
-// StateVecD SurfaceTens(FLUID const& fvar, Part const& pj, StateVecD const& Rij, 
-// 					  real const& r, real const& npd)
-// {
-// 	/*Surface tension factor*/
-// 	real const lam = (6.0/81.0*pow((2.0*fvar.H),3.0)/pow(M_PI,4.0)*
-// 							(9.0/4.0*pow(M_PI,3.0)-6.0*M_PI-4.0));
-
-// 	real fac=1.0; /*Boundary Correction Factor*/
-// 	if(pj.b==PartState.BOUND_) fac=(1+0.5*cos(M_PI*(fvar.contangb/180))); 
-
-// 	/*npd = numerical particle density (see code above) */
-// 	real const sij = 0.5*pow(npd,-2.0)*(fvar.sig/lam)*fac;
-// 	return -(Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*fvar.H));
-// }
-
-// /* Colour field gradient in He et al (2014) method, note the bottom variable to account for no air*/
-// std::vector<StateVecD> GetColourGrad(SIM const& svar, FLUID const& fvar, State const& pnp1, outl const& outlist)
-// {
-// 	std::vector<StateVecD> cgrad(svar.totPts, StateVecD::Zero());
-// 	const uint& start = svar.bndPts;
-// 	const uint& end = svar.totPts;
-
-// 	#pragma omp parallel for shared(outlist) reduction(+:cgrad)
-// 	for(uint ii=start; ii < end; ++ii)
-// 	{
-// 		StateVecD const& pi = pnp1[ii].xi;
-// 		real bottom = 0.0;
-		
-// 		for(auto jj:outlist[ii])
-// 		{	/*Find the denominator to correct absence of second phase*/
-// 			Part const& pj = pnp1[jj];
-// 			real const r = (pj.xi-pi).norm();
-// 			bottom +=(pj.m/pj.rho)*W2Kernel(r,fvar.H,fvar.correc);
-// 		}
-
-// 		for(auto jj:outlist[ii])
-// 		{	/*Find the numerator and sum*/
-// 			Part const& pj = pnp1[jj];
-// 			StateVecD const Rij = pj.xi-pi;
-// 			real const r = Rij.norm();
-// 			cgrad[ii] += (pj.m/pj.rho)*W2GradK(Rij,r,fvar.H,fvar.correc);
-// 		}
-		
-// 		cgrad[ii] = cgrad[ii]/bottom;
-// 	}
-
-// 	return cgrad;
-// }
-
-// /*Diffuse interface method from He et al (2014) for surface tension*/
-// StateVecD HeST(FLUID const& fvar, Part const& pi, Part const& pj, 
-// 			  StateVecD const& Rij, real const& r, StateVecD const& cgradi, StateVecD const& cgradj)
-// {
-// 	return (0.01/2.0)*(pi.m/pi.rho)*(pj.m/pj.rho)*((cgradi.squaredNorm()+cgradj.squaredNorm())/2.0)
-// 		*W2GradK(Rij,r,fvar.H,fvar.correc);
-// }
-
-
-// StateVecD BasePos(real const& Pi, real const& Pj, real const& Vj, StateVecD const& gradK)
-// {
-// 	/* Positive Pressure - Sun, Colagrossi, Marrone, Zhang (2016)*/
-// 	return gradK * Vj * (Pj + Pi);
-// }
-
-// StateVecD BaseNeg(real const& Pi, real const& Pj, real const& Vj, StateVecD const& gradK)
-// {
-// 	/* Negative Pressure - Sun, Colagrossi, Marrone, Zhang (2016)*/
-// 	return gradK * Vj * (Pj - Pi);
-// }
-
-// StateVecD ArtVisc(StateVecD const& Rij, StateVecD const& Vij, real const r, 
-// 	 StateVecD const& gradK, real const& Vj)
-// {
-//     return Vij.dot(Rij) * Vj * gradK / (r*r);
-// }
-
-StateVecD BasePos(Part const& pi, Part const& pj, StateVecD const& gradK)
-{
-	/* Positive Pressure - Monaghan (1994)*/
-	return gradK * (pj.p*pow(pj.rho,-2)+pi.p*pow(pi.rho,-2));
-}
-
-StateVecD BaseNeg(Part const& pi, Part const& pj, StateVecD const& gradK)
-{
-	/* Negative Pressure - Monaghan (1994)*/
-	return gradK * (pj.p*pow(pj.rho,-2)-pi.p*pow(pi.rho,-2));
-}
-
-StateVecD ArtVisc(Part const& pi, Part const& pj, FLUID const& fvar, StateVecD const& Rij, StateVecD const& Vij, real const r, 
-	 StateVecD const& gradK)
-{
-	real const vdotr = Vij.dot(Rij);
-
-	if (vdotr > 0.0) 
-	{
-		return StateVecD::Zero();
-	}
-	else
-	{
-		real const muij= fvar.H*vdotr/(r*r+0.0001*fvar.HSQ);
-		real const rhoij = 0.5*(pi.rho+pj.rho);
-		real const cbar = 0.5*(sqrt((fvar.B*fvar.gam)/pi.rho)+sqrt((fvar.B*fvar.gam)/pj.rho));
-		return gradK * fvar.alpha*cbar*muij/rhoij;
-	}
-}
-
-/*Laminar Viscosity - Morris (2003)*/
-StateVecD Viscosity(FLUID const& fvar, Part const& pi, Part const& pj, 
-	StateVecD const& Rij, StateVecD const& Vij, real const& r, StateVecD const& gradK)
-{
-	return -Vij*((fvar.mu)/(pi.rho*pj.rho))*(1.0/(r*r+0.01*fvar.HSQ))*Rij.dot(gradK);
-}
-
-
-/*Repulsion for interacting with mesh surface - saves generating particles on surface*/
-StateVecD NormalBoundaryRepulsion(FLUID const& fvar, MESH const& cells, Part const& pi)
-{
-    real beta = 4*fvar.Cs*fvar.Cs;
-    real kern = BoundaryKernel(pi.y,fvar.H,beta);
-	return fvar.bndM/(fvar.bndM+fvar.simM)*kern*pi.bNorm;
-}
-
 /*L matrix for delta-SPH calculation*/
 void dSPH_PreStep(FLUID const& fvar, size_t const& start, size_t const& end, State const& pnp1, 
 				 outl const& outlist, DELTAP& dp)
@@ -290,10 +148,153 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& start, size_t const& end, Sta
 			dp.kernsum[ii] = kernsum[ii];
 		}			
 
-	}	/*End parallel section*/
-
-	
+	}	/*End parallel section*/	
 }
+
+
+// /*Numerical particle density for Nair & Poeschel (2017) surface tension*/
+// real GetNumpartdens(SIM const& svar, FLUID const& fvar, State const& pnp1, outl const& outlist)
+// {
+// 	real npd = 0.0;
+// 	uint const& end = svar.totPts;
+// 	#pragma omp parallel for reduction(+:npd)
+// 	for (uint ii=0; ii< end; ++ii)
+// 	{
+// 		StateVecD const& pi = pnp1[ii].xi;
+// 		for (auto jj:outlist[ii])
+// 		{ /* Surface Tension calcs */
+// 			StateVecD const& pj = pnp1[jj].xi;
+// 			real const r = (pj-pi).norm();
+// 			npd += W2Kernel(r,fvar.H,fvar.correc);
+// 		}
+// 	}
+// 	return npd/real(svar.totPts);
+// }
+
+// /*Surface Tension - Nair & Poeschel (2017)*/
+// StateVecD SurfaceTens(FLUID const& fvar, Part const& pj, StateVecD const& Rij, 
+// 					  real const& r, real const& npd)
+// {
+// 	/*Surface tension factor*/
+// 	real const lam = (6.0/81.0*pow((2.0*fvar.H),3.0)/pow(M_PI,4.0)*
+// 							(9.0/4.0*pow(M_PI,3.0)-6.0*M_PI-4.0));
+
+// 	real fac=1.0; /*Boundary Correction Factor*/
+// 	if(pj.b==PartState.BOUND_) fac=(1+0.5*cos(M_PI*(fvar.contangb/180))); 
+
+// 	/*npd = numerical particle density (see code above) */
+// 	real const sij = 0.5*pow(npd,-2.0)*(fvar.sig/lam)*fac;
+// 	return -(Rij/r)*sij*cos((3.0*M_PI*r)/(4.0*fvar.H));
+// }
+
+// /* Colour field gradient in He et al (2014) method, note the bottom variable to account for no air*/
+// std::vector<StateVecD> GetColourGrad(SIM const& svar, FLUID const& fvar, State const& pnp1, outl const& outlist)
+// {
+// 	std::vector<StateVecD> cgrad(svar.totPts, StateVecD::Zero());
+// 	const uint& start = svar.bndPts;
+// 	const uint& end = svar.totPts;
+
+// 	#pragma omp parallel for shared(outlist) reduction(+:cgrad)
+// 	for(uint ii=start; ii < end; ++ii)
+// 	{
+// 		StateVecD const& pi = pnp1[ii].xi;
+// 		real bottom = 0.0;
+		
+// 		for(auto jj:outlist[ii])
+// 		{	/*Find the denominator to correct absence of second phase*/
+// 			Part const& pj = pnp1[jj];
+// 			real const r = (pj.xi-pi).norm();
+// 			bottom +=(pj.m/pj.rho)*W2Kernel(r,fvar.H,fvar.correc);
+// 		}
+
+// 		for(auto jj:outlist[ii])
+// 		{	/*Find the numerator and sum*/
+// 			Part const& pj = pnp1[jj];
+// 			StateVecD const Rij = pj.xi-pi;
+// 			real const r = Rij.norm();
+// 			cgrad[ii] += (pj.m/pj.rho)*W2GradK(Rij,r,fvar.H,fvar.correc);
+// 		}
+		
+// 		cgrad[ii] = cgrad[ii]/bottom;
+// 	}
+
+// 	return cgrad;
+// }
+
+// /*Diffuse interface method from He et al (2014) for surface tension*/
+// StateVecD HeST(FLUID const& fvar, Part const& pi, Part const& pj, 
+// 			  StateVecD const& Rij, real const& r, StateVecD const& cgradi, StateVecD const& cgradj)
+// {
+// 	return (0.01/2.0)*(pi.m/pi.rho)*(pj.m/pj.rho)*((cgradi.squaredNorm()+cgradj.squaredNorm())/2.0)
+// 		*W2GradK(Rij,r,fvar.H,fvar.correc);
+// }
+
+
+// StateVecD BasePos(real const& Pi, real const& Pj, real const& Vj, StateVecD const& gradK)
+// {
+// 	/* Positive Pressure - Sun, Colagrossi, Marrone, Zhang (2016)*/
+// 	return gradK * Vj * (Pj + Pi);
+// }
+
+// StateVecD BaseNeg(real const& Pi, real const& Pj, real const& Vj, StateVecD const& gradK)
+// {
+// 	/* Negative Pressure - Sun, Colagrossi, Marrone, Zhang (2016)*/
+// 	return gradK * Vj * (Pj - Pi);
+// }
+
+// StateVecD ArtVisc(StateVecD const& Rij, StateVecD const& Vij, real const r, 
+// 	 StateVecD const& gradK, real const& Vj)
+// {
+//     return Vij.dot(Rij) * Vj * gradK / (r*r);
+// }
+
+StateVecD BasePos(Part const& pi, Part const& pj, StateVecD const& gradK)
+{
+	/* Positive Pressure - Monaghan (1994)*/
+	return gradK * (pj.p*pow(pj.rho,-2)+pi.p*pow(pi.rho,-2));
+}
+
+StateVecD BaseNeg(Part const& pi, Part const& pj, StateVecD const& gradK)
+{
+	/* Negative Pressure - Monaghan (1994)*/
+	return gradK * (pj.p*pow(pj.rho,-2)-pi.p*pow(pi.rho,-2));
+}
+
+StateVecD ArtVisc(Part const& pi, Part const& pj, FLUID const& fvar, StateVecD const& Rij, StateVecD const& Vij, real const r, 
+	 StateVecD const& gradK)
+{
+	real const vdotr = Vij.dot(Rij);
+
+	if (vdotr < 0.0) 
+	{
+		return StateVecD::Zero();
+	}
+	else
+	{
+		real const muij= fvar.H*vdotr/(r*r+0.0001*fvar.HSQ);
+		real const rhoij = 0.5*(pi.rho+pj.rho);
+		real const cbar = 0.5*(sqrt((fvar.B*fvar.gam)/pi.rho)+sqrt((fvar.B*fvar.gam)/pj.rho));
+		return gradK * fvar.alpha*cbar*muij/rhoij;
+	}
+}
+
+/*Laminar Viscosity - Morris (2003)*/
+StateVecD Viscosity(FLUID const& fvar, Part const& pi, Part const& pj, 
+	StateVecD const& Rij, StateVecD const& Vij, real const& r, StateVecD const& gradK)
+{
+	return -Vij*((fvar.mu)/(pi.rho*pj.rho))*(1.0/(r*r+0.01*fvar.HSQ))*Rij.dot(gradK);
+}
+
+
+/*Repulsion for interacting with mesh surface - saves generating particles on surface*/
+StateVecD NormalBoundaryRepulsion(FLUID const& fvar, MESH const& cells, Part const& pi)
+{
+    real beta = 4*fvar.Cs*fvar.Cs;
+    real kern = BoundaryKernel(pi.y,fvar.H,beta);
+	return fvar.bndM/(fvar.bndM+fvar.simM)*kern*pi.bNorm;
+}
+
+
 
 /* delta-SPH dissipation term in the continuity equation*/
 real Continuity_dSPH(StateVecD const& Rij, real const& r, StateVecD const& Grad, 
@@ -482,7 +483,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				StateVecD const Vij = pj.v-pi.v;
 				real const r = Rij.norm();			
 				real const volj = pj.m/pj.rho;
-				StateVecD const gradK = /*dp.L[ii]**/W2GradK(Rij,r,fvar.H,fvar.correc);
+				StateVecD const gradK = dp.L[ii]*W2GradK(Rij,r,fvar.H,fvar.correc);
 
 				/*Momentum contribution -  Sun, Colagrossi, Marrone, Zhang (2016)*/
 				// StateVecD contrib;
@@ -501,14 +502,14 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				/*Momentum contribution -  Monaghan (1994)*/
 				StateVecD contrib;
-				// if(pi.p < 0.0 && dp.lam[ii] > 0.75)
-				// {
-				// 	contrib = BaseNeg(pi,pj,gradK);
-				// }
-				// else
-				// {
+				if(pi.p < 0.0 && dp.lam[ii] > 0.75)
+				{
+					contrib = BaseNeg(pi,pj,gradK);
+				}
+				else
+				{
 					contrib = BasePos(pi,pj,gradK);
-				// }
+				}
 
 				StateVecD const aVisc = ArtVisc(pi,pj,fvar,Rij,Vij,r,gradK);
 
@@ -530,7 +531,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 			    {
 					if(dp.lam[pj.partID] < 0.7)
 					{	
-						curve += (dp.norm[pj.partID].normalized()-dp.norm[ii].normalized()).dot(volj*gradK);
+						curve -= (dp.norm[pj.partID].normalized()-dp.norm[ii].normalized()).dot(volj*gradK);
 						correc += volj * W2Kernel(Rij.norm(),fvar.H,fvar.correc)/dp.kernsum[ii];
 					}
 
@@ -596,7 +597,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				}
 
-				RV[ii] -= (fvar.sig/pi.rho * curve * dp.norm[ii])/correc;
+				RV[ii] += (fvar.sig/pi.rho * curve * dp.norm[ii])/correc;
 			}
 
 		} /*End of sim parts*/		

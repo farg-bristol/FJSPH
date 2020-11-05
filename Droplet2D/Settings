@@ -13,7 +13,7 @@
 0.7            #Boundary particle spacing factor (of part spacing)
 4              #SPH starting geometry (0 = rectangle + no boundary, 1= Rectangle, 2 = converging jet, 3 = linear jet, 4 = droplet)
 0              #Aerodynamic solution source (0 = constant vel, 1 = mesh, 2 = mesh + momentum corr, 3 = VLM infl.)
-4              #Aero force case (0 = none, 1 = left surface, 2 = prop to ST-Aero angle, 4 = Gissler Method)
+5              #Aero force case (0 = none, 1 = left surface, 2 = prop to ST-Aero angle, 4 = Gissler Method)
 0              #Ghost pressure particles (0 = no, 1 = yes)
 0.03 0.06      #Jet starting x-pos, y-pos, z-pos
 0.0 0.0        #Jet starting rotation         

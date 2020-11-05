@@ -133,7 +133,7 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 				Force += res[ii]*pnp1[ii].m;
 				dropVel += pnp1[ii].v;
 				
-				// pnp1[ii].theta = wDiff[ii];
+				pnp1[ii].theta = dp.lam[ii];
 				// pnp1[ii].nNeigb = real(outlist[ii].size());
 
 // #if SIMDIM == 2
@@ -675,8 +675,6 @@ while (log10(sqrt(errsum/(real(svar.totPts)))) - logbase > -7.0)
 
 	/*Implement particle shifting technique - Sun, Colagrossi, Marrone, Zhang (2016)*/
 
-	// TREE.NP1.index->buildIndex();
-	// FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 	// maxUi = std::max_element(pnp1.begin(),pnp1.end(),
 	// 	[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
 
@@ -698,17 +696,17 @@ while (log10(sqrt(errsum/(real(svar.totPts)))) - logbase > -7.0)
 	// 		{	/* Neighbour list loop. */
 	// 			Part const& pj(pnp1[jj]);
 
-	// 			if(pj.partID == pi.partID || pj.b == PartState.BOUND_)
+	// 			if(pj.partID == pi.partID /*|| pj.b == PartState.BOUND_*/)
 	// 				continue;
 
 	// 			StateVecD const Rij = pj.xi-pi.xi;
 	// 			real const r = Rij.norm();
 	// 			real const kern = W2Kernel(r,fvar.H,fvar.correc);
-	// 			StateVecD const gradK = W2GradK(Rij,r,fvar.H,fvar.correc);
+	// 			StateVecD const gradK = dp.L[ii]*W2GradK(Rij,r,fvar.H,fvar.correc);
 
 	// 			deltaR += (1+0.2*pow(kern/W2Kernel(svar.Pstep,fvar.H,fvar.correc),4.0))*gradK*(pj.m/(pi.rho+pj.rho));
 
-	// 			gradLam += (dp.lam[jj]-dp.lam[ii]) * dp.L[ii]*gradK*pj.m/pj.rho;
+	// 			// gradLam += (dp.norm[jj]-dp.norm[ii]) * gradK*pj.m/pj.rho;
 	// 		}
 
 			
@@ -717,18 +715,19 @@ while (log10(sqrt(errsum/(real(svar.totPts)))) - logbase > -7.0)
 
 	// 		if(pi.b != PartState.START_ && pi.b != PartState.BACK_)
 	// 		{
-	// 			gradLam = gradLam.normalized();
+	// 			gradLam = dp.norm[ii].normalized();
 	// 			// cout << gradLam(0) << "  " << gradLam(1) << endl;
 
 	// 			/*Apply the partial shifting*/
-	// 			if(dp.lam[ii] < 0.8 && dp.lam[ii] > 0.4)
-	// 			{	/*Particle in the surface region, so apply a partial shifting*/
-	// 				StateMatD shift = StateMatD::Identity() - gradLam*gradLam.transpose();
-	// 				pnp1[ii].xi += shift*deltaR;
-	// 			}
-	// 			else if (dp.lam[ii] >= 0.8)
+				
+	// 			if (dp.lam[ii] >= 0.75)
 	// 			{   /*Particle in the body of fluid, so treat as normal*/
 	// 				pnp1[ii].xi +=deltaR;
+	// 			}
+	// 			else if(dp.lam[ii] < 0.75 && dp.lam[ii] > 0.6)
+	// 			{	/*Particle in the surface region, so apply a partial shifting*/
+	// 				StateMatD shift = StateMatD::Identity() - gradLam*gradLam.transpose();
+	// 				pnp1[ii].xi += /*dp.lam[ii]*/ shift*deltaR;
 	// 			}
 	// 			/*Otherwise, particle is a surface, and don't shift.*/
 	// 		}	
@@ -740,6 +739,8 @@ while (log10(sqrt(errsum/(real(svar.totPts)))) - logbase > -7.0)
 	// 	cout << "L Mag: " << dp.L[ii].determinant() << "  gradRho: " << dp.gradRho[ii].norm() << "  norm: " << dp.norm[ii].norm() 
 	// 	<< "  avgV: " << dp.avgV[ii].norm() << "  lam: " << dp.lam[ii] << "  kernsum: " << dp.kernsum[ii] << endl;
 	// }
+
+	// cout << "L Matrix: " << dp.L[400] << endl;
 
 
 	/*Add time to global*/

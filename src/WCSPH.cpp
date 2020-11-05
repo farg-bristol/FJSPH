@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
 	TREE.CELL.index->buildIndex();
 	TREE.NP1.index->buildIndex();
 
-	// FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
 	
 	// real aMom = 0.0;
@@ -155,6 +155,12 @@ int main(int argc, char *argv[])
 	///*** Perform an iteration to populate the vectors *****/
 	if(svar.restart == 0)
 		First_Step(TREE,svar,fvar,avar,cells,outlist,dp,pnp1,pn,airP);
+	else
+	{
+		const size_t start = svar.bndPts;
+		const size_t end = svar.totPts;
+		dSPH_PreStep(fvar,start,end,pnp1,outlist,dp);
+	}
 
 	///*************** Open simulation files ***************/
 	std::fstream f1,f2,f3,fb,fg;
