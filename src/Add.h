@@ -5,6 +5,7 @@
 #define CROSS_H
 
 #include "Var.h"
+#include "IOFunctions.h"
 #include <random>
 #include <stdint.h>
 #include <time.h>
@@ -894,8 +895,8 @@ namespace PoissonSample
 		Return a vector of generated points
 		sampleLimit - refer to bridson-siggraph07-poissondisk.pdf for details (the value 'k')
 	**/
-	std::vector<Part> generatePoissonPoints(SIM& svar, FLUID const& fvar, AERO const& avar, const uint& host, 
-			State& pnp1, outl const& outlist)
+	std::vector<Part> generatePoissonPoints(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
+	 uint const& host, State const& pnp1, outl const& outlist, StateVecD const& norm, StateVecD const& avgV)
 	{
 		/*Variables for the poisson disk sampling*/
 		real radius = fvar.sr;
@@ -906,37 +907,58 @@ namespace PoissonSample
 
 		/*Properties for new particles*/
 		StateVecD vel= avar.vInf;
+		StateVecD Vdiff = StateVecD::Zero();
+		real Pbase = 0.0;
 		real press = 0;
 		real rho = fvar.rho0;
+
 		if(svar.Asource == 1)
 		{
-			press = pnp1[host].cellP;
 			vel = pnp1[host].cellV;
-			rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
+			Vdiff =  vel - avgV;
+			Pbase = pnp1[host].cellP - avar.pRef;
 		}
 		else if (svar.Asource == 2)
 		{
-			press = pnp1[host].cellP;
-			vel = pnp1[host].cellV;
-			rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
+			vel = (pnp1[host].cellV+cells.cPertnp1[pnp1[host].cellID]);
+			Vdiff =  vel - /*pi.v*/ avgV;
+			Pbase = pnp1[host].cellP - avar.pRef;
 		}
 #if SIMDIM == 3
 		else if(svar.Asource == 3)
 		{	
-			real Vel = svar.vortex.getVelocity(pnp1[host].xi).norm();
-			press = 0.5*avar.rhog*
-				(pow(avar.vRef,2.0)-pow(Vel,2.0));
-			rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
+			vel = svar.vortex.getVelocity(pnp1[host].xi);
+			Vdiff = vel - avgV;
+			Pbase = 0.5*avar.rhog*(pow(avar.vRef,2.0)-pow(vel.norm(),2.0));
 		}
 #endif
 		else
 		{
-			press = /*fvar.gasPress +*/0.5*avar.rhog*(vel.squaredNorm()-pnp1[host].v.squaredNorm());
-			rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
+			Vdiff = vel - avgV;
+			Pbase = 0.5*avar.rhog*Vdiff.squaredNorm();
 		}
+
+		real theta = acos(-norm.normalized().dot(Vdiff.normalized()));
+		
+		real Cp = 0.0;
+
+		if(abs(theta) < 2.4877)
+		{
+			Cp = 1.0 - 2.5*pow(sin(abs(theta)),2.0);
+		}
+		else
+		{
+			Cp = 0.075;
+		}
+
+
+		press = Pbase + 0.5*avar.rhog*Vdiff.squaredNorm()*Cp;
+		rho = fvar.rho0 * pow((press/fvar.B + 1.0),1.0/fvar.gam);
+
 
 		// const real rho = pnp1[host].cellRho;
 		// const real mass = fvar.rhog* pow(svar.Pstep, SIMDIM);
+
 		
 		const real mass = pnp1[host].m;
 

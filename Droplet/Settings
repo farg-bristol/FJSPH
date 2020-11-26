@@ -9,7 +9,7 @@
 80000          #Max particles
 0.01           #Mesh grid spacing
 0.008          #Mesh support radius
-0.001        #Initial Particle spacing
+0.0005        #Initial Particle spacing
 0.7            #Boundary particle spacing factor (of part spacing)
 4              #SPH starting geometry (0 = rectangle + no boundary, 1= Rectangle, 2 = converging jet, 3 = linear jet, 4 = droplet)
 0              #Aerodynamic solution source (0 = constant vel, 1 = mesh, 2 = mesh + momentum corr, 3 = VLM infl.)

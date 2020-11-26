@@ -293,13 +293,16 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   	fvar.dCont = 2.0 * fvar.delta * fvar.H * fvar.Cs;
   	// fvar.dMom = fvar.alpha * fvar.H * fvar.Cs * fvar.rho0;
   	fvar.dMom = 2.0*(SIMDIM + 2.0);
+  	fvar.artMu = std::max(fvar.mu, fvar.alpha*fvar.Cs*fvar.H*fvar.rho0);
 
 #if SIMDIM == 2
-	fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
+	// fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
+	fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
 	svar.simPts = svar.xyPART[0]*svar.xyPART[1];
 #endif
 #if SIMDIM == 3
-	fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+	// fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+	fvar.correc = (1/(M_PI*fvar.H*fvar.H*fvar.H));
 	svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
 #endif
 
@@ -569,16 +572,16 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 	else
 		svar.clear = 0.0;
 
-	// int width = 15;
+/*	int width = 15;
 
-	// for(size_t ii = 0; ii < svar.totPts; ++ii)
-	// {
-	// 	cout << setw(5) << pnp1[ii].partID << setw(width) << pnp1[ii].xi(0) << setw(width) << pnp1[ii].xi(1) << setw(width) <<
-	// 	pnp1[ii].rho << setw(width) << pnp1[ii].Rrho << setw(width) << pnp1[ii].m << setw(width) << pnp1[ii].v(0) << 
-	// 	setw(width) << pnp1[ii].v(1) << setw(width) << pnp1[ii].f(0) << setw(width) << pnp1[ii].f(1) << setw(4) << 
-	// 	pnp1[ii].b << setw(width) << pnp1[ii].cellV(0) << setw(width) << pnp1[ii].cellV(1) << setw(width) << pnp1[ii].cellP
-	// 	<< setw(width) << pnp1[ii].cellID << endl;
-	// }
+	for(size_t ii = 0; ii < svar.totPts; ++ii)
+	{
+		cout << setw(5) << pnp1[ii].partID << setw(width) << pnp1[ii].xi(0) << setw(width) << pnp1[ii].xi(1) << setw(width) <<
+		pnp1[ii].rho << setw(width) << pnp1[ii].Rrho << setw(width) << pnp1[ii].m << setw(width) << pnp1[ii].v(0) << 
+		setw(width) << pnp1[ii].v(1) << setw(width) << pnp1[ii].f(0) << setw(width) << pnp1[ii].f(1) << setw(4) << 
+		pnp1[ii].b << setw(width) << pnp1[ii].cellV(0) << setw(width) << pnp1[ii].cellV(1) << setw(width) << pnp1[ii].cellP
+		<< setw(width) << pnp1[ii].cellID << endl;
+	}*/
 }
 
 

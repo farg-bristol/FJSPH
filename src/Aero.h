@@ -86,7 +86,7 @@ StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff,
 }
 
 StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff,
-		StateVecD const& norm, uint const size, real const woccl, real const Pbasei)
+		StateVecD const& norm, uint const& size, real const& Pbasei)
 {
 	StateVecD Fd= StateVecD::Zero();
 
@@ -94,7 +94,7 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 	if( avar.acase == 1)
 	{
 		 /* All upstream particles */
-		Fd = woccl*avar.Acorrect*AeroForce(Vdiff, avar, pi.m);
+		Fd = pi.woccl*avar.Acorrect*AeroForce(Vdiff, avar, pi.m);
 	}
 	else if(avar.acase == 2)
 	{ /*Surface particles, with correction based on surface normal*/
@@ -112,8 +112,8 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 				
 				if (theta <= 1.0  && theta >= -1.0)
 				{
-					correc = avar.a*W2Kernel(1-theta,avar.h1,1)+
-						avar.b*W2Kernel(1-theta,avar.h2,1);
+					correc = avar.a*Kernel(1-theta,avar.h1,1)+
+						avar.b*Kernel(1-theta,avar.h2,1);
 				}
 			}
 			Fd = /*avar.Acorrect**/correc*Fd;
@@ -189,7 +189,7 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 	}
 	else if(avar.acase == 4)
 	{	
-		Fd = GisslerForce(avar,Vdiff,pi.m,size,woccl);
+		Fd = GisslerForce(avar,Vdiff,pi.m,size,pi.woccl);
 	}
 	else if(avar.acase == 5)
 	{
@@ -207,9 +207,18 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 		// 	Cp = 0.075;
 		// }
 
-		if(abs(theta) < 2.6399)
+		// if(abs(theta) < 2.6399)
+		// {
+		// 	Cp = 1.0 - 2.0*pow(sin(abs(theta)),2.0);
+		// }
+		// else
+		// {
+		// 	Cp = 0.075;
+		// }
+
+		if(abs(theta) < 2.4877)
 		{
-			Cp = 1.0 - 4.0*pow(sin(abs(theta)),2.0);
+			Cp = 1.0 - 2.5*pow(sin(abs(theta)),2.0);
 		}
 		else
 		{
@@ -228,20 +237,18 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 
 
 		// cout << Cdi << endl;
-		StateVecD F_drop = 0.5*avar.rhog*Vdiff.norm()*Vdiff*(M_PI*avar.L*avar.L/4)*Cdi/pi.m;
+		StateVecD const F_drop = 0.5*avar.rhog*Vdiff.norm()*Vdiff*(M_PI*avar.L*avar.L/4)*Cdi/pi.m;
 		// aeroD = -Pi * avar.aPlate * norm[ii].normalized();
-#if SIMDIM == 3
-		StateVecD F_kern = -1500.0*(Pi/(pi.m*pi.rho)) * norm;
-#else
-		StateVecD F_kern = -(Pi/(/*pi.m**/pi.rho)) * norm;
-#endif
+
+		// StateVecD const F_kern = -(Pi/(pi.rho)) * norm;
+		StateVecD const F_kern = - 0.5 * Pi * avar.aPlate * norm.normalized()/pi.m;
 
 		real const frac1 = std::min(real(size-1),avar.nfull)/(avar.nfull);
 
 		// cout << F_kern.norm() << "  " << F_drop.norm() << endl;
 		// cout << avar.nfull << "  " << frac1  << "  " << real(size-1) << endl;
 
-		Fd = frac1*F_kern + (1-frac1)*F_drop;
+		Fd = frac1*F_kern + (1.0-frac1)*F_drop;
 
 	}
 
@@ -321,7 +328,7 @@ void ApplyAero(SIM & svar, FLUID const& fvar, AERO const& avar, MESH const& cell
 			} /*End of neighbours*/
 
 			/*Find the aero force*/
-			StateVecD Fd = CalcAeroForce(avar,pi,Vdiff,pi.normal,size,woccl,0.0);
+			StateVecD Fd = CalcAeroForce(avar,pi,Vdiff,pi.normal,size,0.0);
 			// StateVecD Fd = GisslerForce(svar,fvar,avar,Vdiff,pi.m,size,woccl);
 
 			// cout << Fd(0) << "  " << Fd(1) << endl;

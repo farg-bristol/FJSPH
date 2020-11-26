@@ -3,23 +3,54 @@
 
 #include "Var.h"
 
-///******Wendland's C2 Quintic Kernel*******
-real const W2Kernel(real const dist, real const H, real const correc) 
+///******Wendland's C2 Quintic Kernel*******///
+real const Kernel(real const dist, real const H, real const correc) 
 {
 	return (pow(1-0.5*dist/H,4))*(2*dist/H+1)*correc;
 }
 
 /*Gradient*/
-StateVecD const W2GradK(StateVecD const& Rij, real const dist, real const H, real const correc)
+StateVecD const GradK(StateVecD const& Rij, real const dist, real const H, real const correc)
 {
+	if(dist/H < 1e-12)
+		return StateVecD::Zero();
+	
 	return 5.0*(Rij/(H*H))*pow(1-0.5*dist/H,3)*correc;
 }
 
-/*2nd Gradient*/
-real const W2Grad2(StateVecD const& Rij, real const dist, real const H, real const correc) 
-{
-	return Rij.dot(Rij)*(5.0*correc/(H*H))*(2*dist/H-1)*pow(1-0.5*dist/H,2);
-}
+///******Cubic Spline Kernel*******///
+// real const Kernel(real const dist, real const H, real const correc)
+// {
+// 	real const q = dist/H;
+
+// 	if(q < 1.0)
+// 	{
+// 		return correc * (1.0 - 1.5 * q*q*(1-0.5*q));
+// 	}
+// 	else if (q < 2.0)
+// 	{
+// 		return correc * 0.25 * pow(2.0-q,3.0);
+// 	}
+	
+// 	return 0;
+// }
+
+// StateVecD const GradK(StateVecD const& Rij, real const dist, real const H, real const correc)
+// {
+// 	real const q = dist/H;
+
+// 	if(q < 1.0)
+// 	{
+// 		return Rij/(H*H) * correc * ( 3.0 * (0.75*q-1.0));
+// 	}
+// 	else if (q < 2.0)
+// 	{
+// 		return Rij/(dist*H) * correc * -0.75 * (2.0-q) * (2.0-q);
+// 	}
+	
+// 	return StateVecD::Zero();
+// }
+
 
 real const BoundaryKernel(real const dist, real const H, real const beta)
 {

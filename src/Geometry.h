@@ -11,6 +11,117 @@
 // #define X 0
 // #define Y 1
 
+/*Surface detection as described by Marrone, Colagrossi, Le Touze, Graziani - (2010)*/
+void Detect_Surface(SIM const& svar, AERO const& avar, size_t const& start, size_t const& end,
+                 DELTAP const& dp, outl const& outlist, MESH const& cells, State& pnp1)
+{
+    #pragma omp parallel shared(pnp1)
+    {
+        real const h = 1.33 * svar.Pstep;
+        #pragma omp for schedule(static) nowait
+        for(size_t ii = start; ii < end; ++ii)
+        {
+            real woccl_ = 0.0;
+
+            StateVecD Vdiff = StateVecD::Zero();
+
+
+
+            if(dp.lam[ii] < 0.7 && pnp1[ii].b == PartState.FREE_)
+            {
+                if (svar.Asource == 1)
+                {
+                    Vdiff = (pnp1[ii].cellV) - pnp1[ii].v/* dp.avgV[ii]*/;
+                }
+                else if (svar.Asource == 2)
+                {
+                    Vdiff = (pnp1[ii].cellV+cells.cPertnp1[pnp1[ii].cellID]) - pnp1[ii].v /*dp.avgV[ii]*/;
+                }
+                else 
+                {
+                    Vdiff = avar.vInf - pnp1[ii].v /*dp.avgV[ii]*/;
+                }
+
+#if SIMDIM == 3
+                if(svar.Asource == 3)
+                {   
+                    StateVecD Vel = svar.vortex.getVelocity(pi.xi);
+                    Vdiff = Vel - pi.v /*dp.avgV[ii]*/;
+                }
+#endif
+            }
+
+            if(dp.lam[ii] < 0.2)
+            {   /*If less that 0.2, then its a surface particle by default*/
+                pnp1[ii].surf = 1;
+            }
+            else if(dp.lam[ii] < 0.75)
+            {   /*Particle could be a surface particle. Perform a test*/
+            
+                // Create point T
+                StateVecD xi = pnp1[ii].xi;
+                StateVecD pointT = xi + h * dp.norm[ii].normalized();
+
+                uint surf = 1; /*Begin by assuming a surface, and proving otherwise*/
+                for(size_t const& jj:outlist[ii])
+                {
+                    if(jj == ii)
+                        continue;
+                    
+                    StateVecD x_jT = pnp1[jj].xi - pointT;
+                    real r = (pnp1[jj].xi - xi).norm();
+
+                    if(r >= sqrt(2)*h)
+                    {
+                        if (x_jT.norm() < h)
+                        {
+                            surf = 0;
+                            break;
+                        }
+                    }
+                    else  
+                    {
+#if SIMDIM == 2
+                        StateVecD tau(dp.norm[ii](1),-dp.norm[ii](0));
+                        if((abs(dp.norm[ii].normalized().dot(x_jT)) + abs(tau.normalized().dot(x_jT))) < h )
+                        {
+                            surf = 0;
+                            break;
+                        }
+#else
+                        StateVecD Rij = pnp1[jj].xi - xi; 
+                        if(acos(dp.norm[ii].normalized().dot(Rij.normalized())) < M_PI/4.0)
+                        {
+                            surf = 0; 
+                            break;
+                        }
+#endif
+                    }
+
+                    /*Occlusion for Gissler Aero Method*/
+                    if (pnp1[ii].b == PartState.FREE_ && (avar.acase == 4 || avar.acase == 1))
+                    {
+                        real const frac = -Vdiff.normalized().dot((pnp1[jj].xi - xi).normalized());
+                        
+                        if (frac > woccl_)
+                        {
+                            woccl_ = frac;
+                        }
+                    }
+                }
+                pnp1[ii].surf = surf;
+                pnp1[ii].woccl = woccl_; 
+
+            }
+            else
+            {   /*If its eigenvalue is high, then by default it cannot be a surface*/
+                pnp1[ii].surf = 0;
+            }
+        }
+    }
+}
+
+
 StateMatD GetRotationMat(StateVecD& angles)
 {
     if (SIMDIM == 3)
@@ -538,10 +649,13 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
     fvar.dMom = fvar.dCont * fvar.rho0;
 
 #if SIMDIM == 2
-    fvar.correc = (7/(4*M_PI*fvar.H*fvar.H));
+    // fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
+    fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
+
 #endif
 #if SIMDIM == 3
-    fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+    // fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+    fvar.correc = (1/(M_PI*fvar.H*fvar.H*fvar.H));
 #endif
 
 #if SIMDIM == 3

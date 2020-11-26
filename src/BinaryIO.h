@@ -8,7 +8,6 @@
 #include "Var.h"
 #include "Neighbours.h"
 #include "Kernel.h"
-#include "IO.h"
 #include <string.h>
 #include <iostream>
 #include <iomanip>
@@ -274,7 +273,7 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 		if(svar.outform == 4)
 		{
 			vector<real> nNb(size);
-			vector<real> aF(size);
+			vector<uint8_t> aF(size);
 
 			#pragma omp parallel for
 		  	for(uint ii = start; ii < end; ++ii)
@@ -285,7 +284,7 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 
 			I = Write_Real_Value(fileHandle, outputZone, var, size, nNb);
 			var++;
-			I = Write_Real_Value(fileHandle, outputZone, var, size, aF);
+			I = tecZoneVarWriteUInt8Values(fileHandle, outputZone, var, 0, size, &aF[0]);
 			var++;
 		}
 	}
@@ -395,15 +394,14 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 {
     int32_t FileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/
     int32_t fileFormat = 1; // 0 == PLT, 1 == SZPLT
-    int I          = 0; /* Used to track return codes */
+    int I          = 0;     /* Used to track return codes */
 
     string file = svar.outfolder;
     file.append(filename);
 
-    /*
-     * Open the file and write the tecplot datafile
-     * header information
-     */
+    // cout << file << endl;
+
+    /* Open the file and write the tecplot datafile header information  */
 #if SIMDIM == 2
     	std::string variables = "X,Z";	
 		if (svar.outform == 1)

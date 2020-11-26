@@ -818,7 +818,7 @@ void FindCell(SIM& svar, real const sr, KDTREE& TREE, MESH& cells, State& pnp1, 
     for(int ii=0; ii<omp_get_num_threads(); ii++)
     {
         #pragma omp ordered
-        toDelete.insert(toDelete.end(),localDel.begin(),localDel.end());
+            toDelete.insert(toDelete.end(),localDel.begin(),localDel.end());
     }
 
 
