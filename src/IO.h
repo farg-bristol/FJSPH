@@ -226,6 +226,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 			svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
 			svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
 		}	
+
+		avar.dPipe = svar.Jet(0);
  	}
  	else if (svar.Bcase == 4)
  	{
@@ -284,6 +286,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   	fvar.H = fvar.Hfac*svar.Pstep;
   	fvar.HSQ = fvar.H*fvar.H; 
 
+
 	fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
 	svar.Bclosed = 0; 		/*Boundary begins open*/
 	svar.psnPts = 0; 		/*Start with no pitson points*/
@@ -305,6 +308,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	fvar.correc = (1/(M_PI*fvar.H*fvar.H*fvar.H));
 	svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
 #endif
+	
+	fvar.Wdx = Kernel(svar.Pstep,fvar.H,fvar.correc);
 
 #ifdef DEBUG
 	dbout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;

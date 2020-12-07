@@ -203,6 +203,7 @@ typedef struct SIM {
 typedef struct FLUID {
 	real Hfac;
 	real H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
+	real Wdx;                   /*Kernel value at the initial particle spacing distance.*/
 	real rho0, rhoJ; 			/*Resting Fluid density*/
 	real pPress;		/*Starting pressure in pipe*/
 	
@@ -241,33 +242,36 @@ typedef class AERO
 			nfull = 28;
 #endif
 		}
-		real L;							/*Gissler Parameters*/
-		real td;							/* }*/
-		real omega;						/* }*/
-		real tmax;						/* }*/
-		real ycoef;						/* }*/
-		real woccl;						/* }*/
-		real Cf, Ck, Cd, Cb, Cdef;		/* }*/
-		real nfull;						/* }*/
 
-		real pVol;                     // Volume of a particle
-		real aPlate;                    /*Area of a plate*/
+			/*Gissler Parameters*/
+		real L;
+		real td;
+		real omega;
+		real tmax;
+		real ycoef;
+		real woccl;
+		real Cf, Ck, Cd, Cb, Cdef;
+		real nfull;
 
-					/* Gas Properties*/
-		real qInf, vRef, pRef;      /*Reference gas values*/
+		real pVol;                     /*Volume of a particle*/
+		real aPlate;                   /*Area of a plate*/
+
+			/* Gas Properties*/
+		real qInf, vRef, pRef;         /*Reference gas values*/
 		real rhog, mug;
-		real gasM;					/*A gas particle mass*/
-		real T;						/*Temperature*/
-		real Rgas;                  /*Specific gas constant*/
+		real gasM;					   /*A gas particle mass*/
+		real T;						   /*Temperature*/
+		real Rgas;                     /*Specific gas constant*/
 
-		int acase;	                        /*Aerodynamic force case*/
-		StateVecD vJet, vInf;               /*Jet + Freestream velocity*/
+		int acase;	                   /*Aerodynamic force case*/
+		StateVecD vJet, vInf;          /*Jet + Freestream velocity*/
+		real dPipe;                    /*Pipe diameter*/
 		
-		real Acorrect;					/*Correction factor for aero force*/
-		real a;                          /*Case 3 tuning parameters*/
-		real b;                          /*}*/
-		real h1;                         /*}*/
-		real h2;                         /*}*/
+		real Acorrect;				   /*Correction factor for aero force*/
+		real a;                        /*Case 3 tuning parameters*/
+		real b;                        /*}*/
+		real h1;                       /*}*/
+		real h2;                       /*}*/
 }AERO;
 
 typedef struct MESH
@@ -355,6 +359,7 @@ typedef class DELTAP {
 			avgV = vector<StateVecD>(size,StateVecD::Zero());
 			
 			lam = vector<real>(size,0.0);
+			lam_nb = vector<real>(size,0.0);
 			kernsum = vector<real>(size,0.0);
 		}
 
@@ -370,11 +375,12 @@ typedef class DELTAP {
 
 		void update(vector<StateMatD> const& L_, vector<StateVecD> const& gradRho_, 
 			vector<StateVecD> const& norm_, vector<StateVecD> const& avgV_,
-			vector<real> const& lam_, vector<real> const& kernsum_, vector<real> const& woccl_)
+			vector<real> const& lam_, vector<real> const& lam_nb_, 
+			vector<real> const& kernsum_)
 		{
 			L = L_; gradRho = gradRho_; norm = norm_; 
-			avgV = avgV_; lam = lam_; kernsum = kernsum_;
-			woccl = woccl_;
+			avgV = avgV_; lam = lam_; lam_nb = lam_nb_;
+			kernsum = kernsum_;
 		}
 
 		vector<StateMatD> L;
@@ -382,9 +388,9 @@ typedef class DELTAP {
 		vector<StateVecD> norm;
 		vector<StateVecD> avgV;
 
-		vector<real> lam;
+		vector<real> lam, lam_nb;
 		vector<real> kernsum;
-		vector<real> woccl;
+
 
 	private:
 
@@ -395,13 +401,16 @@ typedef class DELTAP {
 			norm = vector<StateVecD>(size);
 			avgV = vector<StateVecD>(size);
 			lam = vector<real>(size);
+			lam_nb = vector<real>(size);
 			kernsum = vector<real>(size);
 		}
 
 		void clear()
 		{
 			L.clear(); gradRho.clear(); norm.clear(); 
-			avgV.clear(); lam.clear(); kernsum.clear(); 
+			avgV.clear(); lam.clear(); lam_nb.clear();
+			kernsum.clear();
+
 		}
 }DELTAP;
 
@@ -416,8 +425,8 @@ typedef class Particle {
 			b = bound; surf = 0;
 
 			xi = X;	v = Vi; f = StateVecD::Zero(); Af = StateVecD::Zero();
-			Rrho = 0.0; rho = Rhoi; p = press; m = Mi; 
-			theta = 0.0; nNeigb = 0.0; s = 0.0; woccl = 0.0;
+			Rrho = 0.0; rho = Rhoi; p = press; m = Mi; curve = 0.0;
+			theta = 0.0; nNeigb = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0;
 						
 			cellV = StateVecD::Zero();
 			cellP = 0.0;
@@ -435,8 +444,8 @@ typedef class Particle {
 			b = bound; surf = 0;
 
 			xi = X;	v = pj.v; f = StateVecD::Zero(); Af = StateVecD::Zero();
-			Rrho = 0.0; rho = pj.rho; p = pj.p; m = pj.m; 
-			theta = 0.0; nNeigb = 0.0; s = 0.0; woccl = 0.0;
+			Rrho = 0.0; rho = pj.rho; p = pj.p; m = pj.m; curve = 0.0;
+			theta = 0.0; nNeigb = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0;
 
 			cellV = StateVecD::Zero();
 			cellP = 0.0;
@@ -463,7 +472,7 @@ typedef class Particle {
 		uint b; //What state is a particle. See PartState above for possible options
 		uint surf; /*Is a particle a surface? 1 = yes, 0 = no*/
 		StateVecD xi, v, f, Af;
-		real Rrho, rho, p, m, theta, nNeigb, s, woccl;
+		real Rrho, rho, p, m, curve, theta, nNeigb, s, woccl, pDist;
 		StateVecD cellV;
 		real cellP;
 		uint internal; 
@@ -482,7 +491,8 @@ typedef class Part {
 		{
 			xi = pi.xi; v = pi.v; Sf = pi.Sf;
 			normal = pi.normal;	vPert = pi.vPert;
-			rho = pi.rho; p = pi.p;	m = pi.m; woccl = pi.woccl;
+			rho = pi.rho; p = pi.p;	m = pi.m; curve = pi.curve;
+			woccl = pi.woccl; pDist = pi.pDist;
 			b = pi.b; surf = pi.surf;
 			cellV = pi.cellV;
 			partID = pi.partID;
@@ -507,7 +517,7 @@ typedef class Part {
 			cellP = 0.0;
 			surf = 0;
 			internal = 0;
-			
+
 		}
 
 		int size() const
@@ -524,7 +534,8 @@ typedef class Part {
 		{
 			xi = pi.xi; v = pi.v; Sf = pi.Sf; 
 			normal = pi.normal; vPert = pi.vPert;
-			rho = pi.rho;	p = pi.p; m = pi.m; woccl = pi.woccl;
+			rho = pi.rho;	p = pi.p; m = pi.m; curve = pi.curve;
+			woccl = pi.woccl; pDist = pi.pDist; 
 			b = pi.b; surf = pi.surf;
 			cellV = pi.cellV;
 			partID = pi.partID;
@@ -536,7 +547,7 @@ typedef class Part {
 		}
 
 		StateVecD xi, v, Sf, normal, vPert;
-		real rho, p, m, woccl;
+		real rho, p, m, curve, woccl, pDist;
 		uint b, surf; //What state is a particle.
 		StateVecD cellV;
 		size_t partID, cellID/*, faceID*/;

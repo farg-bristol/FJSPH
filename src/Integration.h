@@ -12,7 +12,7 @@
 #include "Resid.h"
 #include "Crossing.h"
 #include "Newmark_Beta.h"
-#include "Runge_Kutta.h"
+// #include "Runge_Kutta.h"
 
 
 ///**************** Integration loop **************///
@@ -227,6 +227,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	void(Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
 							cellsused,outlist,xih,pn,pnp1,k));
+	k++;
 
 	// State st_2 = pn;
 
@@ -240,6 +241,9 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
 
 	Detect_Surface(svar,avar,start,end,dp,outlist,cells,pnp1);
+
+	// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
+	// Particle_Shift(svar,fvar,start,end,outlist,dp,pnp1);
 	
 	air.clear();
 	if(svar.ghost == 1)
@@ -260,7 +264,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			}
 
 			#pragma omp for schedule(static) ordered
-	    	for(int i=0; i<omp_get_num_threads(); i++)
+	    	for(int i=0; i < omp_get_num_threads(); i++)
 	    	{
 	    		#pragma omp ordered
 	    		air.insert(air.end(),local.begin(),local.end());
@@ -320,10 +324,6 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
     		neighb.insert(neighb.end(),local.begin(),local.end());
     	}
 	}
-
-
-
-	// Particle_Shift(svar,fvar,start,end,outlist,dp,st_2);
 
 	/*Do time integration*/
 	Newmark_Beta(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,cells,cellsused,neighb,
@@ -646,8 +646,9 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	vector<StateVecD> res(end,StateVecD::Zero());
 	vector<StateVecD> Af(end,StateVecD::Zero());
 	vector<real> Rrho(end,0.0);
+	vector<real> curve(end,0.0);
 
-	Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force); 
+	Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force,curve); 
 
 	// #pragma omp parallel for shared(res,Rrho) schedule(static)
 	// for(size_t ii = 0; ii < end; ++ii)
@@ -847,14 +848,15 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		vector<StateVecD> res(end,StateVecD::Zero());
 		vector<StateVecD> Af(end,StateVecD::Zero());
 		vector<real> Rrho(svar.totPts,0.0);
+		vector<real> curve(end,0.0);
 
 		Force = StateVecD::Zero();
-		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force);
+		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force,curve);
 
 		const real dti = svar.dt;
 		const real dti2 = dti*dti;
 
-		#pragma omp parallel for shared(res, Rrho, Af/*, wDiff, norm, curve*/)
+		#pragma omp parallel for shared(res, Rrho, Af, curve)
 		for(size_t ii = 0; ii < end; ++ii)
 		{
 			pnp1[ii].f = res[ii];
@@ -875,10 +877,10 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				xih[ii] = pn[ii].xi + dti*pn[ii].v + dti2*(d*res[ii]);
 			}
 
-			pnp1[ii].theta = dp.kernsum[ii];
+			// pnp1[ii].theta = dp.kernsum[ii];
 			pnp1[ii].s = outlist[ii].size();
 
-			// pnp1[ii].theta = wDiff[ii];
+			pnp1[ii].curve = curve[ii];
 			pnp1[ii].nNeigb = real(outlist[ii].size());
 			pnp1[ii].bNorm = dp.norm[ii];
 		}

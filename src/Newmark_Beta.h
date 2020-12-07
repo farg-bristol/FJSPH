@@ -101,7 +101,7 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 		vector<StateVecD> res(end,StateVecD::Zero());
 		vector<StateVecD> Af(end,StateVecD::Zero());
 		vector<real> Rrho(end,0.0);
-		vector<real> wDiff(end,0.0);
+		vector<real> curve(end,0.0);
 		vector<StateVecD> norm(end, StateVecD::Zero());
 		// vector<real> curve(end,0.0);
 
@@ -114,7 +114,8 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 		// cout << "Start: " << start << "  End: " << end << endl;
 		Force = StateVecD::Zero();
 		svar.AForce = StateVecD::Zero();
-		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force); /*Guess force at time n+1*/
+
+		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force,curve); /*Guess force at time n+1*/
 
 		const real dt = svar.dt;
 		const real dt2 = dt*dt;
@@ -174,10 +175,10 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 
 			if(pnp1[ii].b > PartState.START_)
 			{	
+				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
 
 				if(pnp1[ii].b == PartState.PIPE_)
-				{	/*Do a check to see if it needs to be given an aero force*/
-					StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
+				{	/*Do a check to see if it needs to be given an aero force*/	
 					if(vec(1) > 0.0)
 					{
 						pnp1[ii].b = PartState.FREE_;
@@ -204,8 +205,10 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 				Force += res[ii]*pnp1[ii].m;
 				dropVel += (pnp1[ii].v+pnp1[ii].vPert);
 				
-				pnp1[ii].theta = dp.lam[ii];
+				// pnp1[ii].theta = dp.lam[ii];
 				// pnp1[ii].nNeigb = real(outlist[ii].size());
+				pnp1[ii].curve = curve[ii];
+				pnp1[ii].pDist = vec.norm();
 
 // #if SIMDIM == 2
 // 					if(real(outlist[ii].size()) < 5.26 * wDiff[ii] +30)
@@ -253,7 +256,7 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 
 			}
 
-			pnp1[ii].theta = wDiff[ii];
+			pnp1[ii].curve = curve[ii];
 			pnp1[ii].s = outlist[ii].size();
 
 			// pnp1[ii].theta = wDiff[ii];
@@ -361,6 +364,8 @@ void Newmark_Beta(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 			break;
 
 		error2 = error1;
+
+		// Particle_Shift(svar,fvar,start,end,outlist,dp,pnp1);
 		// cout << error1 << endl;
 		
 	} /*End of subits*/

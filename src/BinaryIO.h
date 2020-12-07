@@ -278,7 +278,7 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 			#pragma omp parallel for
 		  	for(uint ii = start; ii < end; ++ii)
 		  	{
-		  		nNb[ii-start] = pnp1[ii].theta;
+		  		nNb[ii-start] = pnp1[ii].curve;
 		  		aF[ii-start] = pnp1[ii].surf;
 	  		}
 
@@ -388,6 +388,10 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
     // cout << "Flushing results." << endl;
     // INTEGER4 numZonesToRetain = 0;
     I = tecFileWriterFlush(fileHandle,0,NULL);
+    if(I == -1)
+    {
+    	exit(-1);
+    }
 }
 
 void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, void* &fileHandle)

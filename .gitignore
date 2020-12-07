@@ -66,6 +66,7 @@ src/NanoFLANN/*
 *.info
 *.stackdump
 *.log
+*.mp4
 FailedCellContainment.dat
 WCSPH
 Cell2Edge

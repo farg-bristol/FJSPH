@@ -216,9 +216,18 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 		// 	Cp = 0.075;
 		// }
 
-		if(abs(theta) < 2.4877)
+		// if(abs(theta) < 2.4877)
+		// {
+		// 	Cp = 1.0 - 2.5*pow(sin(abs(theta)),2.0);
+		// }
+		// else
+		// {
+		// 	Cp = 0.075;
+		// }
+
+		if(abs(theta) < 2.3187)
 		{
-			Cp = 1.0 - 2.5*pow(sin(abs(theta)),2.0);
+			Cp = 1.0 - 2*pow(sin(abs(theta)),2.0);
 		}
 		else
 		{
@@ -241,14 +250,24 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 		// aeroD = -Pi * avar.aPlate * norm[ii].normalized();
 
 		// StateVecD const F_kern = -(Pi/(pi.rho)) * norm;
-		StateVecD const F_kern = - 0.5 * Pi * avar.aPlate * norm.normalized()/pi.m;
+		StateVecD const F_kern = - /*0.5 **/ Pi * avar.aPlate * norm.normalized()/pi.m;
 
 		real const frac1 = std::min(real(size-1),avar.nfull)/(avar.nfull);
+		// real const frac2 = std::min(exp(pi.curve*0.001+200),1.0);
 
+		real frac3 = 1.0;
+		if(avar.dPipe != 0.0)
+		{
+			if(pi.pDist < avar.dPipe)
+			{
+				/*Smooth the aerodynamic force near the pipe*/
+				frac3 = 1.0-Kernel(pi.pDist,0.5*avar.dPipe,1.0);
+			}
+		}
 		// cout << F_kern.norm() << "  " << F_drop.norm() << endl;
 		// cout << avar.nfull << "  " << frac1  << "  " << real(size-1) << endl;
 
-		Fd = frac1*F_kern + (1.0-frac1)*F_drop;
+		Fd = frac3*(frac1*/*frac2**/F_kern + (1.0-frac1)*F_drop);
 
 	}
 
