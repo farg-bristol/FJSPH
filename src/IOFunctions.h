@@ -898,8 +898,6 @@ void Write_Input(SIM const& svar, FLUID const& fvar, AERO const& avar)
 
 	std::ofstream fluid(file);
 
-	fluid << svar.beta << " " << svar.gamma << setw(width) << "#Newmark-Beta terms" << endl;
-	fluid << fvar.Hfac << setw(width) << "#Support radius factor" << endl;
 	fluid << fvar.alpha << setw(width) << "#Artificial viscosity" << endl;
 	fluid << fvar.contangb << setw(width) << "#Contact angle" << endl;
 	fluid << fvar.rho0 << setw(width) << "#Fluid density" << endl;

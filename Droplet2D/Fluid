@@ -1,5 +1,3 @@
-0.25 0.5             #Beta & Gamma in Newmark-Beta
-2.0                  #Smoothing length factor
 0.1                  #Aritificial Viscosity factor
 150.0                #Boundary contact angle
 810                  #Rho_jet

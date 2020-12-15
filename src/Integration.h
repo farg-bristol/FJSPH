@@ -240,10 +240,10 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
 
-	Detect_Surface(svar,avar,start,end,dp,outlist,cells,pnp1);
+	Detect_Surface(svar,fvar,avar,start,end,dp,outlist,cells,pnp1);
 
 	// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
-	// Particle_Shift(svar,fvar,start,end,outlist,dp,pnp1);
+	Particle_Shift(svar,fvar,start,end,outlist,dp,pnp1);
 	
 	air.clear();
 	if(svar.ghost == 1)
@@ -324,6 +324,99 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
     		neighb.insert(neighb.end(),local.begin(),local.end());
     	}
 	}
+
+	if(svar.Asource == 2)
+	{
+		cellsused.clear();
+		vector<size_t> tempcell;
+		#pragma omp parallel shared(pnp1)
+		{
+			std::vector<size_t> local;
+			#pragma omp for schedule(static) nowait
+			for (size_t ii = start; ii < end; ++ii)
+			{	
+				if(pnp1[ii].b == PartState.FREE_)
+					local.emplace_back(pnp1[ii].cellID);
+			}
+
+			#pragma omp for schedule(static) ordered
+			for(int i=0; i<omp_get_num_threads(); i++)
+			{
+				#pragma omp ordered
+				tempcell.insert(tempcell.end(),local.begin(),local.end());
+			}
+		}
+
+		// Sort the vector and remove unique values.
+		std::unordered_set<size_t> s;
+		for(size_t const& ii:tempcell)
+			s.insert(ii);
+
+		cellsused.assign(s.begin(),s.end());
+		std::sort(cellsused.begin(),cellsused.end());
+
+		#pragma omp parallel for schedule(static)
+		for(size_t const& ii : cellsused)
+		{
+			// Work out the mass and volume fractions
+			if(cells.fNum[ii] != 0)
+			{
+				real fVol = real(cells.fNum[ii]) * avar.pVol;
+
+				real aFrac = (cells.cVol[ii]-fVol)/cells.cVol[ii];
+
+				
+				if (aFrac < 0.2)
+					continue;
+				
+				real aMass = cells.cMass[ii]*aFrac;
+
+				// Do the momentum exchange
+				StateVecD newPert = (cells.fMass[ii]/aMass)*(cells.vFnp1[ii]-cells.vFn[ii])/real(cells.fNum[ii]);
+				// StateVecD diffusion = 0.2*cells.cPertn[ii];
+				cells.cPertnp1[ii] = cells.cPertn[ii]*0.75 - newPert;
+
+// 				#pragma omp critical
+// 				{
+// 				cout << "Cell " << ii << ":" << endl;
+
+// 				cout << "pertnp1: " << cells.cPertnp1[ii](0) << "  "
+// 						<< cells.cPertnp1[ii](1) 
+// #if SIMDIM == 3
+// 				 		<< "  " << cells.cPertnp1[ii](2)
+// #endif
+// 						<< endl;
+
+// 				cout << "pertn:   " << cells.cPertn[ii](0) << "  "
+// 				 		<< cells.cPertn[ii](1) 
+// #if SIMDIM == 3
+// 				 		<< "  " << cells.cPertn[ii](2)
+// #endif
+// 						<< endl;
+// 				cout << "Update: " << newPert(0) << "  " << newPert(1) 
+// #if SIMDIM == 3
+// 				<< "  " << newPert(2)
+// #endif
+// 				 << endl; 
+
+// 				cout << "Fuel count: " << cells.fNum[ii] << endl;
+// 				cout << "Mass fraction: " << cells.fMass[ii]/aMass << endl;
+// 				// cout << "Fuel Volume: " << fVol << " Fuel Mass: " << cells.fMass[ii] << endl;
+// 				// // cout << "Cell Volume: " << cells.cVol[ii] << " Air fraction: " << aFrac << "  Air Mass: " << aMass << endl;
+// 				cout << "Fuel Vel difference: " << cells.vFnp1[ii](0)-cells.vFn[ii](0) << "  " << cells.vFnp1[ii](1)-cells.vFn[ii](1)
+// #if SIMDIM == 3
+// 					<< "  " << cells.vFnp1[ii](2)-cells.vFn[ii](2)
+// #endif
+// 				 	<< endl << endl;
+// 				}
+			}
+			// else
+			// {
+			// 	cout << "Cell with no fuel in it considered" << endl;
+			// }
+		}
+	}
+
 
 	/*Do time integration*/
 	Newmark_Beta(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,cells,cellsused,neighb,
@@ -409,6 +502,8 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		// vector<real> aMom(cells.size(),0.0);
 		real fMom = 0.0;
 		// cout << cells.size() << endl;
+
+		#pragma omp parallel for schedule(static)
 		for(size_t ii = 0; ii < cells.size(); ii++)
 		{
 			real fVol = real(cells.fNum[ii]) * avar.pVol;
@@ -424,8 +519,12 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 			// cout << aMass << " " << cells.cVel[ii](0) << " " << cells.cPertnp1[ii](0) << endl;
 			// aMom[ii] = ( aMass*(cells.cVel[ii]+cells.cPertnp1[ii]).norm());
-			aMomT += aMass*(cells.cVel[ii]+cells.cPertnp1[ii]).norm();
-			tMom += aMass*(cells.cVel[ii]+cells.cPertnp1[ii]).norm();
+			#pragma omp critical
+			{
+				aMomT += aMass*(cells.cVel[ii]+cells.cPertnp1[ii]).norm();
+				tMom += aMass*(cells.cVel[ii]+cells.cPertnp1[ii]).norm();
+			}
+			
 		}
 
 		for(size_t jj = 0; jj < pnp1.size(); ++jj)
@@ -553,7 +652,7 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
 
-	Detect_Surface(svar,avar,start,end,dp,outlist,cells,pnp1);
+	Detect_Surface(svar,fvar,avar,start,end,dp,outlist,cells,pnp1);
 	
 	vector<vector<Part>> air;
 	if(svar.ghost == 1)
@@ -741,7 +840,7 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
 
-	Detect_Surface(svar,avar,start,end,dp,outlist,cells,pnp1);
+	Detect_Surface(svar,fvar,avar,start,end,dp,outlist,cells,pnp1);
 	
 	air.clear();
 	if(svar.ghost == 1)
@@ -880,9 +979,15 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			// pnp1[ii].theta = dp.kernsum[ii];
 			pnp1[ii].s = outlist[ii].size();
 
-			pnp1[ii].curve = curve[ii];
+			// pnp1[ii].curve = curve[ii];
 			pnp1[ii].nNeigb = real(outlist[ii].size());
 			pnp1[ii].bNorm = dp.norm[ii];
+
+
+			if(pnp1[ii].f != pnp1[ii].f)
+			{
+				cout << "Force is nan:  " << ii << endl;
+			}
 		}
 
 		int errstate = Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,

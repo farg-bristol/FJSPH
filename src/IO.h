@@ -127,11 +127,7 @@ void Read_FLUID_Var(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 
 	/*Fluid parameters read*/
 	uint lineno = 0;
-	Eigen::Vector2d nb = getvector(fluid, lineno, "Newmark-Beta terms");
-	svar.beta = nb[0];	svar.gamma = nb[1];
-	fvar.Hfac = getDouble(fluid, lineno, "Smoothing length factor"); /*End of state read*/
-
-  	fvar.alpha = getDouble(fluid, lineno, "Artificial visc");
+	fvar.alpha = getDouble(fluid, lineno, "Artificial visc");
 	fvar.contangb = getDouble(fluid, lineno, "contact angle");
 	fvar.rho0 = getDouble(fluid, lineno, "Fluid density rho0");
 	avar.rhog = getDouble(fluid, lineno, "Air density rhog");
@@ -274,6 +270,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
  	avar.pVol = M_PI* svar.Pstep*svar.Pstep;
 #endif
 
+ 	svar.beta = 0.25; svar.gamma = 0.5; /*Newmark Beta parameters*/
+
  	/*Mass from spacing and density*/
 	fvar.simM = fvar.rho0*pow(svar.Pstep,SIMDIM); 
 	fvar.bndM = fvar.simM;
@@ -283,7 +281,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	svar.addcount = 0;
   	svar.dt = 2E-010; 			/*Initial timestep*/
   	svar.t = 0.0;				/*Total simulation time*/
-  	fvar.H = fvar.Hfac*svar.Pstep;
+  	fvar.H = 2.0*svar.Pstep;
   	fvar.HSQ = fvar.H*fvar.H; 
 
 

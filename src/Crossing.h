@@ -804,9 +804,12 @@ void FindCell(SIM& svar, real const sr, KDTREE& TREE, MESH& cells, State& pnp1, 
 
                     if(cross == 0)
                     {
-                        cout << "Particle containing cell not found. Something is wrong." << endl;
-                        Write_Containment(ret_indexes,cells,testp);
-                        exit(-1);
+                        #pragma omp critical
+                        {
+                            cout << "Particle " << ii-start << " containing cell not found. Something is wrong." << endl;
+                            Write_Containment(ret_indexes,cells,testp);
+                            exit(-1);
+                        }
                     }
                 }
             }

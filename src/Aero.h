@@ -196,7 +196,9 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 							
 		real theta = acos(-norm.normalized().dot(Vdiff.normalized()));
 		
-		real Cp = 0.0;
+		real Cp_p = 0.0;
+		real Cp_s = 0.0;
+		real Cp_tot = 0.0;
 
 		// if(abs(theta) < 2.48073)
 		// {
@@ -225,16 +227,60 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 		// 	Cp = 0.075;
 		// }
 
+		/*Spherical Cp*/
 		if(abs(theta) < 2.3187)
 		{
-			Cp = 1.0 - 2*pow(sin(abs(theta)),2.0);
+			Cp_s = 1.0 - 2*pow(sin(abs(theta)),2.0);
 		}
 		else
 		{
-			Cp = 0.075;
+			Cp_s = 0.075;
 		}
 
-		real Plocali = 0.5*avar.rhog*Vdiff.squaredNorm()*Cp;
+		/*Plate Cp*/
+		if(abs(theta) < 1.570796)
+		{
+			Cp_p = cos(abs(theta));
+		}
+		else if (abs(theta) < 1.9918)
+		{
+			Cp_p = -pow(cos(6.0*abs(theta)+M_PI/2.0),1.5);
+		}
+		else if (abs(theta) < 2.0838)
+		{
+			Cp_p = 5.5836*abs(theta)-11.5601;
+		}
+		else
+		{
+			Cp_p = 0.075;
+		}
+
+
+		/*Overall Cp*/
+		if(pi.curve > 200.0)
+		{
+			if(abs(theta) < 1.570796)
+				Cp_tot = 0.5*cos(2.0*abs(theta))+0.5;
+			else
+				Cp_tot = 0.0;
+		}
+		else if (pi.curve > 0.0)
+		{
+			real frac = (pi.curve)/(200.0);
+			Cp_tot = frac + (1.0-frac)*Cp_p;
+		}
+		else if (pi.curve > -200.0)
+		{
+			real frac = (pi.curve + 200.0)/(200.0);
+			Cp_tot = frac*Cp_p + (1.0-frac)*Cp_s;
+		}
+		else
+		{
+			Cp_tot = Cp_s;
+		}
+
+
+		real Plocali = 0.5*avar.rhog*Vdiff.squaredNorm()*Cp_tot;
 		// cout << Plocalj << endl;
 
 		real Pi = (Plocali+Pbasei);
@@ -267,8 +313,8 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 		// cout << F_kern.norm() << "  " << F_drop.norm() << endl;
 		// cout << avar.nfull << "  " << frac1  << "  " << real(size-1) << endl;
 
-		Fd = frac3*(frac1*/*frac2**/F_kern + (1.0-frac1)*F_drop);
 
+		Fd = frac3*(frac1*/*frac2**/F_kern + (1.0-frac1)*F_drop);
 	}
 
 	return Fd;

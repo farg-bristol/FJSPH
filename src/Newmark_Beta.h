@@ -203,12 +203,28 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 				// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
 				
 				Force += res[ii]*pnp1[ii].m;
-				dropVel += (pnp1[ii].v+pnp1[ii].vPert);
+				dropVel += (pnp1[ii].v + pnp1[ii].vPert);
 				
 				// pnp1[ii].theta = dp.lam[ii];
 				// pnp1[ii].nNeigb = real(outlist[ii].size());
-				pnp1[ii].curve = curve[ii];
+				// pnp1[ii].curve = curve[ii];
 				pnp1[ii].pDist = vec.norm();
+
+
+				if(pnp1[ii].xi(0) != pnp1[ii].xi(0))
+				{
+					cout << "Position is nan:  " << ii << endl;
+				}
+
+				if(pnp1[ii].v != pnp1[ii].v)
+				{
+					cout << "velocity is nan:  " << ii << endl;
+				}
+
+				if(pnp1[ii].f != pnp1[ii].f)
+				{
+					cout << "Force is nan:  " << ii << endl;
+				}
 
 // #if SIMDIM == 2
 // 					if(real(outlist[ii].size()) < 5.26 * wDiff[ii] +30)
@@ -264,71 +280,6 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 			pnp1[ii].bNorm = norm[ii];
 			
 		} /*End fluid particles*/
-
-
-		if(svar.Asource == 2)
-		{
-			#pragma omp for schedule(static) nowait
-			for(size_t const& ii : cellsused)
-			{
-				// Work out the mass and volume fractions
-				if(cells.fNum[ii] != 0)
-				{
-					real fVol = real(cells.fNum[ii]) * avar.pVol;
-
-					real aFrac = (cells.cVol[ii]-fVol)/cells.cVol[ii];
-
-					
-					if (aFrac < 0.1)
-						continue;
-					
-					real aMass = cells.cMass[ii]*aFrac;
-
-					// Do the momentum exchange
-					StateVecD newPert = (cells.fMass[ii]/aMass)*(cells.vFnp1[ii]-cells.vFn[ii])/real(cells.fNum[ii]);
-					// StateVecD diffusion = 0.2*cells.cPertn[ii];
-					cells.cPertnp1[ii] = cells.cPertn[ii]*0.9 - newPert;
-
-	// 				#pragma omp critical
-	// 				{
-	// 				cout << "Cell " << ii << ":" << endl;
-
-	// 				cout << "pertnp1: " << cells.cPertnp1[ii](0) << "  "
-	// 						<< cells.cPertnp1[ii](1) 
-	// #if SIMDIM == 3
-	// 				 		<< "  " << cells.cPertnp1[ii](2)
-	// #endif
-	// 						<< endl;
-
-	// 				cout << "pertn:   " << cells.cPertn[ii](0) << "  "
-	// 				 		<< cells.cPertn[ii](1) 
-	// #if SIMDIM == 3
-	// 				 		<< "  " << cells.cPertn[ii](2)
-	// #endif
-	// 						<< endl;
-	// 				cout << "Update: " << newPert(0) << "  " << newPert(1) 
-	// #if SIMDIM == 3
-	// 				<< "  " << newPert(2)
-	// #endif
-	// 				 << endl; 
-
-	// 				cout << "Fuel count: " << cells.fNum[ii] << endl;
-	// 				cout << "Mass fraction: " << cells.fMass[ii]/aMass << endl;
-	// 				// cout << "Fuel Volume: " << fVol << " Fuel Mass: " << cells.fMass[ii] << endl;
-	// 				// // cout << "Cell Volume: " << cells.cVol[ii] << " Air fraction: " << aFrac << "  Air Mass: " << aMass << endl;
-	// 				cout << "Fuel Vel difference: " << cells.vFnp1[ii](0)-cells.vFn[ii](0) << "  " << cells.vFnp1[ii](1)-cells.vFn[ii](1)
-	// #if SIMDIM == 3
-	// 					<< "  " << cells.vFnp1[ii](2)-cells.vFn[ii](2)
-	// #endif
-	// 				 	<< endl << endl;
-	// 				}
-				}
-				// else
-				// {
-				// 	cout << "Cell with no fuel in it considered" << endl;
-				// }
-			}
-		}
 
 	}/*End pragma omp parallel*/
 

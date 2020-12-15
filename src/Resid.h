@@ -205,12 +205,12 @@ DELTAP const& dp, State& pnp1)
 {
 	/*Implement particle shifting technique - Sun, Colagrossi, Marrone, Zhang (2018)*/
 
-	// vector<Particle>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
-	// 	[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
+	vector<Particle>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
+		[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
 
-	// real maxU = maxUi->v.norm();
+	real const maxU = 0.0001*maxUi->v.norm();
 
-	real maxU = 100;
+	// real const maxU = fvar.maxU;
 
 	#pragma omp parallel
 	{
@@ -256,7 +256,7 @@ DELTAP const& dp, State& pnp1)
 			// deltaR *= -1 * fvar.sr * maxU / fvar.Cs;
 			deltaU *= -2.0 * fvar.H * /*maxU*/ pi.v.norm();
 
-			deltaU = std::min(deltaU.norm(), maxU/4.0) * deltaU.normalized();
+			deltaU = std::min(deltaU.norm(), maxU) * deltaU.normalized();
 
 			if(pi.b != PartState.START_ && pi.b != PartState.BACK_)
 			{
@@ -671,6 +671,13 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				// RV[ii] += aero;
 				Force += aero*pi.m;	
 
+				if (aero != aero)
+				{
+					cout << "Aerodynamic force has gone NaN" << endl;
+					cout << "Point: " << ii - start << "  normal: " << dp.norm[ii](0) << "  " << dp.norm[ii](1) << endl;
+					cout << "Vdiff: " << Vdiff(0) << "  " << Vdiff(1) << endl;
+					exit(-1);
+				}
 				
 			}
 
@@ -694,7 +701,19 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				StateVecD gradLK = gradK;
 
 				if( dp.lam[ii] < 0.75)
+				{
 					gradLK = dp.L[ii]*gradK;
+
+					if(dp.lam[pj.partID] < 0.75/*pj.surf == 1*/)
+					{	
+						curve -= (dp.norm[pj.partID].normalized()-dp.norm[ii].normalized()).dot(volj*gradLK);
+						correc += volj * Kernel(r,fvar.H,fvar.correc)/*/dp.kernsum[ii]*/;
+					}
+
+					
+					if(pi.b == PartState.FREE_ && pi.surf == 1)
+						RV[pj.partID] += aero * pj.m/pj.rho* Kernel(r,fvar.H,fvar.correc)/dp.kernsum[ii];
+				}
 
 				// #pragma omp critical
 				// cout << dp.L[ii](0,0) << "  " << dp.L[ii](0,1) << "  " << dp.L[ii](1,0) << "  " << dp.L[ii](1,1) << "  " << endl;
@@ -712,9 +731,11 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				// }
 				// else
 				// {
-				StateVecD const	contrib = BasePos(pi,pj,gradLK);
+				
 				// }
 
+				StateVecD const ALEcontrib = ALEMomentum(pi,pj,volj,gradK,fvar.rho0);
+				StateVecD const	contrib = BasePos(pi,pj,gradLK);
 				StateVecD const aVisc = ArtVisc(pi,pj,fvar,Rij,Vij,r,gradLK);
 
 				/*Laminar Viscosity - Morris (2003)*/
@@ -724,29 +745,16 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				/*Base WCSPH continuity drho/dt*/
 				Rrhoi -= pj.m*(Vij.dot(gradLK));
-				// Rrhoi -= ALEContinuity(pi,pj,volj,gradK);
+				Rrhoi -= ALEContinuity(pi,pj,volj,gradK);
 				Rrhod -= Continuity_dSPH(Rij,r,fvar.HSQ,gradLK,volj,dp.gradRho[ii],dp.gradRho[pj.partID],pi,pj);
 		
 				/*Surface Tension - Nair & Poeschel (2017)*/
 				// SurfC = SurfaceTens(fvar,pj,Rij,r,npd);
 				
-				// // SurfC = HeST(fvar,pi,pj,Rij,r,cgrad[ii],cgrad[pj.partID]);	
-
-			    if (pi.surf == 1)
-			    {
-					if(pj.surf == 1)
-					{	
-						curve -= (dp.norm[pj.partID].normalized()-dp.norm[ii].normalized()).dot(volj*gradLK);
-						correc += volj * Kernel(r,fvar.H,fvar.correc)/*/dp.kernsum[ii]*/;
-					}
-
-					
-					if(pi.b == PartState.FREE_)
-						RV[pj.partID] += aero * pj.m/pj.rho* Kernel(r,fvar.H,fvar.correc)/dp.kernsum[ii];
-				}	
+				// SurfC = HeST(fvar,pi,pj,Rij,r,cgrad[ii],cgrad[pj.partID]);	
 
 				// RVi += (-contrib + fvar.artMu * fvar.dMom * aVisc)/pi.rho/* + ALEcontrib*/ +  pj.m*visc;
-				RVi += pj.m*(-contrib + aVisc + visc)/* + ALEcontrib*/;
+				RVi += pj.m*(-contrib + aVisc + visc) + ALEcontrib;
 				
 			}/*End of neighbours*/
 			
@@ -755,10 +763,9 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				RVi += NormalBoundaryRepulsion(fvar, cells, pi);
 			}
 
-			if(pi.surf == 1)
+			if(dp.lam[ii] < 0.75/*pi.surf == 1*/)
 			{
 				RVi += (fvar.sig/pi.rho * curve * dp.norm[ii]/*.normalized()*/)/correc;
-				curv[ii] = curve;
 			}
 
 			RV[ii] += RVi + g;
