@@ -86,7 +86,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
         for(size_t ii = start; ii < end; ++ii)
         {
             /*Find the curvature for the surface particles*/
-            if(pnp1[ii].surf == 1)
+            if(dp.lam[ii] < 0.75 )
             {
                 real curve = 0.0;
                 real correc = 0.0;
@@ -132,7 +132,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                     /*Occlusion for Gissler Aero Method*/
                     if (pnp1[ii].b == PartState.FREE_ && (avar.acase == 4 || avar.acase == 1))
                     {
-                        real const frac = -Vdiff.normalized().dot(Rij/r);
+                        real const frac = -Rij.dot(Vdiff)/(Vdiff.norm()*r);
                         
                         if (frac > woccl_)
                         {
@@ -644,7 +644,7 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
 
     if(svar.Bcase == 4)
     {
-        real volume = pow(svar.Pstep,SIMDIM)*svar.totPts;
+        real volume = pow(svar.Pstep,SIMDIM)*real(svar.totPts);
     #if SIMDIM == 3
         real dvol = (4.0*M_PI/3.0)*pow(0.5*svar.diam,3.0);
     #else
@@ -663,7 +663,7 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
         cout << "Old SPH particle mass: " << fvar.simM << "  spacing: " << svar.Pstep << endl;
         // Adjust mass and spacing to create the correct mass/volume for the droplet.
 
-        fvar.simM = dvol*fvar.rho0/svar.totPts;
+        fvar.simM = dvol*fvar.rho0/real(svar.totPts);
         // svar.Pstep = pow(fvar.simM/fvar.rho0,1.0/SIMDIM);
 
 
@@ -673,9 +673,9 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
     {   /*Jet flow*/
         /*Take the height of the jet, and find the volume of the cylinder*/
 #if SIMDIM == 3 
-        real cVol = 5.0*svar.Pstep * (M_PI * pow((svar.Jet(0)/2.0),2));
+        real cVol = svar.Jet(1) * (M_PI * pow((svar.Jet(0)/2.0),2));
 #else
-        real cVol = 5.0*svar.Pstep * svar.Jet(0);
+        real cVol = svar.Jet(1) * svar.Jet(0);
 #endif
         real volume = pow(svar.Pstep,SIMDIM)*real(svar.simPts);
 
@@ -701,9 +701,10 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
 #else
     // svar.Pstep = 2*sqrt(fvar.simM/(fvar.rho0*M_PI));
     svar.Pstep = pow(fvar.simM/fvar.rho0,1.0/2.0);
-#endif
 
-    GetYcoef(avar, fvar, /*fvar.H*/ svar.Pstep);
+#endif
+    svar.dx = svar.Pstep * pow(fvar.rho0/fvar.rhoJ,1.0/SIMDIM);
+    GetYcoef(avar, fvar, svar.Pstep);
     fvar.H = 2.0*svar.Pstep;
     fvar.HSQ = fvar.H*fvar.H; 
 
@@ -712,24 +713,21 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
     fvar.dCont = fvar.delta * fvar.H * fvar.Cs;
     fvar.dMom = fvar.dCont * fvar.rho0;
 
-#if SIMDIM == 2
-    // fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
-    fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
-
-#endif
-#if SIMDIM == 3
-    // fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
-    fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
-#endif
 
 #if SIMDIM == 3
+    fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+    // fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
+
     avar.pVol = 4.0/3.0 * M_PI * pow(avar.L,SIMDIM);
     // avar.aPlate = svar.Pstep*svar.Pstep;
     avar.aPlate = 4.0*avar.L*avar.L;
 #else
+    fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
+    // fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
+
     avar.pVol = M_PI* avar.L*avar.L/4.0;
-    // avar.aPlate = svar.Pstep;
-    avar.aPlate = 2.0*avar.L;
+    avar.aPlate = svar.Pstep;
+    // avar.aPlate = 2.0*avar.L;
 #endif
 
     for(size_t ii = 0; ii < svar.totPts; ii++)

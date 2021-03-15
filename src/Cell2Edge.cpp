@@ -89,9 +89,9 @@ typedef class EDGE
 
 	uint numElem, numEdges, nFar, nWall;
 	vector<StateVecD> verts;
-	vector<vector<uint>> edges; /*edge indexes*/
+	vector<std::pair<uint,uint>> edges; /*edge indexes*/
 	vector<std::pair<int,int>> celllr; /*Cell left and right of the face*/
-	vector<vector<uint>> wall, far;
+	vector<std::pair<uint,uint>> wall, far;
 	vector<uint> usedVerts;
 	// int* nFacesPElem;
 
@@ -504,7 +504,7 @@ void Get_Data(NcFile& fin, FACE& fdata, vector<int> markers, int symPlane)
 }
 
 
-void Add_Edge(vector<uint> const& edge, std::pair<int,int> const& leftright,
+void Add_Edge(std::pair<uint,uint> const& edge, std::pair<int,int> const& leftright,
 	EDGE& edata)
 {
 	edata.celllr.emplace_back(leftright);
@@ -596,7 +596,7 @@ void BuildEdges(const FACE& fdata, EDGE& edata)
 								#pragma omp atomic
 								colour[rindex][rfaceindex]++;
 
-								vector<uint> edge = {l0,l1};
+								std::pair<uint,uint> edge(l0,l1);
 								Add_Edge(edge,leftright,elocal);
 								goto matchfound;
 							}
@@ -622,7 +622,7 @@ void BuildEdges(const FACE& fdata, EDGE& edata)
 							std::pair<int,int> leftright(lindex,-1);
 							#pragma omp atomic
 								colour[lindex][lfaceindex]++;
-							vector<uint> edge = {l0,l1};
+							std::pair<uint,uint> edge(l0,l1);
 							Add_Edge(edge,leftright,elocal);
 							elocal.wall.emplace_back(edge);
 							elocal.nWall++;
@@ -634,7 +634,7 @@ void BuildEdges(const FACE& fdata, EDGE& edata)
 					std::pair<int,int> leftright(lindex,-2);
 					#pragma omp atomic
 					colour[lindex][lfaceindex]++;
-					vector<uint> edge = {l0,l1};
+					std::pair<uint,uint> edge(l0,l1);
 					Add_Edge(edge,leftright,elocal);
 					elocal.far.emplace_back(edge);
 					elocal.nFar++;
@@ -737,8 +737,8 @@ void Recast_Data(EDGE& edata)
 	vector<uint> vertInUse;
 	for(auto const& edge:edata.edges)
 	{
-		vertInUse.emplace_back(edge[0]);
-		vertInUse.emplace_back(edge[1]);
+		vertInUse.emplace_back(edge.first);
+		vertInUse.emplace_back(edge.second);
 	}
 
 	/*Sort and erase duplicates*/
@@ -756,11 +756,11 @@ void Recast_Data(EDGE& edata)
 	{
 		for(auto& edge:edata.edges)
 		{
-			if(edge[0] == vertInUse[ii])
-				edge[0] = ii;
+			if(edge.first == vertInUse[ii])
+				edge.first = ii;
 			
-			if(edge[1] == vertInUse[ii])
-				edge[1] = ii;
+			if(edge.second == vertInUse[ii])
+				edge.second = ii;
 		}
 		newVerts[ii] = edata.verts[ii];
 	}
@@ -814,10 +814,10 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 	/*Create the C array for the faces*/
 	int* edges = new int[edata.numEdges*2];
 	for(uint ii = 0; ii < edata.numEdges; ++ii)
-		for(uint jj = 0; jj < 2; ++jj)
-		{
-			edges[index(ii,jj,2)] = static_cast<int>(edata.edges[ii][jj]);
-		}
+	{
+		edges[index(ii,0,2)] = static_cast<int>(edata.edges[ii].first);
+		edges[index(ii,1,2)] = static_cast<int>(edata.edges[ii].second);
+	}
 
 	/*Put edges into the file*/
 	elemEdges.putVar(edges);
@@ -929,14 +929,18 @@ void Write_Edge_Tecplot(const EDGE& edata)
 	fout << "#face nodes" << endl;
 	for (uint ii = 0; ii < edata.edges.size(); ++ii)
 	{
-		for(auto const& vertex:edata.edges[ii])
-		{	/*Write face vertex indexes*/
-			fout << std::setw(w) << vertex+1;
-			if (vertex > edata.numPoint)
+			/*Write face vertex indexes*/
+			fout << std::setw(w) << edata.edges[ii].first+1;
+			if (edata.edges[ii].first > edata.numPoint)
 			{
 				cout << "Trying to write a vertex outside of the number of points." << endl;
 			}
-		}
+			fout << std::setw(w) << edata.edges[ii].second+1;
+			if (edata.edges[ii].first > edata.numPoint)
+			{
+				cout << "Trying to write a vertex outside of the number of points." << endl;
+			}
+		
 		fout << endl;
 	}
 
@@ -979,6 +983,75 @@ void Write_Edge_Tecplot(const EDGE& edata)
 
 	#ifdef DEBUG
 	dbout << "Exiting Write_Edge_Tecplot..." << endl;
+	#endif
+}
+
+void Write_griduns(const EDGE& edata)
+{
+	/*File format:*/
+	/*<nCell> <nEdge> <nVert>*/
+	/*<edge1Vert1> <edge1Vert2> <edge1LeftCell> <edge1RightCell> */
+	/*<edge2Vert1> <edge2Vert2> <edge2LeftCell> <edge2RightCell> */
+	/*...*/
+	/*<vert1X> <vert1Y>*/
+	/*<vert2X> <vert2Y>*/
+	/*...*/
+
+	#ifdef DEBUG
+	dbout << "Entering Write_griduns..." << endl;
+	cout << "Attempting write output file." << endl;
+	cout << "File: " << "griduns" << endl;
+	#endif
+	std::ofstream fout("griduns",std::ios::out);
+	if(!fout.is_open())
+	{
+		cout << "Couldn't open the output file." << endl;
+		exit(-1);
+	}
+
+
+	fout << std::left << std::fixed;
+	uint w = 9;
+
+	fout << std::setw(w) << edata.numElem << std::setw(w) << edata.numEdges << std::setw(w) << edata.numPoint << endl;
+
+	for(size_t ii = 0; ii < edata.edges.size(); ++ii)
+	{	/*Add 1 (for fortran bull) if not a boundary edge*/
+		
+
+		if(edata.celllr[ii].second == -1)
+		{
+			fout << std::setw(w) << edata.edges[ii].second+1 << std::setw(w) << edata.edges[ii].first+1;
+			fout << std::setw(w) << edata.celllr[ii].second << std::setw(w) << edata.celllr[ii].first+1;
+		}
+		else if (edata.celllr[ii].second == -2)
+		{
+			fout << std::setw(w) << edata.edges[ii].first+1 << std::setw(w) << edata.edges[ii].second+1;
+			fout << std::setw(w) << edata.celllr[ii].first+1 << std::setw(w) << edata.celllr[ii].second;
+		}
+		else
+		{
+			fout << std::setw(w) << edata.edges[ii].first+1 << std::setw(w) << edata.edges[ii].second+1;
+			fout << std::setw(w) << edata.celllr[ii].first+1 << std::setw(w) << edata.celllr[ii].second+1;
+		}
+	
+		 
+		fout << endl;
+	}
+
+	w = 17;
+	uint preci = 8;
+	fout << std::left << std::scientific << std::setprecision(preci);
+
+	for(size_t ii = 0 ; ii < edata.verts.size(); ++ii)
+	{
+		fout << std::setw(8) << ii+1 << std::setw(w) << edata.verts[ii](0) << std::setw(w) << edata.verts[ii](1) << endl;
+	}
+
+	fout.close();
+
+	#ifdef DEBUG
+	dbout << "Exiting Write_griduns..." << endl;
 	#endif
 }
 
@@ -1028,6 +1101,7 @@ int main (int argc, char** argv)
 
 
 	Write_Edge_Tecplot(edata);
-	Write_Edge_Data(meshIn,edata);
+	// Write_Edge_Data(meshIn,edata);
+	Write_griduns(edata);
 	return 0;
 }

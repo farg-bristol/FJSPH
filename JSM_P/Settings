@@ -1,23 +1,23 @@
-0.00005         #Frame output timestep
-1200              #number of frames
+0.000001        #Frame output timestep
+1200           #number of frames
 1              #Output Frame Interval (if 0, suppresses framewise output)
 0              #Output encoding (0 = Binary, 1 = ASCII)
 3              #Output format (0 = Position only, 1 = fluid properties, 2 = debug/research)
 1              #Boundary timestep output (0 = no, 1 = yes)
 0              #Ghost particle output (0 = no, 1 = yes)
 20             #Max Sub-iterations
-1000000           #Max particles
-500          #Post process Mesh grid max length division
-0.0005          #Mesh support radius
-0.00075         #Initial Particle spacing
+1000000        #Max particles
+500            #Post process Mesh grid max length division
+0.0005         #Mesh support radius
+0.0005        #Initial Particle spacing
 0.7            #Boundary particle spacing factor (of part spacing)
 3              #Boundary case (0 = none, 1 = Rectangle, 3 = jet, 4 = VLM, 5 = droplet, 6 = TAU mesh)
 1              #Aerodynamic solution source (0 = constant vel, 1 = mesh, 2 = mesh + momentum corr, 3 = VLM infl.)
-5              #Aero force case (0 = none, 1 = left surface, 2 = prop to ST-Aero angle, 4 = Gissler Method)
+4              #Aero force case (0 = none, 1 = left surface, 2 = prop to ST-Aero angle, 4 = Gissler Method)
 0              #Ghost pressure particles (0 = no, 1 = yes)
 3.015462 -0.22311    #Jet starting x-pos, y-pos, z-pos (pipe exit centre) (grid units)
 -150.0 0.0     #Jet starting rotation         
-0.0252 0.02  #Pipe diameter, Pipe Depth
-0          #Pipe pressure (Pa)
+0.0252 0.025    #Pipe diameter, Pipe Depth
+1000              #Pipe pressure (Pa)
 3.163          #Jet Velocity (along jet axis)
-20 0              #Freestream Velocity
+20 0           #Freestream Velocity

@@ -44,7 +44,7 @@ void Read_SIM_Var(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 	svar.boutform = getInt(in, lineno, "Boundary time output");
 	svar.gout = getInt(in, lineno, "Output ghost particles to file");
 	svar.subits = getInt(in, lineno, "Max sub iterations");
-	svar.nmax = getInt(in, lineno, "Max particle add rounds");
+	svar.nmax = getInt(in, lineno, "Max number of particles");
 	/*Get post processing options*/
 	svar.cellSize = getDouble(in, lineno, "Post processing mesh size");
 	svar.postRadius = getDouble(in, lineno, "Post processing support radius");
@@ -83,6 +83,7 @@ void Read_SIM_Var(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 		fvar.pPress = getDouble(in, lineno, "Pipe pressure");
 		avar.vJet = StateVecD::Zero(); avar.vInf = StateVecD::Zero();
 		avar.vJet(1) = getDouble(in, lineno, "Jet velocity");  
+		avar.vJetMag = avar.vJet(1);
 		avar.vJet = svar.Rotate*avar.vJet;
 		avar.vInf = getDVector(in, lineno, "Freestream velocity");
 		if(avar.acase == 2 || avar.acase == 3)
@@ -127,15 +128,16 @@ void Read_FLUID_Var(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 
 	/*Fluid parameters read*/
 	uint lineno = 0;
-	fvar.alpha = getDouble(fluid, lineno, "Artificial visc");
-	fvar.contangb = getDouble(fluid, lineno, "contact angle");
+	fvar.alpha = getDouble(fluid, lineno, "Artificial viscosity factor");
+	fvar.maxU = getDouble(fluid,lineno,"Particle shifting factor");
+	fvar.contangb = getDouble(fluid, lineno, "Surface tension contact angle");
 	fvar.rho0 = getDouble(fluid, lineno, "Fluid density rho0");
 	avar.rhog = getDouble(fluid, lineno, "Air density rhog");
 	fvar.Cs = getDouble(fluid, lineno, "Speed of sound");
 	fvar.mu = getDouble(fluid, lineno, "Fluid viscosity");
 	avar.mug = getDouble(fluid, lineno, "Air viscosity");
 	fvar.sig = getDouble(fluid, lineno, "Surface Tension");
-	svar.outfolder = getString(fluid,lineno, "Output Folder name");
+	svar.outfolder = getString(fluid,lineno, "Output folder name");
 	svar.outdir = svar.outfolder;
 	if(svar.Asource != 0)
 	{
@@ -202,7 +204,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
 
 	/*Pipe Pressure calc*/
-	real rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
+	fvar.rhoJ = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
 
 	svar.nrad = 1;
 	if(svar.Bcase == 0 || svar.Bcase == 1)
@@ -234,8 +236,10 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		}
 		else
 		{
-	 		svar.nrad = ceil(abs(svar.Jet(0)*M_PI/svar.Pstep));
-	 		svar.dx = svar.Jet(0)*M_PI/real(svar.nrad);
+			real radius = 0.5*svar.Jet(0);
+		
+	 		svar.nrad = ceil(abs(radius/svar.Pstep));
+	 		svar.dx = radius/real(svar.nrad);
  		}
  	}
  	else
@@ -252,9 +256,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
  		}
  	}
 
-
  	// svar.dx = svar.Pstep;	
-	svar.Pstep = svar.dx * pow(rho/fvar.rho0,1.0/SIMDIM);
+	svar.Pstep = svar.dx * pow(fvar.rhoJ/fvar.rho0,1.0/SIMDIM);
 
 	// Correct the droplet to have the same volume as the original
 	if(svar.Bcase == 4)
@@ -284,26 +287,27 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   	fvar.H = 2.0*svar.Pstep;
   	fvar.HSQ = fvar.H*fvar.H; 
 
-
 	fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
 	svar.Bclosed = 0; 		/*Boundary begins open*/
 	svar.psnPts = 0; 		/*Start with no pitson points*/
   	svar.delNum = 0;
   	svar.intNum = 0;
+  	svar.iter = 0;
 
   	fvar.dCont = 2.0 * fvar.delta * fvar.H * fvar.Cs;
   	// fvar.dMom = fvar.alpha * fvar.H * fvar.Cs * fvar.rho0;
   	fvar.dMom = 2.0*(SIMDIM + 2.0);
   	fvar.artMu = std::max(fvar.mu, fvar.alpha*fvar.Cs*fvar.H*fvar.rho0);
+    fvar.nu = fvar.mu/fvar.rho0;
 
 #if SIMDIM == 2
-	// fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
-	fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
+	fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
+	// fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
 	svar.simPts = svar.xyPART[0]*svar.xyPART[1];
 #endif
 #if SIMDIM == 3
-	// fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
-	fvar.correc = (1/(M_PI*fvar.H*fvar.H*fvar.H));
+	fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+	// fvar.correc = (1/(M_PI*fvar.H*fvar.H*fvar.H));
 	svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
 #endif
 	
@@ -311,7 +315,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 
 #ifdef DEBUG
 	dbout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
-	dbout << "Pipe rho: " << rho << endl;
+	dbout << "Pipe rho: " << fvar.rhoJ << endl;
 	dbout << "Number of fluid particles along diameter: " << 2*svar.nrad+1 << endl;
 	dbout << "Pipe step (dx): " << svar.dx << endl;
 	dbout << "Particle mass: " << fvar.simM << endl;
@@ -321,6 +325,15 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 #endif
 
 	cout << "****** SIMULATION SETTINGS *******" << endl;
+	#pragma omp parallel
+	{
+		#pragma omp single
+		cout << "Number of threads: " << omp_get_num_threads() << endl;
+	}
+	
+	cout << "Frame time interval: " << svar.framet << endl;
+	cout << "Number of frames: " << svar.Nframe << endl;
+	cout << "Output type: " << svar.outform << endl;
 	cout << "Tait gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
 	cout << "Newmark-Beta parameters: " << svar.beta << ", " << svar.gamma << endl;
 	cout << "Boundary case: " << svar.Bcase << endl;
@@ -330,7 +343,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	cout << endl;
 	cout << "****** PIPE SETTINGS *******" << endl;
 	cout << "Pipe pressure: " << fvar.pPress << endl;
-	cout << "Pipe density: " << rho << endl;
+	cout << "Pipe density: " << fvar.rhoJ << endl;
 	cout << "Pipe step (dx): " << svar.dx << endl;
 	cout << "Pipe diameter: " << svar.Jet(0) << endl;
 	cout << "Number of fluid particles along diameter: " << 2*svar.nrad+1 << endl;
@@ -380,7 +393,28 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	cout << "******** FILE SETTINGS ********" << endl;
 	char cCurrentPath[FILENAME_MAX];
 	if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
+	{
 		cerr << "Failed to get current working directory." << endl;
+		exit(-1);
+	}
+
+	/*Get output absolute path*/
+	string pathname = cCurrentPath;
+  	pathname.append("/");
+  	pathname.append(svar.infolder);
+  	pathname.append(svar.outfolder);
+  	pathname.append("/");
+  
+  	/*Check for output file name*/		
+	check_folder(pathname);
+	
+	/*Check if there is a slash at the end.*/
+  	if (pathname.back() != '/')
+  	{
+  		pathname.append("/");
+  	}
+
+  	svar.outfolder = pathname;
 	
 	cout << "Working directory: " << cCurrentPath << endl;
 	cout << "Input folder: " << svar.infolder << endl;
@@ -392,8 +426,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 
 	cout << "Output folder: " << svar.outfolder << endl << endl;
 	
-
-
 
 	#if SIMDIM == 3
 		if(svar.Asource == 3)
@@ -412,9 +444,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	avar.aPlate = svar.Pstep/**svar.Pstep*/ /** pow(avar.L,0.5)*/;
 		// avar.aPlate = fvar.H;
 #endif
-	// if(svar.restart!=1)
-	// 	Write_Input(svar,fvar,avar,angle);
-}
+
+} /*End of GetInput()*/
 
 
 void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& cells)
@@ -470,21 +501,16 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 	if(svar.outtype == 0)
 	{
 		State boundary, fuel;
-
-		string file;
-		INTEGER4 I;
-		INTEGER4 frameNo;
-		
+		string file;	
 
 		// Read the fuel
 		void* fuelHandle = NULL;
 		string fuelf = outdir;
+		int32_t fuelFrames, boundFrames;
+		double fuelTime, boundTime;
 		fuelf.append("Fuel.szplt");
 
-		// cout << fuelf << endl;
-		// fuelf = "Droplet2D/solution/Fuel.szplt";
-		I = tecFileReaderOpen(fuelf.c_str(),&fuelHandle);
-		if(I == -1)
+		if(tecFileReaderOpen(fuelf.c_str(),&fuelHandle))
 		{
 			cout << "Error opening szplt file. Path:" << endl;
 			cout << file << endl;
@@ -492,13 +518,7 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 		}
 
 		cout << "Checking Fuel file..." << endl;
-		CheckContents(fuelHandle,svar);
-
-	    // Read the actual data.
-	    frameNo = svar.frame+1;
-
-		cout << endl << "Attempting to read the fuel..." << endl;
-		Read_Binary_Timestep(fuelHandle,svar,frameNo,fuel);
+		CheckContents(fuelHandle,svar,fuelFrames,fuelTime);
 
 		if (svar.Bcase != 4 && svar.Bcase !=0)
 		{
@@ -506,8 +526,7 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 			string boundf = outdir;
 			boundf.append("Boundary.szplt");
 
-			I = tecFileReaderOpen(boundf.c_str(),&boundHandle);
-			if(I == -1)
+			if(tecFileReaderOpen(boundf.c_str(),&boundHandle))
 			{
 				cout << "Error opening szplt file. Path:" << endl;
 				cout << file << endl;
@@ -515,12 +534,77 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 			}
 
 			cout << "Checking Boundary file..." << endl;
-			CheckContents(boundHandle,svar);
+			CheckContents(boundHandle,svar,boundFrames,boundTime);
+
+			if(fuelFrames!= boundFrames)
+			{
+				cout << "Caution! Number of frames is not consistent between fuel and boundary files." << endl;
+			}
+
+
+			if(fuelTime != boundTime)
+			{
+				cout << "Caution! Frame times are not consistent between fuel and boundary files." << endl;
+
+				if(fuelTime > boundTime)
+				{
+					double time = 0.0;
+					for(int32_t frame = fuelFrames-1; frame > 1; frame--)
+					{
+						if(tecZoneGetSolutionTime(fuelHandle, frame, &time))
+						{
+							cout << "Failed to get time data for frame : " << frame << " from fuel file." << endl;
+							continue;
+						}
+						
+						if(time == boundTime)
+						{
+							cout << "Found the correct frame" << endl;
+							fuelFrames = frame;
+							fuelTime = time;
+							break;
+						}
+					}
+				}
+				else
+				{
+					double time = 0.0;
+					for(int32_t frame = boundFrames-1; frame > 1; frame--)
+					{
+						if(tecZoneGetSolutionTime(boundHandle, frame, &time))
+						{
+							cout << "Failed to get time data for frame : " << frame << " from boundary file." << endl;
+							continue;
+						}
+						
+
+						if(time == fuelTime)
+						{
+							cout << "Found the correct frame" << endl;
+							boundFrames = frame;
+							boundTime = time;
+							break;
+						}
+					}
+				}
+
+				if(fuelTime != boundTime)
+				{
+					cout << "Could not find a consistent time in each file. Stopping." << endl;
+					exit(-1);
+				}
+			}
 
 			cout << "Attempting to read the boundary..." << endl;
-			Read_Binary_Timestep(boundHandle,svar,frameNo,boundary);
-		
+			Read_Binary_Timestep(boundHandle,svar,boundFrames,boundary);
 		}
+
+	    svar.frame = fuelFrames-1;
+
+	    // Read the actual data.
+		cout  << "Attempting to read the fuel..." << endl;
+		Read_Binary_Timestep(fuelHandle,svar,fuelFrames,fuel);
+
 
 		pn = boundary;
 		svar.bndPts = boundary.size();
@@ -530,7 +614,7 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 		
 		if(svar.simPts + svar.bndPts != svar.totPts)
 		{
-			cout << "Mismatch of array sizes. Total array is not the sum of the others" << endl;
+			cout << "Mismatch of array sizes. Total array is not the sum of sim and boundary arrays" << endl;
 			exit(-1);
 		}
 
@@ -544,6 +628,9 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 		// TODO: ASCII Restart.
 		// Particle numbers can be found from frame file.
 		// Find EOF, then walk back from there how many particles.
+
+		cout << "ASCII file restart not yet implemented." << endl;
+		exit(-1);
 	}
 
 	// Go through the particles giving them the properties of the cell

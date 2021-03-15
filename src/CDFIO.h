@@ -445,9 +445,8 @@ void Read_SOLUTION(string const& solIn, FLUID const& fvar, AERO const& avar,
 	catch (netCDF::exceptions::NcException& e)
 	{
 		cout << "A netCDF error occured whilst trying to open solution file:" << endl;
+		cout << "\t" << solIn << endl << endl;
 		cout << "what(): " << e.what() << endl << endl;
-
-		cout << "Attemted file path: " << solIn << endl;
 		exit(-1);
 	}
 	
@@ -840,8 +839,22 @@ void Read_TAUMESH_EDGE(SIM& svar, MESH& cells, FLUID const& fvar, AERO const& av
 		dbout << "Mesh file: " << meshIn << endl;
 		dbout << "Solution file: " << solIn << endl;
 	#endif
+
 	/*Read the mesh data*/
-	NcFile fin(meshIn, NcFile::read);
+	NcFile fin;
+
+	try
+	{
+		fin.open(meshIn, NcFile::read);
+	}
+	catch (netCDF::exceptions::NcException& e)
+	{
+		cout << "A netCDF error occured whilst trying to open mesh file:" << endl;
+		cout << "\t" << meshIn << endl << endl;
+		cout << "what(): " << e.what() << endl << endl;
+		exit(-1);
+	}
+
 	cout << "Mesh file open. Reading face data..." << endl;
 
 	// Retrieve how many elements there are.

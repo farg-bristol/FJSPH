@@ -4,13 +4,13 @@
 #include "Var.h"
 
 ///******Wendland's C2 Quintic Kernel*******///
-real const Kernel(real const dist, real const H, real const correc) 
+real const Kernel(real const& dist, real const& H, real const& correc) 
 {
 	return (pow(1-0.5*dist/H,4))*(2*dist/H+1)*correc;
 }
 
 /*Gradient*/
-StateVecD const GradK(StateVecD const& Rij, real const dist, real const H, real const correc)
+StateVecD const GradK(StateVecD const& Rij, real const& dist, real const& H, real const& correc)
 {
 	if(dist/H < 1e-12)
 		return StateVecD::Zero();

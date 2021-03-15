@@ -26,10 +26,10 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	real error2 = 0.0;
 
 	// Find maximum safe timestep
-	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin(),pnp1.end(),
+	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
 		[](Particle p1, Particle p2){return p1.f.norm()< p2.f.norm();});
 
-	vector<Particle>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
+	vector<Particle>::iterator maxUi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
 		[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
 
 	real maxf = maxfi->f.squaredNorm();
@@ -48,7 +48,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 /***********************************************************************************/
 /***********************************************************************************/
 /***********************************************************************************/
-	svar.dt = 0.1*std::min(dtf,std::min(dtc,dtv));
+	svar.dt = 0.125*std::min(dtf,std::min(dtc,dtv));
 /***********************************************************************************/
 /***********************************************************************************/
 /***********************************************************************************/
@@ -225,8 +225,10 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	Get_Resid(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
 		cells,cellsused,neighb,outlist,dp,pn,pnp1,airP,Force,dropVel);
 
+	uint nUnstab = 0;
+
 	void(Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
-							cellsused,outlist,xih,pn,pnp1,k));
+							cellsused,outlist,xih,pn,pnp1,k,nUnstab));
 	k++;
 
 	// State st_2 = pn;
@@ -538,7 +540,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 		// cout << pnp1[0].cellV(0) << "  " << pnp1[0].cellV(1) << "  " << pnp1[0].cellV(2) << endl;
 		// cout << pn[0].cellV(0) << "  " << pn[0].cellV(1) << "  " << pn[0].cellV(2) << endl;
-		pertLog << svar.t << " " << tMom-(svar.tMom) << " " << aMomT-svar.aMom << " " << fMom << endl;
+		// pertLog << svar.t << " " << tMom-(svar.tMom) << " " << aMomT-svar.aMom << " " << fMom << endl;
 	}
 
 // 	if (svar.Bcase == 4)
@@ -613,7 +615,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	return error1;
 }
 
-void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar, 
+void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
 	MESH& cells, outl& outlist, DELTAP& dp, State& pnp1, State& pn, State& airP)
 {
 	const size_t start = svar.bndPts;
@@ -651,7 +653,8 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
 	dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
-
+	cout << "Got past the first prestep" << endl;
+	
 	Detect_Surface(svar,fvar,avar,start,end,dp,outlist,cells,pnp1);
 	
 	vector<vector<Part>> air;
@@ -738,14 +741,21 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	real error1 = 0.0;
 	real error2 = 0.0;
 
+	const real a = 1 - svar.gamma;
+	const real b = svar.gamma;
+	const real c = 0.5*(1-2*svar.beta);
+	const real d = svar.beta;
+	const real B = fvar.B;
+	const real gam = fvar.gam;
+
+	StateVecD dropVel = StateVecD::Zero();
 	StateVecD Force = StateVecD::Zero();
-	// StateVecD dropVel = StateVecD::Zero();
 	
 	/*find force at time n*/
-	vector<StateVecD> res(end,StateVecD::Zero());
-	vector<StateVecD> Af(end,StateVecD::Zero());
-	vector<real> Rrho(end,0.0);
-	vector<real> curve(end,0.0);
+	vector<StateVecD> res;
+	vector<StateVecD> Af;
+	vector<real> Rrho;
+	vector<real> curve;
 
 	Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force,curve); 
 
@@ -766,21 +776,17 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	// /*Previous State for error calc*/
 	vector<StateVecD> xih(svar.totPts);
+	vector<StateVecD> xi(svar.totPts); /*Keep original positions to reset after finding forces*/
 	#pragma omp parallel for shared(pnp1)
 	for (size_t  ii=0; ii < end; ++ii)
 		xih[ii] = pnp1[ii].xi;
 
 	
-	const real b = svar.gamma;
-	const real d = svar.beta;
-	const real B = fvar.B;
-	const real gam = fvar.gam;
 
 	#pragma omp parallel for shared(res, Rrho, Af/*, wDiff, norm, curve*/)
 	for(size_t ii = 0; ii < end; ++ii)
 	{
-		pnp1[ii].f = res[ii];
-		pnp1[ii].Rrho = Rrho[ii];
+		
 		pnp1[ii].Af = Af[ii]; 
 		pnp1[ii].rho = pn[ii].rho+dt*(b*Rrho[ii]);
 		pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
@@ -795,6 +801,8 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		else if (pnp1[ii].b > PartState.START_)
 		{
 			// pnp1[ii].v = pn[ii].v + dt*b*res[ii]; 
+			pnp1[ii].f = res[ii];
+			pnp1[ii].Rrho = Rrho[ii];
 			xih[ii] = pn[ii].xi + dt*pn[ii].v + dt2*(d*res[ii]);
 		}
 
@@ -808,6 +816,8 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 		// Force += res[ii];
 		// dropVel += pnp1[ii].v;
+
+		xi[ii] = pnp1[ii].xi;
 
 	}
 
@@ -828,7 +838,7 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 /***********************************************************************************/
 /***********************************************************************************/
 /***********************************************************************************/
-	dt = 0.1*std::min(dtf,std::min(dtc,dtv));
+	dt = 0.125*std::min(dtf,std::min(dtc,dtv));
 	svar.dt = dt;
 /***********************************************************************************/
 /***********************************************************************************/
@@ -839,6 +849,7 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
 	dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
+
 
 	Detect_Surface(svar,fvar,avar,start,end,dp,outlist,cells,pnp1);
 	
@@ -942,65 +953,15 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	// }
 
 	/***************************** Newmark Beta *************************************/
-	while (error1 > -7.0)
+	Newmark_Beta(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,cells,cellsused,neighb,
+		outlist,dp,logbase,k,error1,error2,pn,pnp1,airP,Force,dropVel);
+
+
+	/*Reset positions*/
+	for(size_t ii = 0; ii < end; ii++)
 	{
-		vector<StateVecD> res(end,StateVecD::Zero());
-		vector<StateVecD> Af(end,StateVecD::Zero());
-		vector<real> Rrho(svar.totPts,0.0);
-		vector<real> curve(end,0.0);
-
-		Force = StateVecD::Zero();
-		Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force,curve);
-
-		const real dti = svar.dt;
-		const real dti2 = dti*dti;
-
-		#pragma omp parallel for shared(res, Rrho, Af, curve)
-		for(size_t ii = 0; ii < end; ++ii)
-		{
-			pnp1[ii].f = res[ii];
-			pnp1[ii].Rrho = Rrho[ii];
-			pnp1[ii].Af = Af[ii]; 
-			pnp1[ii].rho = pn[ii].rho+dti*(b*Rrho[ii]);
-			pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-			// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
-
-
-			if (pnp1[ii].b == PartState.START_ || pnp1[ii].b == PartState.BACK_)
-			{
-				xih[ii] = pn[ii].xi + dti*pn[ii].v;
-			}
-			else if (pnp1[ii].b > PartState.START_)
-			{
-				// pnp1[ii].v = pn[ii].v + dti*b*res[ii]; 
-				xih[ii] = pn[ii].xi + dti*pn[ii].v + dti2*(d*res[ii]);
-			}
-
-			// pnp1[ii].theta = dp.kernsum[ii];
-			pnp1[ii].s = outlist[ii].size();
-
-			// pnp1[ii].curve = curve[ii];
-			pnp1[ii].nNeigb = real(outlist[ii].size());
-			pnp1[ii].bNorm = dp.norm[ii];
-
-
-			if(pnp1[ii].f != pnp1[ii].f)
-			{
-				cout << "Force is nan:  " << ii << endl;
-			}
-		}
-
-		int errstate = Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
-							cellsused,outlist,xih,pn,pnp1,k);
-
-		if (errstate == 0)	/*Sub iterations exceeded*/
-			k++;
-		else if (errstate == 1)	/*Continue iterating*/
-			break;
-
+		pnp1[ii].xi = xi[ii];
 	}
-
-
 
 	// for(size_t ii = start; ii < end; ++ii)
 	// {
@@ -1023,10 +984,10 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		
 		StateVecD Vdiff = avar.vInf;
 
-		real Re = 2.0*avar.rhog*Vdiff.norm()*radius/avar.mug;
+		real Re = avar.rhog*Vdiff.norm()*svar.diam/avar.mug;
 		real Cds_undef,Cds_def;
 
-		Cds_undef = (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re));
+		Cds_undef = GetCd(Re);
 
 		
 		// if( Re <= 1000.0)
@@ -1093,14 +1054,30 @@ void First_Step(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		// 	sumForce += pnp1[ii].m*pnp1[ii].f;	
 		// }
 
-		// cout << sumForce[0] << "  " << sumForce[1] << "  " << sumForce[2] << endl;
+		Force = StateVecD::Zero();
 
+		for(size_t ii = 0; ii < end; ii++)
+		{
+			Force += pnp1[ii].Af;
+		}
+
+		// real totMass = real(svar.totPts) * pnp1[0].m;
+
+		// cout << totMass << "  " << pnp1[0].m << endl;
+
+		// Force = pnp1[0].m*Force;
+
+		// cout << sumForce[0] << "  " << sumForce[1] << "  " << sumForce[2] << endl;
+		// real f_undef = 0.5*avar.rhog*Vdiff.squaredNorm()*Adrop_und*Cds_undef;
 		real calcCd = Force[1]/(0.5*avar.rhog*Vdiff.squaredNorm()*Adrop_und);
 		real defCd = dropDefCd[1]/(0.5*avar.rhog*Vdiff.squaredNorm()*Adrop_und);
 		// StateVecD test = GisslerForce(bigdrop, Vdiff, 1.0, 1.0, 0);
-
+		cout << std::fixed;
 		cout << endl << "Drop Cd: " << Cds_undef << "  Drop deformed Cd: "
-		 << defCd << "  Calculated Cd: " << calcCd  /*<< " Magnitude: " << Force.norm()*/ << endl  << endl;
+		 << defCd << "  Calculated Cd: " << calcCd/*Force(1)*/  /*<< " Magnitude: " << Force.norm()*/   << endl;
+		cout << "Difference factor: " << (calcCd/Cds_undef-1.0)*100 << "%" << endl << endl;
+
+		cout << std::scientific;
 	}
 }
 

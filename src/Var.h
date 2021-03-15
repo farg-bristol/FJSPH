@@ -33,7 +33,7 @@
 	std::ofstream dbout("WCSPH.log",std::ios::out);
 #endif
 
-std::ofstream pertLog("cellPert.log",std::ios::out);
+// std::ofstream pertLog("cellPert.log",std::ios::out);
 
 // Define pi
 #ifndef M_PI
@@ -170,6 +170,7 @@ typedef struct SIM {
 	uint outform, boutform, gout;   /*Output type. Fluid properties or Research.*/
 	uint framecount;                /*How many frames have been output*/
 	vector<size_t> back;            /*Particles at the back of the pipe*/
+	uint iter;                      /*Current iteration number to renormalise*/
 
 	std::string infolder, outfolder, outdir;
 	std::string meshfile, bmapfile, solfile;
@@ -209,7 +210,7 @@ typedef struct FLUID {
 	
 	real simM, bndM;			/*Particle and boundary masses*/
 	real correc;				/*Smoothing Kernel Correction*/
-	real alpha,Cs,mu;		    /*}*/
+	real alpha,Cs,mu,nu;		/*}*/
 	real sig;					/* Fluid properties*/
 	real gam, B; 				/*}*/
 	real artMu;					/*Artificial viscosity*/
@@ -267,6 +268,7 @@ typedef class AERO
 
 		int acase;	                   /*Aerodynamic force case*/
 		StateVecD vJet, vInf;          /*Jet + Freestream velocity*/
+		real vJetMag;
 		real dPipe;                    /*Pipe diameter*/
 		
 		real Acorrect;				   /*Correction factor for aero force*/
@@ -385,6 +387,14 @@ typedef class DELTAP {
 			kernsum = kernsum_;
 		}
 
+		void clear()
+		{
+			L.clear(); gradRho.clear(); norm.clear(); 
+			avgV.clear(); lam.clear(); lam_nb.clear();
+			kernsum.clear();
+
+		}
+
 		vector<StateMatD> L;
 		vector<StateVecD> gradRho;
 		vector<StateVecD> norm;
@@ -407,13 +417,7 @@ typedef class DELTAP {
 			kernsum = vector<real>(size);
 		}
 
-		void clear()
-		{
-			L.clear(); gradRho.clear(); norm.clear(); 
-			avgV.clear(); lam.clear(); lam_nb.clear();
-			kernsum.clear();
 
-		}
 }DELTAP;
 
 /*Particle data class*/
@@ -586,9 +590,11 @@ typedef struct KDTREE
 {
 	KDTREE(State const& pnp1, MESH const& cells): NP1(SIMDIM,pnp1,20), 
 	CELL(SIMDIM,cells.cCentre,20), BOUNDARY(SIMDIM,cells.bVerts,20) {}
+
 	Sim_Tree NP1;
 	Vec_Tree CELL;
 	Vec_Tree BOUNDARY;	
+
 }KDTREE;
 
 #endif /* VAR_H */

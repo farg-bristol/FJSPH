@@ -1,8 +1,9 @@
-0.1                  #Aritificial Viscosity factor
+0.01                 #Aritificial Viscosity factor
+0.000               #Particle shifting factor
 150.0                #Boundary contact angle
 810                  #Rho_jet
 1.1226               #Rho_gas
-1200                  #Speed of Sound C_s
+500                  #Speed of Sound C_s
 0.00142              #Liquid dynamic viscosity
 0.00001716           #Gas dynamic viscosity
 0.0256               #Surface tension

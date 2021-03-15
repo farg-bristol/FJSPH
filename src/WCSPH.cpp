@@ -129,7 +129,7 @@ int main(int argc, char *argv[])
 	}
 	
 	cout << "Starting counts: " << endl;
-	cout << "Boundary: " << svar.bndPts << "  Sim: " << svar.simPts << endl;
+	cout << "Boundary: " << svar.bndPts << "  Sim: " << svar.simPts << endl << endl;
 	
 	///********* Tree algorithm stuff ************/
 	KDTREE TREE(pnp1,cells);
@@ -174,7 +174,7 @@ int main(int argc, char *argv[])
 	f1 << std::scientific << std::setprecision(6);
 	f3 << std::scientific << std::setw(10);
 
-	pertLog << std::scientific << std::setprecision(8);
+	// pertLog << std::scientific << std::setprecision(8);
 	uint ghost_strand = 0;
 	if(svar.boutform == 0)
 		ghost_strand = 2;
@@ -199,7 +199,7 @@ int main(int argc, char *argv[])
 				/*Apply Rotation...*/
 				xi = svar.Rotate*xi;
 				xi += svar.Start;
-			    if(!Check_Pipe(TREE.CELL, cells, xi))
+			    if(!Check_Pipe(svar,TREE.CELL, cells, xi))
 			    {
 
 			    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
@@ -215,7 +215,7 @@ int main(int argc, char *argv[])
 				xi += svar.Start;
 
 				// cout << "Checking point: " << xi(0) << "  " << xi(1) << endl;
-			    if(!Check_Pipe(TREE.CELL, cells, xi))
+			    if(!Check_Pipe(svar,TREE.CELL, cells, xi))
 			    {
 			    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
 			    	cout << "Fuel will be excessively close to begin." << endl;
@@ -287,6 +287,7 @@ int main(int argc, char *argv[])
 		    error = Integrate(TREE,svar,fvar,avar,cells,dp,pn,pnp1,airP,outlist);
 		    stept+=svar.dt;
 		    ++stepits;
+		    svar.iter++;
 		}
 		++svar.frame;
 
