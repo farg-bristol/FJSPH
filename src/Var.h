@@ -33,7 +33,7 @@
 	std::ofstream dbout("WCSPH.log",std::ios::out);
 #endif
 
-std::ofstream pertLog("cellPert.log",std::ios::out);
+// std::ofstream pertLog("cellPert.log",std::ios::out);
 
 // Define pi
 #ifndef M_PI
@@ -170,6 +170,7 @@ typedef struct SIM {
 	uint outform, boutform, gout;   /*Output type. Fluid properties or Research.*/
 	uint framecount;                /*How many frames have been output*/
 	vector<size_t> back;            /*Particles at the back of the pipe*/
+	uint iter;                      /*Current iteration number to renormalise*/
 
 	std::string infolder, outfolder, outdir;
 	std::string meshfile, bmapfile, solfile;
@@ -203,14 +204,16 @@ typedef struct SIM {
 typedef struct FLUID {
 	real Hfac;
 	real H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
+	real Wdx;                   /*Kernel value at the initial particle spacing distance.*/
 	real rho0, rhoJ; 			/*Resting Fluid density*/
 	real pPress;		/*Starting pressure in pipe*/
 	
 	real simM, bndM;			/*Particle and boundary masses*/
 	real correc;				/*Smoothing Kernel Correction*/
-	real alpha,Cs,mu;		    /*}*/
+	real alpha,Cs,mu,nu;		/*}*/
 	real sig;					/* Fluid properties*/
 	real gam, B; 				/*}*/
+	real artMu;					/*Artificial viscosity*/
 	// real mug;
 	// real rhog;
 	
@@ -222,6 +225,8 @@ typedef struct FLUID {
 	real delta; /*delta-SPH contribution*/
 	real dCont; /*delta-SPH continuity constant term, since density and speed of sound are constant*/
 	real dMom;  /*delta-SPH momentum constant term (dCont * rho0)*/
+
+	real maxU; /*Maximum particle velocity shift*/
 }FLUID;
 
 /*Aerodynamic Properties*/
@@ -240,33 +245,37 @@ typedef class AERO
 			nfull = 28;
 #endif
 		}
-		real L;							/*Gissler Parameters*/
-		real td;							/* }*/
-		real omega;						/* }*/
-		real tmax;						/* }*/
-		real ycoef;						/* }*/
-		real woccl;						/* }*/
-		real Cf, Ck, Cd, Cb, Cdef;		/* }*/
-		real nfull;						/* }*/
 
-		real pVol;                     // Volume of a particle
-		real aPlate;                    /*Area of a plate*/
+			/*Gissler Parameters*/
+		real L;
+		real td;
+		real omega;
+		real tmax;
+		real ycoef;
+		real woccl;
+		real Cf, Ck, Cd, Cb, Cdef;
+		real nfull;
 
-					/* Gas Properties*/
-		real qInf, vRef, pRef;      /*Reference gas values*/
+		real pVol;                     /*Volume of a particle*/
+		real aPlate;                   /*Area of a plate*/
+
+			/* Gas Properties*/
+		real qInf, vRef, pRef;         /*Reference gas values*/
 		real rhog, mug;
-		real gasM;					/*A gas particle mass*/
-		real T;						/*Temperature*/
-		real Rgas;                  /*Specific gas constant*/
+		real gasM;					   /*A gas particle mass*/
+		real T;						   /*Temperature*/
+		real Rgas;                     /*Specific gas constant*/
 
-		int acase;	                        /*Aerodynamic force case*/
-		StateVecD vJet, vInf;               /*Jet + Freestream velocity*/
+		int acase;	                   /*Aerodynamic force case*/
+		StateVecD vJet, vInf;          /*Jet + Freestream velocity*/
+		real vJetMag;
+		real dPipe;                    /*Pipe diameter*/
 		
-		real Acorrect;					/*Correction factor for aero force*/
-		real a;                          /*Case 3 tuning parameters*/
-		real b;                          /*}*/
-		real h1;                         /*}*/
-		real h2;                         /*}*/
+		real Acorrect;				   /*Correction factor for aero force*/
+		real a;                        /*Case 3 tuning parameters*/
+		real b;                        /*}*/
+		real h1;                       /*}*/
+		real h2;                       /*}*/
 }AERO;
 
 typedef struct MESH
@@ -307,11 +316,7 @@ typedef struct MESH
 	real scale;
 
 	/*Point based data*/
-	std::vector<StateVecD> verts;
-	// std::vector<StateVecD> pVel;
-	// std::vector<real> pointCp;
-	// std::vector<real> pointP;
-	// std::vector<real> pointRho;
+	vector<StateVecD> verts;
 
 	/*Face based data*/
 	vector<vector<size_t>> faces;
@@ -319,10 +324,8 @@ typedef struct MESH
 
 	/*Cell based data*/
 	vector<vector<size_t>> elems;
-	// vector<vector<StateVecD>> cVerts;
 	vector<StateVecD> cCentre;
 	vector<vector<size_t>> cFaces;
-	// vector<vector<size_t>> cNeighb;
 
 	/*Boundary data*/
 	vector<size_t> bIndex;
@@ -330,17 +333,17 @@ typedef struct MESH
 
 	/*Solution vectors*/
 	vector<StateVecD> cVel;
-	
 	vector<real> cCp;
 	vector<real> cP;
-
+	vector<real> cMass;
+	vector<real> cRho;
+	
 	// Cell information for the momentum balance
 	vector<StateVecD> cPertn;
 	vector<StateVecD> cPertnp1;
 	vector<real> cVol;
 
-	vector<real> cMass;
-	vector<real> cRho;
+
 	vector<size_t> fNum; // number of fuel particles in cell
 	vector<real> fMass;
 
@@ -349,6 +352,74 @@ typedef struct MESH
 
 }MESH;
 
+/*Container for delta-plus SPH calculations*/
+typedef class DELTAP {
+	public: 
+		DELTAP(size_t const& size)
+		{
+			L = vector<StateMatD>(size,StateMatD::Zero());
+			gradRho = vector<StateVecD>(size,StateVecD::Zero());
+			norm = vector<StateVecD>(size,StateVecD::Zero());
+			avgV = vector<StateVecD>(size,StateVecD::Zero());
+			
+			lam = vector<real>(size,0.0);
+			lam_nb = vector<real>(size,0.0);
+			kernsum = vector<real>(size,0.0);
+		}
+
+		DELTAP(){}
+
+		void realloc(size_t const& size)
+		{
+			if(L.size() != 0)
+				clear();
+
+			alloc(size);
+		}
+
+		void update(vector<StateMatD> const& L_, vector<StateVecD> const& gradRho_, 
+			vector<StateVecD> const& norm_, vector<StateVecD> const& avgV_,
+			vector<real> const& lam_, vector<real> const& lam_nb_, 
+			vector<real> const& kernsum_)
+		{
+			L = L_; gradRho = gradRho_; norm = norm_; 
+			avgV = avgV_; lam = lam_; lam_nb = lam_nb_;
+			kernsum = kernsum_;
+		}
+
+		void clear()
+		{
+			L.clear(); gradRho.clear(); norm.clear(); 
+			avgV.clear(); lam.clear(); lam_nb.clear();
+			kernsum.clear();
+
+		}
+
+		vector<StateMatD> L;
+		vector<StateVecD> gradRho;
+		vector<StateVecD> norm;
+		vector<StateVecD> avgV;
+
+		vector<real> lam, lam_nb;
+		vector<real> kernsum;
+
+
+	private:
+
+		void alloc(size_t const& size)
+		{
+			L = vector<StateMatD>(size);
+			gradRho = vector<StateVecD>(size);
+			norm = vector<StateVecD>(size);
+			avgV = vector<StateVecD>(size);
+			lam = vector<real>(size);
+			lam_nb = vector<real>(size);
+			kernsum = vector<real>(size);
+		}
+
+
+}DELTAP;
+
 /*Particle data class*/
 typedef class Particle {
 	public:
@@ -356,42 +427,39 @@ typedef class Particle {
 		Particle(StateVecD const& X, StateVecD const& Vi, real const Rhoi, real const Mi, 
 			real const press, int const bound, uint const pID)
 		{
-			xi = X;	v = Vi; 
-			rho = Rhoi; m = Mi; b = bound;
-			partID = pID;
-			f = StateVecD::Zero();
-			Sf = StateVecD::Zero(); 
-			Af = StateVecD::Zero();
-			normal = StateVecD::Zero();
-			vPert = StateVecD::Zero();
-			p = press;
-			Rrho = 0.0;
-			theta = 0.0;
+			partID = pID; cellID = 0; faceID = 0;
+			b = bound; surf = 0;
+
+			xi = X;	v = Vi; f = StateVecD::Zero(); Af = StateVecD::Zero();
+			Rrho = 0.0; rho = Rhoi; p = press; m = Mi; curve = 0.0;
+			theta = 0.0; nNeigb = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0;
+						
 			cellV = StateVecD::Zero();
-			cellID = 0;
-			faceID = 0;
 			cellP = 0.0;
 			internal = 0;
 
+			Sf = StateVecD::Zero();
+			normal = StateVecD::Zero();
+			vPert = StateVecD::Zero(); 
 		}
 
 		/*To add particles dynamically for boundary layer*/
 		Particle(StateVecD const& X, Particle const& pj, size_t const pID, int const bound)
 		{
-			xi = X;	v = pj.v; 
-			rho = pj.rho; m = pj.m; b = bound;
-			partID = pID;
-			f = StateVecD::Zero();
-			Sf = StateVecD::Zero(); 
-			Af = StateVecD::Zero();
-			normal = StateVecD::Zero();
-			p = pj.p;
-			Rrho = 0.0;
-			theta = 0.0;
+			partID = pID; cellID = 0; faceID = 0;
+			b = bound; surf = 0;
+
+			xi = X;	v = pj.v; f = StateVecD::Zero(); Af = StateVecD::Zero();
+			Rrho = 0.0; rho = pj.rho; p = pj.p; m = pj.m; curve = 0.0;
+			theta = 0.0; nNeigb = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0;
+
 			cellV = StateVecD::Zero();
-			cellID = 0;
 			cellP = 0.0;
-			internal = 0.0;
+			internal = 0;
+
+			Sf = StateVecD::Zero();
+			normal = StateVecD::Zero();
+			vPert = StateVecD::Zero();
 		}
 
 		Particle(){};
@@ -407,12 +475,15 @@ typedef class Particle {
 		}
 
 		size_t partID, cellID, faceID;
-		uint b; //What state is a particle. Boundary, forced particle or unforced
+		uint b; //What state is a particle. See PartState above for possible options
+		uint surf; /*Is a particle a surface? 1 = yes, 0 = no*/
 		StateVecD xi, v, f, Af;
-		real Rrho, rho, p, m, theta, nNeigb, surf;
+		real Rrho, rho, p, m, curve, theta, nNeigb, s, woccl, pDist;
 		StateVecD cellV;
 		real cellP;
 		uint internal; 
+
+		/*Mesh surface repulsion */
 		StateVecD bNorm;
 		real y;
 		
@@ -426,7 +497,9 @@ typedef class Part {
 		{
 			xi = pi.xi; v = pi.v; Sf = pi.Sf;
 			normal = pi.normal;	vPert = pi.vPert;
-			rho = pi.rho; p = pi.p;	m = pi.m; b = pi.b;
+			rho = pi.rho; p = pi.p;	m = pi.m; curve = pi.curve;
+			woccl = pi.woccl; pDist = pi.pDist;
+			b = pi.b; surf = pi.surf;
 			cellV = pi.cellV;
 			partID = pi.partID;
 			cellID = pi.cellID;
@@ -448,6 +521,9 @@ typedef class Part {
 			partID = pID;
 			cellV = StateVecD::Zero();
 			cellP = 0.0;
+			surf = 0;
+			internal = 0;
+
 		}
 
 		int size() const
@@ -462,8 +538,11 @@ typedef class Part {
 
 		void operator=(Particle const& pi)
 		{
-			xi = pi.xi; v = pi.v; Sf = pi.Sf; vPert = pi.vPert;
-			rho = pi.rho;	p = pi.p;	m = pi.m;	b = pi.b;
+			xi = pi.xi; v = pi.v; Sf = pi.Sf; 
+			normal = pi.normal; vPert = pi.vPert;
+			rho = pi.rho;	p = pi.p; m = pi.m; curve = pi.curve;
+			woccl = pi.woccl; pDist = pi.pDist; 
+			b = pi.b; surf = pi.surf;
 			cellV = pi.cellV;
 			partID = pi.partID;
 			cellID = pi.cellID;
@@ -474,8 +553,8 @@ typedef class Part {
 		}
 
 		StateVecD xi, v, Sf, normal, vPert;
-		real rho, p, m;
-		uint b; //What state is a particle. Boundary, forced particle or unforced, or air
+		real rho, p, m, curve, woccl, pDist;
+		uint b, surf; //What state is a particle.
 		StateVecD cellV;
 		size_t partID, cellID/*, faceID*/;
 		real cellP;
@@ -511,9 +590,11 @@ typedef struct KDTREE
 {
 	KDTREE(State const& pnp1, MESH const& cells): NP1(SIMDIM,pnp1,20), 
 	CELL(SIMDIM,cells.cCentre,20), BOUNDARY(SIMDIM,cells.bVerts,20) {}
+
 	Sim_Tree NP1;
 	Vec_Tree CELL;
 	Vec_Tree BOUNDARY;	
+
 }KDTREE;
 
 #endif /* VAR_H */

@@ -18,7 +18,7 @@
 #include "Add.h"
 #include "Resid.h"
 #include "Crossing.h"
-#include "Newmark_Beta.h"
+#include "Integration.h"
 
 using namespace std::chrono;
 using namespace nanoflann;
@@ -82,6 +82,7 @@ int main(int argc, char *argv[])
 	State pn;	    /*Particles at n   */
 	State pnp1; 	/*Particles at n+1 */
 	State airP;
+	DELTAP dp;
 
 	if(svar.Bcase == 2 || svar.Bcase == 3)
 	{
@@ -128,14 +129,14 @@ int main(int argc, char *argv[])
 	}
 	
 	cout << "Starting counts: " << endl;
-	cout << "Boundary: " << svar.bndPts << "  Sim: " << svar.simPts << endl;
+	cout << "Boundary: " << svar.bndPts << "  Sim: " << svar.simPts << endl << endl;
 	
 	///********* Tree algorithm stuff ************/
 	KDTREE TREE(pnp1,cells);
 	// Sim_Tree NP1_INDEX(SIMDIM,pnp1,20);
+	
 	TREE.CELL.index->buildIndex();
 	TREE.NP1.index->buildIndex();
-
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
 	
@@ -153,7 +154,13 @@ int main(int argc, char *argv[])
 
 	///*** Perform an iteration to populate the vectors *****/
 	if(svar.restart == 0)
-		First_Step(TREE,svar,fvar,avar,cells,outlist,pnp1,pn,airP);
+		First_Step(TREE,svar,fvar,avar,cells,outlist,dp,pnp1,pn,airP);
+	else
+	{
+		size_t const start = svar.bndPts;
+		size_t const end = svar.totPts;
+		dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
+	}
 
 	///*************** Open simulation files ***************/
 	std::fstream f1,f2,f3,fb,fg;
@@ -167,7 +174,7 @@ int main(int argc, char *argv[])
 	f1 << std::scientific << std::setprecision(6);
 	f3 << std::scientific << std::setw(10);
 
-	pertLog << std::scientific << std::setprecision(8);
+	// pertLog << std::scientific << std::setprecision(8);
 	uint ghost_strand = 0;
 	if(svar.boutform == 0)
 		ghost_strand = 2;
@@ -184,6 +191,7 @@ int main(int argc, char *argv[])
 			real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
 			real r = 0.5*holeD;
 #if SIMDIM == 3
+			real stepb = (svar.Pstep*svar.Bstep);
 	    	real dtheta = atan((stepb)/(r));
 			for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 			{
@@ -191,25 +199,23 @@ int main(int argc, char *argv[])
 				/*Apply Rotation...*/
 				xi = svar.Rotate*xi;
 				xi += svar.Start;
-			    if(!Check_Pipe(TREE.CELL, cells, xi))
+			    if(!Check_Pipe(svar,TREE.CELL, cells, xi))
 			    {
 
 			    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
 			    	cout << "Fuel will be excessively close to begin." << endl;
 			    	exit(-1);
 			    }
-
 	    	}
 #else
 	    	for(real x = -r; x <= r; x+=svar.Pstep)
 	    	{
-
 	    		StateVecD xi(x,0.0);
 	    		xi = svar.Rotate*xi;
 				xi += svar.Start;
 
 				// cout << "Checking point: " << xi(0) << "  " << xi(1) << endl;
-			    if(!Check_Pipe(TREE.CELL, cells, xi))
+			    if(!Check_Pipe(svar,TREE.CELL, cells, xi))
 			    {
 			    	cout << "Some of the pipe is outside of the simulation mesh." << endl;
 			    	cout << "Fuel will be excessively close to begin." << endl;
@@ -271,27 +277,26 @@ int main(int argc, char *argv[])
 
 	
 
-	for (uint frame = svar.frame+1; frame <= svar.Nframe; ++frame)
+	for (uint frame = 0; frame < svar.Nframe; ++frame)
 	{
 		int stepits=0;
 		real stept=0.0;
 		
 		while (stept+ MERROR <svar.framet)
 		{
-		    error = Newmark_Beta(TREE,svar,fvar,avar,cells,pn,pnp1,airP,outlist);
+		    error = Integrate(TREE,svar,fvar,avar,cells,dp,pn,pnp1,airP,outlist);
 		    stept+=svar.dt;
 		    ++stepits;
+		    svar.iter++;
 		}
 		++svar.frame;
-
-		// Find_MinMax(svar,pnp1);		
 
 		t2= high_resolution_clock::now();
 		duration = duration_cast<microseconds>(t2-t1).count()/1e6;
 
-		/*Write each frame info to file (Useful to debug for example)*/
+		/*Write each frame info to file*/
 		f2 << endl;
-		f2 << "Frame: " << frame << endl;
+		f2 << "Frame: " << svar.frame << endl;
 
 		f2 << "Total Points: " << svar.totPts << " Boundary Points: " << svar.bndPts 
 			<< " Fluid Points: " << svar.simPts << endl;
@@ -304,7 +309,7 @@ int main(int argc, char *argv[])
 		{
 			if (frame % svar.outframe == 0 )
 			{	/*Output to console every 20 or so steps*/
-			  	cout << "Frame: " << frame << "  Sim Time: " << svar.t << "  Compute Time: "
+			  	cout << "Frame: " << svar.frame << "  Sim Time: " << svar.t << "  Compute Time: "
 			  	<< duration <<"  Error: " << error << endl;
 			  	cout << "Boundary particles:  " << svar.bndPts << " Sim particles: " << svar.totPts-svar.bndPts
 			  	<< " Deleted particles: " << svar.delNum << " Internal collisions: " << svar.intNum <<  endl;
@@ -332,20 +337,42 @@ int main(int argc, char *argv[])
 	if (fg.is_open())
 		fg.close();
 	
+	// if(svar.outtype == 0)
+	// {
+	// 	if(tecFileWriterClose(&svar.fuelFile))
+	// 		exit(-1);
+
+	// 	if(svar.boutform == 1)
+	// 		if(tecFileWriterClose(&svar.boundFile))
+	// 			exit(-1);
+
+	// 	if(svar.gout == 1)
+	// 		if(tecFileWriterClose(&svar.ghostFile))
+	// 			exit(-1);
+	// }
+
 	if(svar.outtype == 0)
 	{
-		if(tecFileWriterClose(&svar.fuelFile))
-			exit(-1);
+		/*Combine the szplt files*/
+
+		string outfile = svar.outfolder;
+		outfile.append("Fuel.szplt");
+		Combine_SZPLT(outfile);
 
 		if(svar.boutform == 1)
-			if(tecFileWriterClose(&svar.boundFile))
-				exit(-1);
+		{
+			outfile = svar.outfolder;
+			outfile.append("Boundary.szplt");
+			Combine_SZPLT(outfile);
+		}
 
 		if(svar.gout == 1)
-			if(tecFileWriterClose(&svar.ghostFile))
-				exit(-1);
+		{
+			outfile = svar.outfolder;
+			outfile.append("Ghost.szplt");
+			Combine_SZPLT(outfile);
+		}
 	}
-
 	
 	cout << "Simulation complete!" << endl;
     cout << "Time taken:\t" << duration << " seconds" << endl;

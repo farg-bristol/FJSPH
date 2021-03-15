@@ -1,4 +1,4 @@
-5e-06                              #Frame time interval
+1e-05                              #Frame time interval
 2000                                 #Number of frames
 1                                #Output frame info
 0                                 #Output data type
@@ -6,18 +6,18 @@
 1                             #Boundary time output
 0                            #Ghost particle output
 20                           #Maximum sub iterations
-1000000                      #Maximum number of particles
+2000000                      #Maximum number of particles
 500                        #Post processing mesh size
 0.0005                   #Post processing support radius
-6.28924e-05                         #Particle initial spacing
+0.000112141                         #Particle initial spacing
 0.7                          #Boundary spacing factor
 3                                    #Boundary case
 0                               #Aerodynamic source
-4                                 #Aerodynamic case
+5                                 #Aerodynamic case
 0                                 #Ghost particles?
-0 0 0                             #Fluid start position
-0 0 0  #Fluid start rotation
-0.0008 0.0008                                   #Jet dimensions
+0 0                             #Fluid start position
+0 0  #Fluid start rotation
+0.008 0.008                                   #Jet dimensions
 68950                                    #Pipe Pressure
 33.6                                     #Jet velocity
-128.5 0 0  #Freestream velocity
+128.5 0  #Freestream velocity

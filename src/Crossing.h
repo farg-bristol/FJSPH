@@ -8,7 +8,7 @@
 
 
 // #ifdef DEBUG
-void Write_Containment(vector<size_t> const& ret_indexes, MESH const& cells, StateVecD const& testp)
+void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH const& cells, StateVecD const& testp)
 {
     cout << "Search size: " << ret_indexes.size() << endl;
     vector<StateVecD> const& verts = cells.verts;
@@ -136,8 +136,12 @@ void Write_Containment(vector<size_t> const& ret_indexes, MESH const& cells, Sta
 
     }    
     cout << "Face intersections: " << intersects << endl;
+    string fout = svar.outfolder;
+    fout.append("FailedCellContainment.dat");
 
-    std::ofstream f1("FailedCellContainment.dat",std::ios::out);
+    cout << "Writing to file: " << fout << endl;
+
+    std::ofstream f1(fout,std::ios::out);
     f1 << "VARIABLES= \"X\", \"Y\", \"Z\"" << endl;
     f1 << "ZONE T=\"Test Point\", I=1, F=POINT" << endl;
     uint w = 25;
@@ -274,7 +278,12 @@ void Write_Containment(vector<size_t> const& ret_indexes, MESH const& cells, Sta
     cout << "Intersect? " << inside_flag << endl;
     
 
-    std::ofstream f1("FailedCellContainment.dat",std::ios::out);
+    string fout = svar.outfolder;
+    fout.append("FailedCellContainment.dat");
+
+    cout << "Writing to file: " << fout << endl;
+
+    std::ofstream f1(fout,std::ios::out);
     f1 << "VARIABLES= \"X\", \"Z\"" << endl;
     f1 << "ZONE T=\"Test Point\", I=1, F=POINT" << endl;
     uint w = 25;
@@ -378,7 +387,7 @@ uint CheckCell(size_t const& cell, MESH const& cells, StateVecD const& testp, ui
     return inside_flag;
 }
 
-uint Check_Pipe(Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& xi)
+uint Check_Pipe(SIM const& svar, Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& xi)
 {
     StateVecD testp = xi;
     const size_t num_results = 100;
@@ -423,7 +432,7 @@ uint Check_Pipe(Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& xi)
     if(inside_flag == FALSE)
     {
         cout << "Containing cell not found..." << endl;
-        Write_Containment(ret_indexes, cells, testp);
+        Write_Containment(svar,ret_indexes, cells, testp);
     }
 
     return inside_flag;
@@ -432,7 +441,7 @@ uint Check_Pipe(Vec_Tree& CELL_INDEX, const MESH& cells, const StateVecD& xi)
 
 
 
-void FirstCell(SIM& svar, size_t end, uint const ii, Vec_Tree& CELL_INDEX,
+void FirstCell(SIM& svar, size_t end, uint const ii, Vec_Tree const& CELL_INDEX,
      MESH const& cells, State& pnp1, State& pn)
 {
 
@@ -581,7 +590,7 @@ void FirstCell(SIM& svar, size_t end, uint const ii, Vec_Tree& CELL_INDEX,
             #pragma omp single
             {
                 cout << "First containing cell not found. Something is wrong." << endl;
-                Write_Containment(ret_indexes,cells,testp);
+                Write_Containment(svar,ret_indexes,cells,testp);
                 exit(-1);
             }
         }
@@ -804,9 +813,12 @@ void FindCell(SIM& svar, real const sr, KDTREE& TREE, MESH& cells, State& pnp1, 
 
                     if(cross == 0)
                     {
-                        cout << "Particle containing cell not found. Something is wrong." << endl;
-                        Write_Containment(ret_indexes,cells,testp);
-                        exit(-1);
+                        #pragma omp critical
+                        {
+                            cout << "Particle " << ii-start << " containing cell not found. Something is wrong." << endl;
+                            Write_Containment(svar,ret_indexes,cells,testp);
+                            exit(-1);
+                        }
                     }
                 }
             }
@@ -818,7 +830,7 @@ void FindCell(SIM& svar, real const sr, KDTREE& TREE, MESH& cells, State& pnp1, 
     for(int ii=0; ii<omp_get_num_threads(); ii++)
     {
         #pragma omp ordered
-        toDelete.insert(toDelete.end(),localDel.begin(),localDel.end());
+            toDelete.insert(toDelete.end(),localDel.begin(),localDel.end());
     }
 
 

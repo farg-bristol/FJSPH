@@ -7,7 +7,7 @@
 #include "Var.h"
 
 ///**************** Update neighbour list **************
-void FindNeighbours(const Sim_Tree& NP1_INDEX, const FLUID& fvar, const State& pnp1, outl& outlist)
+void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, State const& pnp1, outl& outlist)
 {
 	const nanoflann::SearchParams params(0,0,false);
 	const real search_radius = fvar.sr;
@@ -49,7 +49,7 @@ void FindNeighbours(const Sim_Tree& NP1_INDEX, const FLUID& fvar, const State& p
 	}
 }
 
-void FindCellNeighbours(const Vec_Tree& CELL_INDEX, const vector<StateVecD>& cells, outl& outlist)
+void FindCellNeighbours(Vec_Tree const& CELL_INDEX, vector<StateVecD> const& cells, outl& outlist)
 {
 	
 	#if SIMDIM == 3

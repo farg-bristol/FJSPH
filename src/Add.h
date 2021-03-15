@@ -5,30 +5,21 @@
 #define CROSS_H
 
 #include "Var.h"
+#include "IOFunctions.h"
 #include <random>
 #include <stdint.h>
 #include <time.h>
 
-// #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-// #include <CGAL/Triangulation_3.h>
-
-// // #include <iostream>
-// // #include <fstream>
-// // #include <cassert>
-// // #include <list>
-// // #include <vector>
-
-// typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-// typedef CGAL::Triangulation_3<K>      Triangulation;
-// typedef Triangulation::Cell_handle    Cell_handle;
-// typedef Triangulation::Vertex_handle  Vertex_handle;
-// typedef Triangulation::Locate_type    Locate_type;
-// typedef Triangulation::Point          Point;
-
 using std::cout;
 using std::endl;
 
-void AddPoints(const real y, SIM &svar, const FLUID &fvar, const AERO &avar, State &pn, State &pnp1)
+StateVecD getVelocity(StateVecD const& vavg, real const& zsq, real const& r)
+{
+	// return 1.092*vavg*(1.25-(zsq)/(r*r));
+	return vavg;
+}
+
+void AddPoints(const real y, SIM &svar, const FLUID &fvar, const AERO &avar, State &pn, State &pnp1, size_t const& pState)
 {	
 	// cout << "Adding points..." << endl;
 	uint pID = svar.totPts;
@@ -59,9 +50,9 @@ void AddPoints(const real y, SIM &svar, const FLUID &fvar, const AERO &avar, Sta
 		StateVecD xi(0.0,y,0.0);
 		xi = svar.Rotate*xi;
 		xi += svar.Start;
-		StateVecD v = vavg*2;
-		pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
-		pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
+		StateVecD v = getVelocity(vavg,0.0,r);
+		pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
+		pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
 		++pID;
 		++svar.simPts;
 		++svar.nrefresh;
@@ -71,9 +62,9 @@ void AddPoints(const real y, SIM &svar, const FLUID &fvar, const AERO &avar, Sta
 			StateVecD xi(0.0,y,z);
 			xi = svar.Rotate*xi;
 			xi += svar.Start;
-			StateVecD v = vavg*2*(1-(z*z)/(r*r));
-			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
-			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
+			StateVecD v = getVelocity(vavg,z*z,r);
+			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
+			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
 			++pID;
 			++svar.simPts;
 			++svar.nrefresh;
@@ -84,9 +75,9 @@ void AddPoints(const real y, SIM &svar, const FLUID &fvar, const AERO &avar, Sta
 			StateVecD xi(0.0,y,z);
 			xi = svar.Rotate*xi;
 			xi += svar.Start;
-			StateVecD v = vavg*2*(1-(z*z)/(r*r));
-			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
-			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
+			StateVecD v = getVelocity(vavg,z*z,r);
+			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
+			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
 			++pID;
 			++svar.simPts;
 			++svar.nrefresh;
@@ -97,9 +88,9 @@ void AddPoints(const real y, SIM &svar, const FLUID &fvar, const AERO &avar, Sta
 			StateVecD xi(x,y,0.0);
 			xi = svar.Rotate*xi;
 			xi += svar.Start;
-			StateVecD v = vavg*2*(1-(x*x)/(r*r));
-			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
-			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
+			StateVecD v = getVelocity(vavg,x*x,r);
+			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
+			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
 			++pID;
 			++svar.simPts;
 			++svar.nrefresh;
@@ -110,9 +101,9 @@ void AddPoints(const real y, SIM &svar, const FLUID &fvar, const AERO &avar, Sta
 			StateVecD xi(x,y,0.0);
 			xi = svar.Rotate*xi;
 			xi += svar.Start;
-			StateVecD v = vavg*2*(1-(x*x)/(r*r));
-			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
-			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
+			StateVecD v = getVelocity(vavg,x*x,r);
+			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
+			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
 			++pID;
 			++svar.simPts;
 			++svar.nrefresh;
@@ -127,30 +118,30 @@ void AddPoints(const real y, SIM &svar, const FLUID &fvar, const AERO &avar, Sta
 					StateVecD temp(x,y,z);
 					StateVecD xi = svar.Rotate*temp;
 					xi+= svar.Start;
-					StateVecD v = vavg*2*(1-(z*z+x*x)/(r*r));
-					pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
-					pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
+					StateVecD v = getVelocity(vavg,(z*z+x*x),r);
+					pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
+					pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
 					++pID;
 
 					temp(0) = -x;
 					xi = svar.Rotate*temp;
 					xi+= svar.Start;
-					pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
-					pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
+					pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
+					pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
 					++pID;
 
 					temp(2) = -z;
 					xi = svar.Rotate*temp;
 					xi+= svar.Start;
-					pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
-					pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
+					pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
+					pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
 					++pID;
 
 					temp(0) = x;
 					xi = svar.Rotate*temp;
 					xi+= svar.Start;
-					pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
-					pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
+					pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
+					pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
 					++pID;
 					svar.simPts+=4;
 					svar.nrefresh+=4;
@@ -163,9 +154,9 @@ void AddPoints(const real y, SIM &svar, const FLUID &fvar, const AERO &avar, Sta
 		StateVecD xi1(0,y);
 		xi1 = svar.Rotate*xi1;
 		xi1 += svar.Start;
-		StateVecD v1 = vavg*2;
-		pn.emplace_back(Particle(xi1,v1,rho,fvar.simM,press,PartState.START_,pID));
-		pnp1.emplace_back(Particle(xi1,v1,rho,fvar.simM,press,PartState.START_,pID));
+		StateVecD v1 = getVelocity(vavg,0.0,r);
+		pn.emplace_back(Particle(xi1,v1,rho,fvar.simM,press,pState,pID));
+		pnp1.emplace_back(Particle(xi1,v1,rho,fvar.simM,press,pState,pID));
 		++pID;
 		++svar.simPts;
 		++svar.nrefresh;
@@ -176,9 +167,9 @@ void AddPoints(const real y, SIM &svar, const FLUID &fvar, const AERO &avar, Sta
 			StateVecD xi(x,y);
 			xi = svar.Rotate*xi;
 			xi += svar.Start;
-			StateVecD v = vavg*2*(1-(x*x)/(r*r));
-			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
-			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
+			StateVecD v = getVelocity(vavg,x*x,r);
+			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
+			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
 			++pID;
 			++svar.simPts;
 			++svar.nrefresh;
@@ -186,8 +177,8 @@ void AddPoints(const real y, SIM &svar, const FLUID &fvar, const AERO &avar, Sta
 			xi = StateVecD(-x,y);
 			xi = svar.Rotate*xi;
 			xi += svar.Start;
-			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
-			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.START_,pID));
+			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
+			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,pState,pID));
 			++pID;
 			++svar.simPts;
 			++svar.nrefresh;
@@ -209,7 +200,7 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 	real press = fvar.pPress;
 	// real press = 0.0;
 	svar.nrefresh = 0;	
-	real radius = 0.5*svar.Jet(0);
+	real radius = 0.500001*svar.Jet(0);
 
 #if SIMDIM == 3
 		
@@ -417,11 +408,17 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 			}
 		}
 #else
+		/*Want to perturb points on the order of machine error */
+		int const interval = 2000;
 		for (real y = 0; y <= radius; y+=svar.dx)
 		{	
 			/*Do the centerline of points*/
+			srand(time(NULL));
+			StateVecD perturb((rand()%interval-interval/2) * MERROR, (rand()%interval-interval/2) * MERROR);
+			
 			StateVecD xi(0.0,y);
-			xi = svar.Rotate*xi;
+			
+			xi = svar.Rotate*(xi+perturb);
 			xi += svar.Start;
 			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.FREE_,pID));
 			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.FREE_,pID));
@@ -433,8 +430,11 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 			{ /*Do the either side of the centerline*/
 				if(((x*x) + (y*y)) <= (radius*radius) )
 	    		{   /*If the point is inside the hole diameter, add it*/
+	    			srand(time(NULL));
+					StateVecD perturb2((rand()%interval-interval/2) * MERROR, (rand()%interval-interval/2) * MERROR);
+
 					StateVecD xi2(x,y);
-					xi2 = svar.Rotate*xi2;
+					xi2 = svar.Rotate*(xi2+perturb2);
 					xi2 += svar.Start;
 					pn.emplace_back(Particle(xi2,v,rho,fvar.simM,press,PartState.FREE_,pID));
 					pnp1.emplace_back(Particle(xi2,v,rho,fvar.simM,press,PartState.FREE_,pID));
@@ -442,8 +442,9 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 					++svar.simPts;
 					++svar.nrefresh;
 
+					perturb2 = StateVecD((rand()%interval-interval/2) * MERROR, (rand()%interval-interval/2) * MERROR);
 					xi2 = StateVecD(-x,y);
-					xi2 = svar.Rotate*xi2;
+					xi2 = svar.Rotate*(xi2+perturb2);
 					xi2 += svar.Start;
 					pn.emplace_back(Particle(xi2,v,rho,fvar.simM,press,PartState.FREE_,pID));
 					pnp1.emplace_back(Particle(xi2,v,rho,fvar.simM,press,PartState.FREE_,pID));
@@ -457,8 +458,11 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 		for (real y = -svar.dx; y >= -radius; y-=svar.dx)
 		{	
 			/*Do the centerline of points*/
+			srand(time(NULL));
+			StateVecD perturb((rand()%interval-interval/2) * MERROR, (rand()%interval-interval/2) * MERROR);
+
 			StateVecD xi(0.0,y);
-			xi = svar.Rotate*xi;
+			xi = svar.Rotate*(xi+perturb);
 			xi += svar.Start;
 			pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.FREE_,pID));
 			pnp1.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.FREE_,pID));
@@ -470,8 +474,11 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 			{ /*Do the either side of the centerline*/
 				if(((x*x) + (y*y)) <= (radius*radius) )
 	    		{   /*If the point is inside the hole diameter, add it*/
+					srand(time(NULL));
+					StateVecD perturb2((rand()%interval-interval/2) * MERROR, (rand()%interval-interval/2) * MERROR);
+
 					StateVecD xi2(x,y);
-					xi2 = svar.Rotate*xi2;
+					xi2 = svar.Rotate*(xi2+perturb2);
 					xi2 += svar.Start;
 					pn.emplace_back(Particle(xi2,v,rho,fvar.simM,press,PartState.FREE_,pID));
 					pnp1.emplace_back(Particle(xi2,v,rho,fvar.simM,press,PartState.FREE_,pID));
@@ -479,8 +486,9 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 					++svar.simPts;
 					++svar.nrefresh;
 
+					perturb2 = StateVecD((rand()%interval-interval/2) * MERROR, (rand()%interval-interval/2) * MERROR);
 					xi2 = StateVecD(-x,y);
-					xi2 = svar.Rotate*xi2;
+					xi2 = svar.Rotate*(xi2+perturb2);
 					xi2 += svar.Start;
 					pn.emplace_back(Particle(xi2,v,rho,fvar.simM,press,PartState.FREE_,pID));
 					pnp1.emplace_back(Particle(xi2,v,rho,fvar.simM,press,PartState.FREE_,pID));
@@ -894,8 +902,8 @@ namespace PoissonSample
 		Return a vector of generated points
 		sampleLimit - refer to bridson-siggraph07-poissondisk.pdf for details (the value 'k')
 	**/
-	std::vector<Part> generatePoissonPoints(SIM& svar, FLUID const& fvar, AERO const& avar, const uint& host, 
-			State& pnp1, outl const& outlist)
+	std::vector<Part> generatePoissonPoints(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
+	 uint const& host, State const& pnp1, outl const& outlist, StateVecD const& norm, StateVecD const& avgV)
 	{
 		/*Variables for the poisson disk sampling*/
 		real radius = fvar.sr;
@@ -906,37 +914,58 @@ namespace PoissonSample
 
 		/*Properties for new particles*/
 		StateVecD vel= avar.vInf;
+		StateVecD Vdiff = StateVecD::Zero();
+		real Pbase = 0.0;
 		real press = 0;
 		real rho = fvar.rho0;
+
 		if(svar.Asource == 1)
 		{
-			press = pnp1[host].cellP;
 			vel = pnp1[host].cellV;
-			rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
+			Vdiff =  vel - avgV;
+			Pbase = pnp1[host].cellP - avar.pRef;
 		}
 		else if (svar.Asource == 2)
 		{
-			press = pnp1[host].cellP;
-			vel = pnp1[host].cellV;
-			rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
+			vel = (pnp1[host].cellV+cells.cPertnp1[pnp1[host].cellID]);
+			Vdiff =  vel - /*pi.v*/ avgV;
+			Pbase = pnp1[host].cellP - avar.pRef;
 		}
 #if SIMDIM == 3
 		else if(svar.Asource == 3)
 		{	
-			real Vel = svar.vortex.getVelocity(pnp1[host].xi).norm();
-			press = 0.5*avar.rhog*
-				(pow(avar.vRef,2.0)-pow(Vel,2.0));
-			rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
+			vel = svar.vortex.getVelocity(pnp1[host].xi);
+			Vdiff = vel - avgV;
+			Pbase = 0.5*avar.rhog*(pow(avar.vRef,2.0)-pow(vel.norm(),2.0));
 		}
 #endif
 		else
 		{
-			press = /*fvar.gasPress +*/0.5*avar.rhog*(vel.squaredNorm()-pnp1[host].v.squaredNorm());
-			rho = fvar.rho0 * pow((press/fvar.B + 1),1/fvar.gam);
+			Vdiff = vel - avgV;
+			Pbase = 0.5*avar.rhog*Vdiff.squaredNorm();
 		}
+
+		real theta = acos(-norm.normalized().dot(Vdiff.normalized()));
+		
+		real Cp = 0.0;
+
+		if(abs(theta) < 2.4877)
+		{
+			Cp = 1.0 - 2.5*pow(sin(abs(theta)),2.0);
+		}
+		else
+		{
+			Cp = 0.075;
+		}
+
+
+		press = Pbase + 0.5*avar.rhog*Vdiff.squaredNorm()*Cp;
+		rho = fvar.rho0 * pow((press/fvar.B + 1.0),1.0/fvar.gam);
+
 
 		// const real rho = pnp1[host].cellRho;
 		// const real mass = fvar.rhog* pow(svar.Pstep, SIMDIM);
+
 		
 		const real mass = pnp1[host].m;
 

@@ -9,15 +9,15 @@
 80000                      #Maximum number of particles
 0.01                        #Post processing mesh size
 0.008                   #Post processing support radius
-0.000623784                         #Particle initial spacing
+0.000492348                         #Particle initial spacing
 0.7                          #Boundary spacing factor
 4                                    #Boundary case
 0                               #Aerodynamic source
-4                                 #Aerodynamic case
+5                                 #Aerodynamic case
 0                                 #Ghost particles?
-0.06 0.06 0.06                             #Fluid start position
-0 0 0  #Fluid start rotation
+0.06 0.06                             #Fluid start position
+0 0  #Fluid start rotation
 0.005 0.08                                   #Jet dimensions
 0                                    #Pipe Pressure
 0                                     #Jet velocity
-0 1.0775 0  #Freestream velocity
+0 1.0775  #Freestream velocity
