@@ -103,6 +103,7 @@ int main(int argc, char *argv[])
   	}
   	else
   	{
+	  	svar.t = 0.0;				/*Total simulation time*/
   		InitSPH(svar,fvar,avar,pn,pnp1);
 
   		// Redefine the mass and spacing to make sure the required mass is conserved
@@ -150,16 +151,21 @@ int main(int argc, char *argv[])
 	// svar.aMom = aMom;
 	// svar.tMom = aMom;
 
-
-
 	///*** Perform an iteration to populate the vectors *****/
 	if(svar.restart == 0)
+	{
 		First_Step(TREE,svar,fvar,avar,cells,outlist,dp,pnp1,pn,airP);
+	}
 	else
 	{
 		size_t const start = svar.bndPts;
 		size_t const end = svar.totPts;
 		dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
+
+		Detect_Surface(svar,fvar,avar,start,end,dp,outlist,cells,pnp1);
+
+		// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
+		Particle_Shift(svar,fvar,start,end,outlist,dp,pnp1);
 	}
 
 	///*************** Open simulation files ***************/
@@ -246,7 +252,7 @@ int main(int argc, char *argv[])
 
 	// pertLog << "Time,  Total Momentum,   Air Momentum,   Fuel Momentum,  Perturbation velocity magnitude" << endl;
 
-	if(svar.restart != 1)
+	if(svar.restart == 0)
 	{
 		f2 << "Frame: " << svar.frame << endl;
 		f2 << "Total Points: " << svar.totPts << " Boundary Points: " << svar.bndPts 
@@ -257,7 +263,7 @@ int main(int argc, char *argv[])
 		f2 << "Deleted particles: " << svar.delNum << " Internal collisions: " << svar.intNum <<  endl;
 
 		// Write a settings file in the solution folder.
-		Write_Input(svar,fvar,avar);
+		Write_Input_TECIO(svar,fvar,avar);
 	}
 
 	///************************* MAIN LOOP ********************/
@@ -274,8 +280,6 @@ int main(int argc, char *argv[])
 	dbout << "c: " << c << "  d: " << d << endl;
 	dbout << "B: " << B << "  gam: " << gam << endl << endl; 
 #endif
-
-	
 
 	for (uint frame = 0; frame < svar.Nframe; ++frame)
 	{

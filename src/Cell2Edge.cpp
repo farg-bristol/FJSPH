@@ -35,6 +35,8 @@ using std::cout;
 using std::endl;
 using std::string; 
 using std::setw;
+
+
 typedef struct FACE
 {
 	/*Standard contructor*/
@@ -112,6 +114,26 @@ std::ifstream& GotoLine(std::ifstream& file, unsigned int num)
     return file;
 }
 
+int Distance(vector<StateVecD> const& verts, std::pair<uint,uint> const& edge, uint const& point)
+{
+    real  ty, tx;
+    StateVecD vtx0, vtx1;
+
+    tx = verts[point](0);
+    ty = verts[point](1);
+
+    vtx0 = verts[edge.first];
+    vtx1 = verts[edge.second];
+
+    real dist = ((vtx1[0]-vtx0[0])*(ty-vtx0[1])-(tx-vtx0[0])*(vtx1[1]-vtx0[0]))
+    		/sqrt(pow((vtx1[0]-vtx0[0]),2) + pow((vtx1[1]-vtx0[1]),2));
+
+    if(dist > 0)
+    	return 1;
+    else
+    	return 0;
+}
+
 vector<int> Find_Bmap_Markers(const string& bmapIn, int& symPlane1, int& symPlane2)
 {
 	#ifdef DEBUG
@@ -183,7 +205,8 @@ vector<int> Find_Bmap_Markers(const string& bmapIn, int& symPlane1, int& symPlan
 				}
 			}
 		}
-		else if(line.find("Type: euler wall")!=string::npos || 
+		else if(line.find("Type: laminar wall")!=string::npos ||
+			line.find("Type: euler wall")!=string::npos || 
 			line.find("Type: viscous wall")!=string::npos ||
 			line.find("Type: sharp edge")!=string::npos)
 		{
@@ -1002,6 +1025,38 @@ void Write_griduns(const EDGE& edata)
 	cout << "Attempting write output file." << endl;
 	cout << "File: " << "griduns" << endl;
 	#endif
+
+	/*Establish edge orientation*/
+	/*Find an edge where cell left is common between two neighboring edges*/
+	int leftright = 0;
+	size_t jj = 0;
+	while(edata.celllr[jj].first != edata.celllr[jj+1].first)
+	{
+		jj++;
+	}
+
+	/*Share the same cell, so have three vertices to use to test*/
+	/*make sure the three points are unique*/
+	if(edata.edges[jj].first != edata.edges[jj+1].first)
+	{
+		if(edata.edges[jj].second != edata.edges[jj+1].first)
+		{
+			/*Have 3 unique points*/
+			leftright = Distance(edata.verts,edata.edges[jj],edata.edges[jj+1].first);
+		}
+		
+	}
+	else
+	{
+		if(edata.edges[jj].second != edata.edges[jj+1].second)
+		{
+			leftright = Distance(edata.verts,edata.edges[jj],edata.edges[jj+1].second);
+		}
+	}
+
+	/*If leftright = 0, then first cell is on the right*/
+
+
 	std::ofstream fout("griduns",std::ios::out);
 	if(!fout.is_open())
 	{
@@ -1015,28 +1070,54 @@ void Write_griduns(const EDGE& edata)
 
 	fout << std::setw(w) << edata.numElem << std::setw(w) << edata.numEdges << std::setw(w) << edata.numPoint << endl;
 
-	for(size_t ii = 0; ii < edata.edges.size(); ++ii)
-	{	/*Add 1 (for fortran bull) if not a boundary edge*/
-		
+	if(leftright == 1)
+	{
 
-		if(edata.celllr[ii].second == -1)
-		{
-			fout << std::setw(w) << edata.edges[ii].second+1 << std::setw(w) << edata.edges[ii].first+1;
-			fout << std::setw(w) << edata.celllr[ii].second << std::setw(w) << edata.celllr[ii].first+1;
+		for(size_t ii = 0; ii < edata.edges.size(); ++ii)
+		{	/*Add 1 (for fortran bull) if not a boundary edge*/
+			if(edata.celllr[ii].second == -1)
+			{
+				fout << std::setw(w) << edata.edges[ii].second+1 << std::setw(w) << edata.edges[ii].first+1;
+				fout << std::setw(w) << edata.celllr[ii].second << std::setw(w) << edata.celllr[ii].first+1;
+			}
+			else if (edata.celllr[ii].second == -2)
+			{
+				fout << std::setw(w) << edata.edges[ii].first+1 << std::setw(w) << edata.edges[ii].second+1;
+				fout << std::setw(w) << edata.celllr[ii].first+1 << std::setw(w) << edata.celllr[ii].second;
+			}
+			else
+			{
+				fout << std::setw(w) << edata.edges[ii].first+1 << std::setw(w) << edata.edges[ii].second+1;
+				fout << std::setw(w) << edata.celllr[ii].first+1 << std::setw(w) << edata.celllr[ii].second+1;
+			}
+		
+			 
+			fout << endl;
 		}
-		else if (edata.celllr[ii].second == -2)
-		{
-			fout << std::setw(w) << edata.edges[ii].first+1 << std::setw(w) << edata.edges[ii].second+1;
-			fout << std::setw(w) << edata.celllr[ii].first+1 << std::setw(w) << edata.celllr[ii].second;
+	}
+	else
+	{
+		for(size_t ii = 0; ii < edata.edges.size(); ++ii)
+		{	/*Add 1 (for fortran bull) if not a boundary edge*/
+			if(edata.celllr[ii].second == -1)
+			{
+				fout << std::setw(w) << edata.edges[ii].first+1 << std::setw(w) << edata.edges[ii].second+1;
+				fout << std::setw(w) << edata.celllr[ii].second << std::setw(w) << edata.celllr[ii].first+1;
+			}
+			else if (edata.celllr[ii].second == -2)
+			{
+				fout << std::setw(w) << edata.edges[ii].second+1 << std::setw(w) << edata.edges[ii].first+1;
+				fout << std::setw(w) << edata.celllr[ii].first+1 << std::setw(w) << edata.celllr[ii].second;
+			}
+			else
+			{
+				fout << std::setw(w) << edata.edges[ii].first+1 << std::setw(w) << edata.edges[ii].second+1;
+				fout << std::setw(w) << edata.celllr[ii].second+1 << std::setw(w) << edata.celllr[ii].first+1;
+			}
+		
+			 
+			fout << endl;
 		}
-		else
-		{
-			fout << std::setw(w) << edata.edges[ii].first+1 << std::setw(w) << edata.edges[ii].second+1;
-			fout << std::setw(w) << edata.celllr[ii].first+1 << std::setw(w) << edata.celllr[ii].second+1;
-		}
-	
-		 
-		fout << endl;
 	}
 
 	w = 17;

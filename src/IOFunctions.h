@@ -81,6 +81,8 @@ int Combine_SZPLT(string& file)
 	dbout << "Attempting to combine szplt." << endl;
 	dbout << "Command: " << cmd << endl;
 #endif
+
+	cout << "Combining szplt: " << file << endl;
 	if(system(cmd.c_str()))
 	{
     	cout << "Could not combine szplt file." << endl;
@@ -516,7 +518,7 @@ void CheckContents(void* const& inputHandle, SIM& svar, int32_t& numZones, doubl
 
     if(dataType!= svar.outform)
     {
-    	cout << "Data is different from that in the settings file." << endl;
+    	cout << "Data is different from that in the restfings file." << endl;
     	cout << "Changing to the file data type: " << dataType << endl;
     	svar.outform = dataType;
     	if(svar.outform == 2)
@@ -808,107 +810,6 @@ void GetYcoef(AERO& avar, const FLUID& fvar, const real diam)
 	avar.ycoef = 0.5*avar.Cdef*(avar.Cf/(avar.Ck*avar.Cb))*(avar.rhog*avar.L)/fvar.sig;
 
 	//cout << avar.ycoef << "  " << avar.Cdef << "  " << avar.tmax << "  " << endl;
-}
-
-void Write_Input(SIM const& svar, FLUID const& fvar, AERO const& avar)
-{
-	// Open the file.
-	string file = svar.outfolder;
-	file.append("Settings");
-	uint width = 50;
-	std::ofstream sett(file);
-
-	sett << svar.framet << setw(width) << "#Frame time interval" << endl;
-	sett << svar.Nframe << setw(width) << "#Number of frames" << endl;
-	sett << svar.outframe << setw(width) << "#Output frame info" << endl;
-	sett << svar.outtype << setw(width) << "#Output data type" << endl;
-	sett << svar.outform << setw(width) << "#Output contents" << endl;
-	sett << svar.boutform << setw(width) << "#Boundary time output" << endl;
-	sett << svar.gout << setw(width) << "#Ghost particle output" << endl;
-	sett << svar.subits << setw(width) << "#Maximum sub iterations" << endl;
-	sett << svar.nmax << setw(width) << "#Maximum number of particles" << endl;
-	sett << svar.cellSize << setw(width) << "#Post processing mesh size" << endl;
-	sett << svar.postRadius << setw(width) << "#Post processing support radius" << endl;
-	sett << svar.Pstep << setw(width) << "#Particle initial spacing" << endl;
-	sett << svar.Bstep << setw(width) << "#Boundary spacing factor" << endl;
-	sett << svar.Bcase << setw(width) << "#Boundary case" << endl;
-	sett << svar.Asource << setw(width) << "#Aerodynamic source" << endl; 
-	sett << avar.acase << setw(width) << "#Aerodynamic case" << endl;
-	sett << svar.ghost << setw(width) << "#Ghost particles?" << endl;
-	sett << svar.Start(0) << " " << svar.Start(1);
-#if SIMDIM == 3
-	sett << " " << svar.Start(2);
-#endif
-	sett << setw(width) << "#Fluid start position" << endl;
-	if(svar.Bcase < 2)
-	{
-		sett << svar.xyPART(0) << " " << svar.xyPART(1);
-#if SIMDIM == 3
-		sett << " " << svar.xyPART(2);
-#endif
-		sett << setw(width) << "#Particle counts" << endl;
-		sett << svar.Box(0) << " " << svar.Box(1);
-#if SIMDIM == 3
-		sett << " " << svar.Box(2);
-#endif
-		sett << setw(width) << "#Box dimensions" << endl << endl;
-		sett << fvar.pPress << setw(width) << "#Pipe Pressure" << endl;
-	}
-	else
-	{
-		sett << svar.Angle(0) << " " << svar.Angle(1);
-#if SIMDIM == 3
-		sett << " " << svar.Angle(2);
-#endif
-		sett << "  #Fluid start rotation" << endl;
-		sett << svar.Jet(0) << " " << svar.Jet(1) << setw(width) << "#Jet dimensions" << endl;
-		sett << fvar.pPress << setw(width) << "#Pipe Pressure" << endl;
-		sett << avar.vJet(1) << setw(width) << "#Jet velocity" << endl;
-		sett << avar.vInf(0) << " " << avar.vInf(1);
-#if SIMDIM == 3
-		sett << " " << avar.vInf(2);
-#endif
-		sett << "  #Freestream velocity" << endl;
-
-		if(avar.acase == 2 || avar.acase == 3)
-  		{
-  			sett << avar.a << setw(width) << "#a" << endl;
-  			sett << avar.h1 << setw(width) << "h1" << endl;
-  			sett << avar.b << setw(width) << "#b" << endl;
-  			sett << avar.h2 << setw(width) << "#h2" << endl;
-  		}
-	}
-
-	/*End of settings write*/
-	sett.close();
-
-	/*Write fluid file now*/
-	file = svar.outfolder;
-	file.append("Fluid");
-
-	std::ofstream fluid(file);
-
-	fluid << fvar.alpha << setw(width) << "#Artificial viscosity" << endl;
-	fluid << fvar.maxU << setw(width) << "#Particle shifting factor" << endl;
-	fluid << fvar.contangb << setw(width) << "#Contact angle" << endl;
-	fluid << fvar.rho0 << setw(width) << "#Fluid density" << endl;
-	fluid << avar.rhog << setw(width) << "#Gas density" << endl;
-	fluid << fvar.Cs << setw(width) << "#Speed of sound" << endl;
-	fluid << fvar.mu << setw(width) << "#Fluid viscosity" << endl;
-	fluid << avar.mug << setw(width) << "#Gas viscosity" << endl;
-	fluid << fvar.sig << setw(width) << "#Surface Tension" << endl;
-	fluid << svar.outdir << setw(width) << "#Output Folder" << endl;
-	if(svar.Asource > 0)
-	{
-		fluid << svar.meshfile << "   #Mesh edge/face file" << endl;
-		fluid << svar.solfile << "   #Mesh Solution file" << endl;
-		fluid << svar.scale << setw(width) << "#Mesh scale" << endl;
-		fluid << avar.vRef << setw(width) << "#Gas reference velocity" << endl;
-		fluid << avar.pRef << setw(width) << "#Gas reference pressure" << endl;
-		fluid << avar.T << setw(width) << "#Gas reference temperature" << endl;
-	}
-	
-	fluid.close();
 }
 
 

@@ -146,6 +146,8 @@ typedef struct SIM {
 	size_t intNum;                  /*Number of internal particles*/
 	uint nmax;                      /*Max number of particles*/
 	uint outframe;	                /*Terminal output frame interval*/
+	uint outtype;                   /*ASCII or binary output*/
+	uint outform, boutform, gout;   /*Output type. Fluid properties or Research.*/
 	uint addcount;					/*Current Number of add-particle calls*/
 	real Pstep,Bstep, dx, clear;	/*Initial spacings for particles and boundary*/
 	real diam;                      /*Droplet diameter*/
@@ -166,8 +168,7 @@ typedef struct SIM {
 	real maxmu;                     /*Maximum viscosity component (CFL)*/
 	int Bcase, Bclosed, ghost;		/*What initial shape to take*/
 	int Asource;                     /*Source of aerodynamic solution*/
-	uint outtype;                   /*ASCII or binary output*/
-	uint outform, boutform, gout;   /*Output type. Fluid properties or Research.*/
+	
 	uint framecount;                /*How many frames have been output*/
 	vector<size_t> back;            /*Particles at the back of the pipe*/
 	uint iter;                      /*Current iteration number to renormalise*/
@@ -230,52 +231,51 @@ typedef struct FLUID {
 }FLUID;
 
 /*Aerodynamic Properties*/
-typedef class AERO
+typedef struct AERO
 {
-	public:
-		AERO()
-		{
-			Cf = 1.0/3.0;
-			Ck = 8;
-			Cd = 5;
-			Cb = 0.5;
+	AERO()
+	{
+		Cf = 1.0/3.0;
+		Ck = 8;
+		Cd = 5;
+		Cb = 0.5;
 #if SIMDIM == 3		
-			nfull = 1.713333e+02;
+		nfull = 1.713333e+02;
 #else
-			nfull = 28;
+		nfull = 28;
 #endif
-		}
+	}
 
-			/*Gissler Parameters*/
-		real L;
-		real td;
-		real omega;
-		real tmax;
-		real ycoef;
-		real woccl;
-		real Cf, Ck, Cd, Cb, Cdef;
-		real nfull;
+		/*Gissler Parameters*/
+	real L;
+	real td;
+	real omega;
+	real tmax;
+	real ycoef;
+	real woccl;
+	real Cf, Ck, Cd, Cb, Cdef;
+	real nfull;
 
-		real pVol;                     /*Volume of a particle*/
-		real aPlate;                   /*Area of a plate*/
+	real pVol;                     /*Volume of a particle*/
+	real aPlate;                   /*Area of a plate*/
 
-			/* Gas Properties*/
-		real qInf, vRef, pRef;         /*Reference gas values*/
-		real rhog, mug;
-		real gasM;					   /*A gas particle mass*/
-		real T;						   /*Temperature*/
-		real Rgas;                     /*Specific gas constant*/
+		/* Gas Properties*/
+	real qInf, vRef, pRef;         /*Reference gas values*/
+	real rhog, mug;
+	real gasM;					   /*A gas particle mass*/
+	real T;						   /*Temperature*/
+	real Rgas;                     /*Specific gas constant*/
 
-		int acase;	                   /*Aerodynamic force case*/
-		StateVecD vJet, vInf;          /*Jet + Freestream velocity*/
-		real vJetMag;
-		real dPipe;                    /*Pipe diameter*/
-		
-		real Acorrect;				   /*Correction factor for aero force*/
-		real a;                        /*Case 3 tuning parameters*/
-		real b;                        /*}*/
-		real h1;                       /*}*/
-		real h2;                       /*}*/
+	int acase;	                   /*Aerodynamic force case*/
+	StateVecD vJet, vInf;          /*Jet + Freestream velocity*/
+	real vJetMag;
+	real dPipe;                    /*Pipe diameter*/
+	
+	real Acorrect;				   /*Correction factor for aero force*/
+	real a;                        /*Case 3 tuning parameters*/
+	real b;                        /*}*/
+	real h1;                       /*}*/
+	real h2;                       /*}*/
 }AERO;
 
 typedef struct MESH

@@ -415,7 +415,7 @@ void Newmark_Beta(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 		error2 = error1;
 
-		// cout << error1 << endl;
+		// cout << "It: " << k << " Error: " << error1 << endl;
 		
 	} /*End of subits*/
 }

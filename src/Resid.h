@@ -178,22 +178,6 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar,
 		// 	// }
 			
 
-		// }
-			
-
-		// #pragma omp for schedule(static) ordered
-		// for(int ii = 0; ii < omp_get_num_threads(); ++ii)
-		// {
-		// 	#pragma omp ordered
-		// 	{
-		// 		dp.L.insert(dp.L.end(),Lmat.begin(),Lmat.end());
-		// 		dp.gradRho.insert(dp.gradRho.end(),gradRho.begin(),gradRho.end());
-		// 		dp.norm.insert(dp.norm.end(),norm.begin(),norm.end());
-		// 		dp.avgV.insert(dp.avgV.end(),avgV.begin(),avgV.end());
-		// 		dp.lam.insert(dp.lam.end(),lam.begin(),lam.end());
-		// 		dp.lam_nb.insert(dp.lam_nb.end(),lam_nb.begin(),lam_nb.end());
-		// 		dp.kernsum.insert(dp.kernsum.end(),kernsum.begin(),kernsum.end());
-		// 	}
 		// }			
 
 	}	/*End parallel section*/	

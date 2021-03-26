@@ -20,7 +20,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	MESH& cells, DELTAP& dp, State& pn, State& pnp1, State& airP, outl& outlist)
 {
 	// cout << "Entered Newmark_Beta" << endl;
-	uint   k = 0;	
+	uint   k = 0;	//iteration number
 	real logbase = 0.0;
 	real error1 = 0.0;
 	real error2 = 0.0;
@@ -225,16 +225,16 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	Get_Resid(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
 		cells,cellsused,neighb,outlist,dp,pn,pnp1,airP,Force,dropVel);
 
+	// void(Get_First_RK(TREE,svar,fvar,avar,start,end,cells,cellsused,
+	// 							neighb,outlist,dp,logbase,pn,st_2,error1));
+
 	uint nUnstab = 0;
 
 	void(Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
 							cellsused,outlist,xih,pn,pnp1,k,nUnstab));
-	k++;
-
-	// State st_2 = pn;
-
-	// void(Get_First_RK(TREE,svar,fvar,avar,start,end,cells,cellsused,
-	// 							neighb,outlist,dp,logbase,pn,st_2,error1));
+	k++; //Update iteration count
+	
+	// cout << "Error: " << error1 << endl;
 
 	/****** UPDATE TREE ***********/
 	TREE.NP1.index->buildIndex();
@@ -653,7 +653,6 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
 	dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
-	cout << "Got past the first prestep" << endl;
 	
 	Detect_Surface(svar,fvar,avar,start,end,dp,outlist,cells,pnp1);
 	

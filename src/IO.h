@@ -11,15 +11,14 @@
 #include "Var.h"
 #include "IOFunctions.h"
 #include "CDFIO.h"
+#include "Restart.h"
 // #include "TauIO.h"
-
 
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
 /*************************************************************************/
 void Read_SIM_Var(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 {
-	svar.infolder = infolder;
 	string file = infolder;
 	file.append("Settings");
 #ifdef DEBUG
@@ -193,11 +192,41 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	if(file.back() != '/')
     	file.append("/");
 
-  	Read_SIM_Var(file,svar,fvar,avar);
-	
-	/*Get fluid properties from fluid.dat*/
+	svar.infolder = file;
+
+    /*Get fluid properties from fluid.dat*/
+	Read_SIM_Var(file,svar,fvar,avar);
+
 	Read_FLUID_Var(file,svar,fvar,avar);
+
+	char cCurrentPath[FILENAME_MAX];
+	if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
+	{
+		cerr << "Failed to get current working directory." << endl;
+		exit(-1);
+	}
+
+	/*Get output absolute path*/
+	string pathname = cCurrentPath;
+  	pathname.append("/");
+  	pathname.append(svar.infolder);
+  	pathname.append(svar.outfolder);
+  	pathname.append("/");
+  
+  	/*Check for output file name*/		
+	check_folder(pathname);
 	
+  	svar.outfolder = pathname;
+	string outdir = svar.outfolder;
+
+    if(svar.restart == 1)
+    {
+	  	Read_Input_TECIO(outdir,svar,fvar,avar);
+	  	svar.framet = 1e-5;
+	}
+
+
+	svar.outfolder = outdir;
 
   	/*Universal parameters based on input values*/
 	fvar.gam = 7.0;  							 /*Factor for Tait's Eq*/
@@ -206,58 +235,62 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	/*Pipe Pressure calc*/
 	fvar.rhoJ = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
 
-	svar.nrad = 1;
-	if(svar.Bcase == 0 || svar.Bcase == 1)
+	if(svar.restart == 0)
 	{
-		svar.dx = svar.Pstep;
-	}
-	else if(svar.Bcase == 2 || svar.Bcase == 3)
-	{
-		// Defining dx to fit the pipe, then find rest spacing
-		if(svar.Jet(0)/svar.Pstep < 1.5)
-		{	/*spacing is too close to full size to use standard adjustment*/
-			cout << "Warning: particle spacing if of the same order of magintude of the jet diameter." << endl;
-			cout << "Consider a different size for accuracy." << endl;
-		}
-		else
+		svar.nrad = 1;
+		if(svar.Bcase == 0 || svar.Bcase == 1)
 		{
-			svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
-			svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
-		}	
+			svar.dx = svar.Pstep;
+		}
+		else if(svar.Bcase == 2 || svar.Bcase == 3)
+		{
+			// Defining dx to fit the pipe, then find rest spacing
+			if(svar.Jet(0)/svar.Pstep < 1.5)
+			{	/*spacing is too close to full size to use standard adjustment*/
+				cout << "Warning: particle spacing if of the same order of magintude of the jet diameter." << endl;
+				cout << "Consider a different size for accuracy." << endl;
+			}
+			else
+			{
+				svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
+				svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
+			}	
 
-		avar.dPipe = svar.Jet(0);
- 	}
- 	else if (svar.Bcase == 4)
- 	{
- 		if(svar.Jet(0)/svar.Pstep < 1.5)
-		{	/*spacing is too close to full size to use standard adjustment*/
- 			svar.nrad = 1;
- 			svar.dx = svar.Jet(0);
-		}
-		else
-		{
-			real radius = 0.5*svar.Jet(0);
-		
-	 		svar.nrad = ceil(abs(radius/svar.Pstep));
-	 		svar.dx = radius/real(svar.nrad);
- 		}
- 	}
- 	else
- 	{
- 		if(svar.Jet(0)/svar.Pstep < 1.5)
-		{	/*spacing is too close to full size to use standard adjustment*/
- 			svar.nrad = 1;
- 			svar.dx = svar.Jet(0);
-		}
-		else
-		{
-	 		svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
-	 		svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
- 		}
- 	}
+			avar.dPipe = svar.Jet(0);
+	 	}
+	 	else if (svar.Bcase == 4)
+	 	{
+	 		if(svar.Jet(0)/svar.Pstep < 1.5)
+			{	/*spacing is too close to full size to use standard adjustment*/
+	 			svar.nrad = 1;
+	 			svar.dx = svar.Jet(0);
+			}
+			else
+			{
+				real radius = 0.5*svar.Jet(0);
+			
+		 		svar.nrad = ceil(abs(radius/svar.Pstep));
+		 		svar.dx = radius/real(svar.nrad);
+	 		}
+	 	}
+	 	else
+	 	{
+	 		if(svar.Jet(0)/svar.Pstep < 1.5)
+			{	/*spacing is too close to full size to use standard adjustment*/
+	 			svar.nrad = 1;
+	 			svar.dx = svar.Jet(0);
+			}
+			else
+			{
+		 		svar.nrad = ceil(abs(0.5*svar.Jet(0)/svar.Pstep));
+		 		svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
+	 		}
+	 	}
 
- 	// svar.dx = svar.Pstep;	
-	svar.Pstep = svar.dx * pow(fvar.rhoJ/fvar.rho0,1.0/SIMDIM);
+	 	// svar.dx = svar.Pstep;	
+		svar.Pstep = svar.dx * pow(fvar.rhoJ/fvar.rho0,1.0/SIMDIM);
+ 	}
+  	
 
 	// Correct the droplet to have the same volume as the original
 	if(svar.Bcase == 4)
@@ -283,7 +316,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 
 	svar.addcount = 0;
   	svar.dt = 2E-010; 			/*Initial timestep*/
-  	svar.t = 0.0;				/*Total simulation time*/
   	fvar.H = 2.0*svar.Pstep;
   	fvar.HSQ = fvar.H*fvar.H; 
 
@@ -334,8 +366,10 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	cout << "Frame time interval: " << svar.framet << endl;
 	cout << "Number of frames: " << svar.Nframe << endl;
 	cout << "Output type: " << svar.outform << endl;
-	cout << "Tait gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
-	cout << "Newmark-Beta parameters: " << svar.beta << ", " << svar.gamma << endl;
+	// cout << "Tait gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
+	fprintf(stdout, "Tait gamma: %.1f  Tait B: %g\n",fvar.gam,fvar.B);
+	// cout << "Newmark-Beta parameters: " << svar.beta << ", " << svar.gamma << endl;
+	fprintf(stdout, "Newmark-Beta parameters: %.2f, %.2f\n",svar.beta,svar.gamma);
 	cout << "Boundary case: " << svar.Bcase << endl;
 	cout << "Aerodynamic source: " << svar.Asource << endl;
 	cout << "Aerodynamic case: " << avar.acase << endl;
@@ -390,32 +424,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	cout << "Gas viscosity: " << avar.mug << endl << endl;
 	
 
-	cout << "******** FILE SETTINGS ********" << endl;
-	char cCurrentPath[FILENAME_MAX];
-	if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
-	{
-		cerr << "Failed to get current working directory." << endl;
-		exit(-1);
-	}
-
-	/*Get output absolute path*/
-	string pathname = cCurrentPath;
-  	pathname.append("/");
-  	pathname.append(svar.infolder);
-  	pathname.append(svar.outfolder);
-  	pathname.append("/");
-  
-  	/*Check for output file name*/		
-	check_folder(pathname);
-	
-	/*Check if there is a slash at the end.*/
-  	if (pathname.back() != '/')
-  	{
-  		pathname.append("/");
-  	}
-
-  	svar.outfolder = pathname;
-	
+	cout << "******** FILE SETTINGS ********" << endl;	
 	cout << "Working directory: " << cCurrentPath << endl;
 	cout << "Input folder: " << svar.infolder << endl;
 	if(svar.Asource == 1 || svar.Asource == 2)
@@ -446,234 +455,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 #endif
 
 } /*End of GetInput()*/
-
-
-void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& cells)
-{	
-	// Read the values from the solution folder, then check. 
-
-	// Check that a restart can be performed. 
-	if(svar.outform == 0 || svar.outform == 1 || svar.outform == 4)
-	{
-		cout << "Output type cannot be restarted from. Make sure that you have the correct output selected." << endl;
-		exit(-1);
-	}
-
-	if(svar.outform == 2)
-	{
-		if(svar.Bcase == 6)
-		{
-			cout << "No cell information. Cannot restart" << endl;
-			exit(-1);
-		}
-	}
-	// if(svar.boutform == 0)
-	// {
-	// 	cout << "No boundary time output, so can't be certain of forces from the boundary." << endl;
-	// 	exit(-1);
-	// }
-
-	if(svar.boutform == 0 && (svar.Bcase != 4 && svar.Bcase !=0))
-	{
-		cout << "Time data for the boundary has not been output. Cannot restart." << endl;
-		exit(-1);
-	}
-
-#ifdef DEBUG
-	dbout << "Reading frame info file for restart information." << endl;
-#endif
-
-	// Re-read the settings and fluid file
-	// cout << svar.outfolder << endl;
-
-	string outdir = svar.outfolder;
-	if(outdir.back() != '/')
-    	outdir.append("/");
-
-
-  	Read_SIM_Var(outdir,svar,fvar,avar);
-
-  	Read_FLUID_Var(outdir,svar,fvar,avar);
-
-  	svar.outfolder = outdir;
-
-	// Now get the data from the files. Start with the boundary
-	if(svar.outtype == 0)
-	{
-		State boundary, fuel;
-		string file;	
-
-		// Read the fuel
-		void* fuelHandle = NULL;
-		string fuelf = outdir;
-		int32_t fuelFrames, boundFrames;
-		double fuelTime, boundTime;
-		fuelf.append("Fuel.szplt");
-
-		if(tecFileReaderOpen(fuelf.c_str(),&fuelHandle))
-		{
-			cout << "Error opening szplt file. Path:" << endl;
-			cout << file << endl;
-			exit(-1);
-		}
-
-		cout << "Checking Fuel file..." << endl;
-		CheckContents(fuelHandle,svar,fuelFrames,fuelTime);
-
-		if (svar.Bcase != 4 && svar.Bcase !=0)
-		{
-			void* boundHandle = NULL;
-			string boundf = outdir;
-			boundf.append("Boundary.szplt");
-
-			if(tecFileReaderOpen(boundf.c_str(),&boundHandle))
-			{
-				cout << "Error opening szplt file. Path:" << endl;
-				cout << file << endl;
-				exit(-1);
-			}
-
-			cout << "Checking Boundary file..." << endl;
-			CheckContents(boundHandle,svar,boundFrames,boundTime);
-
-			if(fuelFrames!= boundFrames)
-			{
-				cout << "Caution! Number of frames is not consistent between fuel and boundary files." << endl;
-			}
-
-
-			if(fuelTime != boundTime)
-			{
-				cout << "Caution! Frame times are not consistent between fuel and boundary files." << endl;
-
-				if(fuelTime > boundTime)
-				{
-					double time = 0.0;
-					for(int32_t frame = fuelFrames-1; frame > 1; frame--)
-					{
-						if(tecZoneGetSolutionTime(fuelHandle, frame, &time))
-						{
-							cout << "Failed to get time data for frame : " << frame << " from fuel file." << endl;
-							continue;
-						}
-						
-						if(time == boundTime)
-						{
-							cout << "Found the correct frame" << endl;
-							fuelFrames = frame;
-							fuelTime = time;
-							break;
-						}
-					}
-				}
-				else
-				{
-					double time = 0.0;
-					for(int32_t frame = boundFrames-1; frame > 1; frame--)
-					{
-						if(tecZoneGetSolutionTime(boundHandle, frame, &time))
-						{
-							cout << "Failed to get time data for frame : " << frame << " from boundary file." << endl;
-							continue;
-						}
-						
-
-						if(time == fuelTime)
-						{
-							cout << "Found the correct frame" << endl;
-							boundFrames = frame;
-							boundTime = time;
-							break;
-						}
-					}
-				}
-
-				if(fuelTime != boundTime)
-				{
-					cout << "Could not find a consistent time in each file. Stopping." << endl;
-					exit(-1);
-				}
-			}
-
-			cout << "Attempting to read the boundary..." << endl;
-			Read_Binary_Timestep(boundHandle,svar,boundFrames,boundary);
-		}
-
-	    svar.frame = fuelFrames-1;
-
-	    // Read the actual data.
-		cout  << "Attempting to read the fuel..." << endl;
-		Read_Binary_Timestep(fuelHandle,svar,fuelFrames,fuel);
-
-
-		pn = boundary;
-		svar.bndPts = boundary.size();
-		svar.simPts = fuel.size();
-		pn.insert(pn.end(),fuel.begin(),fuel.end());	
-		svar.totPts = pn.size();
-		
-		if(svar.simPts + svar.bndPts != svar.totPts)
-		{
-			cout << "Mismatch of array sizes. Total array is not the sum of sim and boundary arrays" << endl;
-			exit(-1);
-		}
-
-		// if(svar.totPts != totPts || svar.bndPts != bndPts || svar.simPts != simPts)
-		// {
-		// 	cout << "Mismatch of the particle numbers in the frame file and data file." << endl;
-		// }
-	}
-	else
-	{
-		// TODO: ASCII Restart.
-		// Particle numbers can be found from frame file.
-		// Find EOF, then walk back from there how many particles.
-
-		cout << "ASCII file restart not yet implemented." << endl;
-		exit(-1);
-	}
-
-	// Go through the particles giving them the properties of the cell
-	#pragma omp parallel for 
-	for(size_t ii = 0; ii < svar.totPts; ++ii)
-	{
-		pn[ii].partID = ii;
-		pn[ii].p =  fvar.B*(pow(pn[ii].rho/fvar.rho0,fvar.gam)-1);
-
-		if((svar.Asource == 1 || svar.Asource == 2) && svar.outform == 5)
-		{
-			if(pn[ii].b == PartState.FREE_)
-			{
-				pn[ii].cellV = cells.cVel[pn[ii].cellID];
-				pn[ii].cellP = cells.cP[pn[ii].cellID];
-			}
-		}
-
-		if(pn[ii].b == PartState.BACK_)
-		{
-			svar.back.emplace_back(ii);
-		}
-	}
-	
-	pnp1 = pn;
-	// Define svar.clear to state a particle is clear of the starting area
-	if (svar.Bcase == 2 || svar.Bcase == 3 || svar.Bcase == 5)
-		svar.clear = -svar.Jet[1] + 4*svar.dx;
-	else
-		svar.clear = 0.0;
-
-/*	int width = 15;
-
-	for(size_t ii = 0; ii < svar.totPts; ++ii)
-	{
-		cout << setw(5) << pnp1[ii].partID << setw(width) << pnp1[ii].xi(0) << setw(width) << pnp1[ii].xi(1) << setw(width) <<
-		pnp1[ii].rho << setw(width) << pnp1[ii].Rrho << setw(width) << pnp1[ii].m << setw(width) << pnp1[ii].v(0) << 
-		setw(width) << pnp1[ii].v(1) << setw(width) << pnp1[ii].f(0) << setw(width) << pnp1[ii].f(1) << setw(4) << 
-		pnp1[ii].b << setw(width) << pnp1[ii].cellV(0) << setw(width) << pnp1[ii].cellV(1) << setw(width) << pnp1[ii].cellP
-		<< setw(width) << pnp1[ii].cellID << endl;
-	}*/
-}
-
 
 /*************************************************************************/
 /**************************** ASCII OUTPUTS ******************************/
@@ -730,12 +511,12 @@ void Write_ASCII_header(std::fstream& fp, SIM &svar)
 }
 
 
-void Write_ASCII_Timestep(std::fstream& fp, SIM &svar, const State &pnp1, 
-	const uint bwrite, const uint start, const uint end, const string& name)
+void Write_ASCII_Timestep(std::fstream& fp, SIM& svar, State const& pnp1, 
+	const uint bwrite, const uint start, const uint end, string const& name)
 {
-	if(bwrite == 1)
-	 	fp <<  "ZONE T=\"" << name << "\"";
-	else
+	// if(bwrite == 1)
+	//  	fp <<  "ZONE T=\"" << name << "\"";
+	// else
 		fp <<  "ZONE T=\"" << name << "\"";
 
     fp <<", I=" << end - start << ", F=POINT" <<", STRANDID=1, SOLUTIONTIME=" << svar.t  << "\n";
@@ -744,10 +525,10 @@ void Write_ASCII_Timestep(std::fstream& fp, SIM &svar, const State &pnp1,
     
     if(svar.outform == 0)
     {
-		for (auto p=std::next(pnp1.begin(),start); p!=std::next(pnp1.begin(),end); ++p)
+		for (size_t ii = start; ii < end; ++ii)
 		{
-			for(uint i = 0; i < SIMDIM; ++i)
-	        	fp << setw(width) << p->xi(i)/svar.scale; 
+			for(uint dim = 0; dim < SIMDIM; ++dim)
+	        	fp << setw(width) << pnp1[ii].xi(dim)/svar.scale; 
 			fp << "\n";  
 	  	}
 
@@ -762,18 +543,19 @@ void Write_ASCII_Timestep(std::fstream& fp, SIM &svar, const State &pnp1,
 				// fp << "\n"; 
 		  // 	}
 	  	// }
+	  	fp << std::flush;
 	}	
     if(svar.outform == 1)
     {
-		for (auto p=std::next(pnp1.begin(),start); p!=std::next(pnp1.begin(),end); ++p)
+		for (size_t ii = start; ii < end; ++ii)
 		{	
-			for(uint i = 0; i < SIMDIM; ++i)
-	        	fp << setw(width) << p->xi(i)/svar.scale;
+			for(uint dim = 0; dim < SIMDIM; ++dim)
+	        	fp << setw(width) << pnp1[ii].xi(dim)/svar.scale;
 
-			fp << setw(width) << p->rho << setw(width) << p->p;
-			fp << setw(width) << p->m;
-	        fp << setw(width) << p->v.norm();
-	        fp << setw(width) << p->f.norm() << "\n";
+			fp << setw(width) << pnp1[ii].rho << setw(width) << pnp1[ii].p;
+			fp << setw(width) << pnp1[ii].m;
+	        fp << setw(width) << pnp1[ii].v.norm();
+	        fp << setw(width) << pnp1[ii].f.norm() << "\n";
 	  	}
 
 	  // 	if (airP.size() > 0 )
@@ -795,19 +577,19 @@ void Write_ASCII_Timestep(std::fstream& fp, SIM &svar, const State &pnp1,
     }
     else if (svar.outform == 2)
 	{
-		for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
+		for (size_t ii = start; ii < end; ++ii)
 		{
-			for(uint i = 0; i < SIMDIM; ++i)
-	        	fp << setw(width) << p->xi(i)/svar.scale;
+			for(uint dim = 0; dim < SIMDIM; ++dim)
+	        	fp << setw(width) << pnp1[ii].xi(dim)/svar.scale;
 	        
-	        fp << setw(width) << p->rho << setw(width) << p->p;
-			fp << setw(width) << p->m;
+	        fp << setw(width) << pnp1[ii].rho << setw(width) << pnp1[ii].p;
+			fp << setw(width) << pnp1[ii].m;
 
 	        for(uint i = 0; i < SIMDIM; ++i)
-	        	fp << setw(width) << p->v(i); 
+	        	fp << setw(width) << pnp1[ii].v(i); 
 
 	        for(uint i = 0; i < SIMDIM; ++i)
-				fp << setw(width) << p->f(i); 
+				fp << setw(width) << pnp1[ii].f(i); 
 
 			fp << "\n";
 	  	}  
@@ -833,41 +615,43 @@ void Write_ASCII_Timestep(std::fstream& fp, SIM &svar, const State &pnp1,
     }
     else if (svar.outform == 3)
     {
-    	for (auto p=std::next(pnp1.begin(),svar.bndPts); p!=std::next(pnp1.begin(),svar.bndPts+svar.simPts); ++p)
+    	for (size_t ii = start; ii < end; ++ii)
 		{
-			for(uint i = 0; i < SIMDIM; ++i)
-	        	fp << setw(width) << p->xi(i)/svar.scale;
+			for(uint dim = 0; dim < SIMDIM; ++dim)
+	        	fp << setw(width) << pnp1[ii].xi(dim)/svar.scale;
 	        
-	        fp << setw(width) << p->rho << setw(width) << p->p;
-			fp << setw(width) << p->m;
+	        fp << setw(width) << pnp1[ii].rho << setw(width) << pnp1[ii].p;
+			fp << setw(width) << pnp1[ii].m;
 
 	        for(uint i = 0; i < SIMDIM; ++i)
-	        	fp << setw(width) << p->v(i); 
+	        	fp << setw(width) << pnp1[ii].v(i); 
 
 	        for(uint i = 0; i < SIMDIM; ++i)
-	        	fp << setw(width) << p->f(i); 
+	        	fp << setw(width) << pnp1[ii].f(i); 
 
 	        for(uint i = 0; i < SIMDIM; ++i)
-				fp << setw(width) << p->cellV(i);
+				fp << setw(width) << pnp1[ii].cellV(i);
 
-			fp << setw(width) << p->cellP;
-	        fp << setw(width) << p->cellID << "\n"; 
+			fp << setw(width) << pnp1[ii].cellP;
+	        fp << setw(width) << pnp1[ii].cellID << "\n"; 
 	  	}
+	  	fp << std::flush;
     }
     else if (svar.outform == 4)
     {
-    	for (auto p=std::next(pnp1.begin(),start); p!=std::next(pnp1.begin(),end); ++p)
+    	for (size_t ii = start; ii < end; ++ii)
 		{	
-			for(uint i = 0; i < SIMDIM; ++i)
-	        	fp << setw(width) << p->xi(i)/svar.scale;
+			for(uint dim = 0; dim < SIMDIM; ++dim)
+	        	fp << setw(width) << pnp1[ii].xi(dim)/svar.scale;
 
-			fp << setw(width) << p->rho << setw(width) << p->p;
-			fp << setw(width) << p->m;
-	        fp << setw(width) << p->v.norm();
-	        fp << setw(width) << p->f.norm();
-	        fp << setw(width) << p->b << setw(width) << p->theta;
-	        fp << setw(width) << p->Af.norm() << "\n";
+			fp << setw(width) << pnp1[ii].rho << setw(width) << pnp1[ii].p;
+			fp << setw(width) << pnp1[ii].m;
+	        fp << setw(width) << pnp1[ii].v.norm();
+	        fp << setw(width) << pnp1[ii].f.norm();
+	        fp << setw(width) << pnp1[ii].b << setw(width) << pnp1[ii].theta;
+	        fp << setw(width) << pnp1[ii].Af.norm() << "\n";
 	  	}
+	  	fp << std::flush;
 
     }
 }
@@ -895,7 +679,10 @@ void Write_First_Step(std::fstream& f1, std::fstream& fb, std::fstream& fg,
 				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",0,svar.boundFile); 
 				int32_t i = tecFileWriterClose(&svar.boundFile);			
 				if(i == -1)
+				{
+					cout << "Failed to close boundary file" << endl;
 					exit(-1);
+				}
 			}
 			else if(svar.restart == 0)
 				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2,svar.boundFile); 

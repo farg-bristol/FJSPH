@@ -707,7 +707,7 @@ void FindCell(SIM& svar, real const sr, KDTREE& TREE, MESH& cells, State& pnp1, 
 #if SIMDIM == 3
                 size_t const num_results = 100;
 #else
-                size_t const num_results = 150;
+                size_t const num_results = 100;
 #endif
                 vector<size_t> ret_indexes(num_results);
                 vector<real> out_dists_sqr(num_results);
