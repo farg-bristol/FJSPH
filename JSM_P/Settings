@@ -1,5 +1,5 @@
-0.000001        #Frame output timestep
-1200           #number of frames
+2.0000e-05     #Frame output timestep
+5000           #number of frames
 1              #Output Frame Interval (if 0, suppresses framewise output)
 0              #Output encoding (0 = Binary, 1 = ASCII)
 3              #Output format (0 = Position only, 1 = fluid properties, 2 = debug/research)
