@@ -256,7 +256,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 				svar.dx = 0.5*(svar.Jet(0))/real(svar.nrad);
 			}	
 
-			avar.dPipe = svar.Jet(0);
+			// avar.dPipe = svar.Jet(0);
 	 	}
 	 	else if (svar.Bcase == 4)
 	 	{
@@ -326,6 +326,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   	svar.intNum = 0;
   	svar.iter = 0;
 
+	fvar.delta = 0.1;
   	fvar.dCont = 2.0 * fvar.delta * fvar.H * fvar.Cs;
   	// fvar.dMom = fvar.alpha * fvar.H * fvar.Cs * fvar.rho0;
   	fvar.dMom = 2.0*(SIMDIM + 2.0);

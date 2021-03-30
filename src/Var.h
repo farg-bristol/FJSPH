@@ -18,7 +18,6 @@
 #include <fstream>
 #include <iostream>
 #include <iomanip>
-#include <fstream>
 #include <string.h>
 #include <sstream>
 #include "Eigen/Core"
@@ -203,7 +202,6 @@ typedef struct SIM {
 
 /*Fluid and smoothing parameters*/
 typedef struct FLUID {
-	real Hfac;
 	real H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
 	real Wdx;                   /*Kernel value at the initial particle spacing distance.*/
 	real rho0, rhoJ; 			/*Resting Fluid density*/
@@ -252,7 +250,6 @@ typedef struct AERO
 	real omega;
 	real tmax;
 	real ycoef;
-	real woccl;
 	real Cf, Ck, Cd, Cb, Cdef;
 	real nfull;
 
@@ -269,7 +266,6 @@ typedef struct AERO
 	int acase;	                   /*Aerodynamic force case*/
 	StateVecD vJet, vInf;          /*Jet + Freestream velocity*/
 	real vJetMag;
-	real dPipe;                    /*Pipe diameter*/
 	
 	real Acorrect;				   /*Correction factor for aero force*/
 	real a;                        /*Case 3 tuning parameters*/

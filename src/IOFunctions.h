@@ -352,7 +352,7 @@ StateVecI getIVector(ifstream& In, uint& lineno, string const& name)
 			cout << "\tWARNING: 3D Input provided for a 2D Simulation." << endl;
 			cout << "\t         The third dimension shall be ignored." << endl;
 			cout << "\tLine " << lineno << ": " << endl;
-			cout << "\t" << sline.str() << endl;
+			cout << "\t" << sline.str() << endl << endl;
 		}
 #ifdef DEBUG
 	dbout << name << ": " << x(0) << "  " << x(1) << endl;
@@ -364,7 +364,7 @@ StateVecI getIVector(ifstream& In, uint& lineno, string const& name)
 	{	
 		cout << "2D input provided. Please provide a 3D file." << endl;
 		cout << "Incorrect line " << lineno << ": " << endl;
-		cout << sline.str() << endl;
+		cout << sline.str() << endl << endl;
 		exit(-1);
 	}
 #ifdef DEBUG

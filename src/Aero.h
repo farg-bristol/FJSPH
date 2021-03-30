@@ -305,14 +305,14 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 		// real const frac2 = std::min(exp(pi.curve*0.001+200),1.0);
 
 		real frac3 = 1.0;
-		if(avar.dPipe != 0.0)
-		{
-			if(pi.pDist < avar.dPipe)
-			{
-				/*Smooth the aerodynamic force near the pipe*/
-				frac3 = 1.0-Kernel(pi.pDist,0.5*avar.dPipe,1.0);
-			}
-		}
+		// if(avar.dPipe != 0.0)
+		// {
+		// 	if(pi.pDist < avar.dPipe)
+		// 	{
+		// 		/*Smooth the aerodynamic force near the pipe*/
+		// 		frac3 = 1.0-Kernel(pi.pDist,0.5*avar.dPipe,1.0);
+		// 	}
+		// }
 		// cout << F_kern.norm() << "  " << F_drop.norm() << endl;
 		// cout << avar.nfull << "  " << frac1  << "  " << real(size-1) << endl;
 

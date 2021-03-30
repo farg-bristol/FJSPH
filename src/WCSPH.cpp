@@ -286,7 +286,7 @@ int main(int argc, char *argv[])
 		int stepits=0;
 		real stept=0.0;
 		
-		while (stept+ MERROR <svar.framet)
+		while (stept + MERROR < svar.framet)
 		{
 		    error = Integrate(TREE,svar,fvar,avar,cells,dp,pn,pnp1,airP,outlist);
 		    stept+=svar.dt;

@@ -31,7 +31,7 @@ void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, State const& p
 			#if SIMDIM == 3
 				matches.reserve(250);
 			#else
-				matches.reserve(20);
+				matches.reserve(47);
 			#endif
 
 			NP1_INDEX.index->radiusSearch(&pnp1[ii].xi[0], search_radius, matches, params);

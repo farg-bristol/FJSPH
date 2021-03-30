@@ -201,6 +201,7 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 	vector<real> wDiff(end,0.0);
 	vector<StateVecD> norm(end, StateVecD::Zero());
 
+	vector<real> curve;
 	Force = StateVecD::Zero();
 	svar.AForce = StateVecD::Zero();
 
@@ -312,7 +313,7 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 	/********************************************************************/
 	#pragma omp parallel shared(svar,pn,st_2,res_2,Rrho_2,st_3,res_3,Rrho_3)
 	{
-		Forces(svar,fvar,avar,cells,st_2,neighb,outlist,dp,res_2,Rrho_2,Af,Force); 
+		Forces(svar, fvar, avar, cells, st_2, neighb, outlist, dp, res_2, Rrho_2, Af, Force, curve);
 		#pragma omp for schedule(static) nowait
 		for (size_t ii=0; ii < start; ++ii)
 		{	/****** BOUNDARY PARTICLES ***********/
@@ -369,7 +370,7 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 	/********************************************************************/
 	#pragma omp parallel shared(svar,pn,st_3,res_3,Rrho_3,st_4,res_4,Rrho_4)
 	{
-		Forces(svar,fvar,avar,cells,st_3,neighb,outlist,dp,res_3,Rrho_3,Af,Force); 
+		Forces(svar, fvar, avar, cells, st_3, neighb, outlist, dp, res_3, Rrho_3, Af, Force, curve);
 		#pragma omp for schedule(static) nowait
 		for (size_t ii=0; ii < start; ++ii)
 		{	/****** BOUNDARY PARTICLES ***********/
@@ -430,12 +431,12 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 			}
 		}
 
-		Forces(svar,fvar,avar,cells,st_4,neighb,outlist,dp,res_4,Rrho_4,Af,Force); 
+		Forces(svar, fvar, avar, cells, st_4, neighb, outlist, dp, res_4, Rrho_4, Af, Force, curve);
 		#pragma omp for schedule(static) nowait
 		for (size_t ii=0; ii < start; ++ii)
 		{	/****** BOUNDARY PARTICLES ***********/
-			pnp1[ii].rho = 
-		pn[ii].rho + (dt/6.0) * (pn[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii]);
+			pnp1[ii].rho = pn[ii].rho + 
+				(dt/6.0) * (pn[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii]);
 			// st_3[ii].p = B*(pow(st_3[ii].rho/fvar.rho0,gam)-1);
 			pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
 
@@ -489,9 +490,12 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 				// 		st_4[ii].v,res_4[ii],Rrho_4[ii],
 				// 		pnp1[ii].xi,pnp1[ii].v,pnp1[ii].rho);
 
-				pnp1[ii].xi = pn[ii].xi +  (dt/6.0) * (pn[ii].v + 2.0 * st_2[ii].v + 2.0 * st_3[ii].v + st_4[ii].v);
-				pnp1[ii].v = pn[ii].v + (dt/6.0) * (pn[ii].f + 2.0 * res_2[ii] + 2.0 * res_3[ii] + res_4[ii]);
-				pnp1[ii].rho = pn[ii].rho + (dt/6.0) * (pn[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii]);
+				pnp1[ii].xi = pn[ii].xi +  
+					(dt/6.0) * (pn[ii].v + 2.0 * st_2[ii].v + 2.0 * st_3[ii].v + st_4[ii].v);
+				pnp1[ii].v = pn[ii].v + 
+					(dt/6.0) * (pn[ii].f + 2.0 * res_2[ii] + 2.0 * res_3[ii] + res_4[ii]);
+				pnp1[ii].rho = pn[ii].rho + 
+					(dt/6.0) * (pn[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii]);
 				pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
 				pnp1[ii].f = res_4[ii];
 				pnp1[ii].Rrho = Rrho_4[ii];
@@ -519,70 +523,6 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 			pnp1[ii].bNorm = norm[ii];
 		}
 
-
-		if(svar.Asource == 2)
-		{
-			#pragma omp for schedule(static) nowait
-			for(size_t const& ii : cellsused)
-			{
-				// Work out the mass and volume fractions
-				if(cells.fNum[ii] != 0)
-				{
-					real fVol = real(cells.fNum[ii]) * avar.pVol;
-
-					real aFrac = (cells.cVol[ii]-fVol)/cells.cVol[ii];
-
-					
-					if (aFrac < 0.1)
-						continue;
-					
-					real aMass = cells.cMass[ii]*aFrac;
-
-					// Do the momentum exchange
-					StateVecD newPert = (cells.fMass[ii]/aMass)*(cells.vFnp1[ii]-cells.vFn[ii])/real(cells.fNum[ii]);
-					// StateVecD diffusion = 0.2*cells.cPertn[ii];
-					cells.cPertnp1[ii] = cells.cPertn[ii]*0.9 - newPert;
-
-	// 				#pragma omp critical
-	// 				{
-	// 				cout << "Cell " << ii << ":" << endl;
-
-	// 				cout << "pertnp1: " << cells.cPertnp1[ii](0) << "  "
-	// 						<< cells.cPertnp1[ii](1) 
-	// #if SIMDIM == 3
-	// 				 		<< "  " << cells.cPertnp1[ii](2)
-	// #endif
-	// 						<< endl;
-
-	// 				cout << "pertn:   " << cells.cPertn[ii](0) << "  "
-	// 				 		<< cells.cPertn[ii](1) 
-	// #if SIMDIM == 3
-	// 				 		<< "  " << cells.cPertn[ii](2)
-	// #endif
-	// 						<< endl;
-	// 				cout << "Update: " << newPert(0) << "  " << newPert(1) 
-	// #if SIMDIM == 3
-	// 				<< "  " << newPert(2)
-	// #endif
-	// 				 << endl; 
-
-	// 				cout << "Fuel count: " << cells.fNum[ii] << endl;
-	// 				cout << "Mass fraction: " << cells.fMass[ii]/aMass << endl;
-	// 				// cout << "Fuel Volume: " << fVol << " Fuel Mass: " << cells.fMass[ii] << endl;
-	// 				// // cout << "Cell Volume: " << cells.cVol[ii] << " Air fraction: " << aFrac << "  Air Mass: " << aMass << endl;
-	// 				cout << "Fuel Vel difference: " << cells.vFnp1[ii](0)-cells.vFn[ii](0) << "  " << cells.vFnp1[ii](1)-cells.vFn[ii](1)
-	// #if SIMDIM == 3
-	// 					<< "  " << cells.vFnp1[ii](2)-cells.vFn[ii](2)
-	// #endif
-	// 				 	<< endl << endl;
-	// 				}
-				}
-				// else
-				// {
-				// 	cout << "Cell with no fuel in it considered" << endl;
-				// }
-			}
-		}
 	}/*End pragma omp parallel*/
 
 	// if (Check_RK_Error(svar,start,end,error1,error2,logbase,st_4,pnp1,k) < 0)
