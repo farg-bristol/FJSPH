@@ -740,7 +740,7 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
         pnp1[ii].m = fvar.simM;
     }
 
-    svar.mass = pnp1[0].m * svar.totPts;
+    svar.mass = pnp1[0].m * svar.simPts;
     cout << "New SPH particle mass: " << fvar.simM << "  spacing: " << svar.Pstep << endl;
 }
 

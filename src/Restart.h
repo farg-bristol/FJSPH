@@ -315,7 +315,6 @@ void Write_Input_TECIO(SIM const& svar, FLUID const& fvar, AERO const& avar)
 	varnum++;
 
 	intVar[0] = static_cast<int32_t>(svar.nmax); 
-	cout << intVar[0] << endl;
 	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varnum, 0, size, &intVar[0]))
 	{
 		cerr << "Failed to write max particles" << endl;
@@ -862,7 +861,6 @@ void Read_Input_TECIO(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 		cerr << "Failed to read max particles" << endl;
 		exit(-1);
 	}
-	cout << static_cast<uint>(intVec[0]) << endl;
 	svar.nmax = static_cast<uint>(intVec[0]);
 	varnum++;
 
@@ -1490,7 +1488,7 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 		pn[ii].woccl = 0.0;
 		pn[ii].pDist = 0.0;
 		pn[ii].internal = 0;
-		
+
 		pn[ii].Sf = StateVecD::Zero();
 		pn[ii].normal = StateVecD::Zero();
 		pn[ii].vPert = StateVecD::Zero();
