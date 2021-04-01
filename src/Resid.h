@@ -249,6 +249,12 @@ DELTAP const& dp, State& pnp1)
 
 			deltaU = std::min(deltaU.norm(), maxU/2.0) * deltaU.normalized();
 
+			if(deltaU.norm() != 0)
+			{
+				cout << "vPert is not 0. Why?" << endl;
+				cout << "ii: " << pi.partID << "  " << deltaU.norm() << "  " << maxU/2.0 << endl;
+			}
+
 			if(pi.b != PartState.START_ && pi.b != PartState.BACK_)
 			{
 				// gradLam = gradLam.normalized();

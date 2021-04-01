@@ -111,6 +111,12 @@ int main(int argc, char *argv[])
 	  		Set_Mass(svar,fvar,avar,pn,pnp1);
   	}
 
+	// Define svar.clear to state a particle is clear of the starting area
+	if (svar.Bcase == 2 || svar.Bcase == 3)
+		svar.clear = -svar.Jet[1] + 4 * svar.dx;
+	else
+		svar.clear = 0.0;
+
 	// Check if cells have been initialsed before making a tree off it
 	if(cells.cCentre.size() == 0)
 		cells.cCentre.emplace_back(StateVecD::Zero());

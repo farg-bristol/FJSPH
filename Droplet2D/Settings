@@ -1,4 +1,4 @@
-0.00001       #Frame output timestep
+0.0001       #Frame output timestep
 2000            #Number of frames
 1              #Output Frame Interval (if 0, suppresses framewise output)
 0              #Output encoding (0 = Binary, 1 = ASCII)

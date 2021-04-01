@@ -730,6 +730,10 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
     // avar.aPlate = 2.0*avar.L;
 #endif
 
+    fvar.dCont = 2.0 * fvar.delta * fvar.H * fvar.Cs;
+    fvar.artMu = std::max(fvar.mu, fvar.alpha * fvar.Cs * fvar.H * fvar.rho0);
+    fvar.Wdx = Kernel(svar.Pstep, fvar.H, fvar.correc);
+
     for(size_t ii = 0; ii < svar.totPts; ii++)
     {
         pn[ii].m = fvar.simM;

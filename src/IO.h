@@ -295,15 +295,15 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	// Correct the droplet to have the same volume as the original
 	if(svar.Bcase == 4)
 	{
-		cout << "Droplet Diameter: " << svar.Jet(0) << endl;
-		svar.diam = svar.Jet(0);
+		cout << "Droplet Diameter: " << svar.Jet(0) << endl;		
 	}
 
+	svar.diam = svar.Jet(0);
 
 #if SIMDIM == 3
- 	avar.pVol = 4.0/3.0 * M_PI * pow(svar.Pstep,SIMDIM);
+ 	avar.pVol = 4.0/3.0 * M_PI * pow(svar.Pstep*0.5,SIMDIM);
 #else
- 	avar.pVol = M_PI* svar.Pstep*svar.Pstep;
+ 	avar.pVol = M_PI* svar.Pstep*svar.Pstep/4.0;
 #endif
 
  	svar.beta = 0.25; svar.gamma = 0.5; /*Newmark Beta parameters*/

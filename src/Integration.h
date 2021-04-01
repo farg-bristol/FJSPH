@@ -23,7 +23,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	uint   k = 0;	//iteration number
 	real logbase = 0.0;
 	real error1 = 0.0;
-	real error2 = 0.0;
+	real error2 = 1.0;
 
 	// Find maximum safe timestep
 	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
@@ -53,15 +53,15 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 /***********************************************************************************/
 /***********************************************************************************/
 
-// #ifdef DEBUG
-	cout << "time: " << svar.t << " dt: " << svar.dt << "  dtv: " << dtv <<  "  dtf: " << dtf << "  dtc: " << dtc << " Maxf: " << maxf << endl;
-// #endif
-
 	if (svar.dt > (svar.frame+1)*svar.framet-svar.t)
 	{
 		svar.dt = (svar.frame+1)*svar.framet-svar.t;
 	}
-	
+
+// #ifdef DEBUG
+	cout << "time: " << svar.t << " dt: " << svar.dt << "  dtv: " << dtv <<  "  dtf: " << dtf << "  dtc: " << dtc << " Maxf: " << maxf << endl;
+// #endif
+
 	// Check if the particle has moved to a new cell
 	if (svar.Asource == 1 || svar.Asource == 2)
 	{
@@ -157,7 +157,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		pnp1[ii].theta = outlist[ii].size(); 
 	}
 
-	vector<StateVecD> xih(end);
+	vector<StateVecD> xih(end-start);
 	
 	const real a = 1 - svar.gamma;
 	const real b = svar.gamma;
@@ -174,19 +174,19 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 	
 	// airP.clear();
-	std::vector<std::vector<Part>> neighb;
+	vector<vector<Part>> neighb;
 	neighb.reserve(end);
 	
 
 	#pragma omp parallel shared(pnp1, outlist, air)
 	{
-		std::vector<std::vector<Part>> local;
+		vector<vector<Part>> local;
 		if(svar.ghost == 1 )
 		{
 			#pragma omp for schedule(static) nowait
 			for (size_t ii = 0; ii < end; ++ii)
 			{
-				std::vector<Part> temp;
+				vector<Part> temp;
 				temp.reserve(outlist[ii].size());
 				for(auto jj:outlist[ii])
 					temp.push_back(Part(pnp1[jj])); 
@@ -203,7 +203,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			#pragma omp for schedule(static) nowait
 			for (size_t ii = 0; ii < end; ++ii)
 			{
-				std::vector<Part> temp;
+				vector<Part> temp;
 				temp.reserve(outlist[ii].size());
 				for(auto jj:outlist[ii])
 					temp.push_back(Part(pnp1[jj])); 
@@ -220,6 +220,11 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
     	}
 	}
 
+	#pragma omp parallel for
+	for(size_t ii = start; ii < end; ++ii )
+	{
+		xih[ii-start] = pnp1[ii].xi;
+	}
 	
 	/*Get preliminary new state to find neighbours, then freeze*/
 	Get_Resid(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
@@ -253,11 +258,11 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		air = vector<vector<Part>>(start,vector<Part>());
 		#pragma omp parallel shared(pnp1, outlist)
 		{
-			std::vector<std::vector<Part>> local;
+			vector<vector<Part>> local;
 			#pragma omp for schedule(static) nowait
 			for (size_t ii = start; ii < end; ++ii)
 			{
-				std::vector<Part> temp;
+				vector<Part> temp;
 				if(pnp1[ii].surf == 1 && pnp1[ii].b == PartState.FREE_ && outlist[ii].size() > 0.4*avar.nfull)
 				{
 					temp = PoissonSample::generatePoissonPoints(svar,fvar,avar,cells,ii,pnp1,outlist,dp.norm[ii],dp.avgV[ii]);
@@ -422,7 +427,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	/*Do time integration*/
 	Newmark_Beta(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,cells,cellsused,neighb,
-		outlist,dp,logbase,k,error1,error2,pn,pnp1,airP,Force,dropVel);
+		outlist,dp,logbase,k,error1,error2,xih,pn,pnp1,airP,Force,dropVel);
 
 	// error1 = Runge_Kutta4(TREE,svar,fvar,avar,start,end,cells,cellsused,neighb,outlist,
 	// 		dp,logbase,pn,st_2,pnp1,airP,Force,dropVel);
@@ -774,7 +779,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	// 							neighb,outlist,dp,logbase,pn,st_2,error1));
 
 	// /*Previous State for error calc*/
-	vector<StateVecD> xih(svar.totPts);
+	vector<StateVecD> xih(end);
 	vector<StateVecD> xi(svar.totPts); /*Keep original positions to reset after finding forces*/
 	#pragma omp parallel for shared(pnp1)
 	for (size_t  ii=0; ii < end; ++ii)
@@ -953,7 +958,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 	/***************************** Newmark Beta *************************************/
 	Newmark_Beta(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,cells,cellsused,neighb,
-		outlist,dp,logbase,k,error1,error2,pn,pnp1,airP,Force,dropVel);
+		outlist,dp,logbase,k,error1,error2,xih,pn,pnp1,airP,Force,dropVel);
 
 
 	/*Reset positions*/

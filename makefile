@@ -16,12 +16,15 @@ ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 # Find the OS to execute correctly
 UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
-TARGET=$(ROOT_DIR)/WCSPH# Target executable
+#TARGET=$(ROOT_DIR)/WCSPH# Target executable
+TARGET=WCSPH
 else
-TARGET=$(ROOT_DIR)/WCSPH.exe
+#TARGET=$(ROOT_DIR)/WCSPH.exe
+TARGET=WCSPH.exe
 endif
 
-SOURCE=$(ROOT_DIR)/src/WCSPH.cpp
+#SOURCE=$(ROOT_DIR)/src/WCSPH.cpp
+SOURCE=src/WCSPH.cpp
 
 
 # Compile and Build
