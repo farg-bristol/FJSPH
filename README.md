@@ -1,5 +1,5 @@
 # WCSPH ReadMe 
-Latest update: 19/12/18
+Latest update: 1/4/21
 
 
 # What is this repository about?
@@ -13,57 +13,64 @@ Weakly Compressible Smoothed Particle Hydrodynamics (WCSPH) is one formulation o
 # What does this code do?
 At present the code is still in large development, so functionality isn't anywhere near where it should be to be a functional tool in your project, at least without modifications of your own. SPH has the brilliant feature of essentially being able to plug in equations for your particular need. At some point it may be worth analysing which models are most appropriate for the intended application of this repository, however accuracy is unlikely to be a priority compared to speed. As such most of the code here is intended for simplicity. The current code has the following set of formulations (detailed in the references stated above):
 
-Base SPH: Monaghan (1992) + XSPH correction.
+Base SPH: Monaghan (1992) + delta-SPH continuity correction (Marrone,2018). Currently undergoing testing for ALE-SPH (Sun,2019).
 
-Laminar Viscosity: Morris (1997).
+Laminar Viscosity: Linking of artificial viscosity to actual viscosity (1997).
 
-Surface Tension: Nair & Poeschel (2018).
+Surface Tension: Continuum Surface Force (Brackbill,1997) with interactions restricted to surface particles (Ordoubadi,2015).
 
-Density Reinitialisation: Colagrossi & Landrini (2003).
+Aerodynamic coupling: Upwind droplet continuum correction (Gissler et al.,2017).
 
 # Dependencies 
-The code only has *three* dependent libraries at present:
+The code only has *four* dependent libraries at present:
 
 [Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page) 
 
 [NanoFLANN](https://github.com/jlblancoc/nanoflann) - Jose Luis Blanco-Claraco (University of Almería).
 
-[Poisson Disk Sampling](https://github.com/thinks/poisson-disk-sampling) - Tommy Hinks.
+[NetCDF](https://www.unidata.ucar.edu/downloads/netcdf/) 
 
-The code has been built such that these need to be in local subfolders "Eigen", "NanoFLANN", and "PDS" respectively. The bare minimum of each has been provided in the repository, so download from other sources shouldn't be necessary. For exactly what needs to be in these folders (particularly for NanoFLANN), see the include headers in the source. 
+[TECIO](https://github.com/su2code/SU2/tree/master/externals/tecio) 
+
+The code has been built such that the first two libraries need to be in local subfolders "Eigen", and "NanoFLANN", but NetCDF and TECIO must be on the system path. 
+The bare minimum of Eigen has been provided in the repository, and additional download of the library shouldn't be necessary. 
+For exactly what needs to be in these folders, see the include headers in the source. 
 
 # Building
-A makefile is provided to ease compliation. There are several options in the build file, but because there are so few dependencies and files associated at present, it is still a single compile line, so even if you dont have a make environment, it's easy to see what command is needed. To build, all the user needs to write is `make build` and the code should then compile. To run, only one input file has been provided as a sample, and it is `make cross` in order to run the program with that input. 
+A makefile is provided to ease compliation. 
+There are several options in the build file, but because there are so few dependencies and files associated at present, it is still a single compile line.
+In the makefile are four primary options: 2D, debug2, 3D, and debug3. 
+These are build options for two and three dimensions, and with or without debug flags. 
+Additionally are options to build associated programs Cell2Edge, for building 2D Edge based mesh files from TAU files, and Cell2Face for 3D TAU meshes to face based data. 
 
 ## C++ 11
-A word of warning that the code requires C++11 standard support, and so will not build on Visual Studio 13, due to an incomplete support of the C++11 standard. If you are on windows and don't have access to VS15, then MinGW is the next best bet (unless you are on windows 10, and have WSL enabled).
+The NanoFLANN code requires C++11 standard support, and so will not build on Visual Studio 13, due to an incomplete support of the C++11 standard. If you are on windows and don't have access to VS15, then MinGW is the next best bet (unless you are on windows 10, and have WSL enabled).
 
 # Input
-On the command line, either zero, one, or two arguments can be provided. If no inputs are provided, the program assumes a standard set of settings for a simulation. The first argument is the input file for settings, that will then overwrite the defaults (aore detail on the options later). Comments are provided in the input file that should be self-explanatory as to their function. The second argument is the output file name. If not provided it defaults to 'Test.plt'. More than two arguments simply states a warning that they will be ignored. 
+On the command line either one, or two options exists; a clean run or run from a current solution. If no inputs are provided, the code exits without performing anything. 
+In the first option, running from a clean start, the first argument is the input folder for settings. Comments are provided in the input file that should be self-explanatory as to their function.
+The second option, restarting, requires the first input argument to be the restart option "-r", and the second argument being the input folder.
+More than two arguments simply states a warning that they will be ignored. 
 
-In time, I'll add a standalone file describing in better detail what the parameters in the .dat files do (for now they are annotated with their function in the file), as some are more obscure, but obviously because they are still being developed. 
+In the input folder should be all files required for the simulation.
+The two files that are required for any and all simulations is the "settings" and "fluid" files. 
+If the simulation involves a mesh, then the mesh and solution file are expected in the same folder. 
 
 # Output
-The code outputs a tecplot360 file, "Test.plt". This has strands in it, so should automatically load ready to animate when brought into tecplot. Unfortunately I haven't figured out how to get tecplot to open straight into scatter, so some steps are needed to get the data to be visible. 
+The code uses the TECIO library to output szplt files, because of it's highly efficient storage, and great ability to append to an existing file, and ability to view the results with the simulation still running. 
+There are three files that are output in this format: "Boundary.szplt", "Fuel.szplt", and "Restart.szplt". 
+The first two files provide the point data for all the SPH particles. The boundary and fuel are separate if one wished to save space and not output the boundary files during the simulation.
+If this option is selected however, restart is not possible. 
 
-When first loaded into tecplot, it'll show as a `XY Line` plot in the top left. Change this to a `2D Cartesian`. Then tick `scatter`, and the data should then become visible. To make it more pretty and presentable, you can change the particle properties in `Zone Style`. The boundary and simulation particles are separate zones, so each can be modified appropriately. To play the simulation, simply press the play button on the left. 
-
-An option may be added to allow writing without strands, as this severely imacts load times into tecplot, and prevents you from retaining the view style between files. 
+Lastly, the restart file is written to provide a lossless storage of parameters to restart the simulation.
+For the restart to work, certain output options need to be selected to have restart data. Three options exist, two of which are for mesh-based rruns.
+Output option 2 is restart data for non mesh based runs, i.e. with uniform flow. 
+Output option 5 is restart data for a mesh based run, with less information about the cell, whereas option 3 is all cell data is also written for the point.
 
 # Future Plans
-The plan for the future is to continue developing code for the crossflow case and try to evaluate which way is best to apply the force to the fluid. At present the methods wishing to be tested are:
+A great amount more work could be done in this field. 
+Section needs to be added to later.
 
-* Force on all upstream particles. (works pretty well)
-* Force on all particles defined as a surface. (Terrible)
-* Force on all particles defined as a surface, proportional to the surface tension. (Works really well)
-* Enact force and surface tension on particles using generated 'ghost' particles. (complicated)
-
-
-Natually a lot of work needs to be done in order to successfully test these, and evaluate each of their traits. At present, some testing of the first method has been done, with reassuring success. Work is afoot to incorporate the other options into a code to allow easy comparison. The list is generally arranged in what I anticipate being low to high accuracy. What I am unsure about is which is the highest computation, particularly for a given accuracy. Using ghost particles is likely to be the most computationally heavy, however could well achieve the highest accuracy for the least tuning work. Finding the relationship between surface tension and aerodynamic force is likely to require lots of tuning, which may never even finish. Therefore part of me leans to ghost particles to save the uncertainty. 
-Another point of attraction for the use of ghost particles is that there appears to be a scarcity in research in this direction of SPH, at least a second phase other than the boundary (see Schechter & Brison, 2012). If implementation is effective, then there is possibility for it to be used in several other applications where surface tension is critical to the scenario, but only a single phase is of interest. 
-
-** Update:
-Having since tested a correction factor based upon the angle formed between the surface tension vector, and the aerodynamic vector, I've switched sides away from ghost particles. The computation required and coding is too much of a headache to deal with in the short term, compared to the simple correction factor. Another great benefit of the CF is that I can (admittedly arbirarily at present) add a negative force on the wake particles, which I know will not be possible in ghost particle cases. Once I've had opportunity to test a few different correction profiles, I'll add some data about them. For now, I'm still toying and trying to find a good solution!
 
 # References 
 Colagrossi, A. & Landrini, M.
@@ -101,3 +108,4 @@ Chemical Engineering Science, Elsevier BV, 2018 , 176 , 192-204
 Schechter, H. & Bridson, R.
 *Ghost SPH for animating water*, 
 ACM Transactions on Graphics, Association for Computing Machinery (ACM), 2012 , 31 , 1-8
+
