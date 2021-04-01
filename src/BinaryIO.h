@@ -4,7 +4,11 @@
 #ifndef BINARYIO_H
 #define BINARYIO_H
 
+#ifdef WINDOWS
+#include <TECIO.h>
+#else
 #include <tecio/TECIO.h>
+#endif
 #include "Var.h"
 #include "Neighbours.h"
 #include "Kernel.h"
@@ -35,8 +39,8 @@ int Read_Real_Value(void* const& inputHandle, int32_t const& frame, int32_t cons
 vector<StateVecD> Read_Binary_Vector(void* inputHandle, INTEGER4& frame, 
 		INTEGER4& varCount, INTEGER8& iMax)
 {
-	vector<real> xVar(iMax);
-	vector<real> yVar(iMax);
+	vector<real> xVar(iMax,0.0);
+	vector<real> yVar(iMax,0.0);
 
     // cout << "Trying to get vector x-component. Var: " << varCount << endl;
 	if(Read_Real_Value(inputHandle, frame, varCount, iMax, xVar))
@@ -54,7 +58,7 @@ vector<StateVecD> Read_Binary_Vector(void* inputHandle, INTEGER4& frame,
 	++varCount;
 
 #if SIMDIM == 3
-	vector<real> zVar(iMax);
+	vector<real> zVar(iMax,0.0);
 	// cout << "Trying to get vector z-component. Var: " << varCount << endl;
 	if(Read_Real_Value(inputHandle, frame, varCount, iMax, zVar))
 	{
@@ -66,7 +70,7 @@ vector<StateVecD> Read_Binary_Vector(void* inputHandle, INTEGER4& frame,
 
 	vector<StateVecD> vec(iMax);
 	#pragma omp parallel for
-	for(uint ii = 0; ii < xVar.size(); ++ii)
+	for(uint ii = 0; ii < iMax; ++ii)
 	{
 		vec[ii](0) = xVar[ii];
 		vec[ii](1) = yVar[ii];
@@ -82,13 +86,13 @@ vector<StateVecD> Read_Binary_Vector(void* inputHandle, INTEGER4& frame,
 }
 
 
-void Read_Binary_Timestep(void* inputHandle, SIM& svar, INTEGER4 frame, State& pn)
+void Read_Binary_Timestep(void* inputHandle, SIM& svar, int32_t frame, State& pn)
 {
 // variables = "x y z rho P m v_x v_y v_z a_x a_y a_z Cell_ID Cell_Vx Cell_Vy Cell_Vz Cell_P Cell_Rho";
 	
 	cout << "Reading zone number: " << frame << endl;
 
-	INTEGER8 iMax, jMax, kMax;
+	int64_t iMax, jMax, kMax;
 	if(tecZoneGetIJK(inputHandle, frame, &iMax, &jMax, &kMax))
 	{
 		cout << "Failed to read frame " << frame << " IJK info. Stopping." << endl;
@@ -105,18 +109,17 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, INTEGER4 frame, State& p
 	}
 
 	vector<StateVecD> xi(iMax);
-	vector<real> rho(iMax);
-	vector<real> Rrho(iMax);
-	vector<real> m(iMax);
+	vector<real> rho(iMax,0.0);
+	vector<real> Rrho(iMax,0.0);
+	vector<real> m(iMax,0.0);
 	vector<StateVecD> vel(iMax);
 	vector<StateVecD> acc(iMax);
-	vector<uint8_t> b(iMax);
+	vector<uint8_t> b(iMax,0);
 	vector<StateVecD> cellV;
 	vector<real> cellP;
-	// vector<real> cellRho;
 	vector<int32_t> cellID;
-	INTEGER4 varCount = 1;
-
+	
+	int32_t varCount = 1;
 
 	xi = Read_Binary_Vector(inputHandle, frame, varCount, iMax);
 
@@ -158,8 +161,8 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, INTEGER4 frame, State& p
 	if(svar.outform == 3)
 	{	/*Get the cell information for the points*/
 		cellV = vector<StateVecD>(iMax);
-		cellP = vector<real>(iMax);
-		cellID = vector<int32_t>(iMax);
+		cellP = vector<real>(iMax,0.0);
+		cellID = vector<int32_t>(iMax,0);
 
 		cellV = Read_Binary_Vector(inputHandle, frame, varCount, iMax);
 		
@@ -182,7 +185,7 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, INTEGER4 frame, State& p
 	else if (svar.outform == 5)
 	{
 		// cout << "Trying to get variable: " << varCount << endl;
-		cellID = vector<int32_t>(iMax);
+		cellID = vector<int32_t>(iMax,0);
 		if(tecZoneVarGetInt32Values(inputHandle, frame, varCount, 1, iMax, &cellID[0]))
 		{
 			cerr << "Failed to read cell ID. frame: " << frame << endl;
@@ -201,7 +204,7 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, INTEGER4 frame, State& p
 		pn[ii].m = m[ii];
 		pn[ii].v = vel[ii];
 		pn[ii].f = acc[ii];
-		pn[ii].b = static_cast<uint>(std::round(b[ii]));
+		pn[ii].b = b[ii]; // static_cast<uint>(b[ii]);
 
 		if(svar.outform == 5 || svar.outform == 3)
 		{
@@ -219,8 +222,8 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, INTEGER4 frame, State& p
 /*************************************************************************/
 /*************************** BINARY OUTPUTS ******************************/
 /*************************************************************************/
-int Write_Real_Value(void* const& fileHandle, int32_t& outputZone, int32_t const& var, int64_t const& size,
-						vector<real>& varVec)
+int Write_Real_Vector(void* const& fileHandle, int32_t& outputZone, int32_t const& var, int64_t const& size,
+						vector<real> const& varVec)
 {
 #if FOD == 1
 	return tecZoneVarWriteDoubleValues(fileHandle, outputZone, var, 0, size, &varVec[0]);
@@ -229,6 +232,17 @@ int Write_Real_Value(void* const& fileHandle, int32_t& outputZone, int32_t const
 #endif	
 }
 
+int Write_Real_Value(void* const& fileHandle, int32_t& outputZone, int32_t const& var, int64_t const& size,
+						real const& value)
+{
+	vector<real> rvec(size,0.0);
+	rvec[0] = value;
+#if FOD == 1
+	return tecZoneVarWriteDoubleValues(fileHandle, outputZone, var, 0, size, &rvec[0]);
+#else
+	return tecZoneVarWriteFloatValues(fileHandle, outputZone, var, 0, size, &rvec[0]);
+#endif	
+}
 
 void Write_Binary_Timestep(SIM const& svar, State const& pnp1, 
 	uint const start, uint const end, char const* group, int32_t const& strandID, void* const& fileHandle)
@@ -268,7 +282,7 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 		for(uint ii = start; ii < end; ++ii)
 			x[ii-start] = pnp1[ii].xi(dim)/svar.scale;
 
-		if(Write_Real_Value(fileHandle, outputZone, var, size, x))
+		if(Write_Real_Vector(fileHandle, outputZone, var, size, x))
 		{
 			cerr << "Failed to write position coordinate " << dim << endl;
 			exit(-1);
@@ -292,19 +306,19 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 			m[ii-start] = pnp1[ii].m;
 		}
 
-			if(Write_Real_Value(fileHandle, outputZone, var, size, rho))
+			if(Write_Real_Vector(fileHandle, outputZone, var, size, rho))
 			{
 				cerr << "Failed to write density" << endl;
 				exit(-1);
 			}
 			var++;
-			if(Write_Real_Value(fileHandle, outputZone, var, size, Rrho))
+			if(Write_Real_Vector(fileHandle, outputZone, var, size, Rrho))
 			{
 				cerr << "Failed to write Rrho" << endl;
 				exit(-1);
 			}
 			var++;
-			if(Write_Real_Value(fileHandle, outputZone, var, size, m))
+			if(Write_Real_Vector(fileHandle, outputZone, var, size, m))
 			{
 				cerr << "Failed to write mass" << endl;
 				exit(-1);
@@ -324,13 +338,13 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 			a[ii-start] = pnp1[ii].f.norm();
 		}
 
-		if(Write_Real_Value(fileHandle, outputZone, var, size, v))
+		if(Write_Real_Vector(fileHandle, outputZone, var, size, v))
 		{
 			cerr << "Failed to write velocity magnitude" << endl;
 			exit(-1);
 		}
 		var++;
-		if(Write_Real_Value(fileHandle, outputZone, var, size, a))
+		if(Write_Real_Vector(fileHandle, outputZone, var, size, a))
 		{
 			cerr << "Failed to write acceleration magnitude" << endl;
 			exit(-1);
@@ -349,7 +363,7 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 		  		aF[ii-start] = pnp1[ii].surf;
 	  		}
 
-			if(Write_Real_Value(fileHandle, outputZone, var, size, nNb))
+			if(Write_Real_Vector(fileHandle, outputZone, var, size, nNb))
 			{
 				cerr << "Failed to write real value" << endl;
 				exit(-1);
@@ -391,40 +405,40 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
   			b[ii-start] = static_cast<uint8_t>(pnp1[ii].b);
   	}
 
-  		if(Write_Real_Value(fileHandle, outputZone, var, size, vx))
+  		if(Write_Real_Vector(fileHandle, outputZone, var, size, vx))
   		{
 			cerr << "Failed to write velocity x-component" << endl;
 			exit(-1);
 		}
 		var++;
-		if(Write_Real_Value(fileHandle, outputZone, var, size, vy))
+		if(Write_Real_Vector(fileHandle, outputZone, var, size, vy))
   		{
 			cerr << "Failed to write velocity y-component" << endl;
 			exit(-1);
 		}
 		var++;
 #if SIMDIM == 3
-		if(Write_Real_Value(fileHandle, outputZone, var, size, vz))
+		if(Write_Real_Vector(fileHandle, outputZone, var, size, vz))
   		{
 			cerr << "Failed to write velocity z-component" << endl;
 			exit(-1);
 		}
 		var++;
 #endif
-  		if(Write_Real_Value(fileHandle, outputZone, var, size, ax))
+  		if(Write_Real_Vector(fileHandle, outputZone, var, size, ax))
   		{
 			cerr << "Failed to write acceleration x-component" << endl;
 			exit(-1);
 		}
 		var++;
-		if(Write_Real_Value(fileHandle, outputZone, var, size, ay))
+		if(Write_Real_Vector(fileHandle, outputZone, var, size, ay))
   		{
 			cerr << "Failed to write acceleration y-component" << endl;
 			exit(-1);
 		}
 		var++;
 #if SIMDIM == 3
-		if(Write_Real_Value(fileHandle, outputZone, var, size, az))
+		if(Write_Real_Vector(fileHandle, outputZone, var, size, az))
   		{
 			cerr << "Failed to write acceleration z-component" << endl;
 			exit(-1);
@@ -454,13 +468,13 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 				cP[ii-start] = pnp1[ii].cellP;
 			}
 
-			if(Write_Real_Value(fileHandle, outputZone, var, size, cVx))
+			if(Write_Real_Vector(fileHandle, outputZone, var, size, cVx))
 			{
 				cerr << "Failed to write cell velocity x-component" << endl;
 				exit(-1);
 			}
 			var++;
-			if(Write_Real_Value(fileHandle, outputZone, var, size, cVy))
+			if(Write_Real_Vector(fileHandle, outputZone, var, size, cVy))
 			{
 				cerr << "Failed to write cell velocity y-component" << endl;
 				exit(-1);
@@ -472,7 +486,7 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 				#pragma omp parallel for
 				for(uint ii = start; ii < end; ++ii)
 					cVz[ii-start] = pnp1[ii].cellV(2);
-				if(Write_Real_Value(fileHandle, outputZone, var, size, cVz))
+				if(Write_Real_Vector(fileHandle, outputZone, var, size, cVz))
 				{
 					cerr << "Failed to write cell velocity z-component" << endl;
 					exit(-1);
@@ -480,7 +494,7 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 				var++;
 			#endif
 
-			if(Write_Real_Value(fileHandle, outputZone, var, size, cP))
+			if(Write_Real_Vector(fileHandle, outputZone, var, size, cP))
 			{
 				cerr << "Failed to write cell pressure" << endl;
 				exit(-1);
@@ -665,5 +679,7 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 
     
 }
+
+
 
 #endif

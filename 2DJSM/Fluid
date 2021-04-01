@@ -1,15 +1,16 @@
-0.1                  #Aritificial Viscosity factor
+0.01                 #Aritificial Viscosity factor
+0.000               #Particle shifting factor
 150.0                #Boundary contact angle
 810                  #Rho_jet
-0.4648               #Rho_gas
-150                  #Speed of Sound C_s
+1.1226               #Rho_gas
+500                  #Speed of Sound C_s
 0.00142              #Liquid dynamic viscosity
 0.00001716           #Gas dynamic viscosity
 0.0256               #Surface tension
-solution             #Output folder name
-2DJSM.grid.edges     #Input Mesh File
-sol2eq.pval.30000    #Input Solution File
+Solution       #Output folder name
+2DJSM.grid.edges #Input Mesh File
+sol2eq.pval.30000       #Input Solution File
 1                    #Input mesh scale
-119.926              #Reference gas airspeed
-36472                #Reference gas pressure
-273.15               #Reference gas temperature
+35.27                #Reference gas airspeed
+101353                #Reference gas pressure
+288                  #Reference gas temperature

@@ -178,22 +178,6 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar,
 		// 	// }
 			
 
-		// }
-			
-
-		// #pragma omp for schedule(static) ordered
-		// for(int ii = 0; ii < omp_get_num_threads(); ++ii)
-		// {
-		// 	#pragma omp ordered
-		// 	{
-		// 		dp.L.insert(dp.L.end(),Lmat.begin(),Lmat.end());
-		// 		dp.gradRho.insert(dp.gradRho.end(),gradRho.begin(),gradRho.end());
-		// 		dp.norm.insert(dp.norm.end(),norm.begin(),norm.end());
-		// 		dp.avgV.insert(dp.avgV.end(),avgV.begin(),avgV.end());
-		// 		dp.lam.insert(dp.lam.end(),lam.begin(),lam.end());
-		// 		dp.lam_nb.insert(dp.lam_nb.end(),lam_nb.begin(),lam_nb.end());
-		// 		dp.kernsum.insert(dp.kernsum.end(),kernsum.begin(),kernsum.end());
-		// 	}
 		// }			
 
 	}	/*End parallel section*/	
@@ -264,6 +248,12 @@ DELTAP const& dp, State& pnp1)
 			deltaU *= -2.0 * fvar.H * /*maxU*/ pi.v.norm();
 
 			deltaU = std::min(deltaU.norm(), maxU/2.0) * deltaU.normalized();
+
+			if(deltaU.norm() != 0)
+			{
+				cout << "vPert is not 0. Why?" << endl;
+				cout << "ii: " << pi.partID << "  " << deltaU.norm() << "  " << maxU/2.0 << endl;
+			}
 
 			if(pi.b != PartState.START_ && pi.b != PartState.BACK_)
 			{
@@ -609,7 +599,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				StateVecD const Rij = pj.xi-pi.xi;
 				StateVecD const Vij = pj.v-pi.v;
 				real const r = Rij.norm();
-				// real const volj = pj.m/pj.rho;
+				real const volj = pj.m/pj.rho;
 				StateVecD const gradK = /*dp.L[ii] * */GradK(Rij, r,fvar.H, fvar.correc);
 
 				// StateVecD contrib = BasePos(pi.p,pj.p,volj,gradK);
@@ -617,7 +607,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				/*drho/dt*/
 				Rrhoi -= pj.m*(Vij.dot(gradK));
-				// Rrhod -= Continuity_dSPH(Rij,r,fvar.HSQ,gradK,volj,dp.gradRho[ii],dp.gradRho[pj.partID],pi,pj);
+				Rrhod -= Continuity_dSPH(Rij,r,fvar.HSQ,gradK,volj,dp.gradRho[ii],dp.gradRho[pj.partID],pi,pj);
 				// RV[ii] -= pj.m*contrib;
 			}/*End of neighbours*/
 			
@@ -625,7 +615,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 			RV[ii] = StateVecD::Zero();
 			Af[ii] = StateVecD::Zero();
 			curv[ii] = 0.0;
-			Rrho[ii] = (Rrhoi + fvar.dCont * Rrhod);
+			Rrho[ii] = (Rrhoi - fvar.dCont * Rrhod);
 
 		} /*End of boundary parts*/
 
@@ -805,7 +795,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 			
 			Af[ii] = aero;
 			RV[ii] = (RVi + artViscI + viscI + aero/pi.m + g);
-			Rrho[ii] = (Rrhoi + fvar.dCont * Rrhod);
+			Rrho[ii] = (Rrhoi - fvar.dCont * Rrhod);
 
 			// res_.emplace_back(aero/pi.m);
 			// Rrho_.emplace_back(0.0);

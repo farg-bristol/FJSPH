@@ -501,7 +501,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			// cout << "In add points for-loop" << endl;
 			AddPoints(y, svar, fvar, avar, pn, pnp1, PartState.START_);
 		}
-		svar.clear = -svar.Jet[1] + 4*svar.dx;
+
 	}
 	else if (svar.Bcase == 3)
 	{
@@ -531,7 +531,6 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			svar.back.emplace_back(ii);
 		}
 
-		svar.clear = -svar.Jet[1] + 4*svar.dx;
 	}
 	else if(svar.Bcase == 4)
 	{

@@ -388,11 +388,9 @@ void Newmark_Beta(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	real const& a, real const& b, real const& c, real const& d, real const& B, real const& gam,
 	MESH& cells, vector<size_t>& cellsused,
 	vector<vector<Part>> const& neighb, outl& outlist, DELTAP const& dp,
-	real& logbase, uint& k, real& error1, real& error2, 
+	real& logbase, uint& k, real& error1, real& error2, vector<StateVecD>& xih,
 	State& pn, State& pnp1, State& airP, StateVecD& Force, StateVecD& dropVel)
 {
-	vector<StateVecD> xih(end-start);
-
 	uint nUnstab = 0;
 
 	while (error1 > -7.0)
@@ -415,7 +413,7 @@ void Newmark_Beta(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 		error2 = error1;
 
-		// cout << error1 << endl;
+		// cout << "It: " << k << " Error: " << error1 << endl;
 		
 	} /*End of subits*/
 }
