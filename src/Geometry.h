@@ -37,13 +37,13 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                 StateVecD pointT = xi + h * dp.norm[ii].normalized();
 
                 uint surf = 1; /*Begin by assuming a surface, and proving otherwise*/
-                for(size_t const& jj:outlist[ii])
+                for(std::pair<size_t,real> const& jj:outlist[ii])
                 {
-                    if(jj == ii)
+                    if(jj.first == ii)
                         continue;
                     
-                    StateVecD x_jT = pnp1[jj].xi - pointT;
-                    real r = (pnp1[jj].xi - xi).norm();
+                    StateVecD x_jT = pnp1[jj.first].xi - pointT;
+                    real r = sqrt(jj.second);
 
                     if(r >= sqrt(2)*h)
                     {
@@ -118,14 +118,14 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
 #endif
                 }
 
-                for(size_t const& jj:outlist[ii])
+                for(std::pair<size_t,real> const& jj:outlist[ii])
                 {
-                    if (ii == jj)
+                    if (ii == jj.first)
                         continue;
 
-                    StateVecD Rij = pnp1[jj].xi - pnp1[ii].xi;
-                    real r = Rij.norm();
-                    real volj = pnp1[jj].m/pnp1[jj].rho;
+                    StateVecD Rij = pnp1[jj.first].xi - pnp1[ii].xi;
+                    real r = sqrt(jj.second);
+                    real volj = pnp1[jj.first].m/pnp1[jj.first].rho;
                     StateVecD diffK = volj *  GradK(Rij,r,fvar.H,fvar.correc);
 
 
@@ -140,9 +140,9 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                         }
                     } 
 
-                    if (pnp1[jj].surf == 1)
+                    if (pnp1[jj.first].surf == 1)
                     {
-                        curve -= (dp.norm[jj].normalized()-dp.norm[ii].normalized()).dot(diffK);
+                        curve -= (dp.norm[jj.first].normalized()-dp.norm[ii].normalized()).dot(diffK);
                         correc += volj * Kernel(r,fvar.H,fvar.correc);
                         // curve += curves[jj] * pnp1[jj].m/pnp1[jj].rho* kern / dp.kernsum[ii];
                     }
@@ -162,21 +162,21 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
             {
                 real curve = 0.0;
 
-                for(size_t const& jj:outlist[ii])
+                for(std::pair<size_t,real> const& jj:outlist[ii])
                 {
-                    if (pnp1[jj].surf != 1)
+                    if (pnp1[jj.first].surf != 1)
                         continue;
 
-                    if (ii == jj)
+                    if (ii == jj.first)
                     {
                         curve += curves[ii] * fvar.correc/correcs[ii];
                         continue;
                     }
 
-                    real r = (pnp1[jj].xi - pnp1[ii].xi).norm();
-                    real kern = pnp1[jj].m/pnp1[jj].rho * Kernel(r,fvar.H,fvar.correc);
+                    real r = sqrt(jj.second);
+                    real kern = pnp1[jj.first].m/pnp1[jj.first].rho * Kernel(r,fvar.H,fvar.correc);
 
-                    curve += curves[jj] * kern/correcs[ii];
+                    curve += curves[jj.first] * kern/correcs[ii];
                 }
 
                 pnp1[ii].curve = curve;

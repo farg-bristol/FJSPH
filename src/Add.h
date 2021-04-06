@@ -995,10 +995,10 @@ namespace PoissonSample
 		Grid grid(gridW, minDist, cellSize);
 
 		/*Fill out the prexisting particles to add points around*/
-		for(auto j:outlist[host])
+		for(auto jj:outlist[host])
 		{
-			samplePoints.push_back(pnp1[j]);
-			grid.insert(pnp1[j].xi-origin);
+			samplePoints.push_back(pnp1[jj.first]);
+			grid.insert(pnp1[jj.first].xi-origin);
 		}
 
 		/*Try and add a point where it won't conflict*/

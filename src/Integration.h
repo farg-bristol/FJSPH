@@ -189,7 +189,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				vector<Part> temp;
 				temp.reserve(outlist[ii].size());
 				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj])); 
+					temp.push_back(Part(pnp1[jj.first],jj.second)); 
 
 				if(air[ii].size()>0)
 				{
@@ -206,7 +206,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				vector<Part> temp;
 				temp.reserve(outlist[ii].size());
 				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj])); 
+					temp.push_back(Part(pnp1[jj.first], jj.second));
 
 				local.push_back(temp);
 			}
@@ -301,7 +301,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				std::vector<Part> temp;
 				temp.reserve(outlist[ii].size());
 				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj])); 
+					temp.push_back(Part(pnp1[jj.first], jj.second));
 
 				if(air[ii].size()>0)
 				{
@@ -318,7 +318,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				std::vector<Part> temp;
 				temp.reserve(outlist[ii].size());
 				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj])); 
+					temp.push_back(Part(pnp1[jj.first], jj.second));
 
 				local.push_back(temp);
 			}
@@ -709,7 +709,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 				std::vector<Part> temp;
 				temp.reserve(outlist[ii].size());
 				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj])); 
+					temp.push_back(Part(pnp1[jj.first]));
 
 				if(air[ii].size()>0)
 				{
@@ -726,7 +726,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 				std::vector<Part> temp;
 				temp.reserve(outlist[ii].size());
 				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj])); 
+					temp.push_back(Part(pnp1[jj.first])); 
 
 				local.push_back(temp);
 			}
@@ -904,7 +904,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 				std::vector<Part> temp;
 				temp.reserve(outlist[ii].size());
 				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj])); 
+					temp.push_back(Part(pnp1[jj.first])); 
 
 				if(air[ii].size()>0)
 				{
@@ -921,7 +921,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 				std::vector<Part> temp;
 				temp.reserve(outlist[ii].size());
 				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj])); 
+					temp.push_back(Part(pnp1[jj.first]));
 
 				local.push_back(temp);
 			}

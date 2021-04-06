@@ -43,11 +43,11 @@
 	///******Wendland's C2 Quintic Kernel*******///
 	real const Kernel(real const& dist, real const& H, real const& correc) 
 	{
-		if(dist/H > 2.0)
-		{
-			// cout << "Distance greater than 2H" << endl;
-			return 0.0;
-		}
+		// if(dist/H > 2.0)
+		// {
+		// 	// cout << "Distance greater than 2H" << endl;
+		// 	return 0.0;
+		// }
 		return (pow(1-0.5*dist/H,4))*(2*dist/H+1)*correc;
 	}
 
@@ -56,11 +56,11 @@
 	{
 		if(dist/H < 1e-12)
 			return StateVecD::Zero();
-		else if(dist/H > 2.0)
-		{
-			// cout << "Distance greater than 2H" << endl;
-			return StateVecD::Zero();
-		}
+		// else if(dist/H > 2.0)
+		// {
+		// 	// cout << "Distance greater than 2H" << endl;
+		// 	return StateVecD::Zero();
+		// }
 		return 5.0*(Rij/(H*H))*pow(1-0.5*dist/H,3)*correc;
 	}
 #endif

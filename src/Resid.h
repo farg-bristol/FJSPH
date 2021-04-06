@@ -51,11 +51,11 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar,
 		
 			Part const& pi(pnp1[ii]);
 	
-			for(size_t const& jj:outlist[ii])
+			for(std::pair<size_t,real> const& jj:outlist[ii])
 			{
-				Part const& pj(pnp1[jj]);
+				Part const& pj(pnp1[jj.first]);
 				/*Check if the position is the same, and skip the particle if yes*/
-				if(ii == jj)
+				if(ii == jj.first)
 				{
 					kernsum_ +=  pj.m/pj.rho * fvar.correc;
 					avgV_ += pj.v * pj.m/pj.rho * fvar.correc;
@@ -64,7 +64,7 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar,
 				}
 
 				StateVecD const Rij = pj.xi - pi.xi;
-				real const r = Rij.norm();
+				real const r = sqrt(jj.second);
 				real const volj = pj.m/pj.rho;
 				real const kern = Kernel(r,fvar.H,fvar.correc);
 				StateVecD const Grad = GradK(-Rij,r,fvar.H,fvar.correc);
@@ -220,26 +220,26 @@ DELTAP const& dp, State& pnp1)
 			uint f = 0;
 			real woccl = 0.0;
 
-			for (size_t const& jj:outlist[ii])
+			for (std::pair<size_t,real> const& jj:outlist[ii])
 			{	/* Neighbour list loop. */
-				Part const& pj(pnp1[jj]);
+				Part const& pj(pnp1[jj.first]);
 
 				if(pj.partID == pi.partID /*|| pj.b == PartState.BOUND_*/)
 					continue;
 
 				StateVecD const Rij = pj.xi-pi.xi;
-				real const r = Rij.norm();
+				real const r = sqrt(jj.second);
 				real const kern = Kernel(r,fvar.H,fvar.correc);
 				StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);
 
 				deltaU += (1.0+0.2*pow(kern/fvar.Wdx,4.0))*gradK*(pj.m/pj.rho);
 				// deltaU += 
-				gradLam += (dp.lam[jj]-dp.lam[ii]) * dp.L[ii] * gradK * pj.m/pj.rho;
+				gradLam += (dp.lam[jj.first]-dp.lam[ii]) * dp.L[ii] * gradK * pj.m/pj.rho;
 
-				if(dp.lam[jj] < 0.75)
+				if(dp.lam[jj.first] < 0.75)
 					f = 1;
 
-				real theta = acos(dp.norm[ii].normalized().dot(dp.norm[jj].normalized()));
+				real theta = acos(dp.norm[ii].normalized().dot(dp.norm[jj.first].normalized()));
 				if ( theta > woccl )
 					woccl = theta;
 			}
@@ -248,12 +248,6 @@ DELTAP const& dp, State& pnp1)
 			deltaU *= -2.0 * fvar.H * /*maxU*/ pi.v.norm();
 
 			deltaU = std::min(deltaU.norm(), maxU/2.0) * deltaU.normalized();
-
-			if(deltaU.norm() != 0)
-			{
-				cout << "vPert is not 0. Why?" << endl;
-				cout << "ii: " << pi.partID << "  " << deltaU.norm() << "  " << maxU/2.0 << endl;
-			}
 
 			if(pi.b != PartState.START_ && pi.b != PartState.BACK_)
 			{
@@ -427,7 +421,7 @@ real Continuity_dSPH(StateVecD const& Rij, real const& r, real const& HSQ, State
 				real const& volj, StateVecD const& gRho_i, StateVecD const& gRho_j, Part const& pi, Part const& pj)
 {
 	real const psi_ij = ((pj.rho - pi.rho) + 0.5*(gRho_i + gRho_j).dot(Rij));
-	return volj * psi_ij * Rij.dot(Grad)/(r*r+0.01*HSQ);
+	return volj * psi_ij * Rij.dot(Grad)/(r*r+0.001*HSQ);
 }
 
 
@@ -598,7 +592,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				StateVecD const Rij = pj.xi-pi.xi;
 				StateVecD const Vij = pj.v-pi.v;
-				real const r = Rij.norm();
+				real const r = sqrt(pj.nDist);
 				real const volj = pj.m/pj.rho;
 				StateVecD const gradK = /*dp.L[ii] * */GradK(Rij, r,fvar.H, fvar.correc);
 
@@ -724,7 +718,9 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				StateVecD const Rij = pj.xi-pi.xi;
 				StateVecD const Vij = pj.v-pi.v;
-				real const r = Rij.norm();			
+				real const r = sqrt(pj.nDist);	
+
+				cout << r << "  " << Rij.norm() << endl;		
 				real const volj = pj.m/pj.rho;
 				// StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);
 				StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);/* gradK;*/

@@ -29,45 +29,42 @@ SOURCE=src/WCSPH.cpp
 
 # Compile and Build
 2D:
-	$(CXX) -DSIMDIM=2 ${FLAGS} $(CXXFLAGS) $(INC) $(LLINK) $(SOURCE) $(LIBS) -o $(TARGET)
+	$(CXX) -DSIMDIM=2 ${FLAGS} $(CXXFLAGS) $(INC) $(LLINK) -o $(TARGET) $(SOURCE) $(LIBS)
 
 3D:
-	$(CXX) -DSIMDIM=3 ${FLAGS} $(CXXFLAGS) $(INC) $(LLINK) $(SOURCE) $(LIBS) -o $(TARGET)
+	$(CXX) -DSIMDIM=3 ${FLAGS} $(CXXFLAGS) $(INC) $(LLINK) -o $(TARGET) $(SOURCE) $(LIBS)
 
 #add debug flag
 debug2:
-	$(CXX) -g -DDEBUG -DSIMDIM=2 ${FLAGS} $(CXXFLAGS) $(INC) $(LLINK) $(SOURCE) $(LIBS) -o $(TARGET)
+	$(CXX) -g -DDEBUG -DSIMDIM=2 ${FLAGS} $(CXXFLAGS) $(INC) $(LLINK) -o $(TARGET) $(SOURCE) $(LIBS)
 
 debug3:
-	$(CXX) -g -DDEBUG -DSIMDIM=3 ${FLAGS} $(CXXFLAGS) $(INC) $(LLINK) $(SOURCE) $(LIBS) -o $(TARGET)
+	$(CXX) -g -DDEBUG -DSIMDIM=3 ${FLAGS} $(CXXFLAGS) $(INC) $(LLINK) -o $(TARGET) $(SOURCE) $(LIBS)
 
 post:
-	$(CXX) ${FLAGS} $(CXXFLAGS) $(INC) $(LLINK) src/Post.cpp $(LIBS) -o SPHPost
+	$(CXX) ${FLAGS} $(CXXFLAGS) $(INC) $(LLINK) src/Post.cpp -o SPHPost $(LIBS)
 
 debugP:
-	$(CXX) -g -DDEBUG ${FLAGS} $(CXXFLAGS) $(INC) $(LLINK) src/Post.cpp $(LIBS) -o SPHPost
+	$(CXX) -g -DDEBUG ${FLAGS} $(CXXFLAGS) $(INC) $(LLINK) -o SPHPost src/Post.cpp $(LIBS)
 
 c2f:
-	$(CXX) $(FLAGS) $(CXXFLAGS) $(INC) $(LLINK) src/Cell2Face.cpp $(LIBS) -o Cell2Face
+	$(CXX) $(FLAGS) $(CXXFLAGS) $(INC) $(LLINK) -o Cell2Face src/Cell2Face.cpp $(LIBS)
 
 c2fD:
-	$(CXX) -g -DDEBUG $(FLAGS) $(CXXFLAGS) $(INC) $(LLINK) src/Cell2Face.cpp $(LIBS) -o Cell2Face
+	$(CXX) -g -DDEBUG $(FLAGS) $(CXXFLAGS) $(INC) $(LLINK) -o Cell2Face src/Cell2Face.cpp $(LIBS)
 
 c2e:
-	$(CXX) $(FLAGS) $(CXXFLAGS) $(INC) $(LLINK) src/Cell2Edge.cpp $(LIBS) -o Cell2Edge
+	$(CXX) $(FLAGS) $(CXXFLAGS) $(INC) $(LLINK) -o Cell2Edge src/Cell2Edge.cpp $(LIBS)
 
 c2eD:
-	$(CXX) -g -DDEBUG $(FLAGS) $(CXXFLAGS) $(INC) $(LLINK) src/Cell2Edge.cpp $(LIBS) -o Cell2Edge
+	$(CXX) -g -DDEBUG $(FLAGS) $(CXXFLAGS) $(INC) $(LLINK) -o Cell2Edge src/Cell2Edge.cpp $(LIBS)
 
 mesh:
-	$(CXX) $(FLAGS) $(CXXFLAGS) $(INC) src/MakeMesh.cpp -lnetcdf_c++4 -o MakeMesh
+	$(CXX) $(FLAGS) $(CXXFLAGS) $(INC) -o MakeMesh src/MakeMesh.cpp -lnetcdf_c++4
 
 meshD:
-	$(CXX) -g -DDEBUG $(FLAGS) $(CXXFLAGS) $(INC) src/MakeMesh.cpp -lnetcdf_c++4 -o MakeMesh
+	$(CXX) -g -DDEBUG $(FLAGS) $(CXXFLAGS) $(INC) -o MakeMesh src/MakeMesh.cpp -lnetcdf_c++4
 
 clean:
 	$(RM) $(TARGET)
 
-new: 
-	$(RM) $(TARGET)
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(SOURCE) $(LIBS)
