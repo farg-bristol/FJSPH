@@ -63,8 +63,8 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                             break;
                         }
 #else
-                        StateVecD Rij = pnp1[jj].xi - xi; 
-                        if(acos(dp.norm[ii].normalized().dot(Rij.normalized())) < M_PI/4.0)
+                        StateVecD Rij = pnp1[jj.first].xi - xi; 
+                        if(acos(dp.norm[ii].normalized().dot(Rij/sqrt(jj.second))) < M_PI/4.0)
                         {
                             surf = 0; 
                             break;

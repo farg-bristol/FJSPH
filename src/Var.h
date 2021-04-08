@@ -127,6 +127,7 @@ PState PartState;
 
 /*Simulation parameters*/
 typedef struct SIM {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	SIM()
 	{
 #if SIMDIM == 3
@@ -231,6 +232,7 @@ typedef struct FLUID {
 /*Aerodynamic Properties*/
 typedef struct AERO
 {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	AERO()
 	{
 		Cf = 1.0/3.0;
@@ -276,6 +278,7 @@ typedef struct AERO
 
 typedef struct MESH
 {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	/*Standard contructor*/
 	MESH(){}
 
@@ -351,6 +354,7 @@ typedef struct MESH
 /*Container for delta-plus SPH calculations*/
 typedef class DELTAP {
 	public: 
+		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 		DELTAP(size_t const& size)
 		{
 			L = vector<StateMatD>(size,StateMatD::Zero());

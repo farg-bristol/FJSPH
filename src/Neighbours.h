@@ -60,13 +60,13 @@ void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, State const& p
 
 
 	// std::fstream fn("Neighbours",std::ios::out);
-	// for(size_t ii = 0; ii < plist.size(); ++ii)
+	// for(size_t ii = 0; ii < outlist.size(); ++ii)
 	// {
 	// 	fn << "Particle: " << ii << endl;
 
-	// 	for(size_t jj = 0; jj < plist[ii].size(); ++jj)
+	// 	for (size_t jj = 0; jj < outlist[ii].size(); ++jj)
 	// 	{
-	// 		fn << "\tNeighbour: " << plist[ii][jj].first << "  Distance: " <<  sqrt(plist[ii][jj].second/fvar.HSQ) << endl;
+	// 		fn << "\tNeighbour: " << outlist[ii][jj].first << "  Distance: " << sqrt(outlist[ii][jj].second) << endl;
 	// 	}
 	// }
 	// fn.close();
