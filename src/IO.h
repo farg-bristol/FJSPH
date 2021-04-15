@@ -128,7 +128,6 @@ void Read_FLUID_Var(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 	/*Fluid parameters read*/
 	uint lineno = 0;
 	fvar.alpha = getDouble(fluid, lineno, "Artificial viscosity factor");
-	fvar.maxU = getDouble(fluid,lineno,"Particle shifting factor");
 	fvar.contangb = getDouble(fluid, lineno, "Surface tension contact angle");
 	fvar.rho0 = getDouble(fluid, lineno, "Fluid density rho0");
 	avar.rhog = getDouble(fluid, lineno, "Air density rhog");

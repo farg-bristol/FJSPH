@@ -1,5 +1,4 @@
 0.1                 #Aritificial Viscosity factor
-0.000               #Particle shifting factor
 150.0                #Boundary contact angle
 810                  #Rho_jet
 1.1226               #Rho_gas

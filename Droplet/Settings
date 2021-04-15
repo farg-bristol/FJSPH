@@ -1,8 +1,8 @@
-0.000005       #Frame output timestep
-100              #Number of frames
+0.00001       #Frame output timestep
+1000              #Number of frames
 1              #Output Frame Interval (if 0, suppresses framewise output)
 0              #Output encoding (0 = Binary, 1 = ASCII)
-4              #Output format (0 = Position only, 1 = fluid properties, 2 = debug/research)
+2              #Output format (0 = Position only, 1 = fluid properties, 2 = debug/research)
 0              #Boundary timestep output (0 = no, 1 = yes)
 0              #Ghost particle output (0 = no, 1 = yes)
 15             #Max Sub-iterations

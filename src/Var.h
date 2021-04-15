@@ -226,7 +226,7 @@ typedef struct FLUID {
 	real dCont; /*delta-SPH continuity constant term, since density and speed of sound are constant*/
 	real dMom;  /*delta-SPH momentum constant term (dCont * rho0)*/
 
-	real maxU; /*Maximum particle velocity shift*/
+	// real maxU; /*Maximum particle velocity shift*/ (No longer needed)
 }FLUID;
 
 /*Aerodynamic Properties*/
