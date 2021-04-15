@@ -334,13 +334,20 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
     fvar.nu = fvar.mu/fvar.rho0;
 
 #if SIMDIM == 2
-	fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
-	// fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
+#ifdef CUBIC
+	fvar.correc = 10.0 / (7.0 * M_PI * fvar.H * fvar.H);
+#else
+	fvar.correc = 7.0 / (4.0 * M_PI * fvar.H * fvar.H);
+#endif
 	svar.simPts = svar.xyPART[0]*svar.xyPART[1];
 #endif
 #if SIMDIM == 3
-	fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
-	// fvar.correc = (1/(M_PI*fvar.H*fvar.H*fvar.H));
+	#ifdef CUBIC
+        fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
+    #else
+        fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+    #endif
+
 	svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
 #endif
 	

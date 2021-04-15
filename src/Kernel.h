@@ -55,7 +55,10 @@
 	StateVecD const GradK(StateVecD const& Rij, real const& dist, real const& H, real const& correc)
 	{
 		if(dist/H < 1e-12)
+		{
+			cout << "Points are too close" << endl;
 			return StateVecD::Zero();
+		}
 		// else if(dist/H > 2.0)
 		// {
 		// 	// cout << "Distance greater than 2H" << endl;

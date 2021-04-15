@@ -193,6 +193,7 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar,
 	dp.kernsum = kernsum;
 }
 
+#ifdef ALE
 void Particle_Shift(SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, outl const& outlist,
 DELTAP const& dp, State& pnp1)
 {
@@ -201,7 +202,7 @@ DELTAP const& dp, State& pnp1)
 	// vector<Particle>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
 	// 	[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
 
-	real const maxU = fvar.maxU/**maxUi->v.norm()*/;
+	// real const maxU = fvar.maxU/**maxUi->v.norm()*/;
 
 	// real const maxU = fvar.maxU;
 
@@ -218,6 +219,7 @@ DELTAP const& dp, State& pnp1)
 			
 			StateVecD deltaU = StateVecD::Zero();
 			StateVecD gradLam = StateVecD::Zero();
+			real maxUij = 0.0;
 
 			uint f = 0;
 			real woccl = 0.0;
@@ -245,12 +247,17 @@ DELTAP const& dp, State& pnp1)
 				real theta = acos(dp.norm[ii].normalized().dot(dp.norm[jj.first].normalized()));
 				if ( theta > woccl )
 					woccl = theta;
+
+				if ((pj.v -pi.v).norm() > maxUij )
+				{
+					maxUij = (pj.v-pi.v).norm();
+				}
 			}
 
 			// deltaR *= -1 * fvar.sr * maxU / fvar.Cs;
 			deltaU *= -2.0 * fvar.H * pi.v.norm();
 
-			deltaU = std::min(deltaU.norm(), maxU/2.0) * deltaU.normalized();
+			deltaU = std::min(deltaU.norm(), maxUij/2.0) * deltaU.normalized();
 
 			if(pi.b != PartState.START_ && pi.b != PartState.BACK_)
 			{
@@ -301,6 +308,7 @@ DELTAP const& dp, State& pnp1)
 
 	// cout << "L Matrix: " << dp.L[400] << endl;
 }
+#endif
 
 // void Apply_XSPH(FLUID const& fvar, size_t const& start, size_t const& end, 
 // 				outl const& outlist, DELTAP const& dp, State& pnp1)
@@ -416,8 +424,8 @@ DELTAP const& dp, State& pnp1)
 /* Arbitrary Lagrangian Eulerian formulation - Sun, Colagrossi, Marrone, Zhang (2018)*/
 StateVecD ALEMomentum(Part const& pi, Part const& pj, real const& Vj, StateVecD const& gradK, real const& rho0)
 {
-	return 	(rho0/pi.rho) * (pj.v * pj.vPert.transpose() + pi.v * pi.vPert.transpose()) * gradK * Vj - 
-			pi.v * (pj.vPert - pi.vPert).dot(gradK) * Vj ;
+	return 	(rho0/pi.rho) * (pj.v * pj.vPert.transpose() + pi.v * pi.vPert.transpose()) * gradK * Vj ;
+			// - pi.v * (pj.vPert - pi.vPert).dot(gradK) * Vj ;
 }
 
 real ALEContinuity(Part const& pi, Part const& pj, real const& Vj, StateVecD const& gradK)
@@ -755,7 +763,9 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				
 				StateVecD const	contrib = BasePos(pi,pj,gradK);
-				StateVecD const ALEcontrib = ALEMomentum(pi,pj,volj,gradK,fvar.rho0);
+				#ifdef ALE
+					StateVecD const ALEcontrib = ALEMomentum(pi,pj,volj,gradK,fvar.rho0);
+				#endif
 
 				StateVecD const aVisc = ArtVisc(fvar.nu,pi,pj,fvar,Rij,Vij,rr,gradK);
 
@@ -763,8 +773,11 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				// StateVecD const visc = Viscosity(fvar.nu,fvar.HSQ,pi,pj,Rij,Vij,r,gradK);
 
 				/*Base WCSPH continuity drho/dt*/
-				// Rrhoi -= pj.m*(Vij.dot(gradK));
-				Rrhoi -= ALEContinuity(pi,pj,volj,gradK);
+				#ifdef ALE
+					Rrhoi -= ALEContinuity(pi,pj,volj,gradK);
+				#else
+					Rrhoi -= pj.m*(Vij.dot(gradK));
+				#endif
 				Rrhod -= Continuity_dSPH(Rij,rr,fvar.HSQ,gradK,volj,dp.gradRho[ii],dp.gradRho[pj.partID],pi,pj);
 		
 				/*Surface Tension - Nair & Poeschel (2017)*/
@@ -773,7 +786,13 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				// SurfC = HeST(fvar,pi,pj,Rij,r,cgrad[ii],cgrad[pj.partID]);	
 
 				// RVi += (-contrib + fvar.artMu * fvar.dMom * aVisc)/pi.rho/* + ALEcontrib*/ +  pj.m*visc;
-				RVi -= pj.m*contrib  - ALEcontrib;
+				#ifdef ALE
+					RVi -= pj.m*contrib  - ALEcontrib;
+
+				#else
+					RVi -= pj.m*contrib;
+				#endif
+
 				artViscI += pj.m*aVisc;
 				// viscI += pj.m*visc;
 

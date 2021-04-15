@@ -715,15 +715,21 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
 
 
 #if SIMDIM == 3
-    fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
-    // fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
+    #ifdef CUBIC
+        fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
+    #else
+        fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+    #endif
 
     avar.pVol = 4.0/3.0 * M_PI * pow(avar.L,SIMDIM);
     // avar.aPlate = svar.Pstep*svar.Pstep;
     avar.aPlate = 4.0*avar.L*avar.L;
 #else
-    fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
-    // fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
+    #ifdef CUBIC
+        fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
+    #else
+        fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
+    #endif    
 
     avar.pVol = M_PI* avar.L*avar.L/4.0;
     avar.aPlate = svar.Pstep;
