@@ -1,8 +1,8 @@
 #ifndef GEOMETRY_H
 #define GEOMETRY_H
 
-#include "Eigen/Core"
-#include "Eigen/Geometry"
+#include "Third_Party/Eigen/Core"
+#include "Third_Party/Eigen/Geometry"
 #include "Var.h"
 #include "IOFunctions.h"
 
@@ -37,13 +37,13 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                 StateVecD pointT = xi + h * dp.norm[ii].normalized();
 
                 uint surf = 1; /*Begin by assuming a surface, and proving otherwise*/
-                for(size_t const& jj:outlist[ii])
+                for(std::pair<size_t,real> const& jj:outlist[ii])
                 {
-                    if(jj == ii)
+                    if(jj.first == ii)
                         continue;
                     
-                    StateVecD x_jT = pnp1[jj].xi - pointT;
-                    real r = (pnp1[jj].xi - xi).norm();
+                    StateVecD x_jT = pnp1[jj.first].xi - pointT;
+                    real r = sqrt(jj.second);
 
                     if(r >= sqrt(2)*h)
                     {
@@ -63,8 +63,8 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                             break;
                         }
 #else
-                        StateVecD Rij = pnp1[jj].xi - xi; 
-                        if(acos(dp.norm[ii].normalized().dot(Rij.normalized())) < M_PI/4.0)
+                        StateVecD Rij = pnp1[jj.first].xi - xi; 
+                        if(acos(dp.norm[ii].normalized().dot(Rij/sqrt(jj.second))) < M_PI/4.0)
                         {
                             surf = 0; 
                             break;
@@ -118,14 +118,14 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
 #endif
                 }
 
-                for(size_t const& jj:outlist[ii])
+                for(std::pair<size_t,real> const& jj:outlist[ii])
                 {
-                    if (ii == jj)
+                    if (ii == jj.first)
                         continue;
 
-                    StateVecD Rij = pnp1[jj].xi - pnp1[ii].xi;
-                    real r = Rij.norm();
-                    real volj = pnp1[jj].m/pnp1[jj].rho;
+                    StateVecD Rij = pnp1[jj.first].xi - pnp1[ii].xi;
+                    real r = sqrt(jj.second);
+                    real volj = pnp1[jj.first].m/pnp1[jj.first].rho;
                     StateVecD diffK = volj *  GradK(Rij,r,fvar.H,fvar.correc);
 
 
@@ -140,9 +140,9 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                         }
                     } 
 
-                    if (pnp1[jj].surf == 1)
+                    if (pnp1[jj.first].surf == 1)
                     {
-                        curve -= (dp.norm[jj].normalized()-dp.norm[ii].normalized()).dot(diffK);
+                        curve -= (dp.norm[jj.first].normalized()-dp.norm[ii].normalized()).dot(diffK);
                         correc += volj * Kernel(r,fvar.H,fvar.correc);
                         // curve += curves[jj] * pnp1[jj].m/pnp1[jj].rho* kern / dp.kernsum[ii];
                     }
@@ -162,21 +162,21 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
             {
                 real curve = 0.0;
 
-                for(size_t const& jj:outlist[ii])
+                for(std::pair<size_t,real> const& jj:outlist[ii])
                 {
-                    if (pnp1[jj].surf != 1)
+                    if (pnp1[jj.first].surf != 1)
                         continue;
 
-                    if (ii == jj)
+                    if (ii == jj.first)
                     {
                         curve += curves[ii] * fvar.correc/correcs[ii];
                         continue;
                     }
 
-                    real r = (pnp1[jj].xi - pnp1[ii].xi).norm();
-                    real kern = pnp1[jj].m/pnp1[jj].rho * Kernel(r,fvar.H,fvar.correc);
+                    real r = sqrt(jj.second);
+                    real kern = pnp1[jj.first].m/pnp1[jj.first].rho * Kernel(r,fvar.H,fvar.correc);
 
-                    curve += curves[jj] * kern/correcs[ii];
+                    curve += curves[jj.first] * kern/correcs[ii];
                 }
 
                 pnp1[ii].curve = curve;
@@ -715,15 +715,21 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
 
 
 #if SIMDIM == 3
-    fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
-    // fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
+    #ifdef CUBIC
+        fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
+    #else
+        fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+    #endif
 
     avar.pVol = 4.0/3.0 * M_PI * pow(avar.L,SIMDIM);
     // avar.aPlate = svar.Pstep*svar.Pstep;
     avar.aPlate = 4.0*avar.L*avar.L;
 #else
-    fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
-    // fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
+    #ifdef CUBIC
+        fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
+    #else
+        fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
+    #endif    
 
     avar.pVol = M_PI* avar.L*avar.L/4.0;
     avar.aPlate = svar.Pstep;
@@ -740,7 +746,7 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
         pnp1[ii].m = fvar.simM;
     }
 
-    svar.mass = pnp1[0].m * svar.totPts;
+    svar.mass = pnp1[0].m * svar.simPts;
     cout << "New SPH particle mass: " << fvar.simM << "  spacing: " << svar.Pstep << endl;
 }
 

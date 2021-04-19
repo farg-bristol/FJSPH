@@ -9,7 +9,7 @@
 ///**************** Update neighbour list **************
 void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, State const& pnp1, outl& outlist)
 {
-	const nanoflann::SearchParams params(0,0,true);
+	const nanoflann::SearchParams params(0,0,false);
 	const real search_radius = fvar.sr;
 	outlist.clear();
 	outlist.reserve(pnp1.size());
@@ -36,13 +36,13 @@ void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, State const& p
 
 			NP1_INDEX.index->radiusSearch(&pnp1[ii].xi[0], search_radius, matches, params);
 			
-			local.emplace_back(vector<size_t>(matches.size()-1));
+			local.emplace_back(matches);
 			// plocal.emplace_back(vector<std::pair<size_t,real>>(matches.size()-1));
-			for (size_t jj = 1; jj < matches.size(); ++jj)
-			{
-				local.back()[jj-1] = matches[jj].first;
-				// plocal.back()[jj-1] = matches[jj];
-			}
+			// for (size_t jj = 1; jj < matches.size(); ++jj)
+			// {
+			// 	local.back()[jj-1] = matches[jj].first;
+			// 	// plocal.back()[jj-1] = matches[jj];
+			// }
 			
 			// std::cout << "  " << pnp1[i].list.size() << std::endl;
 		}
@@ -60,20 +60,20 @@ void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, State const& p
 
 
 	// std::fstream fn("Neighbours",std::ios::out);
-	// for(size_t ii = 0; ii < plist.size(); ++ii)
+	// for(size_t ii = 0; ii < outlist.size(); ++ii)
 	// {
 	// 	fn << "Particle: " << ii << endl;
 
-	// 	for(size_t jj = 0; jj < plist[ii].size(); ++jj)
+	// 	for (size_t jj = 0; jj < outlist[ii].size(); ++jj)
 	// 	{
-	// 		fn << "\tNeighbour: " << plist[ii][jj].first << "  Distance: " <<  sqrt(plist[ii][jj].second/fvar.HSQ) << endl;
+	// 		fn << "\tNeighbour: " << outlist[ii][jj].first << "  Distance: " << sqrt(outlist[ii][jj].second) << endl;
 	// 	}
 	// }
 	// fn.close();
 
 }
 
-void FindCellNeighbours(Vec_Tree const& CELL_INDEX, vector<StateVecD> const& cells, outl& outlist)
+void FindCellNeighbours(Vec_Tree const& CELL_INDEX, vector<StateVecD> const& cells, celll& outlist)
 {
 	
 	#if SIMDIM == 3

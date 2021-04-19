@@ -114,7 +114,6 @@ void Write_Input_ASCII(SIM const& svar, FLUID const& fvar, AERO const& avar)
 	restf << endl;
 
 	restf << fvar.alpha << setw(width) << "#Artificial viscosity" << endl;
-	restf << fvar.maxU << setw(width) << "#Particle shifting factor" << endl;
 	restf << fvar.contangb << setw(width) << "#Contact angle" << endl;
 	restf << fvar.rho0 << setw(width) << "#Fluid density" << endl;
 	restf << avar.rhog << setw(width) << "#Gas density" << endl;
@@ -199,7 +198,6 @@ void Write_Input_TECIO(SIM const& svar, FLUID const& fvar, AERO const& avar)
 	}
 
 	var.append("alpha,"); varTypes.emplace_back(realType);
-	var.append("maxU,"); varTypes.emplace_back(realType);
 	var.append("contangb,"); varTypes.emplace_back(realType);
 	var.append("rho0,"); varTypes.emplace_back(realType);
 	var.append("rhog,"); varTypes.emplace_back(realType);
@@ -315,7 +313,6 @@ void Write_Input_TECIO(SIM const& svar, FLUID const& fvar, AERO const& avar)
 	varnum++;
 
 	intVar[0] = static_cast<int32_t>(svar.nmax); 
-	cout << intVar[0] << endl;
 	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varnum, 0, size, &intVar[0]))
 	{
 		cerr << "Failed to write max particles" << endl;
@@ -542,12 +539,6 @@ void Write_Input_TECIO(SIM const& svar, FLUID const& fvar, AERO const& avar)
 	}
 	varnum++;
 
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, fvar.maxU))
-	{
-		cerr << "Failed to write max shifting velocity." << endl;
-		exit(-1);
-	}
-	varnum++;
 
 	if(Write_Real_Value(fileHandle, outputZone, varnum, size, fvar.contangb))
 	{
@@ -732,7 +723,6 @@ void Read_Restart(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 	lineno++;
 	
 	fvar.alpha = getDouble(in, lineno, "Artificial viscosity factor");
-	fvar.maxU = getDouble(in,lineno,"Particle shifting factor");
 	fvar.contangb = getDouble(in, lineno, "Surface tension contact angle");
 	fvar.rho0 = getDouble(in, lineno, "Fluid density rho0");
 	avar.rhog = getDouble(in, lineno, "Air density rhog");
@@ -862,7 +852,6 @@ void Read_Input_TECIO(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 		cerr << "Failed to read max particles" << endl;
 		exit(-1);
 	}
-	cout << static_cast<uint>(intVec[0]) << endl;
 	svar.nmax = static_cast<uint>(intVec[0]);
 	varnum++;
 
@@ -1092,14 +1081,6 @@ void Read_Input_TECIO(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 		exit(-1);
 	}
 	fvar.alpha = realVec[0];
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read max shifting velocity" << endl;
-		exit(-1);
-	}
-	fvar.maxU = realVec[0];
 	varnum++;
 
 	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
@@ -1490,7 +1471,7 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 		pn[ii].woccl = 0.0;
 		pn[ii].pDist = 0.0;
 		pn[ii].internal = 0;
-		
+
 		pn[ii].Sf = StateVecD::Zero();
 		pn[ii].normal = StateVecD::Zero();
 		pn[ii].vPert = StateVecD::Zero();

@@ -15,7 +15,7 @@
 1              #Aerodynamic solution source (0 = constant vel, 1 = mesh, 2 = mesh + momentum corr, 3 = VLM infl.)
 4              #Crossflow force case (0 = none, 1 = left surface, 2 = prop to ST-Aero angle, 4 = Gissler Method)
 0              #Ghost pressure particles (0 = no, 1 = yes)
-43.1451 14.2063 -0.1253          #Jet starting x-pos, y-pos, z-pos (pipe exit centre) (m)
+5.28519 4.2725288 -0.010222211          #Jet starting x-pos, y-pos, z-pos (pipe exit centre) (grid units)
 -1.005 1 89.716           #Jet starting rotation         
 0.0635 0.100                  #Pipe diameter, Pipe Depth (m)
 68950          #Pipe pressure (Pa)

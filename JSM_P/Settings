@@ -18,6 +18,6 @@
 3.015462 -0.22311    #Jet starting x-pos, y-pos, z-pos (pipe exit centre) (grid units)
 -150.0 0.0     #Jet starting rotation         
 0.0252 0.025    #Pipe diameter, Pipe Depth
-1000              #Pipe pressure (Pa)
+00              #Pipe pressure (Pa)
 3.163          #Jet Velocity (along jet axis)
 20 0           #Freestream Velocity

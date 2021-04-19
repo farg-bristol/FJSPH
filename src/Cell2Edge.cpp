@@ -1,6 +1,6 @@
 #include <vector>
-#include "Eigen/Core"
-#include "Eigen/StdVector"
+#include "Third_Party/Eigen/Core"
+#include "Third_Party/Eigen/StdVector"
 #include <netcdf>
 using namespace netCDF;
 using namespace netCDF::exceptions;
@@ -1181,8 +1181,8 @@ int main (int argc, char** argv)
 	Recast_Data(edata);
 
 
-	Write_Edge_Tecplot(edata);
-	// Write_Edge_Data(meshIn,edata);
-	Write_griduns(edata);
+	// Write_Edge_Tecplot(edata);
+	Write_Edge_Data(meshIn,edata);
+	// Write_griduns(edata);
 	return 0;
 }

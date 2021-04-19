@@ -16,8 +16,8 @@
 #include "Kernel.h"
 #include "Aero.h"
 #include "Add.h"
-#include "Eigen/LU"
-#include "Eigen/Eigenvalues"
+#include "Third_Party/Eigen/LU"
+#include "Third_Party/Eigen/Eigenvalues"
 #include <unordered_set>
 
 /*L matrix for delta-SPH calculation*/
@@ -51,11 +51,11 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar,
 		
 			Part const& pi(pnp1[ii]);
 	
-			for(size_t const& jj:outlist[ii])
+			for(std::pair<size_t,real> const& jj:outlist[ii])
 			{
-				Part const& pj(pnp1[jj]);
+				Part const& pj(pnp1[jj.first]);
 				/*Check if the position is the same, and skip the particle if yes*/
-				if(ii == jj)
+				if(ii == jj.first)
 				{
 					kernsum_ +=  pj.m/pj.rho * fvar.correc;
 					avgV_ += pj.v * pj.m/pj.rho * fvar.correc;
@@ -64,7 +64,7 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar,
 				}
 
 				StateVecD const Rij = pj.xi - pi.xi;
-				real const r = Rij.norm();
+				real const r = sqrt(jj.second);
 				real const volj = pj.m/pj.rho;
 				real const kern = Kernel(r,fvar.H,fvar.correc);
 				StateVecD const Grad = GradK(-Rij,r,fvar.H,fvar.correc);
@@ -90,11 +90,13 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar,
 			/*In this case, L becomes singular, and invertability needs to be checked.*/
 			if(lu.isInvertible())
 			{	
-				Lmat[ii] = (lu.inverse());
-				gradRho[ii] = (lu.inverse() * gradRho_);
+				StateMatD Linv = lu.inverse();
+				Lmat[ii] = Linv;
+				gradRho[ii] = Linv * gradRho_ ;
 
-				StateVecD ntemp = lu.inverse() * norm_;
-				norm[ii] = (norm_.norm() * ntemp.normalized());
+				// StateVecD ntemp = Linv * norm_;
+				// norm[ii] = (norm_.norm() * ntemp.normalized());
+				norm[ii] = Linv.normalized() * norm_;
 				// avgV[ii] = lu.inverse() * avgV_;
 
 				Eigen::SelfAdjointEigenSolver<StateMatD> es;
@@ -191,6 +193,7 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar,
 	dp.kernsum = kernsum;
 }
 
+#ifdef ALE
 void Particle_Shift(SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, outl const& outlist,
 DELTAP const& dp, State& pnp1)
 {
@@ -199,7 +202,7 @@ DELTAP const& dp, State& pnp1)
 	// vector<Particle>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
 	// 	[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
 
-	real const maxU = fvar.maxU/**maxUi->v.norm()*/;
+	// real const maxU = fvar.maxU/**maxUi->v.norm()*/;
 
 	// real const maxU = fvar.maxU;
 
@@ -216,44 +219,45 @@ DELTAP const& dp, State& pnp1)
 			
 			StateVecD deltaU = StateVecD::Zero();
 			StateVecD gradLam = StateVecD::Zero();
+			real maxUij = 0.0;
 
 			uint f = 0;
 			real woccl = 0.0;
 
-			for (size_t const& jj:outlist[ii])
+			for (std::pair<size_t,real> const& jj:outlist[ii])
 			{	/* Neighbour list loop. */
-				Part const& pj(pnp1[jj]);
+				Part const& pj(pnp1[jj.first]);
 
 				if(pj.partID == pi.partID /*|| pj.b == PartState.BOUND_*/)
 					continue;
 
 				StateVecD const Rij = pj.xi-pi.xi;
-				real const r = Rij.norm();
+				real const r = sqrt(jj.second);
+				real const volj = pj.m/pj.rho;
 				real const kern = Kernel(r,fvar.H,fvar.correc);
 				StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);
 
-				deltaU += (1.0+0.2*pow(kern/fvar.Wdx,4.0))*gradK*(pj.m/pj.rho);
+				deltaU += ( 1.0 + 0.2 * pow(kern/fvar.Wdx,4.0) ) * gradK * volj;
 				// deltaU += 
-				gradLam += (dp.lam[jj]-dp.lam[ii]) * dp.L[ii] * gradK * pj.m/pj.rho;
+				gradLam -= (dp.lam[jj.first]-dp.lam[ii]) * dp.L[ii] * gradK * volj;
 
-				if(dp.lam[jj] < 0.75)
+				if(/* dp.lam[jj.first] < 0.75 || */ pj.surf == 1)
 					f = 1;
 
-				real theta = acos(dp.norm[ii].normalized().dot(dp.norm[jj].normalized()));
+				real theta = acos(dp.norm[ii].normalized().dot(dp.norm[jj.first].normalized()));
 				if ( theta > woccl )
 					woccl = theta;
+
+				if ((pj.v -pi.v).norm() > maxUij )
+				{
+					maxUij = (pj.v-pi.v).norm();
+				}
 			}
 
 			// deltaR *= -1 * fvar.sr * maxU / fvar.Cs;
-			deltaU *= -2.0 * fvar.H * /*maxU*/ pi.v.norm();
+			deltaU *= -2.0 * fvar.H * pi.v.norm();
 
-			deltaU = std::min(deltaU.norm(), maxU/2.0) * deltaU.normalized();
-
-			if(deltaU.norm() != 0)
-			{
-				cout << "vPert is not 0. Why?" << endl;
-				cout << "ii: " << pi.partID << "  " << deltaU.norm() << "  " << maxU/2.0 << endl;
-			}
+			deltaU = std::min(deltaU.norm(), maxUij/2.0) * deltaU.normalized();
 
 			if(pi.b != PartState.START_ && pi.b != PartState.BACK_)
 			{
@@ -269,7 +273,7 @@ DELTAP const& dp, State& pnp1)
 				}
 				else /*Already checked if eigenvalue is less than 0.55*/
 				{	/*Particle in the surface region, so apply a partial shifting*/
-				    if(norm.dot(deltaU) > 0.0)
+				    if(norm.dot(deltaU) >= 0.0)
 					{	/*Check if particle is heading towards or away from the surface*/
 						if(woccl < M_PI/12.0)
 						{
@@ -277,7 +281,10 @@ DELTAP const& dp, State& pnp1)
 							pnp1[ii].vPert = /*dp.lam[ii]*/ shift*deltaU;
 						}
 						else
+						{
+							pnp1[ii].vPert = StateVecD::Zero();
 							continue;
+						}
 					}
 					else
 					{
@@ -285,6 +292,10 @@ DELTAP const& dp, State& pnp1)
 					}
 				}
 				/*Otherwise, particle is near a surface, and don't shift.*/
+			}
+			else
+			{
+				pnp1[ii].vPert = StateVecD::Zero();
 			}	
 		}
 	}
@@ -297,6 +308,7 @@ DELTAP const& dp, State& pnp1)
 
 	// cout << "L Matrix: " << dp.L[400] << endl;
 }
+#endif
 
 // void Apply_XSPH(FLUID const& fvar, size_t const& start, size_t const& end, 
 // 				outl const& outlist, DELTAP const& dp, State& pnp1)
@@ -412,22 +424,22 @@ DELTAP const& dp, State& pnp1)
 /* Arbitrary Lagrangian Eulerian formulation - Sun, Colagrossi, Marrone, Zhang (2018)*/
 StateVecD ALEMomentum(Part const& pi, Part const& pj, real const& Vj, StateVecD const& gradK, real const& rho0)
 {
-	return 	(rho0/pi.rho) * (pj.v * pj.vPert.transpose() + pi.v * pi.vPert.transpose()) * gradK * Vj - 
-			pi.v * (pj.vPert - pi.vPert).dot(gradK) * Vj ;
+	return 	(rho0/pi.rho) * (pj.v * pj.vPert.transpose() + pi.v * pi.vPert.transpose()) * gradK * Vj ;
+			// - pi.v * (pj.vPert - pi.vPert).dot(gradK) * Vj ;
 }
 
 real ALEContinuity(Part const& pi, Part const& pj, real const& Vj, StateVecD const& gradK)
 {
-	return pi.rho*((pj.v+pj.vPert) - (pi.v + pi.vPert)).dot(gradK)*Vj + 
+	return pi.rho*((pj.v+pj.vPert) - (pi.v + pi.vPert)).dot(gradK)*Vj - 
 			(pj.rho*pj.vPert + pi.rho*pi.vPert).dot(gradK)*Vj ;
 }
 
 /* delta-SPH dissipation term in the continuity equation*/
-real Continuity_dSPH(StateVecD const& Rij, real const& r, real const& HSQ, StateVecD const& Grad, 
+real Continuity_dSPH(StateVecD const& Rij, real const& rr, real const& HSQ, StateVecD const& Grad, 
 				real const& volj, StateVecD const& gRho_i, StateVecD const& gRho_j, Part const& pi, Part const& pj)
 {
 	real const psi_ij = ((pj.rho - pi.rho) + 0.5*(gRho_i + gRho_j).dot(Rij));
-	return volj * psi_ij * Rij.dot(Grad)/(r*r+0.01*HSQ);
+	return volj * psi_ij * Rij.dot(Grad)/(rr+0.001*HSQ);
 }
 
 
@@ -468,7 +480,7 @@ StateVecD BaseNeg(Part const& pi, Part const& pj, StateVecD const& gradK)
 	return gradK * (pj.p*pow(pj.rho,-2)-pi.p*pow(pi.rho,-2));
 }
 
-StateVecD ArtVisc(real const& nu, Part const& pi, Part const& pj, FLUID const& fvar, StateVecD const& Rij, StateVecD const& Vij, real const r, 
+StateVecD ArtVisc(real const& nu, Part const& pi, Part const& pj, FLUID const& fvar, StateVecD const& Rij, StateVecD const& Vij, real const rr, 
 	 StateVecD const& gradK)
 {
 	real const vdotr = Vij.dot(Rij);
@@ -479,7 +491,7 @@ StateVecD ArtVisc(real const& nu, Part const& pi, Part const& pj, FLUID const& f
 	}
 	else
 	{	
-		real const muij= fvar.H*vdotr/(r*r+0.0001*fvar.HSQ);
+		real const muij= fvar.H*vdotr/(rr+0.0001*fvar.HSQ);
 		real const rhoij = 0.5*(pi.rho+pj.rho);
 		real const cbar = 0.5*(sqrt((fvar.B*fvar.gam)/pi.rho)+sqrt((fvar.B*fvar.gam)/pj.rho));
 
@@ -499,10 +511,10 @@ StateVecD ArtVisc(real const& nu, Part const& pi, Part const& pj, FLUID const& f
 // }
 
 StateVecD Viscosity(real const& nu, real const& HSQ, Part const& pi, Part const& pj, 
-	StateVecD const& Rij, StateVecD const& Vij, real const& r, StateVecD const& gradK)
+	StateVecD const& Rij, StateVecD const& Vij, real const& rr, StateVecD const& gradK)
 
 {
-	return nu * (pi.rho + pj.rho)/(pi.rho*pj.rho) * (Rij.dot(gradK))/(r*r + 0.001*HSQ) * Vij;		
+	return nu * (pi.rho + pj.rho)/(pi.rho*pj.rho) * (Rij.dot(gradK))/(rr + 0.001*HSQ) * Vij;		
 }
 
 
@@ -589,7 +601,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 			real Rrhoi = 0.0;
 			real Rrhod = 0.0;
 
-			for (Part const& pj:neighb[ii])
+			for (Part const& pj : neighb[ii])
 			{	/* Neighbour list loop. */
 
 				/*Check if the position is the same, and skip the particle if yes*/
@@ -598,7 +610,8 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				StateVecD const Rij = pj.xi-pi.xi;
 				StateVecD const Vij = pj.v-pi.v;
-				real const r = Rij.norm();
+				real const rr = pj.nDist;
+				real const r = sqrt(rr);
 				real const volj = pj.m/pj.rho;
 				StateVecD const gradK = /*dp.L[ii] * */GradK(Rij, r,fvar.H, fvar.correc);
 
@@ -607,7 +620,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				/*drho/dt*/
 				Rrhoi -= pj.m*(Vij.dot(gradK));
-				Rrhod -= Continuity_dSPH(Rij,r,fvar.HSQ,gradK,volj,dp.gradRho[ii],dp.gradRho[pj.partID],pi,pj);
+				Rrhod -= Continuity_dSPH(Rij,rr,fvar.HSQ,gradK,volj,dp.gradRho[ii],dp.gradRho[pj.partID],pi,pj);
 				// RV[ii] -= pj.m*contrib;
 			}/*End of neighbours*/
 			
@@ -707,7 +720,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				curv[ii] = 0.0;
 			}
 
-			for (Part const& pj:neighb[ii])
+			for (Part const& pj : neighb[ii])
 			{	/* Neighbour list loop. */
 
 				/*Check if the position is the same, and skip the particle if yes*/
@@ -724,17 +737,18 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				StateVecD const Rij = pj.xi-pi.xi;
 				StateVecD const Vij = pj.v-pi.v;
-				real const r = Rij.norm();			
+				real const rr = pj.nDist;
+				real const r = sqrt(rr);	
 				real const volj = pj.m/pj.rho;
 				// StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);
 				StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);/* gradK;*/
 
-				if( dp.lam[ii] < 0.75 )
+				if( pi.surf == 1 /* dp.lam[ii] < 0.75 */ )
 				{
 					// if(/* svar.iter % 10 == 0  &&*/ r > 1e-6*fvar.H)
 					// 	gradLK = dp.L[ii]*gradK;
 
-					if( dp.lam[pj.partID] < 0.75/*pj.surf == 1*/ )
+					if( /* dp.lam[pj.partID] < 0.75 */ pj.surf == 1 )
 					{	
 						curve -= (dp.norm[pj.partID].normalized()-dp.norm[ii].normalized()).dot(volj*gradK);
 						correc += volj * Kernel(r,fvar.H,fvar.correc)/*/dp.kernsum[ii]*/;
@@ -749,17 +763,22 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				
 				StateVecD const	contrib = BasePos(pi,pj,gradK);
-				StateVecD const ALEcontrib = ALEMomentum(pi,pj,volj,gradK,fvar.rho0);
+				#ifdef ALE
+					StateVecD const ALEcontrib = ALEMomentum(pi,pj,volj,gradK,fvar.rho0);
+				#endif
 
-				StateVecD const aVisc = ArtVisc(fvar.nu,pi,pj,fvar,Rij,Vij,r,gradK);
+				StateVecD const aVisc = ArtVisc(fvar.nu,pi,pj,fvar,Rij,Vij,rr,gradK);
 
 				/*Laminar Viscosity - Morris (2003)*/
 				// StateVecD const visc = Viscosity(fvar.nu,fvar.HSQ,pi,pj,Rij,Vij,r,gradK);
 
 				/*Base WCSPH continuity drho/dt*/
-				// Rrhoi -= pj.m*(Vij.dot(gradK));
-				Rrhoi -= ALEContinuity(pi,pj,volj,gradK);
-				Rrhod -= Continuity_dSPH(Rij,r,fvar.HSQ,gradK,volj,dp.gradRho[ii],dp.gradRho[pj.partID],pi,pj);
+				#ifdef ALE
+					Rrhoi -= ALEContinuity(pi,pj,volj,gradK);
+				#else
+					Rrhoi -= pj.m*(Vij.dot(gradK));
+				#endif
+				Rrhod -= Continuity_dSPH(Rij,rr,fvar.HSQ,gradK,volj,dp.gradRho[ii],dp.gradRho[pj.partID],pi,pj);
 		
 				/*Surface Tension - Nair & Poeschel (2017)*/
 				// SurfC = SurfaceTens(fvar,pj,Rij,r,npd);
@@ -767,7 +786,13 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				// SurfC = HeST(fvar,pi,pj,Rij,r,cgrad[ii],cgrad[pj.partID]);	
 
 				// RVi += (-contrib + fvar.artMu * fvar.dMom * aVisc)/pi.rho/* + ALEcontrib*/ +  pj.m*visc;
-				RVi -= pj.m*contrib  - ALEcontrib;
+				#ifdef ALE
+					RVi -= pj.m*contrib  - ALEcontrib;
+
+				#else
+					RVi -= pj.m*contrib;
+				#endif
+
 				artViscI += pj.m*aVisc;
 				// viscI += pj.m*visc;
 
@@ -784,7 +809,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				RVi += NormalBoundaryRepulsion(fvar, cells, pi);
 			}
 
-			if(dp.lam[ii] < 0.75/*pi.surf == 1*/)
+			if(/* dp.lam[ii] < 0.75 */pi.surf == 1)
 			{
 				RVi += (fvar.sig/pi.rho * curve * dp.norm[ii]/*.normalized()*/)/correc;
 			}

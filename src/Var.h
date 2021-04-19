@@ -20,12 +20,14 @@
 #include <iomanip>
 #include <string.h>
 #include <sstream>
-#include "Eigen/Core"
-#include "Eigen/StdVector"
-#include "NanoFLANN/nanoflann.hpp"
-#include "NanoFLANN/utils.h"
-#include "NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 #include <omp.h>
+
+// Third party includes
+#include "Third_Party/Eigen/Core"
+#include "Third_Party/Eigen/StdVector"
+#include "Third_Party/NanoFLANN/nanoflann.hpp"
+#include "Third_Party/NanoFLANN/utils.h"
+#include "Third_Party/NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 
 #ifdef DEBUG
 	/*Open debug file to write to*/	
@@ -127,6 +129,7 @@ PState PartState;
 
 /*Simulation parameters*/
 typedef struct SIM {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	SIM()
 	{
 #if SIMDIM == 3
@@ -225,12 +228,13 @@ typedef struct FLUID {
 	real dCont; /*delta-SPH continuity constant term, since density and speed of sound are constant*/
 	real dMom;  /*delta-SPH momentum constant term (dCont * rho0)*/
 
-	real maxU; /*Maximum particle velocity shift*/
+	// real maxU; /*Maximum particle velocity shift*/ (No longer needed)
 }FLUID;
 
 /*Aerodynamic Properties*/
 typedef struct AERO
 {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	AERO()
 	{
 		Cf = 1.0/3.0;
@@ -276,6 +280,7 @@ typedef struct AERO
 
 typedef struct MESH
 {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	/*Standard contructor*/
 	MESH(){}
 
@@ -351,6 +356,7 @@ typedef struct MESH
 /*Container for delta-plus SPH calculations*/
 typedef class DELTAP {
 	public: 
+		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 		DELTAP(size_t const& size)
 		{
 			L = vector<StateMatD>(size,StateMatD::Zero());
@@ -503,6 +509,32 @@ typedef class Part {
 			internal = pi.internal;
 			bNorm = pi.bNorm;
 			y = pi.y;
+			nDist = 0.0;
+		}
+
+		Part(Particle const &pi, real const& dist)
+		{
+			xi = pi.xi;
+			v = pi.v;
+			Sf = pi.Sf;
+			normal = pi.normal;
+			vPert = pi.vPert;
+			rho = pi.rho;
+			p = pi.p;
+			m = pi.m;
+			curve = pi.curve;
+			woccl = pi.woccl;
+			pDist = pi.pDist;
+			nDist = dist; // Neighbour distance (squared)
+			b = pi.b;
+			surf = pi.surf;
+			cellV = pi.cellV;
+			partID = pi.partID;
+			cellID = pi.cellID;
+			cellP = pi.cellP;
+			internal = pi.internal;
+			bNorm = pi.bNorm;
+			y = pi.y;
 		}
 
 		Part(StateVecD const& xin, StateVecD const& vin, real const pin, 
@@ -549,7 +581,7 @@ typedef class Part {
 		}
 
 		StateVecD xi, v, Sf, normal, vPert;
-		real rho, p, m, curve, woccl, pDist;
+		real rho, p, m, curve, woccl, pDist, nDist;
 		uint b, surf; //What state is a particle.
 		StateVecD cellV;
 		size_t partID, cellID/*, faceID*/;
@@ -578,7 +610,8 @@ Particle PartToParticle(Part& pj)
 typedef std::vector<Particle> State;
 
 /* Neighbour search tree containers */
-typedef std::vector<std::vector<size_t>> outl;
+typedef std::vector<std::vector<std::pair<size_t,real>>> outl;
+typedef std::vector<std::vector<size_t>> celll;
 typedef KDTreeVectorOfVectorsAdaptor<State,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Sim_Tree;
 typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Vec_Tree;
 
