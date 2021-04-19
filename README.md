@@ -9,6 +9,7 @@ The specific scenario of the PhD associated with this repository is aircraft fue
 
 # What is WCSPH?
 Weakly Compressible Smoothed Particle Hydrodynamics (WCSPH) is one formulation of the SPH equations, which were first introduced by Gingold and Monaghan (1977), and independently by Lucy (1977), for astrophyiscal simulations. It was realised a few years later that this formulation is also applicable to fluid dynamics with reasonable accuracy. Most notable is the ease with which liquid motion can be modelled. Unlike many other methods, SPH doesn't require any special treatment of the boundary between liquid and gas phases. The equations handle this implicitly. For a good summary on SPH equations, right from the base equations to all the additions made through the years, Monaghan (2005) has the most notable contributions, excepting surface tension models. For a review of surface tension models, Huber et al. (2015) provides a review of three primary models. 
+
 Recently work has been done to massively improve the performance of SPH in regions where negative pressures exist, and to smooth the density field. These are the delta-SPH formulations and particle shifting methods, and further still the ALE (Arbitrary Lagrangian Eulerian) formulation. The ALE formulation combines the shifting more completely into the SPH equations, minimising the loss of conservation, at the gain of particle distribution. 
 
 # What does this code do?
@@ -36,7 +37,7 @@ The code has *four* dependent libraries at present:
 The code has been built such that the first two libraries need to be in local subfolder "Third_Party", then in  "Eigen", and "NanoFLANN". NetCDF and TECIO must be on the system path. 
 The bare minimum of Eigen has been provided in the repository, and additional download of the library shouldn't be necessary. 
 
-It has also been realised that syntax has been used that requires **g++ 9 or later**, so the code will not compile with g++ 8 or older. 
+
 
 # Building
 A makefile is provided to ease compliation. 
@@ -49,7 +50,7 @@ Additionally are options to build associated programs Cell2Edge, for building 2D
 ## C++ Standards
 The NanoFLANN code requires C++11 standard support, and so will not build on Visual Studio 13, due to an incomplete support of the C++11 standard. If you are on windows and don't have access to VS15, then MinGW is the next best bet (unless you are on windows 10, and have WSL enabled).
 
-It has also bee
+It has also been realised that syntax has been used that requires **g++ 9 or later**, so the code will not compile with g++ 8 or older. 
 
 # Input
 On the command line either one, or two options exists; a clean run or run from a current solution. If no inputs are provided, the code exits without performing anything. Comments are provided in the input file that should be self-explanatory as to their function.
