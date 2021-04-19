@@ -1,8 +1,0 @@
--0.01 -0.01       #Start coordinate
-0.01 0.25        #End coordinate
-50 50 100          #ijk counts
-0 0 0           #Mesh velocity
-100000               #Mesh pressure
-1.0                #Mesh density
-mesh                #Mesh filename
-sol                 #Solution filename
