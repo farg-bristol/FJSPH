@@ -66,7 +66,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	if (svar.Asource == 1 || svar.Asource == 2)
 	{
 		// cout << "Finding cells" << endl;
-		FindCell(svar,fvar.sr,TREE,cells,pnp1,pn);
+		FindCell(svar,fvar.sr,TREE,cells,pnp1, pn);
 		if (svar.totPts != pnp1.size())
 		{	//Rebuild the neighbour list
 			// cout << "Updating neighbour list" << endl;
@@ -79,8 +79,8 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		}	
 	}
 
-	const size_t start = svar.bndPts;
-	const size_t end = svar.totPts;
+	size_t const start = svar.bndPts;
+	size_t end = svar.totPts;
 	// const size_t piston = svar.psnPts;
 
 	// cout << "Cells found" << endl;
@@ -625,8 +625,8 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
 	MESH& cells, outl& outlist, DELTAP& dp, State& pnp1, State& pn, State& airP)
 {
-	const size_t start = svar.bndPts;
-	const size_t end = svar.totPts;
+	size_t const start = svar.bndPts;
+	size_t end = svar.totPts;
 	// cout << "Calculating first step" << endl;
 
 	#if DEBUG 
@@ -774,7 +774,33 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 	// State st_2 = pn;
 	vector<size_t> cellsused;
-	
+
+	// Find maximum safe timestep
+	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin() + svar.bndPts, pnp1.end(),
+									[](Particle p1, Particle p2) { return p1.f.norm() < p2.f.norm(); });
+
+	vector<Particle>::iterator maxUi = std::max_element(pnp1.begin() + svar.bndPts, pnp1.end(),
+									[](Particle p1, Particle p2) { return p1.v.norm() < p2.v.norm(); });
+
+	real maxf = maxfi->f.squaredNorm();
+	real maxU = maxUi->v.norm();
+	real dtv = fvar.HSQ * fvar.rho0 / fvar.mu;
+	real dtf = sqrt(fvar.H / maxf);
+	real dtc = fvar.H / (maxU);
+
+	/***********************************************************************************/
+	/***********************************************************************************/
+	/***********************************************************************************/
+	svar.dt = 0.125 * std::min(dtf, std::min(dtc, dtv));
+	/***********************************************************************************/
+	/***********************************************************************************/
+	/***********************************************************************************/
+
+	if (svar.dt > (svar.frame + 1) * svar.framet - svar.t)
+	{
+		svar.dt = (svar.frame + 1) * svar.framet - svar.t;
+	}
+
 	real dt = svar.dt;
 	real dt2 = dt*dt;
 	// void(Get_First_RK(TREE,svar,fvar,avar,start,end,cells,cellsused,
@@ -782,7 +808,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 	// /*Previous State for error calc*/
 	vector<StateVecD> xih(end);
-	vector<StateVecD> xi(svar.totPts); /*Keep original positions to reset after finding forces*/
+	vector<StateVecD> xi(end); /*Keep original positions to reset after finding forces*/
 	#pragma omp parallel for shared(pnp1)
 	for (size_t  ii=0; ii < end; ++ii)
 		xih[ii] = pnp1[ii].xi;
@@ -792,7 +818,8 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	#pragma omp parallel for shared(res, Rrho, Af/*, wDiff, norm, curve*/)
 	for(size_t ii = 0; ii < end; ++ii)
 	{
-		
+		xi[ii] = pnp1[ii].xi;
+
 		pnp1[ii].Af = Af[ii]; 
 		pnp1[ii].rho = pn[ii].rho+dt*(b*Rrho[ii]);
 		pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
@@ -802,14 +829,14 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 		if (pnp1[ii].b == PartState.START_ || pnp1[ii].b == PartState.BACK_)
 		{
-			xih[ii] = pn[ii].xi + dt*pn[ii].v;
+			pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
 		}
 		else if (pnp1[ii].b > PartState.START_)
 		{
 			// pnp1[ii].v = pn[ii].v + dt*b*res[ii]; 
 			pnp1[ii].f = res[ii];
 			pnp1[ii].Rrho = Rrho[ii];
-			xih[ii] = pn[ii].xi + dt*pn[ii].v + dt2*(d*res[ii]);
+			pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v + dt2*(d*res[ii]);
 		}
 
 		// pnp1[ii].theta = kern[ii]/ 5.51645e+009;
@@ -823,23 +850,19 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 		// Force += res[ii];
 		// dropVel += pnp1[ii].v;
 
-		xi[ii] = pnp1[ii].xi;
+		
 
 	}
 
 
 	/*Find maximum safe timestep*/
-	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin(),pnp1.end(),
-		[](Particle p1, Particle p2){return p1.f.norm()< p2.f.norm();});
 
-	vector<Particle>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
+
+	maxUi = std::max_element(pnp1.begin(),pnp1.end(),
 		[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
 
-	real maxf = maxfi->f.squaredNorm();
-	real maxU = maxUi->v.norm();
-	real dtv = fvar.HSQ * fvar.rho0/fvar.mu;
-	real dtf = sqrt(fvar.H/maxf);
-	real dtc = fvar.H/(maxU);
+	maxU = maxUi->v.norm();
+	dtc = fvar.H/(maxU);
 
 /***********************************************************************************/
 /***********************************************************************************/

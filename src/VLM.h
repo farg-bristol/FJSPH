@@ -9,10 +9,10 @@
 #include <fstream>
 #include <string.h>
 #include <sstream>
-#include "Eigen/Core"
-#include "Eigen/StdVector"
-#include "Eigen/LU"
-#include "Eigen/Geometry"
+#include "Third_Party/Eigen/Core"
+#include "Third_Party/Eigen/StdVector"
+#include "Third_Party/Eigen/LU"
+#include "Third_Party/Eigen/Geometry"
 #include "Var.h"
 // #include "IO.h"
 

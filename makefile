@@ -5,10 +5,10 @@ CXX=g++
 CX8=g++-8
 
 # Libraries to include
-LIBS=-ltecio -lnetcdf_c++4 #-lH5hut -lhdf5
+LIBS=-ltecio -lnetcdf #-lH5hut -lhdf5
 #-lgmpxx -lgmp
 # Compiler flags. 
-CXXFLAGS=-std=c++14 -Wall -ffast-math -funroll-loops -O3 -fopenmp
+CXXFLAGS=-std=c++11 -Wall -ffast-math -funroll-loops -O3 -fopenmp
 
 INC=#-I/usr/include/hdf5/serial/
 LLINK=#-L/usr/lib/x86_64-linux-gnu/hdf5/serial/

@@ -16,8 +16,8 @@
 #include "Kernel.h"
 #include "Aero.h"
 #include "Add.h"
-#include "Eigen/LU"
-#include "Eigen/Eigenvalues"
+#include "Third_Party/Eigen/LU"
+#include "Third_Party/Eigen/Eigenvalues"
 #include <unordered_set>
 
 /*L matrix for delta-SPH calculation*/
@@ -601,7 +601,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 			real Rrhoi = 0.0;
 			real Rrhod = 0.0;
 
-			for (Part const& pj:neighb[ii])
+			for (Part const& pj : neighb[ii])
 			{	/* Neighbour list loop. */
 
 				/*Check if the position is the same, and skip the particle if yes*/
@@ -720,7 +720,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				curv[ii] = 0.0;
 			}
 
-			for (Part const& pj:neighb[ii])
+			for (Part const& pj : neighb[ii])
 			{	/* Neighbour list loop. */
 
 				/*Check if the position is the same, and skip the particle if yes*/

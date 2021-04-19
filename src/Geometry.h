@@ -1,8 +1,8 @@
 #ifndef GEOMETRY_H
 #define GEOMETRY_H
 
-#include "Eigen/Core"
-#include "Eigen/Geometry"
+#include "Third_Party/Eigen/Core"
+#include "Third_Party/Eigen/Geometry"
 #include "Var.h"
 #include "IOFunctions.h"
 

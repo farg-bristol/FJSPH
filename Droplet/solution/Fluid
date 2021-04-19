@@ -1,0 +1,10 @@
+0.1                             #Artificial viscosity
+0                         #Particle shifting factor
+150                                    #Contact angle
+810                                    #Fluid density
+1.1025                                      #Gas density
+100                                   #Speed of sound
+0.00142                                  #Fluid viscosity
+1.716e-05                                    #Gas viscosity
+0.0256                                  #Surface Tension
+solution                                    #Output Folder

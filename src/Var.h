@@ -20,12 +20,14 @@
 #include <iomanip>
 #include <string.h>
 #include <sstream>
-#include "Eigen/Core"
-#include "Eigen/StdVector"
-#include "NanoFLANN/nanoflann.hpp"
-#include "NanoFLANN/utils.h"
-#include "NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 #include <omp.h>
+
+// Third party includes
+#include "Third_Party/Eigen/Core"
+#include "Third_Party/Eigen/StdVector"
+#include "Third_Party/NanoFLANN/nanoflann.hpp"
+#include "Third_Party/NanoFLANN/utils.h"
+#include "Third_Party/NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 
 #ifdef DEBUG
 	/*Open debug file to write to*/	

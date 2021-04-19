@@ -4,10 +4,7 @@
 #ifndef IO_H
 #define IO_H
 
-
-#include "Eigen/Core"
-#include "Eigen/StdVector"
-#include "Eigen/LU"
+#include "Third_Party/Eigen/LU"
 #include "Var.h"
 #include "IOFunctions.h"
 #include "CDFIO.h"

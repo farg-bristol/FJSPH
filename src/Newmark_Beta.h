@@ -94,7 +94,7 @@ int Check_Error(KDTREE& TREE, SIM& svar, FLUID const& fvar, size_t const& start,
 }
 
 void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	size_t const& start, size_t const& end, 
+	size_t const& start, size_t& end, 
 	real const& a, real const& b, real const& c, real const& d, real const& B, real const& gam,
 	MESH& cells, vector<size_t> const& cellsused,
 	vector<vector<Part>> const& neighb, outl const& outlist, DELTAP const& dp,
@@ -274,7 +274,23 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 						if(svar.Asource == 1 || svar.Asource == 2)
 						{
 							/*retrieve the cell it's in*/
-							FirstCell(svar,end,ii,TREE.CELL, cells, pnp1, pn);
+							uint to_del = 0;
+							FirstCell(svar,TREE.CELL, cells, pnp1[ii], to_del);
+
+							if(to_del)
+							{
+								#pragma omp critical
+								{
+								// cout << "Particle has crossed an outer boundary!" << endl;
+								// cout << "Particle will be deleted." << endl;
+								pnp1.erase(pnp1.begin()+ii);
+								pn.erase(pn.begin()+ii);
+								}
+								#pragma omp atomic
+									svar.totPts--;
+								#pragma omp atomic
+									end--;
+							}
 						}
 					}	
 				}
@@ -384,7 +400,7 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 
 
 void Newmark_Beta(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	size_t const& start, size_t const& end, 
+	size_t const& start, size_t& end, 
 	real const& a, real const& b, real const& c, real const& d, real const& B, real const& gam,
 	MESH& cells, vector<size_t>& cellsused,
 	vector<vector<Part>> const& neighb, outl& outlist, DELTAP const& dp,
