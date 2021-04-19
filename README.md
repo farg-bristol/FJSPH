@@ -9,6 +9,7 @@ The specific scenario of the PhD associated with this repository is aircraft fue
 
 # What is WCSPH?
 Weakly Compressible Smoothed Particle Hydrodynamics (WCSPH) is one formulation of the SPH equations, which were first introduced by Gingold and Monaghan (1977), and independently by Lucy (1977), for astrophyiscal simulations. It was realised a few years later that this formulation is also applicable to fluid dynamics with reasonable accuracy. Most notable is the ease with which liquid motion can be modelled. Unlike many other methods, SPH doesn't require any special treatment of the boundary between liquid and gas phases. The equations handle this implicitly. For a good summary on SPH equations, right from the base equations to all the additions made through the years, Monaghan (2005) has the most notable contributions, excepting surface tension models. For a review of surface tension models, Huber et al. (2015) provides a review of three primary models. 
+Recently work has been done to massively improve the performance of SPH in regions where negative pressures exist, and to smooth the density field. These are the delta-SPH formulations and particle shifting methods, and further still the ALE (Arbitrary Lagrangian Eulerian) formulation. The ALE formulation combines the shifting more completely into the SPH equations, minimising the loss of conservation, at the gain of particle distribution. 
 
 # What does this code do?
 At present the code is still in large development, so functionality isn't anywhere near where it should be to be a functional tool in your project, at least without modifications of your own. SPH has the brilliant feature of essentially being able to plug in equations for your particular need. At some point it may be worth analysing which models are most appropriate for the intended application of this repository, however accuracy is unlikely to be a priority compared to speed. As such most of the code here is intended for simplicity. The current code has the following set of formulations (detailed in the references stated above):
@@ -22,39 +23,47 @@ Surface Tension: Continuum Surface Force (Brackbill,1997) with interactions rest
 Aerodynamic coupling: Upwind droplet continuum correction (Gissler et al.,2017).
 
 # Dependencies 
-The code only has *four* dependent libraries at present:
+The code has *four* dependent libraries at present:
 
-[Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page) 
+[Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page) - Tested with 3.4-rc1, 3.3.9, 3.3.8.
 
 [NanoFLANN](https://github.com/jlblancoc/nanoflann) - Jose Luis Blanco-Claraco (University of Almería).
 
-[NetCDF](https://www.unidata.ucar.edu/downloads/netcdf/) 
+[NetCDF](https://www.unidata.ucar.edu/downloads/netcdf/) - Tested with NetCDF 4.7.3. 
 
-[TECIO](https://github.com/su2code/SU2/tree/master/externals/tecio) 
+[TECIO](https://github.com/su2code/SU2/tree/master/externals/tecio) - Tested with Tecplot 360 EX 2016 R2 version of TECIO.
 
-The code has been built such that the first two libraries need to be in local subfolders "Eigen", and "NanoFLANN", but NetCDF and TECIO must be on the system path. 
+The code has been built such that the first two libraries need to be in local subfolder "Third_Party", then in  "Eigen", and "NanoFLANN". NetCDF and TECIO must be on the system path. 
 The bare minimum of Eigen has been provided in the repository, and additional download of the library shouldn't be necessary. 
-For exactly what needs to be in these folders, see the include headers in the source. 
+
+It has also been realised that syntax has been used that requires **g++ 9 or later**, so the code will not compile with g++ 8 or older. 
 
 # Building
 A makefile is provided to ease compliation. 
 There are several options in the build file, but because there are so few dependencies and files associated at present, it is still a single compile line.
-In the makefile are four primary options: 2D, debug2, 3D, and debug3. 
+In the makefile are four primary options: `2D`, `debug2`, `3D`, and `debug3`. 
+
 These are build options for two and three dimensions, and with or without debug flags. 
 Additionally are options to build associated programs Cell2Edge, for building 2D Edge based mesh files from TAU files, and Cell2Face for 3D TAU meshes to face based data. 
 
-## C++ 11
+## C++ Standards
 The NanoFLANN code requires C++11 standard support, and so will not build on Visual Studio 13, due to an incomplete support of the C++11 standard. If you are on windows and don't have access to VS15, then MinGW is the next best bet (unless you are on windows 10, and have WSL enabled).
 
+It has also bee
+
 # Input
-On the command line either one, or two options exists; a clean run or run from a current solution. If no inputs are provided, the code exits without performing anything. 
-In the first option, running from a clean start, the first argument is the input folder for settings. Comments are provided in the input file that should be self-explanatory as to their function.
-The second option, restarting, requires the first input argument to be the restart option "-r", and the second argument being the input folder.
+On the command line either one, or two options exists; a clean run or run from a current solution. If no inputs are provided, the code exits without performing anything. Comments are provided in the input file that should be self-explanatory as to their function.
+Option 1: `./WCSPH Droplet2D`
+Provide the input folder for the simulation. This starts the simulation from time 0, and removes any current output files to start writing anew.
+
+Option 2: `./WCSPH -r Droplet2D`
+This restarts the simulation, assuming that the output data exists and can be restarted from.
+
 More than two arguments simply states a warning that they will be ignored. 
 
 In the input folder should be all files required for the simulation.
 The two files that are required for any and all simulations is the "settings" and "fluid" files. 
-If the simulation involves a mesh, then the mesh and solution file are expected in the same folder. 
+If the simulation involves a mesh, then the mesh and solution file are expected in the same folder, and these file names are expected in the fluid file, after the solution file. For an example of a mesh based simulation, look at the **RAE2822** folder. 
 
 # Output
 The code uses the TECIO library to output szplt files, because of it's highly efficient storage, and great ability to append to an existing file, and ability to view the results with the simulation still running. 
