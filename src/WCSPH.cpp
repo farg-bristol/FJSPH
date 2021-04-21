@@ -29,8 +29,9 @@ int main(int argc, char *argv[])
 	high_resolution_clock::time_point t2;
 	Eigen::initParallel();
 	// omp_set_num_threads(1);
-
-    real duration;
+	srand(unsigned(time(NULL)));
+	
+	real duration;
     real error = 0;
     cout.width(13);
     cout << std::scientific << std::left << std::setprecision(4);

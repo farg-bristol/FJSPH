@@ -788,12 +788,12 @@ int ParticleCount(SIM &svar)
 
 void GetYcoef(AERO& avar, const FLUID& fvar, const real diam)
 {
-	// #if SIMDIM == 3
-	// 	avar.L = rad * std::cbrt(3.0/(4.0*M_PI));
-	// #endif
-	// #if SIMDIM == 2
+	#if SIMDIM == 3
+		avar.L = diam * std::cbrt(3.0/(4.0*M_PI));
+	#endif
+	#if SIMDIM == 2
 		avar.L = diam/sqrt(M_PI);
-	// #endif
+	#endif
 
 	// avar.L = diam / 2.0; pow(diam,1.25)/2.0;
 

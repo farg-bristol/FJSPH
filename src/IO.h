@@ -329,36 +329,53 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
   	fvar.artMu = std::max(fvar.mu, fvar.alpha*fvar.Cs*fvar.H*fvar.rho0);
     fvar.nu = fvar.mu/fvar.rho0;
 
-#if SIMDIM == 2
-#ifdef CUBIC
-	fvar.correc = 10.0 / (7.0 * M_PI * fvar.H * fvar.H);
-#else
-	fvar.correc = 7.0 / (4.0 * M_PI * fvar.H * fvar.H);
-#endif
-	svar.simPts = svar.xyPART[0]*svar.xyPART[1];
-#endif
-#if SIMDIM == 3
+	#if SIMDIM == 2
 	#ifdef CUBIC
-        fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
-    #else
-        fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
-    #endif
+		fvar.correc = 10.0 / (7.0 * M_PI * fvar.H * fvar.H);
+	#else
+		fvar.correc = 7.0 / (4.0 * M_PI * fvar.H * fvar.H);
+	#endif
+		svar.simPts = svar.xyPART[0]*svar.xyPART[1];
+	#endif
+	#if SIMDIM == 3
+		#ifdef CUBIC
+			fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
+		#else
+			fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+		#endif
 
-	svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
-#endif
-	
-	fvar.Wdx = Kernel(svar.Pstep,fvar.H,fvar.correc);
+		svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
+	#endif
+		
+		fvar.Wdx = Kernel(svar.Pstep,fvar.H,fvar.correc);
 
-#ifdef DEBUG
-	dbout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
-	dbout << "Pipe rho: " << fvar.rhoJ << endl;
-	dbout << "Number of fluid particles along diameter: " << 2*svar.nrad+1 << endl;
-	dbout << "Pipe step (dx): " << svar.dx << endl;
-	dbout << "Particle mass: " << fvar.simM << endl;
-	dbout << "Freestream initial spacing: " << svar.Pstep << endl;
-	dbout << "Support Radius: " << fvar.H << endl;
-	dbout << "Gas Dynamic pressure: " << avar.qInf << endl << endl;
-#endif
+	#if SIMDIM == 3
+		if (svar.Asource == 3)
+		{
+			svar.vortex.Init(svar.infolder);
+			svar.vortex.GetGamma(avar.vInf);
+		}
+	#endif
+
+		GetYcoef(avar, fvar, /*fvar.H*/ svar.Pstep);
+	#if SIMDIM == 3
+		avar.aPlate = svar.Pstep * svar.Pstep;
+		// avar.aPlate = fvar.H*fvar.H;
+	#else
+		avar.aPlate = svar.Pstep /**svar.Pstep*/ /** pow(avar.L,0.5)*/;
+		// avar.aPlate = fvar.H;
+	#endif
+
+	#ifdef DEBUG
+		dbout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
+		dbout << "Pipe rho: " << fvar.rhoJ << endl;
+		dbout << "Number of fluid particles along diameter: " << 2*svar.nrad+1 << endl;
+		dbout << "Pipe step (dx): " << svar.dx << endl;
+		dbout << "Particle mass: " << fvar.simM << endl;
+		dbout << "Freestream initial spacing: " << svar.Pstep << endl;
+		dbout << "Support Radius: " << fvar.H << endl;
+		dbout << "Gas Dynamic pressure: " << avar.qInf << endl << endl;
+	#endif
 
 	cout << "****** SIMULATION SETTINGS *******" << endl;
 	#pragma omp parallel
@@ -377,8 +394,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	cout << "Boundary case: " << svar.Bcase << endl;
 	cout << "Aerodynamic source: " << svar.Asource << endl;
 	cout << "Aerodynamic case: " << avar.acase << endl;
-	cout << "Speed of sound: " << fvar.Cs << endl;
 	cout << endl;
+
 	cout << "****** PIPE SETTINGS *******" << endl;
 	cout << "Pipe pressure: " << fvar.pPress << endl;
 	cout << "Pipe density: " << fvar.rhoJ << endl;
@@ -387,33 +404,40 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	cout << "Number of fluid particles along diameter: " << 2*svar.nrad+1 << endl;
 	cout << "Pipe start position: " << svar.Start(0) << "  " << svar.Start(1);
 	#if SIMDIM == 3
-	cout << "  " << svar.Start(2);
+		cout << "  " << svar.Start(2);
 	#endif
 	cout << endl;
 	cout << "Pipe start rotation: " << svar.Angle(0) << "  " << svar.Angle(1);
 	#if SIMDIM == 3
-	cout << "  " << svar.Angle(2);
+		cout << "  " << svar.Angle(2);
 	#endif
 	cout << endl;
 	cout << "Jet velocity: " << avar.vJet.norm() << endl;
 
 	cout << endl;		
 	cout << "****** RESTING FUEL SETTINGS *******" << endl;
+	cout << "Resting density: " << fvar.rho0 << endl;
 	cout << "Particle spacing: " << svar.Pstep << endl;
 	cout << "Support radius: " << fvar.H << endl;
 	cout << "Particle mass: " << fvar.simM << endl;
 	cout << "Liquid viscosity: " << fvar.mu << endl;
-	cout << "Resting density: " << fvar.rho0 << endl;
+	cout << "Speed of sound: " << fvar.Cs << endl;
 	cout << endl;
+
 	cout << "****** FREESTREAM SETTINGS ******" << endl;
 	if(svar.Asource != 1 || svar.Asource != 2)
 	{
 		cout << "Gas Velocity: " << avar.vInf(0) << "  " << avar.vInf(1);
-#if SIMDIM == 3
-		cout << "  " << avar.vInf(2);
-#endif
+		#if SIMDIM == 3
+			cout << "  " << avar.vInf(2);
+		#endif
 		cout << endl;
 	}
+
+	cout << "Gas density: " << avar.rhog << endl;
+	cout << "Gas viscosity: " << avar.mug << endl;
+	cout << "Aerodynamic length: " << avar.L << endl;
+	cout << endl;
 
 	if(svar.Asource == 1 || svar.Asource == 2)
 	{
@@ -424,8 +448,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		cout << "Reference temperature: " << avar.T << endl;
 		cout << "Gas dynamic pressure: " << avar.qInf << endl << endl;
 	}
-	cout << "Gas density: " << avar.rhog << endl;
-	cout << "Gas viscosity: " << avar.mug << endl << endl;
+	
 	
 
 	cout << "******** FILE SETTINGS ********" << endl;	
@@ -438,25 +461,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	}
 
 	cout << "Output folder: " << svar.outfolder << endl << endl;
-	
 
-	#if SIMDIM == 3
-		if(svar.Asource == 3)
-		{
-			svar.vortex.Init(svar.infolder);	
-			svar.vortex.GetGamma(avar.vInf);	
-		}
-	#endif
-
-	
-	GetYcoef(avar, fvar, /*fvar.H*/ svar.Pstep);
-#if SIMDIM == 3
-	avar.aPlate = svar.Pstep*svar.Pstep;
-		// avar.aPlate = fvar.H*fvar.H;
-#else
-	avar.aPlate = svar.Pstep/**svar.Pstep*/ /** pow(avar.L,0.5)*/;
-		// avar.aPlate = fvar.H;
-#endif
 
 } /*End of GetInput()*/
 
