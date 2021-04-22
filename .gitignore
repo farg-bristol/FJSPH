@@ -52,10 +52,20 @@ MakeMesh
 para
 
 # Folders
-Outputs/*
-src/Eigen/*
-src/NanoFLANN/*
-
+2D220
+2DHLCRM
+2DJSM
+Coaxial
+CRM_P
+Cube
+Inputs
+Outputs
+JSM_P_2
+P_HLCRM
+P_JSM
+PinCell
+RAE_NG
+Square
 
 # Output files
 *.plt

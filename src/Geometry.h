@@ -722,8 +722,8 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
     #endif
 
     avar.pVol = 4.0/3.0 * M_PI * pow(avar.L,SIMDIM);
-    // avar.aPlate = svar.Pstep*svar.Pstep;
-    avar.aPlate = 4.0*avar.L*avar.L;
+    avar.aPlate = svar.Pstep*svar.Pstep;
+    // avar.aPlate = 4.0*avar.L*avar.L;
 #else
     #ifdef CUBIC
         fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);

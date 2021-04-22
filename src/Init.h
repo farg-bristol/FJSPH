@@ -166,7 +166,6 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			}
 
 		#else
-
 			real stepb = (svar.Pstep*svar.Bstep);
 			real jetR = 0.5*(svar.Jet(0)+4*svar.dx); /*Diameter of hole (or width)*/
 			real resR = jetR*2.0;
@@ -231,6 +230,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 				StateVecD xi(jetR,y);
 				xi = svar.Rotate*xi;
 				xi += svar.Start;
+
 				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 				pID++;
 			}
@@ -238,6 +238,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 	}
 	else if(svar.Bcase == 3)
 	{	/*Jet*/
+		int const interval = 20000;
 		#if SIMDIM == 3
 			real holeD = svar.Jet(0)+7*svar.dx; /*Diameter of hole (or width)*/
 			real stepb = (svar.Pstep*svar.Bstep);
@@ -249,17 +250,17 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 	    	int ncirc = floor(2.0*M_PI/dtheta);
 	    	dtheta = 2.0*M_PI/real(ncirc);
 
-	    	for(size_t ii = 0; ii < 4; ii++)
+			for(real ii = 0; ii < 4; ii+=1.0)
 			{
-				r = 0.5*holeD + real(ii)*stepb;
-
+				r = 0.5*holeD + ii*stepb;
 				for (real y = 0; y >= -svar.Jet(1)-stepb; y-=stepb)			
 				{	
 					for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 					{
+						StateVecD perturb(random(interval), random(interval), random(interval));
 						StateVecD xi(r*sin(theta), y, r*cos(theta));
 						/*Apply Rotation...*/
-						xi = svar.Rotate*xi;
+						xi = svar.Rotate*(xi+perturb);
 						xi += svar.Start;
 						pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 						pID++;
@@ -272,13 +273,14 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			real stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
-			for(size_t ii = 0; ii < 4; ii++)
+			for(real ii = 0; ii < 4; ii+=1.0)
 			{
-				real x = jetR + real(ii)*stepb;
+				real x = jetR + ii*stepb;
 				for (real y = 0; y >= -svar.Jet(1)-2*stepb; y-=stepb)			
 				{
+					StateVecD perturb(random(interval), random(interval));
 					StateVecD xi(-x,y);
-					xi = svar.Rotate*xi;
+					xi = svar.Rotate*(xi+perturb);
 					xi += svar.Start;
 					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 					pID++;
@@ -286,8 +288,9 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 
 				for (real y = -stepb; y >= -svar.Jet(1)-stepb; y-=stepb)
 				{
+					StateVecD perturb(random(interval), random(interval));
 					StateVecD xi(x,y);
-					xi = svar.Rotate*xi;
+					xi = svar.Rotate*(xi+perturb);
 					xi += svar.Start;
 					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 					pID++;
@@ -493,15 +496,14 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		svar.simPts = 0;
 		svar.totPts = pn.size();
 		/*Update n+1 before adding sim pn*/
-		for (auto p: pn)
-			pnp1.emplace_back(p);
+		for (auto& pi : pn)
+			pnp1.emplace_back(pi);
 
 		for (real y = -svar.Jet[1]*2; y > -svar.Jet[1]*3; y-=svar.dx)
 		{
 			// cout << "In add points for-loop" << endl;
 			AddPoints(y, svar, fvar, avar, pn, pnp1, PartState.START_);
 		}
-
 	}
 	else if (svar.Bcase == 3)
 	{
@@ -509,8 +511,8 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		svar.simPts = 0;
 		svar.totPts = pn.size();
 		/*Update n+1 before adding sim pn*/
-		for (auto p: pn)
-			pnp1.emplace_back(p);
+		for (auto& pi : pn)
+			pnp1.emplace_back(pi);
 
 		real y = -svar.Jet[1]+4*svar.dx;
 		for (y = -4*svar.dx; y >  -svar.Jet[1]+4*svar.dx; y-= svar.dx)
@@ -538,8 +540,8 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		svar.simPts = 0;
 		svar.totPts = pn.size();
 		/*Update n+1 before adding sim pn*/
-		for (auto p: pn)
-			pnp1.emplace_back(p);
+		for (auto& pi : pn)
+			pnp1.emplace_back(pi);
 
 		// CreateRDroplet(svar,fvar,pn,pnp1);
 		CreateDroplet(svar,fvar,pn,pnp1);
@@ -629,27 +631,27 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 
 		CreateDroplet(svar,fvar,pn,pnp1);
 		// Perturb so that the points are at numerical zero. 
-		real pturb = 1e-1;
-		for (auto& pi:pnp1)
+		// real pturb = 1e-1;
+		for (auto& pi : pnp1)
 		{
-#if SIMDIM == 3
-			pi.xi += StateVecD(-pturb,-pturb,-pturb);
-#else
-			pi.xi += StateVecD(-pturb,-pturb);
-#endif
+// #if SIMDIM == 3
+// 			pi.xi += StateVecD(-pturb,-pturb,-pturb);
+// #else
+// 			pi.xi += StateVecD(-pturb,-pturb);
+// #endif
 			pi.cellID = 0;
 			pi.cellV = avar.vInf;
 			pi.cellP = avar.pRef;
 			// pi.cellRho = fvar.rho0 * pow((fvar.gasPress/fvar.B + 1),1/fvar.gam);
 		}
 
-		for (auto& pi:pn)
+		for (auto& pi : pn)
 		{
-#if SIMDIM == 3
-			pi.xi += StateVecD(-pturb,-pturb,-pturb);
-#else
-			pi.xi += StateVecD(-pturb,-pturb);
-#endif
+// #if SIMDIM == 3
+// 			pi.xi += StateVecD(-pturb,-pturb,-pturb);
+// #else
+// 			pi.xi += StateVecD(-pturb,-pturb);
+// #endif
 			pi.cellID = 0;
 			pi.cellV = avar.vInf;
 			pi.cellP = avar.pRef;
@@ -692,8 +694,8 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			}
 		#endif
 
-		for (auto p: pn)
-			pnp1.emplace_back(p);
+		for (auto& pi : pn)
+			pnp1.emplace_back(pi);
 	}
 	
 		

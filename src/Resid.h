@@ -713,7 +713,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				// }
 
 				// cout << aero(0) << "  " << aero(1) << endl;
-				curv[ii] = (std::min(avar.nfull,real(outlist[ii].size()-1))/(avar.nfull));
+				// curv[ii] = (std::min(avar.nfull,real(outlist[ii].size()-1))/(avar.nfull));
 			}
 			else 
 			{
@@ -743,12 +743,12 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				// StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);
 				StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);/* gradK;*/
 
-				if( pi.surf == 1 /* dp.lam[ii] < 0.75 */ )
+				if( pi.surf == 1 /* dp.lam[ii] < 0.75  */)
 				{
 					// if(/* svar.iter % 10 == 0  &&*/ r > 1e-6*fvar.H)
 					// 	gradLK = dp.L[ii]*gradK;
 
-					if( /* dp.lam[pj.partID] < 0.75 */ pj.surf == 1 )
+					if( pj.surf == 1 /* dp.lam[pj.partID] < 0.75  */)
 					{	
 						curve -= (dp.norm[pj.partID].normalized()-dp.norm[ii].normalized()).dot(volj*gradK);
 						correc += volj * Kernel(r,fvar.H,fvar.correc)/*/dp.kernsum[ii]*/;
@@ -788,7 +788,6 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				// RVi += (-contrib + fvar.artMu * fvar.dMom * aVisc)/pi.rho/* + ALEcontrib*/ +  pj.m*visc;
 				#ifdef ALE
 					RVi -= pj.m*contrib  - ALEcontrib;
-
 				#else
 					RVi -= pj.m*contrib;
 				#endif
@@ -811,7 +810,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 			if(/* dp.lam[ii] < 0.75 */pi.surf == 1)
 			{
-				RVi += (fvar.sig/pi.rho * curve * dp.norm[ii]/*.normalized()*/)/correc;
+				RVi += (fvar.sig/pi.rho * curve * dp.norm[ii]/* .normalized() */)/correc;
 			}
 			
 			// #pragma omp critical

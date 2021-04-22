@@ -127,6 +127,11 @@ typedef struct PState{
 
 PState PartState;
 
+real random(int const& interval)
+{
+	return real(rand() % interval - interval / 2) * MERROR;
+}
+
 /*Simulation parameters*/
 typedef struct SIM {
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
