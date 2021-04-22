@@ -1,22 +1,8 @@
 /*Cell based to Face based data converter*/
 
-#include <vector>
-#include <fstream>
-#include <iomanip>
-#include <netcdf>
+#include "Convert.h"
 #include "Third_Party/Eigen/Core"
 #include "Third_Party/Eigen/StdVector"
-
-// using namespace netCDF;
-// using namespace netCDF::exceptions;
-
-#define NC_ERR 2
-#define ERR(e)                                 \
-	{                                          \
-		printf("Error: %s\n", nc_strerror(e)); \
-		exit(-1);                              \
-	}
-
 
 #ifdef DEBUG
 	/*Open debug file to write to*/
@@ -32,21 +18,14 @@
 #define SIMDIM 3
 #endif
 
-/* Define data type. */
-typedef double real;
-typedef unsigned int uint;
-
 /****** Eigen vector definitions ************/
 typedef Eigen::Matrix<real,SIMDIM,1> StateVecD;
 typedef Eigen::Matrix<int,SIMDIM,1> StateVecI;
 
-using std::vector;
-using std::cout;
-using std::endl;
-using std::string; 
-using std::setw;
 typedef struct CELL
 {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
 	/*Standard contructor*/
 	CELL(const uint nElem, const uint nPts)
 	{
@@ -69,15 +48,18 @@ typedef struct CELL
 	vector<vector<uint>> sfaces;
 }CELL;
 
-typedef class FACE
+typedef struct FACE
 {
-	public:
-	FACE(const CELL& cdata): numElem(cdata.numElem), numPoint(cdata.numPoint)
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+	FACE(const CELL &cdata) : numElem(cdata.numElem), numPoint(cdata.numPoint)
 	{
 		verts = cdata.verts;
 		// numElem = cdata.numElem;
 		// numPoint = cdata.numPoint;
-		numFaces = 0; nFar = 0; nWall = 0;
+		numFaces = 0;
+		nFar = 0;
+		nWall = 0;
 		// nFacesPElem = new int[cdata.numElem];
 	}	
 
@@ -105,19 +87,6 @@ typedef class FACE
 	const uint numElem, numPoint;
 }FACE;
 
-uint index(uint ii, uint jj, uint nPts)
-{
-	return(ii*nPts + jj);
-}
-
-std::ifstream& GotoLine(std::ifstream& file, unsigned int num)
-{
-    file.seekg(std::ios::beg);
-    for(uint ii=0; ii < num - 1; ++ii){
-        file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
-    }
-    return file;
-}
 
 vector<int> Find_Bmap_Markers(string const& bmapIn)
 {
@@ -211,23 +180,6 @@ vector<int> Find_Bmap_Markers(string const& bmapIn)
 	return markers;
 }
 
-void Get_Dimension(int& fin, string variable, int& dimID, size_t& dimVal)
-{
-	int retval;
-	if ((retval = nc_inq_dimid(fin, variable.c_str(), &dimID)))
-	{
-		cout << "Error: failed getting the ID of dimension \"" << variable << "\"" << endl;
-		ERR(retval);
-		exit(-1);
-	}
-
-	if ((retval = nc_inq_dimlen(fin, dimID, &dimVal)))
-	{
-		cout << "Error: failed getting the length of dimension \"" << variable << "\"" << endl;
-		ERR(retval);
-		exit(-1);
-	}
-}
 
 vector<vector<uint>> Get_Surface(int& fin, vector<int> const& markers)
 {
@@ -239,7 +191,7 @@ vector<vector<uint>> Get_Surface(int& fin, vector<int> const& markers)
 	vector<vector<uint>> faceVec;
 
 	int surfTDim, surfQDim, pPSTDim, pPSQDim;
-	size_t nsurfT, nsurfQ, npPST, npPSQ;
+	size_t nsurfT, nsurfQ, nPpST, nPpSQ;
 
 	/* Get surface dimensions */
 	if ((retval = nc_inq_dimid(fin, "no_of_surfacetriangles", &surfTDim)))
@@ -249,49 +201,13 @@ vector<vector<uint>> Get_Surface(int& fin, vector<int> const& markers)
 	else
 	{
 		Get_Dimension(fin, "no_of_surfacetriangles", surfTDim, nsurfT);
-		Get_Dimension(fin, "points_per_surfacetriangle", pPSTDim, npPST);
+		Get_Dimension(fin, "points_per_surfacetriangle", pPSTDim, nPpST);
 
 		#ifdef DEBUG
 			dbout << "Number of triangles: " << nsurfT << endl;
 		#endif
 
-		int *tris = new int[nsurfT * npPST];
-
-		/*Get the actual data from the file*/
-		size_t startp[] = {0,0};
-		size_t countp[] = {nsurfT, npPST};
-	
-
-		#ifdef DEBUG
-			dbout << "Attempting to read NetCDF surface triangles." << endl;
-		#endif
-
-		int varID;
-		if ((retval = nc_inq_varid(fin, "points_of_surfacetriangles", &varID)))
-		{
-			cout << "Error: failed to get ID for variable \"points_of_surfacetriangles\"" << endl;
-			ERR(retval);
-			exit(-1);
-		}
-			
-
-		if ((retval = nc_get_vara_int(fin, varID, startp, countp, &tris[0])))
-		{
-			cout << "Error: failed to get data for variable  \"points_of_surfacetriangles\"" << endl;
-			ERR(retval);
-			exit(-1);
-		}
-
-		#ifdef DEBUG
-			dbout << "Putting surface faces into a vector." << endl;
-		#endif
-
-		vector<vector<uint>> localVec(nsurfT, vector<uint>(npPST));
-		for (uint ii = 0; ii < nsurfT; ++ii)
-		{
-			for (uint jj = 0; jj < npPST; ++jj)
-				localVec[ii][jj] = (static_cast<uint>(tris[index(ii, jj, npPST)]));
-		}
+		vector<vector<uint>> localVec = Get_Element(fin, "points_of_surfacetriangles", nsurfT, nPpST);
 
 		faceVec.insert(faceVec.end(), localVec.begin(), localVec.end());
 	}
@@ -304,59 +220,22 @@ vector<vector<uint>> Get_Surface(int& fin, vector<int> const& markers)
 	else
 	{
 		Get_Dimension(fin, "no_of_surfacequadrilaterals", surfQDim, nsurfQ);
-		Get_Dimension(fin, "points_per_surfacequadrilateral", pPSQDim, npPSQ);
+		Get_Dimension(fin, "points_per_surfacequadrilateral", pPSQDim, nPpSQ);
 		
 		#ifdef DEBUG
 			dbout << "Number of quadrilaterals: " << nsurfQ << endl;
 		#endif
 
-		/*Allocate on the heap (can be big datasets)*/
-		
-		int* quads = new int[nsurfQ*npPSQ];
-
-		size_t startp[] = {0, 0};
-		size_t countp[] = {nsurfQ, npPSQ};
-
-		#ifdef DEBUG
-			dbout << "Attempting to read NetCDF surface quadrilaterals." << endl;
-		#endif
-
-		int varID;
-		if ((retval = nc_inq_varid(fin, "points_of_surfacequadrilaterals", &varID)))
-		{
-			cout << "Error: failed to get ID for variable \"points_of_surfacequadrilaterals\"" << endl;
-			ERR(retval);
-			exit(-1);
-		}
-
-		if ((retval = nc_get_vara_int(fin, varID, startp, countp, &quads[0])))
-		{
-			cout << "Error: failed to get data for variable  \"points_of_surfacequadrilaterals\"" << endl;
-			ERR(retval);
-			exit(-1);
-		}
-
-		#ifdef DEBUG
-			dbout << "Putting surface faces into a vector." << endl;
-		#endif
-		/*Convert it to a vector to store*/
-		vector<vector<uint>> localVec(nsurfQ,vector<uint>(npPSQ));
-
-		for (uint ii = 0; ii < nsurfQ; ++ii)
-		{
-			for(uint jj = 0; jj < npPSQ; ++jj)
-				localVec[ii][jj] = (static_cast<uint>(quads[index(ii,jj,npPSQ)]));
-		}
+		vector<vector<uint>> localVec = Get_Element(fin, "points_of_surfacequadrilaterals", nsurfQ, nPpSQ);
 
 		faceVec.insert(faceVec.end(),localVec.begin(),localVec.end());
 	}
 
 	/*Get the boundarymarkers*/
 	int boundMDim;
-	size_t nbound;
-	Get_Dimension(fin, "no_of_surfaceelements", boundMDim, nbound);
+	size_t nMarkers;
+	Get_Dimension(fin, "no_of_surfaceelements", boundMDim, nMarkers);
 
-	uint nMarkers = static_cast<uint>(nbound);
 	if(faceVec.size() != nMarkers)
 	{
 		cout << "Mismatch of number of surface elements defined and number ingested." << endl;
@@ -366,20 +245,7 @@ vector<vector<uint>> Get_Surface(int& fin, vector<int> const& markers)
 
 	int* faceMarkers = new int[nMarkers];
 
-	int varID;
-	if ((retval = nc_inq_varid(fin,"boundarymarker_of_surfaces", &varID)))
-	{
-		cout << "Error: failed to get ID for variable \"boundarymarker_of_surfaces\"" << endl;
-		ERR(retval);
-		exit(-1);
-	}
-
-	if ((retval = nc_get_var_int(fin, varID, &faceMarkers[0])))
-	{
-		cout << "Error: failed to get data for variable  \"boundarymarker_of_surfaces\"" << endl;
-		ERR(retval);
-		exit(-1);
-	}
+	faceMarkers = Get_Int_Scalar(fin, "boundarymarker_of_surfaces", nMarkers);
 
 	vector<vector<uint>> farVec;
 
@@ -402,115 +268,6 @@ vector<vector<uint>> Get_Surface(int& fin, vector<int> const& markers)
 	return farVec;
 }
 
-double* Get_Real_Scalar(int& fin, string variable, int const& nPnts)
-{
-	int retval, varID;
-	if ((retval = nc_inq_varid(fin, variable.c_str(), &varID)))
-	{
-		cout << "Error: failed to get ID for variable \"" << variable << "\"" << endl;
-		ERR(retval);
-		exit(-1);
-	}
-
-	double* var = new double[nPnts];
-
-	if ((retval = nc_get_var_double(fin, varID, &var[0])))
-	{
-		cout << "Error: failed to get data for variable  \"" << variable << "\"" << endl;
-		ERR(retval);
-		exit(-1);
-	}
-
-	return var;
-}
-
-/*To run on the mesh file*/
-vector<vector<uint>> Get_Element(int& fin, string variable, size_t& nElem, size_t& nPnts)
-{
-	#ifdef DEBUG
-		dbout << "Reading Element: " << variable << endl;
-	#endif
-	int retval, varID;
-
-	if ((retval = nc_inq_varid(fin, variable.c_str(), &varID)))
-	{
-		cout << "Error: failed to get ID for variable \"" << variable << "\"" << endl;
-		ERR(retval);
-		exit(-1);
-	}
-
-	// cout << nElem << "  " << nPoints << endl;
-	#ifdef DEBUG
-	dbout << "Allocating array of: " << nElem << " by " << nPnts << endl;
-	#endif
-
-	/*Allocate on the heap (can be big datasets)*/		
-	int* elemArray = new int[nElem*nPnts];
-			
-	/*Get the actual data from the file*/
-	size_t startp[] = {0,0};
-	size_t countp[] = {nElem,nPnts};
-
-	#ifdef DEBUG
-	dbout << "Attempting to read NetCDF elements." << endl;
-	#endif
-
-	if ((retval = nc_get_vara_int(fin, varID, startp, countp, &elemArray[0])))
-	{
-		cout << "Error: failed to get data for variable  \"" << variable << "\"" << endl;
-		ERR(retval);
-		exit(-1);
-	}
-
-	cout << "Successfully read: " << variable << endl;
-	cout << "Number of elements: " << nElem << endl;
-
-	#ifdef DEBUG
-	dbout << "Successfully read elements" << endl;
-	#endif
-
-	/*Convert it to a vector to store*/
-	uint ii,jj;
-	vector<vector<uint>> elemVec(nElem,vector<uint>(nPnts));
-	for (ii = 0; ii < nElem; ++ii)
-	{
-		for(jj = 0; jj < nPnts; ++jj)
-			elemVec[ii][jj] = static_cast<uint>(elemArray[index(ii,jj,nPnts)]);
-	}
-
-	#ifdef DEBUG
-	dbout << "Returning vector" << endl;
-	#endif
-	return elemVec;
-}
-
-/*To run on the mesh file*/
-vector<StateVecD> Get_Coordinates(int& fin, size_t const& nPnts)
-{
-	#ifdef DEBUG
-		dbout << "Reading coordinates." << endl;
-	#endif
-
-	/*Get the coordinate data*/
-	double* coordX = Get_Real_Scalar(fin, "points_xc", nPnts);
-	double* coordY = Get_Real_Scalar(fin, "points_yc", nPnts);
-	double* coordZ = Get_Real_Scalar(fin, "points_zc", nPnts);
-
-	/*Convert it to a vector to store*/
-	vector<StateVecD> coordVec(nPnts);
-	for (uint ii = 0; ii < nPnts; ++ii)
-	{
-		#if SIMDIM == 3
-		coordVec[ii] = StateVecD(coordX[ii],coordY[ii],coordZ[ii]);
-		#else
-		coordVec[ii] = StateVecD(coordX[ii],coordY[ii]);
-		#endif
-	}
-	#ifdef DEBUG
-		dbout << "Returning coordinates." << endl;
-	#endif
-	return coordVec;	
-}
 
 void Add_Face(vector<uint> const& face, std::pair<int,int> const& leftright,
 	FACE& fdata)
@@ -533,6 +290,7 @@ void Add_Face(vector<uint> const& face, std::pair<int,int> const& leftright,
 		fdata.numFaces++;
 	}
 }
+
 
 void CheckFaces(const vector<vector<uint>>& vertincells,
 	 const vector<vector<uint>>& lfaces, const uint lindex, const uint lgeom, 
@@ -660,6 +418,7 @@ matchfound:
 		lfaceindex++;
 	}
 }
+
 
 void BuildFaces(const CELL& cdata, FACE& fdata)
 {
@@ -851,14 +610,15 @@ void BuildFaces(const CELL& cdata, FACE& fdata)
 
 	#ifdef DEBUG
 	dbout << "Building faces complete. Number of faces: " << fdata.numFaces << endl;
-	dbout << "Average number of faces per element:" << float(fdata.numFaces)/float(fdata.numElem) << endl;
+	dbout << "Average number of faces per element: " << float(fdata.numFaces)/float(fdata.numElem) << endl;
 	dbout << "Exiting BuildFaces..." << endl;
 	#endif
 
 	cout << "Building faces complete. Number of faces: " << fdata.numFaces << endl;
-	cout << "Average number of faces per element:" << float(fdata.numFaces)/float(fdata.numElem) << endl;
+	cout << "Average number of faces per element: " << float(fdata.numFaces)/float(fdata.numElem) << endl;
 	cout << "Number of wall faces: " << fdata.nWall << " Far field faces: " << fdata.nFar << endl;
 }
+
 
 void Write_Face_Data(string const& meshIn, FACE const& fdata)
 {
@@ -870,10 +630,8 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 	dbout << "Output file: " << meshOut << endl;
 	#endif
 
-	#ifdef DEBUG 
 	cout << "Attempting write output file." << endl;
 	cout << "File: " << meshOut << endl;
-	#endif
 	
 	/* Create the file. */
 	int retval;
@@ -1091,7 +849,6 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 }
 
 
-
 void Write_ASCII_Face_Data(const FACE& fdata)
 {
 	#ifdef DEBUG
@@ -1219,6 +976,7 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 	#endif
 }
 
+
 void Write_Cell_Data(const CELL& cdata)
 {
 	#ifdef DEBUG
@@ -1282,6 +1040,7 @@ void Write_Cell_Data(const CELL& cdata)
 
 }
 
+
 void Write_Griduns(const FACE& fdata)
 {
 	std::ofstream fout("griduns",std::ios::out);
@@ -1319,6 +1078,7 @@ void Write_Griduns(const FACE& fdata)
 
 	fout.close();
 }
+
 
 int main (int argc, char** argv)
 {
@@ -1418,7 +1178,7 @@ int main (int argc, char** argv)
 	}
 	
 	/*Get the coordinates of the mesh*/
-	cdata.verts = Get_Coordinates(meshID, nPnts);
+	cdata.verts = Get_Coordinate_Vector(meshID, nPnts);
 
 	if (cdata.verts.size() != nPnts)
 	{
