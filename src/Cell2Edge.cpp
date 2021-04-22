@@ -236,7 +236,7 @@ vector<int> Find_Bmap_Markers(const string& bmapIn, int& symPlane1, int& symPlan
 }
 
 /*To run on the mesh file*/
-vector<StateVecD> Get_Coordinates(int& fin, size_t const& nPnts)
+vector<StateVecD> Get_Coordinates(int& fin, size_t const& nPnts, vector<uint> const& ptIndex)
 {
 	#ifdef DEBUG
 		dbout << "Reading coordinates." << endl;
@@ -250,32 +250,41 @@ vector<StateVecD> Get_Coordinates(int& fin, size_t const& nPnts)
 	double tolerance = 1e-6;
 
 	uint counts[3] = {0};
-	for(uint ii = 0; ii < nPnts; ++ii)
+
+	#pragma omp parallel for
+	for(auto const ii : ptIndex)
 	{
 		if (abs(coords[ii](0)) < tolerance || (abs(coords[ii](0)) < 1 + tolerance && abs(coords[ii](0)) > 1 - tolerance))
 		{
+			#pragma omp atomic
 			counts[0]++;
 		}
 
 		if (abs(coords[ii](1)) < tolerance || (abs(coords[ii](1)) < 1 + tolerance && abs(coords[ii](1)) > 1 - tolerance))
 		{
+			#pragma omp atomic
 			counts[1]++;
 		}
 
 		if (abs(coords[ii](2)) < tolerance || (abs(coords[ii](2)) < 1 + tolerance && abs(coords[ii](2)) > 1 - tolerance))
 		{
+			#pragma omp atomic
 			counts[2]++;
 		}
+
 	}
 
 	uint ignore=0;
-	if (counts[0] == nPnts)
+
+	if (counts[0] == nPnts/2)
 		ignore = 1;
-	else if (counts[1] == nPnts)
+	else if (counts[1] == nPnts/2)
 		ignore = 2;
-	else if (counts[2] == nPnts)
+	else if (counts[2] == nPnts/2)
 		ignore = 3;
-	else
+
+	// cout << counts[0] << "  " << counts[1] << "  " << counts[2] << endl;
+	if(ignore == 0)
 	{
 		cout << "Couldn't determine which dimension is false." << endl;
 		exit(-1);
@@ -285,15 +294,17 @@ vector<StateVecD> Get_Coordinates(int& fin, size_t const& nPnts)
 		dbout << "Ignored dimension: " << ignore << endl;
 	#endif
 	cout << "Ignored dimension: " << ignore << endl;
-	vector<StateVecD> coordVec(nPnts);
-	for (uint ii = 0; ii < nPnts; ++ii)
+
+
+	vector<StateVecD> coordVec(nPnts/2);
+	for (auto const& ii : ptIndex)
 	{
-		if(ignore == 1)
-			coordVec[ii] = StateVecD(coords[ii](1),coords[ii](2));
-		else if(ignore == 2)
-			coordVec[ii] = StateVecD(coords[ii](0),coords[ii](2));
-		else if(ignore == 3)
-			coordVec[ii] = StateVecD(coords[ii](0),coords[ii](1));
+		if (ignore == 1)
+			coordVec[ii] = StateVecD(coords[ii](1), coords[ii](2));
+		else if (ignore == 2)
+			coordVec[ii] = StateVecD(coords[ii](0), coords[ii](2));
+		else if (ignore == 3)
+			coordVec[ii] = StateVecD(coords[ii](0), coords[ii](1));
 	}
 
 
@@ -303,7 +314,7 @@ vector<StateVecD> Get_Coordinates(int& fin, size_t const& nPnts)
 	return coordVec;	
 }
 
-void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers, int symPlane)
+void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers, int const& symPlane1, int const& symPlane2)
 {
 	#ifdef DEBUG
 	dbout << "Entering Get_Data..." << endl;
@@ -373,38 +384,79 @@ void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers, i
 
 	faceMarkers = Get_Int_Scalar(fin, "boundarymarker_of_surfaces", nMarkers);
 
-	cout << "symPlane: " << symPlane << endl;
+	// cout << "symPlane: " << symPlane << endl;
 
 	/*Create the faces of the symmetry plane*/
+	vector<vector<uint>> symFace1, symFace2; 
 	for(uint ii = 0; ii < nMarkers; ++ii)
 	{
-		if(faceMarkers[ii] == symPlane)
+		if(faceMarkers[ii] == symPlane1)
 		{	/*The face is part of the symmetry plane*/
-			
-			fdata.faces.emplace_back(faceVec[ii]);
+			symFace1.emplace_back(faceVec[ii]);
+		}
+		else if (faceMarkers[ii] == symPlane2)
+		{
+			symFace2.emplace_back(faceVec[ii]);
 		}
 		else if(std::find(markers.begin(),markers.end(),faceMarkers[ii])!= markers.end())
-		{
-			/*Its an internal face*/
+		{	/*Its an internal face*/
 			fdata.internal.emplace_back(faceVec[ii]);
 		}
 	}
 
-	cout << "Cell faces: " << fdata.faces.size();
-	cout << "   Internal faces: " << fdata.internal.size() << endl;
+	// cout << "Symmetry plane 1 faces: " << symFace1.size() << endl;
+	// cout << "Symmetry plane 2 faces: " << symFace1.size() << endl;
+	// cout << "   Internal faces: " << fdata.internal.size() << endl;
 
-#ifdef DEBUG
-	dbout << "Cell faces: " << fdata.faces.size();
-	dbout << "   Internal faces: " << fdata.internal.size() << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Symmetry plane 1 faces: " << symFace1.size() << endl;
+		dbout << "Symmetry plane 2 faces: " << symFace1.size() << endl;
+		dbout << "   Internal faces: " << fdata.internal.size() << endl;
+	#endif
+
+	vector<uint> index1;
+	for(auto const face:symFace1)
+	{
+		index1.insert(index1.end(),face.begin(),face.end());
+	}
+
+	vector<uint> index2;
+	for (auto const face : symFace2)
+	{
+		index2.insert(index2.end(), face.begin(), face.end());
+	}
+
+	/* Find the max value in each */
+	auto max1 = std::max_element(index1.begin(), index1.end());
+	auto max2 = std::max_element(index2.begin(), index2.end());
+
+	cout << *max1 << "  " << *max2 << endl;
+	vector<uint> ptIndex;
+	if (*max1+1 == nPnts/2)
+	{
+		cout << "Using the first symmetry plane" << endl;
+		std::sort(index1.begin(), index1.end());
+		index1.erase(std::unique(index1.begin(), index1.end()), index1.end());
+		fdata.faces = symFace1;
+		ptIndex = index1;
+	}
+
+	if (*max2+1 == nPnts/2)
+	{
+		cout << "Using the second symmetry plane" << endl;
+		std::sort(index2.begin(), index2.end());
+		index2.erase(std::unique(index2.begin(), index2.end()), index2.end());
+		fdata.faces = symFace2;
+		ptIndex = index2;
+	}
 
 	/*Get the coordinates*/
-	fdata.verts = Get_Coordinates(fin,nPnts);
+	fdata.verts = Get_Coordinates(fin,nPnts,ptIndex);
 
 	#ifdef DEBUG
 	dbout << "Exiting Get_Data..." << endl;
 	#endif
-	}
+}
 
 void Add_Edge(std::pair<uint,uint> const& edge, std::pair<int,int> const& leftright,
 	EDGE& edata)
@@ -678,11 +730,14 @@ void Recast_Data(EDGE& edata)
 	/*Now the edges need recasting to the index of the vector*/
 	vector<StateVecD> newVerts(newsize);
 	// vector<std::pair<size_t,size_t>> edges;
-	// // #pragma omp parallel shared(vertInUse)
-	// {
-	// 	// #pragma omp for schedule(static) nowait
-		// for(auto& edge:edata.edges)
-		// {
+	#pragma omp parallel shared(newVerts, edata, vertInUse)
+	{
+		// #pragma omp for schedule(static) nowait
+		for(auto& edge:edata.edges)
+		{
+			if(edge.first != vertInUse[edge.first] || edge.second != vertInUse[edge.second])
+				cout << "A value that is not in vinuse is used" << endl;
+		} 
 	// 		int ifirst = search(vertInUse,edge.first);
 	// 		// cout << "Found first index " << ifirst << endl;
 
@@ -713,11 +768,11 @@ void Recast_Data(EDGE& edata)
 		// 		cout << "Vertex used that isn't in the used vertices list" << endl;
 		// }
 
-		#pragma omp parallel for shared(newVerts,edata,vertInUse)
+		#pragma omp for 
 		for(size_t ii = 0; ii < newsize; ii++)
 			newVerts[ii] = edata.verts[vertInUse[ii]];
 
-	// }
+	}
 	edata.usedVerts = vertInUse;
 	edata.verts = newVerts;
 	edata.numPoint = newsize;
@@ -1241,7 +1296,7 @@ int main (int argc, char** argv)
 	int symPlane1 = 0;
 	int symPlane2 = 0;
 	vector<int> markers = Find_Bmap_Markers(bmapIn,symPlane1, symPlane2);
-	Get_Data(meshID,nPnts,fdata,markers,symPlane1);
+	Get_Data(meshID,nPnts,fdata,markers,symPlane1,symPlane2);
 
 	cout << "Face size: " << fdata.faces.size() << endl;
 
