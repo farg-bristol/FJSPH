@@ -56,6 +56,7 @@ It has also been realised that syntax has been used that requires **g++ 9 or lat
 
 # Input
 On the command line either one, or two options exists; a clean run or run from a current solution. If no inputs are provided, the code exits without performing anything. Comments are provided in the input file that should be self-explanatory as to their function.
+
 Option 1: `./WCSPH Droplet2D`
 Provide the input folder for the simulation. This starts the simulation from time 0, and removes any current output files to start writing anew.
 
