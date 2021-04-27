@@ -193,7 +193,7 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar,
 	dp.kernsum = kernsum;
 }
 
-#ifdef ALE
+#ifndef NOALE
 void Particle_Shift(SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, outl const& outlist,
 DELTAP const& dp, State& pnp1)
 {
@@ -763,8 +763,9 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 				
 				StateVecD const	contrib = BasePos(pi,pj,gradK);
-				#ifdef ALE
-					StateVecD const ALEcontrib = ALEMomentum(pi,pj,volj,gradK,fvar.rho0);
+
+				#ifndef NOALE
+					StateVecD const ALEcontrib = ALEMomentum(pi, pj, volj, gradK, fvar.rho0);
 				#endif
 
 				StateVecD const aVisc = ArtVisc(fvar.nu,pi,pj,fvar,Rij,Vij,rr,gradK);
@@ -773,10 +774,10 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				// StateVecD const visc = Viscosity(fvar.nu,fvar.HSQ,pi,pj,Rij,Vij,r,gradK);
 
 				/*Base WCSPH continuity drho/dt*/
-				#ifdef ALE
-					Rrhoi -= ALEContinuity(pi,pj,volj,gradK);
-				#else
+				#ifdef NOALE
 					Rrhoi -= pj.m*(Vij.dot(gradK));
+				#else
+					Rrhoi -= ALEContinuity(pi,pj,volj,gradK);
 				#endif
 				Rrhod -= Continuity_dSPH(Rij,rr,fvar.HSQ,gradK,volj,dp.gradRho[ii],dp.gradRho[pj.partID],pi,pj);
 		
@@ -786,10 +787,10 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				// SurfC = HeST(fvar,pi,pj,Rij,r,cgrad[ii],cgrad[pj.partID]);	
 
 				// RVi += (-contrib + fvar.artMu * fvar.dMom * aVisc)/pi.rho/* + ALEcontrib*/ +  pj.m*visc;
-				#ifdef ALE
-					RVi -= pj.m*contrib  - ALEcontrib;
-				#else
+				#ifdef NOALE
 					RVi -= pj.m*contrib;
+				#else
+					RVi -= pj.m*contrib  - ALEcontrib;
 				#endif
 
 				artViscI += pj.m*aVisc;

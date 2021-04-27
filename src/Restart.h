@@ -1211,27 +1211,11 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 		State boundary, fuel, rest;	
 
 		// Read the fuel
-		// void* restHandle = NULL;
 		void* fuelHandle = NULL;
 		void* boundHandle = NULL;
 
 		int32_t fuelFrames, boundFrames;
 		double fuelTime, boundTime;
-
-
-		// string restf = outdir;
-		// restf.append("Restart.szplt");
-
-		// if(tecFileReaderOpen(restf.c_str(),&restHandle))
-		// {
-		// 	cout << "Error opening szplt file. Path:" << endl;
-		// 	cout << restf << endl;
-		// 	exit(-1);
-		// }
-
-		// Get restart time.
-		// cout << "Checking Restart file..." << endl;
-		// CheckContents(restHandle, svar, restFrames, restTime);
 
 		string fuelf = outdir;
 		fuelf.append("Fuel.szplt");
@@ -1246,36 +1230,6 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 		// Check how many frames are in the fuel file.
 		cout << "Checking Fuel file..." << endl;
 		CheckContents(fuelHandle,svar,fuelFrames,fuelTime);
-
-		// if(fuelTime != restTime)
-		// {
-		// 	// Restart is not the lastest time
-		// 	double time = 0.0;
-		// 	int found = 0;
-		// 	for (int32_t frame = fuelFrames - 1; frame >= 1; frame--)
-		// 	{
-		// 		if (tecZoneGetSolutionTime(fuelHandle, frame, &time))
-		// 		{
-		// 			cout << "Failed to get time data for frame : " << frame << " from fuel file." << endl;
-		// 			continue;
-		// 		}
-
-		// 		if(time == restTime)
-		// 		{
-		// 			cout << "Got the same restart time." << endl;
-		// 			fuelFrames = frame;
-		// 			fuelTime = time;
-		// 			found = 1;
-		// 			break;
-		// 		}
-		// 	}
-
-		// 	if(found == 0)
-		// 	{
-		// 		cout << "Could not find a matching time between fuel and restart files. Stopping." << endl;
-		// 		exit(-1);
-		// 	}
-		// }
 
 		if (svar.Bcase != 4 && svar.Bcase !=0)
 		{
@@ -1292,50 +1246,10 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 			cout << "Checking Boundary file..." << endl;
 			CheckContents(boundHandle,svar,boundFrames,boundTime);
 
-			// if(fuelFrames < boundFrames)
-			// {
-			// 	// Means we're not at the end of the boundary file either
-			// 	double time = 0.0;
-			// 	if(tecZoneGetSolutionTime(boundHandle, fuelFrames, &time))
-			// 	{
-			// 		cout << "Failed to get time data for frame : " << fuelFrames << " from boundary file." << endl;
-			// 	}
-
-			// 	if(time != fuelTime)
-			// 	{
-			// 		// Frames are out of sync somehow... Try from top frame to find the correct frame
-			// 		int found = 0;
-			// 		for (int32_t frame = boundFrames - 1; frame >= 1; frame--)
-			// 		{
-			// 			if (tecZoneGetSolutionTime(boundHandle, frame, &time))
-			// 			{
-			// 				cout << "Failed to get time data for frame : " << frame << " from boundary file." << endl;
-			// 				continue;
-			// 			}
-
-			// 			if (time == fuelTime)
-			// 			{
-			// 				cout << "Found the correct frame" << endl;
-			// 				boundFrames = frame;
-			// 				boundTime = time;
-			// 				found = 1;
-			// 				break;
-			// 			}
-			// 		}
-					
-			// 		if(found == 0)
-			// 		{
-			// 			cout << "Could not find a matching time between fuel and boundary files to restart. Stopping." << endl;
-			// 			exit(-1);
-			// 		}
-			// 	}
-			// }
-
 			if(fuelFrames!= boundFrames)
 			{
 				cout << "Caution! Number of frames is not consistent between fuel and boundary files." << endl;
 			}
-
 
 			if(fuelTime != boundTime)
 			{
@@ -1423,7 +1337,7 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 			cout << "Need to adjust frame time to match the current time" << endl;
 
 			real framet = svar.t/real(fuelFrames-1.0);
-			cout << "Old frame time: " << svar.framet << "  New frame time: " << framet << endl;
+			cout << "Old frame time: " << svar.framet << "  New frame time: " << framet << endl << endl;
 			svar.framet = framet;			
 		}
 

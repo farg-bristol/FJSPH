@@ -218,7 +218,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
     if(svar.restart == 1)
     {
 	  	Read_Input_TECIO(outdir,svar,fvar,avar);
-	  	svar.framet = 1e-5;
 	}
 
 
