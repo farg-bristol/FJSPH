@@ -11,8 +11,12 @@
 #include "Neighbours.h"
 #include "Resid.h"
 #include "Crossing.h"
+#ifdef RK
+#include "Runge_Kutta.h"
+#else
 #include "Newmark_Beta.h"
-// #include "Runge_Kutta.h"
+#endif
+
 
 
 ///**************** Integration loop **************///
@@ -20,10 +24,13 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	MESH& cells, DELTAP& dp, State& pn, State& pnp1, State& airP, outl& outlist)
 {
 	// cout << "Entered Newmark_Beta" << endl;
+	#ifndef RK
 	uint   k = 0;	//iteration number
+	real error2 = 1.0;
+	#endif
 	real logbase = 0.0;
 	real error1 = 0.0;
-	real error2 = 1.0;
+	
 
 	// Find maximum safe timestep
 	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
@@ -159,10 +166,13 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	vector<StateVecD> xih(end-start);
 	
+	#ifndef RK
 	const real a = 1 - svar.gamma;
 	const real b = svar.gamma;
 	const real c = 0.5*(1-2*svar.beta);
 	const real d = svar.beta;
+	#endif
+
 	const real B = fvar.B;
 	const real gam = fvar.gam;
 
@@ -227,18 +237,24 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	}
 	
 	/*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
-	Get_Resid(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
-		cells,cellsused,neighb,outlist,dp,pn,pnp1,airP,Force,dropVel);
+	#ifdef RK
+	int errstate = (Get_First_RK(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused,
+								 neighb, outlist, dp, logbase, pn, pnp1, error1));
 
-	// void(Get_First_RK(TREE,svar,fvar,avar,start,end,cells,cellsused,
-	// 							neighb,outlist,dp,logbase,pn,st_2,error1));
-
-	uint nUnstab = 0;
-
-	void(Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
-							cellsused,outlist,xih,pn,pnp1,k,nUnstab));
-	k++; //Update iteration count
+	if (errstate)
+		cout << "First step indicates instability. Caution..." << endl;
+	#else
+		Get_Resid(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
+			cells,cellsused,neighb,outlist,dp,pn,pnp1,airP,Force,dropVel);
 	
+		uint nUnstab = 0;
+
+		void(Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
+								cellsused,outlist,xih,pn,pnp1,k,nUnstab));
+		k++; //Update iteration count
+
+	#endif
+
 	// cout << "Error: " << error1 << endl;
 
 	/****** UPDATE TREE ***********/
@@ -427,17 +443,19 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		}
 	}
 
-
 	/*Do time integration*/
-	Newmark_Beta(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,cells,cellsused,neighb,
-		outlist,dp,logbase,k,error1,error2,xih,pn,pnp1,airP,Force,dropVel);
+	#ifdef RK
+		State st_2 = pnp1;
 
-	// error1 = Runge_Kutta4(TREE,svar,fvar,avar,start,end,cells,cellsused,neighb,outlist,
-	// 		dp,logbase,pn,st_2,pnp1,airP,Force,dropVel);
+		error1 = Runge_Kutta4(TREE,svar,fvar,avar,start,end,B,gam,cells,cellsused,neighb,outlist,
+					dp,logbase,pn,st_2,pnp1,airP,Force,dropVel);
+	#else 
+		Newmark_Beta(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,cells,cellsused,neighb,
+			outlist,dp,logbase,k,error1,error2,xih,pn,pnp1,airP,Force,dropVel);
+	#endif	
 
 	/*Add time to global*/
 	svar.t+=svar.dt;
-
 
 	// cout << "Timestep Params: " << maxf << " " << fvar.Cs + svar.maxmu << " " << dtf << " " << dtcv << endl;
 	// cout << "New Time: " << svar.t << endl;
@@ -743,15 +761,21 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
     	}
 	}
 
+	#ifndef RK
 	uint k = 0;	
+	real error2 = 0.0;
+	#endif
 	real logbase = 0.0;
 	real error1 = 0.0;
-	real error2 = 0.0;
+	
 
+	#ifndef RK
 	const real a = 1 - svar.gamma;
 	const real b = svar.gamma;
 	const real c = 0.5*(1-2*svar.beta);
 	const real d = svar.beta;
+	#endif
+
 	const real B = fvar.B;
 	const real gam = fvar.gam;
 
@@ -764,8 +788,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	vector<real> Rrho;
 	vector<real> curve;
 
-	Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force,curve); 
-
+	
 	// #pragma omp parallel for shared(res,Rrho) schedule(static)
 	// for(size_t ii = 0; ii < end; ++ii)
 	// {
@@ -804,54 +827,34 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 	// cout << "time: " << svar.t << " dt: " << svar.dt << "  dtv: " << dtv << "  dtf: " << dtf << "  dtc: " << dtc << " Maxf: " << maxf << endl;
 
-	real dt = svar.dt;
-	real dt2 = dt*dt;
-	// void(Get_First_RK(TREE,svar,fvar,avar,start,end,cells,cellsused,
-	// 							neighb,outlist,dp,logbase,pn,st_2,error1));
-
 	// /*Previous State for error calc*/
-	vector<StateVecD> xih(end);
-	vector<StateVecD> xi(end); /*Keep original positions to reset after finding forces*/
+	vector<StateVecD> xih(end-start);
+	// vector<StateVecD> xi(end); /*Keep original positions to reset after finding forces*/
 	#pragma omp parallel for shared(pnp1)
-	for (size_t  ii=0; ii < end; ++ii)
+	for (size_t  ii=start; ii < end; ++ii)
 	{
-		xih[ii] = pnp1[ii].xi;
-		xi[ii] = pnp1[ii].xi;
+		xih[ii-start] = pnp1[ii].xi;
+		// xi[ii] = pnp1[ii].xi;
 	}
 
-	#pragma omp parallel for shared(res, Rrho, Af/*, wDiff, norm, curve*/)
-	for(size_t ii = 0; ii < end; ++ii)
-	{
-		pnp1[ii].Af = Af[ii]; 
-		pnp1[ii].rho = pn[ii].rho+dt*(b*Rrho[ii]);
-		pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-		// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
-		
-		// cout << res[ii](0) << "  " << res[ii](1) << endl;			
+	/*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
+	#ifdef RK
+		int errstate = (Get_First_RK(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused,
+									neighb, outlist, dp, logbase, pn, pnp1, error1));
 
-		if (pnp1[ii].b == PartState.START_ || pnp1[ii].b == PartState.BACK_)
-		{
-			pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-		}
-		else if (pnp1[ii].b > PartState.START_)
-		{
-			// pnp1[ii].v = pn[ii].v + dt*b*res[ii]; 
-			pnp1[ii].f = res[ii];
-			pnp1[ii].Rrho = Rrho[ii];
-			pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v + dt2*(d*res[ii]);
-		}
+		if(errstate)
+			cout << "First step indicates instability. Caution..." << endl;
+	#else
+		Get_Resid(TREE, svar, fvar, avar, start, end, a, b, c, d, B, gam,
+				cells, cellsused, neighb, outlist, dp, pn, pnp1, airP, Force, dropVel);
 
-		// pnp1[ii].theta = kern[ii]/ 5.51645e+009;
-		pnp1[ii].theta = dp.kernsum[ii];
-		pnp1[ii].s = outlist[ii].size();
+		uint nUnstab = 0;
 
-		// pnp1[ii].theta = wDiff[ii];
-		pnp1[ii].nNeigb = real(outlist[ii].size());
-		pnp1[ii].bNorm = dp.norm[ii];
+		void(Check_Error(TREE, svar, fvar, start, end, error1, error2, logbase,
+						cellsused, outlist, xih, pn, pnp1, k, nUnstab));
+		k++; //Update iteration count
 
-		// Force += res[ii];
-		// dropVel += pnp1[ii].v;
-	}
+	#endif
 
 	/*Find maximum safe timestep*/
 	// maxUi = std::max_element(pnp1.begin(),pnp1.end(),
@@ -965,30 +968,18 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	}
 
 
-	/*************************** Runge Kutta ***************************************/
-	// void(Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
-	// 						cellsused,outlist,xih,pn,pnp1,k));
 
-	// State st_4 = pn;
-	
+	/*Do time integration*/
+	#ifdef RK
+		State st_2 = pnp1;
 
-	// error1 = Runge_Kutta4(TREE,svar,fvar,avar,start,end,cells,cellsused,neighb,outlist,
-	// 		dp,logbase,pn,st_2,st_4,airP,Force,dropVel);
+		error1 = Runge_Kutta4(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused, neighb, outlist,
+							  dp, logbase, pn, st_2, pnp1, airP, Force, dropVel);
+#else
 
-	// #pragma omp parallel for shared(res, Rrho, Af/*, wDiff, norm, curve*/)
-	// for(size_t ii = 0; ii < end; ++ii)
-	// {
-	// 	pnp1[ii].f = st_4[ii].f;
-	// 	pnp1[ii].Rrho = st_4[ii].Rrho;
-	// 	pnp1[ii].rho = st_4[ii].rho;
-	// 	pnp1[ii].v = st_4[ii].v;
-	// 	pnp1[ii].p = st_4[ii].p;
-	// }
-
-	/***************************** Newmark Beta *************************************/
-	Newmark_Beta(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,cells,cellsused,neighb,
-		outlist,dp,logbase,k,error1,error2,xih,pn,pnp1,airP,Force,dropVel);
-
+		Newmark_Beta(TREE, svar, fvar, avar, start, end, a, b, c, d, B, gam, cells, cellsused, neighb,
+					outlist, dp, logbase, k, error1, error2, xih, pn, pnp1, airP, Force, dropVel);
+	#endif
 
 	/*Reset positions*/
 	// for(size_t ii = 0; ii < end; ii++)

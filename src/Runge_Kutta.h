@@ -18,8 +18,7 @@ int Check_RK_Error(SIM const& svar, size_t const& start, size_t const& end,
 	#pragma omp parallel for reduction(+:errsum) schedule(static)
 	for (size_t ii = start; ii < end; ++ii)
 	{
-		StateVecD r = pnp1[ii].xi-pn[ii].xi;
-		errsum += r.squaredNorm();
+		errsum += (pnp1[ii].xi-pn[ii].xi).squaredNorm();
 	}
 
 	if(k == 1)
@@ -29,9 +28,9 @@ int Check_RK_Error(SIM const& svar, size_t const& start, size_t const& end,
 	// cout << RestartCount << "  " << k << "  " << error1  << "  " << svar.dt << endl;
 	// cout << k << "  " << error1 << "  " << svar.dt << endl;
 
-	cout << "Step: " << k << "  Error: " << error1 << endl;
+	// cout << "Step: " << k << "  Error: " << error1 << endl;
 
-	if (error1-error2 > 0.0 /*|| std::isnan(error1)*/)
+	if (error1 - error2 > 0.0 /*|| std::isnan(error1)*/)
 	{	/*If simulation starts diverging, then reduce the timestep and try again.*/
 		return -1;
 	}
@@ -84,9 +83,11 @@ void Step_4(real const& dt,
 	rho_np1 = rho_1 + (dt/6.0) * (Rrho_1 + 2.0 * Rrho_2 + 2.0 * Rrho_3 + Rrho_4);
 }
 
-void Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	size_t const& start, size_t const& end, 
-	MESH& cells, vector<size_t> const& cellsused,
+/* <summary> Peform the first stage of the Runge-Kutta integration
+	to get the first guess of time n+1 (regarded here as time n+1/4)
+	to perform neighbour search and dissipation terms before freezing </summary */
+int Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
+	size_t const& start, size_t const& end, real const& B, real const& gam, MESH& cells, vector<size_t> const& cellsused,
 	vector<vector<Part>> const& neighb, outl const& outlist, DELTAP const& dp, real& logbase,
 	State& pn, State& st_2, real& error1)
 {
@@ -96,6 +97,16 @@ void Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& 
 	real error2 = 0.0;
 	// logbase = 0.0;
 	uint k = 1;
+
+	vector<StateVecD> res_1(end, StateVecD::Zero());
+	vector<real> Rrho_1(end, 0.0);
+
+	vector<real> curve;
+	StateVecD Force = StateVecD::Zero();
+	vector<StateVecD> Af;
+	svar.AForce = StateVecD::Zero();
+
+	Forces(svar, fvar, avar, cells, pn, neighb, outlist, dp, res_1, Rrho_1, Af, Force, curve);
 
 	#pragma omp parallel shared(svar,pn,st_2) /*reduction(+:Force,dropVel)*/
 	{
@@ -111,7 +122,7 @@ void Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& 
 			}
 		}
 
-		uint w = 15;
+		// uint w = 15;
 
 		/********************************************************************/
 		/*************************  STEP 1  *********************************/
@@ -120,8 +131,8 @@ void Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& 
 		for (size_t ii=0; ii < start; ++ii)
 		{	/****** BOUNDARY PARTICLES ***********/
 			st_2[ii].rho = pn[ii].rho + 0.5 * dt * pn[ii].Rrho;
-			// st_2[ii].p = B*(pow(st_2[ii].rho/fvar.rho0,gam)-1);
-			st_2[ii].p = fvar.Cs*fvar.Cs * (st_2[ii].rho - fvar.rho0);
+			st_2[ii].p = B*(pow(st_2[ii].rho/fvar.rho0,gam)-1);
+			// st_2[ii].p = fvar.Cs*fvar.Cs * (st_2[ii].rho - fvar.rho0);
 		}
 
 		#pragma omp for schedule(static) nowait
@@ -144,17 +155,21 @@ void Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& 
 
 				// Step_1(dt,pn[ii].xi,pn[ii].v,pn[ii].rho,pn[ii].f,pn[ii].Rrho,
 				// 		st_2[ii].xi,st_2[ii].v,st_2[ii].rho);
-
+				#ifdef NOALE
 				st_2[ii].xi = pn[ii].xi + 0.5 * dt * pn[ii].v;
+				#else
+				st_2[ii].xi = pn[ii].xi + 0.5 * dt * (pn[ii].v + pn[ii].vPert);
+				#endif
 				st_2[ii].v = pn[ii].v + 0.5 * dt * pn[ii].f;
 				st_2[ii].rho = pn[ii].rho + 0.5 * dt * pn[ii].Rrho;
-				st_2[ii].p = fvar.Cs*fvar.Cs * (st_2[ii].rho - fvar.rho0);
+				st_2[ii].p = B*(pow(st_2[ii].rho/fvar.rho0,gam)-1);
+				// st_2[ii].p = fvar.Cs*fvar.Cs * (st_2[ii].rho - fvar.rho0);
 
-				#pragma omp critical
-				cout << setw(6) << ii << setw(w) << st_2[ii].xi(0) << setw(w) << st_2[ii].xi(1) << 
-				setw(w) << st_2[ii].v(0) << setw(w) << st_2[ii].v(1) << setw(w) << 
-				setw(w) << pn[ii].f(0) << setw(w) << pn[ii].f(1) << setw(w) <<
-				setw(w) << st_2[ii].rho << setw(w) << st_2[ii].m << endl;
+				// #pragma omp critical
+				// cout << setw(6) << ii << setw(w) << st_2[ii].xi(0) << setw(w) << st_2[ii].xi(1) << 
+				// setw(w) << st_2[ii].v(0) << setw(w) << st_2[ii].v(1) << setw(w) << 
+				// setw(w) << pn[ii].f(0) << setw(w) << pn[ii].f(1) << setw(w) <<
+				// setw(w) << st_2[ii].rho << setw(w) << st_2[ii].m << endl;
 
 
 				if(svar.Asource == 2 && st_2[ii].b == PartState.FREE_)
@@ -175,15 +190,16 @@ void Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& 
 
 	}
 
-	void(Check_RK_Error(svar,start,end,error1,error2,logbase,pn,st_2,k));
-
+	return (Check_RK_Error(svar,start,end,error1,error2,logbase,pn,st_2,k));
 }
 
+/* <summary> Perform the rest of the Runge-Kutta integration, assuming frozen 
+	dissipation terms. This will do step 2 to 4 (n+1/4 to n+1) </summary> */
 int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	size_t const& start, size_t const& end, 
+	size_t const& start, size_t& end, real const& B, real const& gam,
 	MESH& cells, vector<size_t> const& cellsused,
 	vector<vector<Part>> const& neighb, outl const& outlist, DELTAP const& dp, real& logbase,
-	State& pn, State& st_2, State& pnp1, State& airP, StateVecD& Force, StateVecD& dropVel, real& error1)
+	State& pn, State const& st_2, State& pnp1, State& airP, StateVecD& Force, StateVecD& dropVel, real& error1)
 {
 	/*Create the vectors*/		
 	vector<StateVecD> res_2(end,StateVecD::Zero());
@@ -208,7 +224,7 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 	const real dt = svar.dt;
 	
 	// real error1 = 0.0;
-	// real error2 = 0.0;
+	real error2 = error1;
 	// logbase = 0.0;
 	uint k = 2;
 
@@ -311,15 +327,17 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 	/********************************************************************/
 	/*************************  STEP 2  *********************************/
 	/********************************************************************/
+	Forces(svar, fvar, avar, cells, st_2, neighb, outlist, dp, res_2, Rrho_2, Af, Force, curve);
+
 	#pragma omp parallel shared(svar,pn,st_2,res_2,Rrho_2,st_3,res_3,Rrho_3)
 	{
-		Forces(svar, fvar, avar, cells, st_2, neighb, outlist, dp, res_2, Rrho_2, Af, Force, curve);
+		
 		#pragma omp for schedule(static) nowait
 		for (size_t ii=0; ii < start; ++ii)
 		{	/****** BOUNDARY PARTICLES ***********/
 			st_3[ii].rho = pn[ii].rho+0.5*dt*(Rrho_2[ii]);
-			// st_3[ii].p = B*(pow(st_3[ii].rho/fvar.rho0,gam)-1);
-			st_3[ii].p = fvar.Cs*fvar.Cs * (st_3[ii].rho - fvar.rho0);
+			st_3[ii].p = B*(pow(st_3[ii].rho/fvar.rho0,gam)-1);
+			// st_3[ii].p = fvar.Cs*fvar.Cs * (st_3[ii].rho - fvar.rho0);
 		}
 
 		#pragma omp for schedule(static) nowait
@@ -344,11 +362,15 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 				// Step_2(dt,pn[ii].xi,pn[ii].v,pn[ii].rho,
 				// 		st_2[ii].v,res_2[ii],Rrho_2[ii],
 				// 		st_3[ii].xi,st_3[ii].v,st_3[ii].rho);
-
+				#ifdef NOALE
 				st_3[ii].xi = pn[ii].xi + 0.5 * dt * st_2[ii].v;
+				#else
+				st_3[ii].xi = pn[ii].xi + 0.5 * dt * (st_2[ii].v + st_2[ii].vPert);
+				#endif
 				st_3[ii].v = pn[ii].v + 0.5 * dt * res_2[ii];
 				st_3[ii].rho = pn[ii].rho + 0.5 * dt * Rrho_2[ii];
-				st_3[ii].p = fvar.Cs*fvar.Cs * (st_3[ii].rho - fvar.rho0);
+				st_3[ii].p = B * (pow(st_3[ii].rho / fvar.rho0, gam) - 1);
+				// st_3[ii].p = fvar.Cs*fvar.Cs * (st_3[ii].rho - fvar.rho0);
 			}
 
 			// #pragma omp critical
@@ -368,15 +390,17 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 	/********************************************************************/
 	/*************************  STEP 3  *********************************/
 	/********************************************************************/
+	Forces(svar, fvar, avar, cells, st_3, neighb, outlist, dp, res_3, Rrho_3, Af, Force, curve);
+
 	#pragma omp parallel shared(svar,pn,st_3,res_3,Rrho_3,st_4,res_4,Rrho_4)
 	{
-		Forces(svar, fvar, avar, cells, st_3, neighb, outlist, dp, res_3, Rrho_3, Af, Force, curve);
+		
 		#pragma omp for schedule(static) nowait
 		for (size_t ii=0; ii < start; ++ii)
 		{	/****** BOUNDARY PARTICLES ***********/
 			st_4[ii].rho = pn[ii].rho+0.5*dt*(Rrho_3[ii]);
-			// st_3[ii].p = B*(pow(st_3[ii].rho/fvar.rho0,gam)-1);
-			st_4[ii].p = fvar.Cs*fvar.Cs * (st_4[ii].rho - fvar.rho0);
+			st_4[ii].p = B*(pow(st_4[ii].rho/fvar.rho0,gam)-1);
+			// st_4[ii].p = fvar.Cs*fvar.Cs * (st_4[ii].rho - fvar.rho0);
 		}
 
 		#pragma omp for schedule(static) nowait
@@ -400,11 +424,15 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 				// Step_3(dt,pn[ii].xi,pn[ii].v,pn[ii].rho,
 				// 		st_3[ii].v,res_3[ii],Rrho_3[ii],
 				// 		st_4[ii].xi,st_4[ii].v,st_4[ii].rho);
-
+				#ifdef NOALE
 				st_4[ii].xi = pn[ii].xi + dt * st_3[ii].v;
+				#else
+				st_4[ii].xi = pn[ii].xi + dt * (st_3[ii].v + st_3[ii].vPert);
+				#endif
 				st_4[ii].v = pn[ii].v + dt * res_3[ii];
 				st_4[ii].rho = pn[ii].rho + dt * Rrho_3[ii];
-				st_4[ii].p = fvar.Cs*fvar.Cs * (st_4[ii].rho - fvar.rho0);
+				st_4[ii].p = B*(pow(st_4[ii].rho/fvar.rho0,gam)-1);
+				// st_4[ii].p = fvar.Cs*fvar.Cs * (st_4[ii].rho - fvar.rho0);
 			}
 		}
 	}
@@ -416,6 +444,7 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 	/********************************************************************/
 	/*************************  STEP 4  *********************************/
 	/********************************************************************/
+	Forces(svar, fvar, avar, cells, st_4, neighb, outlist, dp, res_4, Rrho_4, Af, Force, curve);
 
 	#pragma omp parallel shared(svar,pn,pnp1,st_2,res_2,Rrho_2,st_3,res_3,Rrho_3,st_4,res_4,Rrho_4)
 	{
@@ -430,15 +459,14 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 					cells.vFnp1[ii] = StateVecD::Zero();
 			}
 		}
-
-		Forces(svar, fvar, avar, cells, st_4, neighb, outlist, dp, res_4, Rrho_4, Af, Force, curve);
+	
 		#pragma omp for schedule(static) nowait
 		for (size_t ii=0; ii < start; ++ii)
 		{	/****** BOUNDARY PARTICLES ***********/
 			pnp1[ii].rho = pn[ii].rho + 
 				(dt/6.0) * (pn[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii]);
-			// st_3[ii].p = B*(pow(st_3[ii].rho/fvar.rho0,gam)-1);
-			pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
+			pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
+			// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
 
 			pnp1[ii].f = res_4[ii];
 			pnp1[ii].Rrho = Rrho_4[ii];
@@ -478,7 +506,23 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 						if(svar.Asource == 1 || svar.Asource == 2)
 						{
 							/*retrieve the cell it's in*/
-							FirstCell(svar,end,ii,TREE.CELL, cells, pnp1, pn);
+							uint to_del = 0;
+							FirstCell(svar, TREE.CELL, cells, pnp1[ii], to_del);
+
+							if (to_del)
+							{
+								#pragma omp critical
+								{
+									// cout << "Particle has crossed an outer boundary!" << endl;
+									// cout << "Particle will be deleted." << endl;
+									pnp1.erase(pnp1.begin() + ii);
+									pn.erase(pn.begin() + ii);
+								}
+								#pragma omp atomic
+								svar.totPts--;
+								#pragma omp atomic
+								end--;
+							}
 						}
 					}	
 				}
@@ -489,15 +533,28 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 				// 		st_3[ii].v,res_3[ii],Rrho_3[ii],
 				// 		st_4[ii].v,res_4[ii],Rrho_4[ii],
 				// 		pnp1[ii].xi,pnp1[ii].v,pnp1[ii].rho);
+				#ifdef NOALE
+				pnp1[ii].xi = pn[ii].xi +
+							(dt / 6.0) * (pn[ii].v + 2.0 * st_2[ii].v + 2.0 * st_3[ii].v + st_4[ii].v);
+				#else
+				pnp1[ii].xi = pn[ii].xi +
+								(dt / 6.0) * ((pn[ii].v+pn[ii].vPert) +
+								2.0 * (st_2[ii].v + st_2[ii].vPert) +
+								2.0 * (st_3[ii].v + st_3[ii].vPert) +
+								(st_4[ii].v + st_4[ii].vPert));
+				#endif
 
-				pnp1[ii].xi = pn[ii].xi +  
-					(dt/6.0) * (pn[ii].v + 2.0 * st_2[ii].v + 2.0 * st_3[ii].v + st_4[ii].v);
 				pnp1[ii].v = pn[ii].v + 
 					(dt/6.0) * (pn[ii].f + 2.0 * res_2[ii] + 2.0 * res_3[ii] + res_4[ii]);
+
 				pnp1[ii].rho = pn[ii].rho + 
 					(dt/6.0) * (pn[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii]);
-				pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
+
+				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
+				// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
+
 				pnp1[ii].f = res_4[ii];
+
 				pnp1[ii].Rrho = Rrho_4[ii];
 
 				if(svar.Asource == 2 && pnp1[ii].b == PartState.FREE_)
@@ -527,12 +584,12 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 
 	// if (Check_RK_Error(svar,start,end,error1,error2,logbase,st_4,pnp1,k) < 0)
 	// 	return -1;
-
-	return 0;
+	int errstate = Check_RK_Error(svar, start, end, error1, error2, logbase, st_4, pnp1, k);
+	return errstate;
 }
 
 real Runge_Kutta4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	size_t const& start, size_t const& end, 
+	size_t const& start, size_t& end, real const& B, real const& gam,
 	MESH& cells, vector<size_t> const& cellsused,
 	vector<vector<Part>> const& neighb, outl const& outlist, DELTAP const& dp, real& logbase,
 	State& pn, State& st_2, State& pnp1, State& airP, StateVecD& Force, StateVecD& dropVel)
@@ -541,7 +598,7 @@ real Runge_Kutta4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& 
 	int errstate = 1;
 	while(errstate != 0)
 	{
-		errstate = Perform_RK4(TREE,svar,fvar,avar,start,end,cells,cellsused,
+		errstate = Perform_RK4(TREE,svar,fvar,avar,start,end,B,gam,cells,cellsused,
 								neighb,outlist,dp,logbase,pn,st_2,pnp1,airP,Force,dropVel,error);
 
 		if(errstate < 0)

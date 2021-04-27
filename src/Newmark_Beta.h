@@ -413,7 +413,7 @@ void Newmark_Beta(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 {
 	uint nUnstab = 0;
 
-	while (error1 > -7.0)
+	while (error1 > -5.0)
 	{
 		/*Previous State for error calc*/
 		#pragma omp parallel for shared(pnp1)
