@@ -250,7 +250,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	Detect_Surface(svar,fvar,avar,start,end,dp,outlist,cells,pnp1);
 
 	// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
-	#ifdef ALE
+	#ifndef NOALE
 		Particle_Shift(svar,fvar,start,end,outlist,dp,pnp1);
 	#endif
 

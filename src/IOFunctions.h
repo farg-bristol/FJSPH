@@ -168,9 +168,9 @@ int MakeOutputDir(int argc, char *argv[], SIM& svar)
 					{
 						auto szdattime = info.st_mtime;
 
-						// cout << sztime << "   " << szdattime << endl;
+						cout << sztime << "   " << szdattime << endl;
  
-						if (szdattime > sztime)
+						if (szdattime > (sztime+10))
 						{
 							// combine the files
 							file = svar.outfolder;

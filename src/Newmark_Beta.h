@@ -297,7 +297,11 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 
 
 				/*For any other particles, intergrate as normal*/
+				#ifdef NOALE
+				pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(c*pn[ii].f+d*res[ii]);
+				#else 
 				pnp1[ii].xi = pn[ii].xi+dt*(pn[ii].v + pnp1[ii].vPert)+dt2*(c*pn[ii].f+d*res[ii]);
+				#endif
 				pnp1[ii].v =  (pn[ii].v/* + pnp1[ii].vPert*/) +dt*(a*pn[ii].f+b*res[ii]);
 				pnp1[ii].f = res[ii];
 				pnp1[ii].Af = Af[ii];

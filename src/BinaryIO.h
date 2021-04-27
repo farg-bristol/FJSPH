@@ -4,11 +4,7 @@
 #ifndef BINARYIO_H
 #define BINARYIO_H
 
-#ifdef WINDOWS
 #include <TECIO.h>
-#else
-#include <tecio/TECIO.h>
-#endif
 #include "Var.h"
 #include "Neighbours.h"
 #include "Kernel.h"
@@ -398,10 +394,10 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 			ax[ii-start] = pnp1[ii].f(0);
 			ay[ii-start] = pnp1[ii].f(1);
 			
-#if SIMDIM == 3
-			vz[ii-start] = pnp1[ii].v(2);
-			az[ii-start] = pnp1[ii].f(2);
-#endif
+			#if SIMDIM == 3
+				vz[ii-start] = pnp1[ii].v(2);
+				az[ii-start] = pnp1[ii].f(2);
+			#endif
   			b[ii-start] = static_cast<uint8_t>(pnp1[ii].b);
   	}
 
@@ -411,40 +407,45 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 			exit(-1);
 		}
 		var++;
+
 		if(Write_Real_Vector(fileHandle, outputZone, var, size, vy))
   		{
 			cerr << "Failed to write velocity y-component" << endl;
 			exit(-1);
 		}
 		var++;
-#if SIMDIM == 3
-		if(Write_Real_Vector(fileHandle, outputZone, var, size, vz))
-  		{
-			cerr << "Failed to write velocity z-component" << endl;
-			exit(-1);
-		}
-		var++;
-#endif
+
+		#if SIMDIM == 3
+			if(Write_Real_Vector(fileHandle, outputZone, var, size, vz))
+			{
+				cerr << "Failed to write velocity z-component" << endl;
+				exit(-1);
+			}
+			var++;
+		#endif
+
   		if(Write_Real_Vector(fileHandle, outputZone, var, size, ax))
   		{
 			cerr << "Failed to write acceleration x-component" << endl;
 			exit(-1);
 		}
 		var++;
+
 		if(Write_Real_Vector(fileHandle, outputZone, var, size, ay))
   		{
 			cerr << "Failed to write acceleration y-component" << endl;
 			exit(-1);
 		}
 		var++;
-#if SIMDIM == 3
-		if(Write_Real_Vector(fileHandle, outputZone, var, size, az))
-  		{
-			cerr << "Failed to write acceleration z-component" << endl;
-			exit(-1);
-		}
-		var++;
-#endif
+
+		#if SIMDIM == 3
+			if(Write_Real_Vector(fileHandle, outputZone, var, size, az))
+			{
+				cerr << "Failed to write acceleration z-component" << endl;
+				exit(-1);
+			}
+			var++;
+		#endif
 		if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, var, 0, size, &b[0]))
 		{
 			cerr << "Failed to write particle type" << endl;
