@@ -46,7 +46,13 @@ In the makefile are four primary options: `2D`, `debug2`, `3D`, and `debug3`.
 These are build options for two and three dimensions, and with or without debug flags. 
 Additionally are options to build associated programs Cell2Edge (`c2e`), for building 2D Edge based mesh files from TAU files, and Cell2Face (`c2f`) for 3D TAU meshes to face based data. 
 
-Lastly are some options that can be passed to the compiler, using the `FLAGS` option, e.g. `make 2D FLAGS='-DALE'`. Currently the two accepted flags are `-DALE` and `-DCUBIC`. The ALE flag turns on the particle shifting and ALE momentum and continuity equations, and is recommended to improve distribution of the particles. The cubic flag changes the kernel to the cubic spline, instead of the Wendland C2. While provided, it is not recommended, as in the tests I've done it quickly becomes unstable.
+Lastly are some options that can be passed to the compiler, using the `FLAGS` option, e.g. `make 2D FLAGS='-DNOALE'`. 
+Currently the three accepted flags are `-DNOALE`, `-DCUBIC`, and `-DRK`. 
+The NOALE flag turns off the particle shifting and ALE momentum and continuity equations, which are on by default to improve the distribution of the particles. 
+The cubic flag changes the kernel to the cubic spline, instead of the Wendland C2. While provided, it is not recommended, as in the tests I've done it quickly becomes unstable.
+Lastly, the RK flag switches the integration method from a Newmark-Beta semi-implicit scheme to an explicit Runge-Kutta 4th order scheme, with frozen diffusive terms.
+It is debatable which method is faster, however it has been observed that Newmark-Beta is more stable, and remains the default integration method.
+
 
 ## C++ Standards
 The NanoFLANN code requires C++11 standard support, and so will not build on Visual Studio 13, due to an incomplete support of the C++11 standard. If you are on windows and don't have access to VS15, then MinGW is the next best bet (unless you are on windows 10, and have WSL enabled).
