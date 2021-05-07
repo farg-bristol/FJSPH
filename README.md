@@ -30,11 +30,12 @@ The code has *four* dependent libraries at present:
 
 [NetCDF](https://www.unidata.ucar.edu/downloads/netcdf/) - Tested with NetCDF 4.7.3. 
 
-[TECIO](https://github.com/su2code/SU2/tree/master/externals/tecio) - Tested with Tecplot 360 EX 2016 R2 version of TECIO.
+[TECIO](https://www.tecplot.com/products/tecio-library/) - Tested with 2016 R2, 2018 R2, 2019 R1, 2020 R2 versions of TECIO.
 
-The code has been built such that the first two libraries need to be in local subfolder "Third_Party", then in  "Eigen", and "NanoFLANN". NetCDF and TECIO must be on the system path. 
+The code has been built such that the first two libraries need to be in local subfolder "Third_Party", then in  "Eigen", and "NanoFLANN". NetCDF is assumed to be installed on the system path, and the TECIO files are in the standard install location for linux tecplot (/usr/local/tecplot/360ex_2020r2/include) and included in the makefile. 
+For your system, the include directories in the makefile will need to be modified for your tecplot version and install location to correctly locate the TECIO files.
+It is possible to download only the TECIO library, via the [SU2 code github](https://github.com/su2code/SU2/tree/master/externals/tecio).
 The bare minimum of Eigen has been provided in the repository, and additional download of the library shouldn't be necessary. 
-
 
 
 # Building
@@ -50,7 +51,7 @@ Lastly are some options that can be passed to the compiler, using the `FLAGS` op
 ## C++ Standards
 The NanoFLANN code requires C++11 standard support, and so will not build on Visual Studio 13, due to an incomplete support of the C++11 standard. If you are on windows and don't have access to VS15, then MinGW is the next best bet (unless you are on windows 10, and have WSL enabled).
 
-It has also been realised that syntax has been used that requires **g++ 9 or later**, so the code will not compile with g++ 8 or older. 
+Syntax has been used that requires **g++ 9 or later**, so the code will not compile with g++ 8 or older. 
 
 # Input
 On the command line either one, or two options exists; a clean run or run from a current solution. If no inputs are provided, the code exits without performing anything. Comments are provided in the input file that should be self-explanatory as to their function.
