@@ -10,8 +10,8 @@ LIBS=-ltecio -lnetcdf #-lH5hut -lhdf5
 # Compiler flags. 
 CXXFLAGS=-std=c++11 -Wall -ffast-math -funroll-loops -O3 -fopenmp
 
-INC=#-I/usr/include/hdf5/serial/
-LLINK=#-L/usr/lib/x86_64-linux-gnu/hdf5/serial/
+INC=-I/usr/local/tecplot/360ex_2020r2/include
+LLINK=-L/usr/local/tecplot/360ex_2020r2/bin
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 # Find the OS to execute correctly
 UNAME := $(shell uname)
