@@ -136,9 +136,19 @@ void Read_FLUID_Var(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 	svar.outdir = svar.outfolder;
 	if(svar.Asource != 0)
 	{
-		svar.meshfile = getString(fluid, lineno, "Mesh input file");
-  		svar.solfile = getString(fluid,lineno, "Mesh solution file");
-  		svar.scale = getDouble(fluid,lineno, "Mesh scale");
+		svar.CDForFOAM = getInt(fluid, lineno, "Mesh source type, netCDF or OpenFOAM");
+		if(svar.CDForFOAM == 1)
+		{
+			svar.foamdir = getString(fluid, lineno, "OpenFOAM source directory");
+			svar.foamtime = getString(fluid,lineno, "OpenFOAM solution time");
+		}
+		else
+		{
+			svar.meshfile = getString(fluid, lineno, "Mesh input file");
+			svar.solfile = getString(fluid,lineno, "Mesh solution file");
+			svar.scale = getDouble(fluid,lineno, "Mesh scale");
+		}
+  		
   		avar.vRef = getDouble(fluid, lineno, "Gas ref Vel");
   		avar.pRef = getDouble(fluid, lineno, "Get ref Press");
   		avar.T = getDouble(fluid, lineno, "Gas ref Temp");
@@ -440,8 +450,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 
 	if(svar.Asource == 1 || svar.Asource == 2)
 	{
-		cout << "Mesh filename: " << svar.meshfile << endl;
-		cout << "Solution filename: " << svar.solfile << endl;
 		cout << "Reference velocity: " << avar.vRef << endl;
 		cout << "Reference pressure: " << avar.pRef << endl;
 		cout << "Reference temperature: " << avar.T << endl;
@@ -455,8 +463,16 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	cout << "Input folder: " << svar.infolder << endl;
 	if(svar.Asource == 1 || svar.Asource == 2)
 	{
-		cout << "Input mesh face file: " << svar.meshfile  << endl;
-		cout << "Input solution file: " << svar.solfile << endl;
+		if(svar.CDForFOAM == 0)
+		{
+			cout << "Mesh filename: " << svar.meshfile << endl;
+			cout << "Solution filename: " << svar.solfile << endl;
+		}
+		else
+		{
+			cout << "OpenFOAM root directory: " << svar.foamdir << endl;
+			cout << "OpenFOAM solution time: " << svar.foamtime << endl;
+		}
 	}
 
 	cout << "Output folder: " << svar.outfolder << endl << endl;

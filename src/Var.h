@@ -104,8 +104,9 @@ typedef struct PState{
 	{
 		BOUND_ = 0;
 	    PISTON_ = 1;
-		BACK_ = 2; 
-		START_ = 3;
+		BUFFER_ = 2;
+		BACK_ = 3; 
+		// START_ = 4;
 		PIPE_ = 4;
 		FREE_ = 5;
 		GHOST_ = 6;
@@ -113,8 +114,9 @@ typedef struct PState{
 
 	size_t BOUND_ ,
     PISTON_,
-	BACK_,            
-	START_,
+	BUFFER_, 
+	BACK_,           
+	// START_,
 	PIPE_,
 	FREE_,
 	GHOST_;
@@ -178,9 +180,12 @@ typedef struct SIM {
 	
 	uint framecount;                /*How many frames have been output*/
 	vector<size_t> back;            /*Particles at the back of the pipe*/
+	vector<vector<size_t>> buffer;  /*ID of particles inside the buffer zone */
 	uint iter;                      /*Current iteration number to renormalise*/
 
+	uint CDForFOAM;
 	std::string infolder, outfolder, outdir;
+	std::string foamdir, foamtime;
 	std::string meshfile, bmapfile, solfile;
 	void* boundFile; /*TECIO file handles*/
 	void* fuelFile;
@@ -318,7 +323,7 @@ typedef struct MESH
 
 	/*Zone info*/
 	std::string zone;
-	uint numPoint, numElem;
+	size_t numPoint, numElem, numFace;
 	real scale;
 
 	/*Point based data*/
@@ -332,10 +337,6 @@ typedef struct MESH
 	vector<vector<size_t>> elems;
 	vector<StateVecD> cCentre;
 	vector<vector<size_t>> cFaces;
-
-	/*Boundary data*/
-	vector<size_t> bIndex;
-	vector<StateVecD> bVerts;
 
 	/*Solution vectors*/
 	vector<StateVecD> cVel;
@@ -623,11 +624,11 @@ typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,real,SIMDIM,nanoflan
 typedef struct KDTREE
 {
 	KDTREE(State const& pnp1, MESH const& cells): NP1(SIMDIM,pnp1,20), 
-	CELL(SIMDIM,cells.cCentre,20), BOUNDARY(SIMDIM,cells.bVerts,20) {}
+	CELL(SIMDIM,cells.cCentre,20)/* , BOUNDARY(SIMDIM,cells.bVerts,20) */ {}
 
 	Sim_Tree NP1;
 	Vec_Tree CELL;
-	Vec_Tree BOUNDARY;	
+	// Vec_Tree BOUNDARY;	
 
 }KDTREE;
 

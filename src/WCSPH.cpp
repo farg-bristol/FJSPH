@@ -12,6 +12,7 @@
 
 #include "Var.h"
 #include "IO.h"
+#include "FOAMIO.h"
 #include "Neighbours.h"
 #include "Kernel.h"
 #include "Init.h"
@@ -56,10 +57,24 @@ int main(int argc, char *argv[])
 	if(svar.Asource == 1 || svar.Asource == 2)
 	{
 		#if SIMDIM == 3
-		Read_TAUMESH_FACE(svar,cells,fvar,avar);
-		// Read_TAUMESH(svar,cells,fvar);
+			if(svar.CDForFOAM == 0)
+			{
+				Read_TAUMESH_FACE(svar,cells,fvar,avar);
+			}
+			else
+			{
+				FOAM::Read_FOAM(svar,cells);
+			}
 		#else
-		Read_TAUMESH_EDGE(svar,cells,fvar,avar);
+			if (svar.CDForFOAM == 0)
+			{
+				Read_TAUMESH_EDGE(svar,cells,fvar,avar);
+			}
+			else
+			{
+				cout << "OpenFOAM mesh input is currently unsupported in two-dimensions" << endl;
+				exit(-1);
+			}
 		#endif
 	}
 	else if (svar.Asource == 4)
@@ -121,8 +136,7 @@ int main(int argc, char *argv[])
 	// Check if cells have been initialsed before making a tree off it
 	if(cells.cCentre.size() == 0)
 		cells.cCentre.emplace_back(StateVecD::Zero());
-	if (cells.bVerts.size() == 0)
-		cells.bVerts.emplace_back(StateVecD::Zero());
+
 	if(cells.fNum.size() == 0)
 	{
 		cells.fNum.emplace_back();

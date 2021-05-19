@@ -681,6 +681,176 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
     
 }
 
+void Write_Cell_Data(MESH const& cdata)
+{
+#ifdef DEBUG
+	dbout << "Entering Write_Cell_Data..." << endl;
+#endif
 
+	cout << "Writing cell based data." << endl;
+
+	std::ofstream fout("Cell.dat", std::ios::out);
+	if (!fout.is_open())
+	{
+		cout << "Failed to open data file for writing mesh." << endl;
+		exit(-1);
+	}
+
+	fout << "TITLE = \"3D Mesh Solution\"\n";
+	fout << "VARIABLES = \"x (m)\" \"y (m)\" \"z (m)\"\n";
+	fout << "ZONE T=\"Cell Data\"" << endl;
+	fout << "N=" << cdata.numPoint << ", E=" << cdata.numElem << ", F=FEBLOCK, ET=BRICK" << endl
+		 << endl;
+
+	/*Write vertices*/
+	fout << std::left << std::scientific << std::setprecision(6);
+	fout << std::setw(1);
+	for (uint ii = 0; ii < SIMDIM; ++ii)
+	{
+		uint kk = 0;
+		for (uint jj = 0; jj < cdata.verts.size(); ++jj)
+		{
+			fout << std::setw(15) << cdata.verts[jj][ii];
+			kk++;
+
+			if (kk == 5)
+			{
+				fout << endl;
+				fout << std::setw(1);
+				kk = 0;
+			}
+		}
+
+		if (kk % 5 != 0)
+			fout << "\n";
+	}
+
+	/*Write element indexing*/
+	fout << std::fixed;
+	for (uint ii = 0; ii < cdata.elems.size(); ++ii)
+	{
+		for (auto elem : cdata.elems[ii])
+		{
+			fout << std::setw(6) << elem + 1;
+		}
+		fout << "\n";
+	}
+
+	fout.close();
+
+#ifdef DEBUG
+	dbout << "Exiting Write_Cell_Data..." << endl;
+#endif
+}
+
+void Write_Face_Data(MESH const& cells)
+{
+	
+	std::ofstream f1("foam_mesh.dat", std::ios::out);
+	f1 << "VARIABLES= \"X\", \"Y\", \"Z\"" << endl;
+	uint w = 17;
+	f1 << std::left << std::scientific << std::setprecision(8);
+
+	/*Write zone header information*/
+	f1 << "ZONE T=\"OpenFOAM MESH\"" << endl;
+	f1 << "ZONETYPE=FEPOLYHEDRON" << endl;
+	f1 << "NODES=" << cells.numPoint << " ELEMENTS=" << cells.numElem << " FACES=" << cells.numFace << endl;
+	size_t TotalNumFaceNodes = cells.numFace * 3;
+	f1 << "TotalNumFaceNodes=" << TotalNumFaceNodes << endl;
+	f1 << "NumConnectedBoundaryFaces=0 TotalNumBoundaryConnections=0" << endl;
+
+	
+	/*Write vertices in block format*/
+	size_t n = 0;
+
+	for (size_t dim = 0; dim < SIMDIM; ++dim)
+	{
+		for (auto const &pnt : cells.verts)
+		{
+			f1 << std::setw(w) << pnt[dim];
+			n++;
+
+			if(n == 6)
+			{
+				f1 << endl;
+				n = 0;
+			}
+		}
+		f1 << endl;
+	}
+
+	/*Write how many vertices per face*/
+	n = 0;
+	for (size_t ii = 0; ii < cells.numFace; ++ii)
+	{
+		f1 << std::setw(5) << 3;
+		n++;
+
+		if(n == 6)
+		{
+			f1 << endl;
+			n = 0;
+		}
+	}
+	f1 << endl;
+
+	/*Write the face vertex list*/
+	n = 0;
+	w = 10;
+	for (auto const &face : cells.faces)
+	{
+		for (auto const &vertex : face)
+		{ 
+			f1 << std::setw(w) << vertex + 1;
+			n++;
+
+			if (n == 6)
+			{
+				f1 << endl;
+				n = 0;
+			}
+		}
+	}
+	f1 << endl;
+
+	/*Write left elements*/
+	n = 0;
+	for (auto const &lr : cells.leftright)
+	{
+		f1 << std::setw(w) << lr.first+1;
+		n++;
+
+		if (n == 6)
+		{
+			f1 << endl;
+			n = 0;
+		}
+	}
+	f1 << endl;
+
+	/*Write right elements*/
+	n = 0;
+	for (auto const &lr : cells.leftright)
+	{
+		if(lr.second < 0)
+		{
+			f1 << std::setw(w) << 0;
+		}
+		else
+		{
+			f1 << std::setw(w) << lr.second+1;
+		}
+		n++;
+
+		if(n == 6)
+		{
+			f1 << endl;
+			n = 0;
+		}
+	}
+	f1 << endl	<< endl;
+	f1.close();
+	// exit(0);
+}
 
 #endif
