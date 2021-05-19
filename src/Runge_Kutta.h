@@ -139,18 +139,12 @@ int Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 		for (size_t ii=start; ii < end; ++ii)
 		{	/****** FLUID PARTICLES **************/
 			
-			/* START = pipe particle receiving prescribed motion            */
+			/* BUFFER = pipe particle receiving prescribed motion            */
 			/* BACK = the latest particle in that column                    */
 			/* PIPE = in the pipe, with free motion                         */
 			/* FREE = free of the pipe and receives an aero force           */
 
-			/*Check if the particle is clear of the starting area*/
-			if(st_2[ii].b == PartState.START_ || st_2[ii].b == PartState.BACK_)
-			{   
-				st_2[ii].xi = pn[ii].xi + 0.5*dt*pn[ii].v;
-			}
-
-			if(st_2[ii].b > PartState.START_)
+			if(st_2[ii].b > PartState.BUFFER_)
 			{	
 
 				// Step_1(dt,pn[ii].xi,pn[ii].v,pn[ii].rho,pn[ii].f,pn[ii].Rrho,
@@ -164,6 +158,35 @@ int Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 				st_2[ii].rho = pn[ii].rho + 0.5 * dt * pn[ii].Rrho;
 				st_2[ii].p = B*(pow(st_2[ii].rho/fvar.rho0,gam)-1);
 				// st_2[ii].p = fvar.Cs*fvar.Cs * (st_2[ii].rho - fvar.rho0);
+
+				if (st_2[ii].b == PartState.BACK_)
+				{ /* Define the buffer particle position based on this particle */
+					StateVecD vec = svar.Transp * (st_2[ii].xi - svar.Start);
+					/* Find the right index to find the particles behind it. */
+					auto pIDit = find(svar.back.begin(), svar.back.end(), ii);
+
+					// if (pIDit != svar.back.end())
+					// {
+						size_t index = pIDit - svar.back.begin();
+
+						real jj = 1.0;
+						for (size_t const &pi : svar.buffer[index])
+						{
+							StateVecD xi = vec;
+							xi(1) -= jj * svar.dx;
+							xi = svar.Rotate * xi + svar.Start;
+
+							st_2[pi].xi = pn[pi].xi + dt * pn[pi].v;
+							st_2[pi].rho = pn[pi].rho + 0.5 * dt * pn[pi].Rrho;
+							st_2[pi].p = B*(pow(st_2[pi].rho/fvar.rho0,gam)-1);
+							jj += 1.0;
+						}
+					// }
+					// else
+					// {
+					// 	cout << "Couldnt find the particle in the back vector" << endl;
+					// }
+				}
 
 				// #pragma omp critical
 				// cout << setw(6) << ii << setw(w) << st_2[ii].xi(0) << setw(w) << st_2[ii].xi(1) << 
@@ -344,20 +367,12 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 		for (size_t ii=start; ii < end; ++ii)
 		{	/****** FLUID PARTICLES **************/
 			
-			/* START = pipe particle receiving prescribed motion            */
+			/* BUFFER = pipe particle receiving prescribed motion            */
 			/* BACK = the latest particle in that column                    */
 			/* PIPE = in the pipe, with free motion                         */
 			/* FREE = free of the pipe and receives an aero force           */
 
-			/*Check if the particle is clear of the starting area*/
-			if(st_2[ii].b == PartState.START_ || st_2[ii].b == PartState.BACK_)
-			{   
-				/*For the particles marked 1, perform a prescribed motion*/
-				st_3[ii].xi = pn[ii].xi + 0.5 * dt * pn[ii].v;
-				
-			}
-
-			if(st_2[ii].b > PartState.START_)
+			if(st_3[ii].b > PartState.BUFFER_)
 			{	
 				// Step_2(dt,pn[ii].xi,pn[ii].v,pn[ii].rho,
 				// 		st_2[ii].v,res_2[ii],Rrho_2[ii],
@@ -371,6 +386,35 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 				st_3[ii].rho = pn[ii].rho + 0.5 * dt * Rrho_2[ii];
 				st_3[ii].p = B * (pow(st_3[ii].rho / fvar.rho0, gam) - 1);
 				// st_3[ii].p = fvar.Cs*fvar.Cs * (st_3[ii].rho - fvar.rho0);
+
+				if (st_3[ii].b == PartState.BACK_)
+				{ /* Define the buffer particle position based on this particle */
+					StateVecD vec = svar.Transp * (st_3[ii].xi - svar.Start);
+					/* Find the right index to find the particles behind it. */
+					auto pIDit = find(svar.back.begin(), svar.back.end(), ii);
+
+					// if (pIDit != svar.back.end())
+					// {
+						size_t index = pIDit - svar.back.begin();
+
+						real jj = 1.0;
+						for (size_t const &pi : svar.buffer[index])
+						{
+							StateVecD xi = vec;
+							xi(1) -= jj * svar.dx;
+							xi = svar.Rotate * xi + svar.Start;
+
+							st_3[pi].xi = pn[pi].xi + dt * pn[pi].v;
+							st_3[pi].rho = pn[pi].rho + 0.5 * dt * Rrho_2[pi];
+							st_3[pi].p = B * (pow(st_3[pi].rho / fvar.rho0, gam) - 1);
+							jj += 1.0;
+						}
+					// }
+					// else
+					// {
+					// 	cout << "Couldnt find the particle in the back vector" << endl;
+					// }
+				}
 			}
 
 			// #pragma omp critical
@@ -407,19 +451,19 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 		for (size_t ii=start; ii < end; ++ii)
 		{	/****** FLUID PARTICLES **************/
 			
-			/* START = pipe particle receiving prescribed motion            */
+			/* BUFFER = pipe particle receiving prescribed motion            */
 			/* BACK = the latest particle in that column                    */
 			/* PIPE = in the pipe, with free motion                         */
 			/* FREE = free of the pipe and receives an aero force           */
 
 			/*Check if the particle is clear of the starting area*/
-			if(st_3[ii].b == PartState.START_ || st_3[ii].b == PartState.BACK_)
-			{   
-				/*For the particles marked 1, perform a prescribed motion*/
-				st_4[ii].xi = pn[ii].xi + dt*pn[ii].v;
-			}
+			// if(st_3[ii].b == PartState.START_ || st_3[ii].b == PartState.BACK_)
+			// {   
+			// 	/*For the particles marked 1, perform a prescribed motion*/
+			// 	st_4[ii].xi = pn[ii].xi + dt*pn[ii].v;
+			// }
 
-			if(st_3[ii].b > PartState.START_)
+			if(st_4[ii].b > PartState.BUFFER_)
 			{	
 				// Step_3(dt,pn[ii].xi,pn[ii].v,pn[ii].rho,
 				// 		st_3[ii].v,res_3[ii],Rrho_3[ii],
@@ -433,6 +477,36 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 				st_4[ii].rho = pn[ii].rho + dt * Rrho_3[ii];
 				st_4[ii].p = B*(pow(st_4[ii].rho/fvar.rho0,gam)-1);
 				// st_4[ii].p = fvar.Cs*fvar.Cs * (st_4[ii].rho - fvar.rho0);
+
+				if (st_4[ii].b == PartState.BACK_)
+				{ /* Define the buffer particle position based on this particle */
+					StateVecD vec = svar.Transp * (st_4[ii].xi - svar.Start);
+					/* Find the right index to find the particles behind it. */
+					auto pIDit = find(svar.back.begin(), svar.back.end(), ii);
+
+					// if (pIDit != svar.back.end())
+					// {
+					size_t index = pIDit - svar.back.begin();
+
+					real jj = 1.0;
+					for (size_t const &pi : svar.buffer[index])
+					{
+						StateVecD xi = vec;
+						xi(1) -= jj * svar.dx;
+						xi = svar.Rotate * xi + svar.Start;
+
+						st_4[pi].xi = pn[pi].xi + dt * pn[pi].v;
+						st_4[pi].rho = pn[pi].rho + dt * Rrho_3[pi];
+						st_4[pi].p = B*(pow(st_4[pi].rho/fvar.rho0,gam)-1);
+
+						jj += 1.0;
+					}
+					// }
+					// else
+					// {
+					// 	cout << "Couldnt find the particle in the back vector" << endl;
+					// }
+				}
 			}
 		}
 	}
@@ -482,20 +556,20 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 			/* FREE = free of the pipe and receives an aero force           */
 
 			/*Check if the particle is clear of the starting area*/
-			if(pnp1[ii].b == PartState.START_ || pnp1[ii].b == PartState.BACK_)
-			{   
-				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
-				if(vec(1) > svar.clear)
-				{	/*Tag it as clear if it's higher than the plane of the exit*/
-					pnp1[ii].b=PartState.PIPE_;
-				}
-				else
-				{	/*For the particles marked 1, perform a prescribed motion*/
-					pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-				}
-			}
+			// if(pnp1[ii].b == PartState.START_ || pnp1[ii].b == PartState.BACK_)
+			// {   
+			// 	StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
+			// 	if(vec(1) > svar.clear)
+			// 	{	/*Tag it as clear if it's higher than the plane of the exit*/
+			// 		pnp1[ii].b=PartState.PIPE_;
+			// 	}
+			// 	else
+			// 	{	/*For the particles marked 1, perform a prescribed motion*/
+			// 		pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
+			// 	}
+			// }
 
-			if(pnp1[ii].b > PartState.START_)
+			if(pnp1[ii].b > PartState.BUFFER_)
 			{	
 				if(pnp1[ii].b == PartState.PIPE_)
 				{	/*Do a check to see if it needs to be given an aero force*/
@@ -556,6 +630,39 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 				pnp1[ii].f = res_4[ii];
 
 				pnp1[ii].Rrho = Rrho_4[ii];
+
+				if (pnp1[ii].b == PartState.BACK_)
+				{ /* Define the buffer particle position based on this particle */
+					StateVecD vec = svar.Transp * (pnp1[ii].xi - svar.Start);
+					/* Find the right index to find the particles behind it. */
+					auto pIDit = find(svar.back.begin(), svar.back.end(), ii);
+
+					// if (pIDit != svar.back.end())
+					// {
+					size_t index = pIDit - svar.back.begin();
+
+					real jj = 1.0;
+					for (size_t const &pi : svar.buffer[index])
+					{
+						// StateVecD xi = vec;
+						// xi(1) -= jj * svar.dx;
+						// xi = svar.Rotate * xi + svar.Start;
+
+						pnp1[pi].xi = pn[pi].xi + dt * pn[pi].v;
+
+						pnp1[pi].rho = pn[pi].rho +
+									   (dt / 6.0) * (pn[pi].Rrho + 2.0 * Rrho_2[pi] + 2.0 * Rrho_3[pi] + Rrho_4[pi]);
+
+						pnp1[pi].p = B*(pow(pnp1[pi].rho/fvar.rho0,gam)-1);
+						
+						jj += 1.0;
+					}
+					// }
+					// else
+					// {
+					// 	cout << "Couldnt find the particle in the back vector" << endl;
+					// }
+				}
 
 				if(svar.Asource == 2 && pnp1[ii].b == PartState.FREE_)
 				{

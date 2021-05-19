@@ -259,7 +259,7 @@ DELTAP const& dp, State& pnp1)
 
 			deltaU = std::min(deltaU.norm(), maxUij/2.0) * deltaU.normalized();
 
-			if(pi.b != PartState.START_ && pi.b != PartState.BACK_)
+			if(pi.b != PartState.BUFFER_)
 			{
 				// gradLam = gradLam.normalized();
 				// cout << gradLam(0) << "  " << gradLam(1) << endl;

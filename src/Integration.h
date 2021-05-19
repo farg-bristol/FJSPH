@@ -55,7 +55,11 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 /***********************************************************************************/
 /***********************************************************************************/
 /***********************************************************************************/
-	svar.dt = 0.125*std::min(dtf,std::min(dtc,dtv));
+	#ifdef RK
+		svar.dt = 0.125*std::min(dtf,std::min(dtc,dtv));
+	#else
+		svar.dt = 0.175*std::min(dtf,std::min(dtc,dtv));
+	#endif
 /***********************************************************************************/
 /***********************************************************************************/
 /***********************************************************************************/
@@ -466,7 +470,8 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		if(svar.Bclosed == 0)
 		{
 			uint nAdd = 0;
-			for (auto& back:svar.back)
+			size_t ii = 0;
+			for (size_t& back:svar.back)
 			{	
 				if(svar.totPts < svar.nmax)
 				{
@@ -480,17 +485,29 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 					
 					if(vec[1] > clear)
 					{	/*Create a new particle behind the last one*/
-						StateVecD xi = vec;
+						/* Find the end buffer particle */
+						size_t id = svar.buffer[ii].back();
+
+						StateVecD xi = svar.Transp*(pnp1[id].xi-svar.Start);
 						xi(1) -= svar.dx;
-						xi = svar.Rotate*xi;
-						xi += svar.Start;
+						xi = svar.Rotate*xi + svar.Start;
+						
+						pn.emplace_back(Particle(xi,pn[id],svar.totPts,PartState.BUFFER_));
+						pnp1.emplace_back(Particle(xi,pnp1[id],svar.totPts,PartState.BUFFER_));
 
-						pn.emplace_back(Particle(xi,pnp1[back],svar.totPts,PartState.BACK_));
-						pnp1.emplace_back(Particle(xi,pnp1[back],svar.totPts,PartState.BACK_));
-
-						pnp1[back].b = PartState.START_;
+						pnp1[back].b = PartState.PIPE_;
+						pnp1[svar.buffer[ii][0]].b = PartState.BACK_;
 						/*Update the back vector*/
-						back = svar.totPts;
+
+						back = svar.buffer[ii][0];
+						/* Shift the buffer particle IDs */
+						for(size_t level = 0; level < svar.buffer[ii].size()-1; ++level)
+						{
+							svar.buffer[ii][level] = svar.buffer[ii][level+1];
+						}
+						svar.buffer[ii].back() = svar.totPts;
+
+						/* Update total number of points */
 						svar.simPts++;
 						svar.totPts++;
 						nAdd++;
@@ -500,6 +517,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				{
 					svar.Bclosed = 1;
 				}	
+				++ii;
 			}
 			
 			if(nAdd != 0)

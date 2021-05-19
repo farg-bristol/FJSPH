@@ -153,116 +153,116 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 			/* FREE = free of the pipe and receives an aero force           */
 
 			/*Check if the particle is clear of the starting area*/
-			if (pnp1[ii].b == PartState.BACK_)
-			{
-// 				StateVecD xin = svar.Transp*pn[ii].xi;
-// 				StateVecD veln  = svar.Transp*(pn[ii].v /*+ pnp1[ii].vPert*/);
-// 				StateVecD acc = svar.Transp*res[ii];
-// 				StateVecD accn = svar.Transp*pn[ii].f;
+// 			if (pnp1[ii].b == PartState.BACK_)
+// 			{
+// // 				StateVecD xin = svar.Transp*pn[ii].xi;
+// // 				StateVecD veln  = svar.Transp*(pn[ii].v /*+ pnp1[ii].vPert*/);
+// // 				StateVecD acc = svar.Transp*res[ii];
+// // 				StateVecD accn = svar.Transp*pn[ii].f;
 
-// 				/*Integrate the pipe x-direction as normal, and allow particles to find their spacing.*/
-//  				StateVecD xi = StateVecD::Zero();
-//  				xi(0) = xin(0) + 0.25*(dt2*(c*accn(0)+d*acc(0)));
-//  				xi(1) = xin(1) + dt*veln(1);
+// // 				/*Integrate the pipe x-direction as normal, and allow particles to find their spacing.*/
+// //  				StateVecD xi = StateVecD::Zero();
+// //  				xi(0) = xin(0) + 0.25*(dt2*(c*accn(0)+d*acc(0)));
+// //  				xi(1) = xin(1) + dt*veln(1);
  				
-// 				StateVecD v  = StateVecD::Zero();
-// 				v(0) = veln(0) + 0.25*(dt*(a*accn(0)+b*acc(0)));
-// 				v(1) = veln(1);
+// // 				StateVecD v  = StateVecD::Zero();
+// // 				v(0) = veln(0) + 0.25*(dt*(a*accn(0)+b*acc(0)));
+// // 				v(1) = veln(1);
 
-// #if SIMDIM == 3
-// 				xi(2) = xin(2) + 0.25*(dt2*(c*accn(2)+d*acc(2)));
-// 				v(2) = veln(2) + 0.25*(dt*(a*accn(2)+b*acc(2)));
-// #endif
+// // #if SIMDIM == 3
+// // 				xi(2) = xin(2) + 0.25*(dt2*(c*accn(2)+d*acc(2)));
+// // 				v(2) = veln(2) + 0.25*(dt*(a*accn(2)+b*acc(2)));
+// // #endif
 
-// 				xi = svar.Rotate*xi;
-// 				v = svar.Rotate*v;
+// // 				xi = svar.Rotate*xi;
+// // 				v = svar.Rotate*v;
 				
-// 				pnp1[ii].xi = xi;
-// 				pnp1[ii].v = v;
-// #if SIMDIM == 3
-// 				pnp1[ii].f = svar.Rotate*StateVecD(acc(0),0.0,acc(2));
-// #else
-// 				pnp1[ii].f = svar.Rotate*StateVecD(acc(0),0.0);
-// #endif
+// // 				pnp1[ii].xi = xi;
+// // 				pnp1[ii].v = v;
+// // #if SIMDIM == 3
+// // 				pnp1[ii].f = svar.Rotate*StateVecD(acc(0),0.0,acc(2));
+// // #else
+// // 				pnp1[ii].f = svar.Rotate*StateVecD(acc(0),0.0);
+// // #endif
 
-				pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-				// pnp1[ii].f = res[ii];
-				pnp1[ii].Rrho = Rrho[ii];
-				pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
-				pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
-			}
-			else if(pnp1[ii].b == PartState.START_ )
-			{   
-				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
-				if(vec(1) > svar.clear)
-				{	/*Tag it as clear if it's higher than the plane of the exit*/
-					pnp1[ii].b=PartState.PIPE_;
-				}
-				else
-				{	/*For the particles marked 1, perform a prescribed motion*/
+// 				pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
+// 				// pnp1[ii].f = res[ii];
+// 				pnp1[ii].Rrho = Rrho[ii];
+// 				pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
+// 				pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
+// 			}
+// 			else if(pnp1[ii].b == PartState.BACK_ )
+// 			{   
+// 				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
+// 				if(vec(1) > svar.clear)
+// 				{	/*Tag it as clear if it's higher than the plane of the exit*/
+// 					pnp1[ii].b=PartState.PIPE_;
+// 				}
+// 				else
+// 				{	/*For the particles marked 1, perform a prescribed motion*/
 
-					/*Try setting a force to maintain a minimum jet-wise velocity*/
+// 					/*Try setting a force to maintain a minimum jet-wise velocity*/
 
-					/*Need to transform into the vertical domain...*/
-// 					StateVecD xin = svar.Transp*pn[ii].xi;
-// 				    StateVecD veln  = svar.Transp*(pn[ii].v /*+ pnp1[ii].vPert*/);
-// 					// StateVecD vel = svar.Transp*pnp1[ii].v;
-// 					StateVecD acc = svar.Transp*res[ii];
-// 					StateVecD accn = svar.Transp*pn[ii].f;
+// 					/*Need to transform into the vertical domain...*/
+// // 					StateVecD xin = svar.Transp*pn[ii].xi;
+// // 				    StateVecD veln  = svar.Transp*(pn[ii].v /*+ pnp1[ii].vPert*/);
+// // 					// StateVecD vel = svar.Transp*pnp1[ii].v;
+// // 					StateVecD acc = svar.Transp*res[ii];
+// // 					StateVecD accn = svar.Transp*pn[ii].f;
 
-// 					// if(vel(1) < (getVelocity(avar.vJet,vec(0)*vec(0),0.5*svar.Jet(0) + 2*svar.dx))(1))
-// 					// {
-// 					// 	acc(1) += 1e2 * pow(vel(1)-avar.vJetMag,2);
-// 					// }
+// // 					// if(vel(1) < (getVelocity(avar.vJet,vec(0)*vec(0),0.5*svar.Jet(0) + 2*svar.dx))(1))
+// // 					// {
+// // 					// 	acc(1) += 1e2 * pow(vel(1)-avar.vJetMag,2);
+// // 					// }
 
-// 					// acc = svar.Rotate * acc;
+// // 					// acc = svar.Rotate * acc;
 
 
-// 					// pnp1[ii].xi = pn[ii].xi+ dt*(pn[ii].v + pnp1[ii].vPert)+dt2*(c*pn[ii].f+d*acc);
-// 					// pnp1[ii].v =  (pn[ii].v /*+ pnp1[ii].vPert*/) +dt*(a*pn[ii].f+b*acc);
-// 					// pnp1[ii].f = svar.Rotate*acc;
+// // 					// pnp1[ii].xi = pn[ii].xi+ dt*(pn[ii].v + pnp1[ii].vPert)+dt2*(c*pn[ii].f+d*acc);
+// // 					// pnp1[ii].v =  (pn[ii].v /*+ pnp1[ii].vPert*/) +dt*(a*pn[ii].f+b*acc);
+// // 					// pnp1[ii].f = svar.Rotate*acc;
 
-// 					// StateVecD xi = xin + dt*(veln + svar.Transp*pnp1[ii].vPert)+dt2*(c*accn+d*accnp1);
-// 	 				// 	pnp1[ii].xi = svar.Rotate*(xi+svar.Start);
-// 	 				// 	pnp1[ii].v = svar.Rotate*v;
+// // 					// StateVecD xi = xin + dt*(veln + svar.Transp*pnp1[ii].vPert)+dt2*(c*accn+d*accnp1);
+// // 	 				// 	pnp1[ii].xi = svar.Rotate*(xi+svar.Start);
+// // 	 				// 	pnp1[ii].v = svar.Rotate*v;
 
-// 					/*Integrate the pipe x-direction as normal, and allow particles to find their spacing.*/
-// 	 				StateVecD xi = StateVecD::Zero();
-// 	 				xi(0) = xin(0) + 0.25*(dt2*(c*accn(0)+d*acc(0)));
-// 	 				xi(1) = xin(1) + dt*veln(1);
+// // 					/*Integrate the pipe x-direction as normal, and allow particles to find their spacing.*/
+// // 	 				StateVecD xi = StateVecD::Zero();
+// // 	 				xi(0) = xin(0) + 0.25*(dt2*(c*accn(0)+d*acc(0)));
+// // 	 				xi(1) = xin(1) + dt*veln(1);
 
 	 				
-// 					StateVecD v  = StateVecD::Zero();
-// 					v(0) = veln(0) + 0.25*(dt*(a*accn(0)+b*acc(0)));
-//  					v(1) = veln(1);
+// // 					StateVecD v  = StateVecD::Zero();
+// // 					v(0) = veln(0) + 0.25*(dt*(a*accn(0)+b*acc(0)));
+// //  					v(1) = veln(1);
 
-// #if SIMDIM == 3
-// 					xi(2) = xin(2) + 0.25*(dt2*(c*accn(2)+d*acc(2)));
-// 					v(2) = veln(2) + 0.25*(dt*(a*accn(2)+b*acc(2)));
-// #endif
+// // #if SIMDIM == 3
+// // 					xi(2) = xin(2) + 0.25*(dt2*(c*accn(2)+d*acc(2)));
+// // 					v(2) = veln(2) + 0.25*(dt*(a*accn(2)+b*acc(2)));
+// // #endif
 
-// 					xi = svar.Rotate*xi;
-//  					v = svar.Rotate*v;
+// // 					xi = svar.Rotate*xi;
+// //  					v = svar.Rotate*v;
 					
-// 					pnp1[ii].xi = xi;
-// 					pnp1[ii].v = v;
-// #if SIMDIM == 3
-// 					pnp1[ii].f = svar.Rotate*StateVecD(acc(0),0.0,acc(2));
-// #else
-// 					pnp1[ii].f = svar.Rotate*StateVecD(acc(0),0.0);
-// #endif
-					// cout << acc(0) << "  " << acc(1) << endl;
-					// pnp1[ii].xi = pn[ii].xi+dt*(pn[ii].v + pnp1[ii].vPert)+dt2*(c*pn[ii].f+d*res[ii]);
-					pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-					// pnp1[ii].f = res[ii];
-					pnp1[ii].Rrho = Rrho[ii];
-					pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
-					pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
-					// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
-				}
-			}				
+// // 					pnp1[ii].xi = xi;
+// // 					pnp1[ii].v = v;
+// // #if SIMDIM == 3
+// // 					pnp1[ii].f = svar.Rotate*StateVecD(acc(0),0.0,acc(2));
+// // #else
+// // 					pnp1[ii].f = svar.Rotate*StateVecD(acc(0),0.0);
+// // #endif
+// 					// cout << acc(0) << "  " << acc(1) << endl;
+// 					// pnp1[ii].xi = pn[ii].xi+dt*(pn[ii].v + pnp1[ii].vPert)+dt2*(c*pn[ii].f+d*res[ii]);
+// 					pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
+// 					// pnp1[ii].f = res[ii];
+// 					pnp1[ii].Rrho = Rrho[ii];
+// 					pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
+// 					pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
+// 					// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
+// 				}
+// 			}				
 
-			if(pnp1[ii].b > PartState.START_)
+			if(pnp1[ii].b > PartState.BUFFER_)
 			{	
 				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
 
@@ -295,6 +295,8 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 					}	
 				}
 
+				
+
 
 				/*For any other particles, intergrate as normal*/
 				#ifdef NOALE
@@ -307,18 +309,52 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 				pnp1[ii].Af = Af[ii];
 				pnp1[ii].Rrho = Rrho[ii];
 
+				pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
+				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
+				// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
+
+				if(pnp1[ii].b == PartState.BACK_)
+				{	/* Define the buffer particle position based on this particle */
+
+					/* Find the right index to find the particles behind it. */
+					auto pIDit = find(svar.back.begin(),svar.back.end(),ii);
+
+					if(pIDit != svar.back.end())
+					{
+						size_t index = pIDit-svar.back.begin();
+
+						real jj = 1.0;
+						for(size_t const& pi:svar.buffer[index])
+						{
+							StateVecD xi = vec;
+							xi(1) -= jj*svar.dx;
+							xi = svar.Rotate*xi + svar.Start;
+							
+							pnp1[pi].xi = pn[pi].xi + dt*pn[pi].v;
+
+							// pnp1[pi].v = (pn[ii].v /* + pnp1[ii].vPert*/) + dt * (a * pn[ii].f + b * res[ii]);
+							// pnp1[ii].f = res[ii];
+							// pnp1[ii].Af = Af[ii];
+							pnp1[pi].Rrho = Rrho[pi];
+
+							pnp1[pi].rho = pn[pi].rho+dt*(a*pn[pi].Rrho+b*Rrho[pi]);
+							pnp1[pi].p = B*(pow(pnp1[pi].rho/fvar.rho0,gam)-1);
+							jj += 1.0;
+						}
+					}
+					else
+					{
+						cout << "Couldnt find the particle in the back vector" << endl;
+					}
+
+				}
+
 				// if(res[ii].norm() > 10)
 				// {
 				// 	#pragma omp critical
 				// 	cout << res[ii](0) << "  " << res[ii](1) << "  " << Af[ii](0) << "  " << Af[ii](1) <<  endl;
 				// }
 
-
-				
-				pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
-				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-				// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
-				
 				Force += res[ii]*pnp1[ii].m;
 				dropVel += (pnp1[ii].v + pnp1[ii].vPert);
 				

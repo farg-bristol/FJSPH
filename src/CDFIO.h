@@ -5,7 +5,7 @@
 #include "IOFunctions.h"
 #include "Geometry.h"
 
-#include <netcdf.h>
+#include <netcdf>
 // using namespace netCDF;
 // using namespace netCDF::exceptions;
 #define NC_ERR 2
@@ -904,6 +904,7 @@ void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 
 	cells.numPoint = nPnts;
 	cells.numElem = nElem;
+	cells.numFace = nEdge;
 
 	cells.elems = vector<vector<size_t>>(nElem);
 	cells.cFaces = vector<vector<size_t>>(nElem);
@@ -975,7 +976,6 @@ void Place_Faces(int &fin, size_t const &nFace, MESH &cells)
 	vector<int> right = Get_Scalar_Property_int(fin,"right_element_of_faces",nFace);
 
 	vector<std::pair<int, int>> leftright(nFace);
-	vector<size_t> bIndex;
 	#pragma omp parallel shared(leftright)
 	{
 		#pragma omp for schedule(static) nowait
@@ -987,15 +987,7 @@ void Place_Faces(int &fin, size_t const &nFace, MESH &cells)
 			#pragma omp critical
 			{
 				cells.cFaces[lindex].emplace_back(ii);
-				if (rindex >= 0)
-					cells.cFaces[rindex].emplace_back(ii);
-				else if (rindex == -1)
-				{ /*Create a list of vertices on the boundary*/
-					for (auto const &vindex : cells.faces[ii])
-					{
-						bIndex.emplace_back(vindex);
-					}
-				}
+				cells.cFaces[rindex].emplace_back(ii);
 			}
 		}
 	}
@@ -1005,25 +997,12 @@ void Place_Faces(int &fin, size_t const &nFace, MESH &cells)
 		dbout << "Building boundary indexes." << endl;
 	#endif
 
-	/*Sort and erase duplicates*/
-	std::sort(bIndex.begin(), bIndex.end());
-	bIndex.erase(std::unique(bIndex.begin(), bIndex.end()), bIndex.end());
-
-	vector<StateVecD> bVerts(bIndex.size());
-	cells.bIndex = bIndex;
 	cells.leftright = leftright;
 
 	/*Now go through the faces and see which vertices are unique, to get element data*/
 	cout << "Building elements..." << endl;
 	#pragma omp parallel
 	{
-
-		#pragma omp for schedule(static) nowait
-		for (size_t ii = 0; ii < bIndex.size(); ++ii)
-		{
-			bVerts[ii] = cells.verts[bIndex[ii]];
-		}
-
 		// Create list of unique vertex indices for each element
 		#pragma omp for schedule(static) nowait
 		for (size_t ii = 0; ii < cells.cFaces.size(); ++ii)
@@ -1066,7 +1045,6 @@ void Place_Faces(int &fin, size_t const &nFace, MESH &cells)
 		}
 	}
 
-	cells.bVerts = bVerts;
 	cout << "Elements built." << endl;
 
 	#ifdef DEBUG
@@ -1165,6 +1143,7 @@ void Read_TAUMESH_FACE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 
 	cells.numPoint = nPnts;
 	cells.numElem = nElem;
+	cells.numFace = nFace;
 
 	cells.elems = vector<vector<size_t>>(nElem);
 	cells.cFaces = vector<vector<size_t>>(nElem);
@@ -1208,174 +1187,5 @@ void Read_TAUMESH_FACE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 		cells.cMass[ii] = cells.cRho[ii] * cells.cVol[ii];
 	}
 }
-
-/*****************************************************************************/
-/****************** WRITING NETCDF DATA FUNCTIONS ****************************/
-/*****************************************************************************/
-
-// void Write_Group(NcGroup& zone, State const& pnp1,
-// 	uint const start, uint const end, uint const outform)
-// {
-// 	/*Write the Particles group*/
-
-// 	uint const size = end - start;
-// 	NcDim posDim = zone.addDim("Point",size);
-
-// 	NcVar xVar = zone.addVar("x",ncFloat,posDim);
-// 	NcVar yVar = zone.addVar("y",ncFloat,posDim);
-// 	NcVar zVar = zone.addVar("z",ncFloat,posDim);
-// 	NcVar idVar = zone.addVar("id",ncInt,posDim);
-
-// 	// xVar.putAtt("units","m");
-// 	// yVar.putAtt("units","m");
-// 	// zVar.putAtt("units","m");
-// 	real* x = new real[size];
-// 	real* y = new real[size];
-// 	real* z = new real[size];
-// 	int* id = new int[size];
-
-// 	for(uint i = start; i < end; ++i)
-// 	{
-// 		x[i-start] = pnp1[i].xi[0];
-// 		y[i-start] = pnp1[i].xi[1];
-// 		#if SIMDIM == 3
-// 			z[i-start] = pnp1[i].xi[2];
-// 		#else
-// 			z[i-start] = 0.0;
-// 		#endif
-
-// 		id[i-start] = pnp1[i].partID;
-// 	}
-
-// 	xVar.putVar(x);
-// 	yVar.putVar(y);
-// 	zVar.putVar(z);
-
-// 	idVar.putVar(id);
-
-// 	if(outform == 1)
-// 	{	/*Write fluid data*/
-// 		NcVar press = zone.addVar("Pressure", ncFloat,posDim);
-// 		NcVar dens = zone.addVar("Density",ncFloat,posDim);
-// 		NcVar acc = zone.addVar("Acceleration",ncFloat,posDim);
-// 		NcVar vel = zone.addVar("Velocity",ncFloat,posDim);
-
-// 		// press.putAtt("units","Pa");
-// 		// dens.putAtt("units","kg/m^3");
-// 		// acc.putAtt("units","m/s^2");
-// 		// vel.putAtt("units","m/s");
-
-// 		real* p = new real[size];
-// 		real* rho = new real[size];
-// 		real* f = new real[size];
-// 		real* v = new real[size];
-
-// 		for(uint i = start; i < end; ++i)
-// 		{
-// 			p[i-start] = pnp1[i].p;
-// 			rho[i-start] = pnp1[i].rho;
-// 			f[i-start] = pnp1[i].f.norm();
-// 			v[i-start] = pnp1[i].v.norm();
-// 		}
-
-// 		press.putVar(p);
-// 		dens.putVar(rho);
-// 		acc.putVar(f);
-// 		vel.putVar(v);
-// 	}
-
-// 	if(outform == 2)
-// 	{	/*Write research data*/
-// 		NcVar aero = zone.addVar("Aerodynamic Force", ncFloat,posDim);
-// 		NcVar surf = zone.addVar("Surface Tension", ncFloat,posDim);
-// 		NcVar Sx = zone.addVar("S_x", ncFloat,posDim);
-// 		NcVar Sy = zone.addVar("S_y", ncFloat,posDim);
-// 		NcVar B = zone.addVar("Boundary",ncInt,posDim);
-// 		NcVar theta = zone.addVar("Theta",ncInt,posDim);
-
-// 		// aero.putAtt("units","N");
-// 		// surf.putAtt("units","N");
-// 		// Sx.putAtt("units","N");
-// 		// Sy.putAtt("units","N");
-
-// 		real* af = new real[size]{0.0};
-// 		real* sf = new real[size]{0.0};
-// 		real* sx = new real[size]{0.0};
-// 		real* sy = new real[size]{0.0};
-// 		int* b = new int[size]{0};
-// 		int* t = new int[size]{0};
-
-// 		for(uint i = start; i < end; ++i)
-// 		{
-// 			af[i-start] = pnp1[i].Af.norm();
-// 			sf[i-start] = pnp1[i].Sf.norm();
-// 			sx[i-start] = pnp1[i].Sf(0);
-// 			sy[i-start] = pnp1[i].Sf(1);
-// 			b[i-start] = pnp1[i].b;
-// 			t[i-start] = pnp1[i].theta;
-// 		}
-
-// 		aero.putVar(af);
-// 		surf.putVar(sf);
-// 		Sx.putVar(sx);
-// 		Sy.putVar(sy);
-// 		B.putVar(b);
-// 		theta.putVar(t);
-
-// 		if (SIMDIM == 3)
-// 		{
-// 			NcVar Sz = zone.addVar("S_z",ncFloat,posDim);
-// 			// Sz.putAtt("units","m");
-// 			real* sz = new real[size]{0.0};
-// 			for(uint i = start; i < end; ++i)
-// 				sz[i-start] = pnp1[i].Sf[2];
-
-// 			Sz.putVar(sz);
-// 		}
-// 	}
-// }
-
-// void Write_CDF_File(NcFile &nf, SIM &svar, State &pnp1)
-// {	/*Write the timestep to a group*/
-// 	string time = "Step #";
-// 	// time.append(std::to_string(svar.t));
-// 	time.append(std::to_string(svar.stepno));
-// 	NcGroup ts(nf.addGroup(time));
-
-// 	/*Write the Particles group*/
-// 	Write_Group(ts, pnp1, svar.bndPts, svar.totPts, svar.outform);
-// }
-
-// void Write_CDF_File(NcFile& nd, SIM& svar, State const& pnp1)
-// {	/*Write the timestep to a group*/
-// 	string timefile = svar.outfolder;
-// 	timefile.append("/h5/fuel_");
-// 	std::ostringstream step;
-// 	step << std::setfill('0') << std::setw(4);
-// 	step << svar.frame;
-// 	timefile.append(step.str());
-// 	timefile.append(".h5part");
-
-// 	NcFile nf(timefile, NcFile::replace);
-// 	string steps = "Step#";
-// 	steps.append(std::to_string(svar.frame));
-// 	NcGroup ts(nf.addGroup(steps));
-// 	NcDim tDim = ts.addDim("time",1);
-// 	NcVar tVar = ts.addVar("time",ncFloat,tDim);
-// 	tVar.putVar(&svar.t);
-
-// 	/*Write the Particles group*/
-// 	Write_Group(ts, pnp1, svar.bndPts, svar.totPts, svar.outform);
-
-// }
-
-// void Write_Boundary_CDF(SIM const& svar, State const& pnp1)
-// {
-// 	std::string file = svar.outfolder;
-// 	file.append("/h5/Boundary.h5part");
-// 	NcFile bound(file, NcFile::replace);
-// 	NcGroup part(bound.addGroup("Boundary"));
-// 	Write_Group(bound, pnp1, 0, svar.bndPts, svar.outform);
-// }
 
 #endif

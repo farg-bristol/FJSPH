@@ -672,10 +672,10 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
     else if (svar.Bcase == 3)
     {   /*Jet flow*/
         /*Take the height of the jet, and find the volume of the cylinder*/
-#if SIMDIM == 3 
-        real cVol = svar.Jet(1) * (M_PI * pow((svar.Jet(0)/2.0),2));
+#if SIMDIM == 3
+        real cVol = (M_PI * pow((svar.Jet(0) / 2.0), 2)) * (svar.Jet(1) + 6 * svar.Pstep); /* Area of circle * depth */
 #else
-        real cVol = svar.Jet(1) * svar.Jet(0);
+        real cVol = svar.Jet(0) * (svar.Jet(1) + 6 * svar.Pstep); /* diameter * depth + buffer zone */
 #endif
         real volume = pow(svar.Pstep,SIMDIM)*real(svar.simPts);
 
