@@ -34,10 +34,10 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	// Find maximum safe timestep
 	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
-		[](Particle p1, Particle p2){return p1.f.norm()< p2.f.norm();});
+		[](Particle const& p1, Particle const& p2){return p1.f.norm()< p2.f.norm();});
 
 	vector<Particle>::iterator maxUi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
-		[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
+		[](Particle const& p1, Particle const& p2){return p1.v.norm()< p2.v.norm();});
 
 	real maxf = maxfi->f.squaredNorm();
 	real maxU = maxUi->v.norm();
@@ -464,13 +464,50 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	// cout << "Timestep Params: " << maxf << " " << fvar.Cs + svar.maxmu << " " << dtf << " " << dtcv << endl;
 	// cout << "New Time: " << svar.t << endl;
 
+
 	/*Check if more particles need to be created*/
 	if(svar.Bcase == 2 || svar.Bcase == 3)
 	{
+		/* Check if any buffer particles have become pipe particles */
+		vector<size_t> to_erase;
+		for (size_t ii = 0; ii < svar.buffer.size(); ++ii)
+		{
+			size_t buff = svar.buffer[ii];
+			/*Check that the starting area is clear first...*/
+			StateVecD vec = svar.Transp*(pnp1[buff].xi-svar.Start);
+			real clear;
+			if(svar.Bcase == 2)
+				clear =  -(3.0 * svar.Jet(1) - svar.dx) ;
+			else
+				clear = -(svar.Jet(1) - svar.dx);
+			
+			if(vec[1] > clear)
+			{
+				/* Particle has cleared the buffer zone */
+				/* Mark to be removed from the buffer vector */
+				pnp1[buff].b = PartState.PIPE_;
+				to_erase.emplace_back(ii);
+			}
+		}
+
+		/* Remove from the buffer vector (going from the back so the vector isn't messed up)*/
+		for(vector<size_t>::reverse_iterator ii = to_erase.rbegin(); ii != to_erase.rend(); ii++)
+		{
+			size_t del = *ii;
+			/* Check index isn't greated than vector length*/
+			if(del <= svar.buffer.size())
+				svar.buffer.erase(svar.buffer.begin()+del);
+			else
+			{
+				cout << "Tried to erase a value that is out of bounds" << endl;
+				cout << "buffer size: " << svar.buffer.size() << " index: " << del << endl;
+			}
+		}
+
+
 		if(svar.Bclosed == 0)
 		{
 			uint nAdd = 0;
-			size_t ii = 0;
 			for (size_t& back:svar.back)
 			{	
 				if(svar.totPts < svar.nmax)
@@ -479,33 +516,25 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 					StateVecD vec = svar.Transp*(pnp1[back].xi-svar.Start);
 					real clear;
 					if(svar.Bcase == 2)
-						clear =  svar.dx-svar.Jet(1)*3;
+						clear =  -(3.0 * svar.Jet(1) + 5.0 * svar.dx) ;
 					else
-						clear = svar.dx-svar.Jet(1);
+						clear = -(svar.Jet(1) + 5.0 * svar.dx);
 					
 					if(vec[1] > clear)
 					{	/*Create a new particle behind the last one*/
-						/* Find the end buffer particle */
-						size_t id = svar.buffer[ii].back();
-
-						StateVecD xi = svar.Transp*(pnp1[id].xi-svar.Start);
+						
+						StateVecD xi = vec;
 						xi(1) -= svar.dx;
 						xi = svar.Rotate*xi + svar.Start;
 						
-						pn.emplace_back(Particle(xi,pn[id],svar.totPts,PartState.BUFFER_));
-						pnp1.emplace_back(Particle(xi,pnp1[id],svar.totPts,PartState.BUFFER_));
+						pnp1.emplace_back(Particle(xi,pnp1[back],svar.totPts,PartState.BACK_));
+						
+						/* add to the buffer vector */
+						pnp1[back].b = PartState.BUFFER_;
+						svar.buffer.emplace_back(back);
 
-						pnp1[back].b = PartState.PIPE_;
-						pnp1[svar.buffer[ii][0]].b = PartState.BACK_;
 						/*Update the back vector*/
-
-						back = svar.buffer[ii][0];
-						/* Shift the buffer particle IDs */
-						for(size_t level = 0; level < svar.buffer[ii].size()-1; ++level)
-						{
-							svar.buffer[ii][level] = svar.buffer[ii][level+1];
-						}
-						svar.buffer[ii].back() = svar.totPts;
+						back = svar.totPts;
 
 						/* Update total number of points */
 						svar.simPts++;
@@ -517,7 +546,6 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				{
 					svar.Bclosed = 1;
 				}	
-				++ii;
 			}
 			
 			if(nAdd != 0)

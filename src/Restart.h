@@ -1377,6 +1377,8 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 			svar.back.emplace_back(ii);
 		}
 
+		/* Need to create buffer zone array */
+
 		// Initialise the rest of the values to 0
 		pn[ii].curve = 0.0;
 		pn[ii].theta = 0.0;

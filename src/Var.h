@@ -104,19 +104,17 @@ typedef struct PState{
 	{
 		BOUND_ = 0;
 	    PISTON_ = 1;
-		BUFFER_ = 2;
-		BACK_ = 3; 
-		// START_ = 4;
+		BACK_ = 2; 
+		BUFFER_ = 3;
 		PIPE_ = 4;
 		FREE_ = 5;
 		GHOST_ = 6;
 	}
 
 	size_t BOUND_ ,
-    PISTON_,
-	BUFFER_, 
-	BACK_,           
-	// START_,
+    PISTON_, 
+	BACK_,
+	BUFFER_,
 	PIPE_,
 	FREE_,
 	GHOST_;
@@ -180,7 +178,7 @@ typedef struct SIM {
 	
 	uint framecount;                /*How many frames have been output*/
 	vector<size_t> back;            /*Particles at the back of the pipe*/
-	vector<vector<size_t>> buffer;  /*ID of particles inside the buffer zone */
+	vector<size_t> buffer;          /*ID of particles inside the buffer zone */
 	uint iter;                      /*Current iteration number to renormalise*/
 
 	uint CDForFOAM;

@@ -232,25 +232,38 @@ void Add_Radial_Points(real const y, SIM& svar, FLUID const& fvar, AERO const& a
 
 void Add_Buffer(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
 {
-	svar.buffer = vector<vector<size_t>>(svar.back.size(),vector<size_t>(6,0));
 	size_t pID = pn.size();
 	real itr = 1.0;
-	for (size_t level = 0; level < 6; ++level)
+	for (size_t level = 0; level < 5; ++level)
 	{
-		size_t ii = 0;
+		
 		for (size_t const &pi : svar.back)
 		{
 			StateVecD xi = pnp1[pi].xi;
 			xi[1] -= itr*svar.dx;
 			pn.emplace_back(Particle(xi, pn[pi], pID, PartState.BUFFER_));
 			pnp1.emplace_back(Particle(xi, pnp1[pi], pID, PartState.BUFFER_));
-			svar.buffer[ii][level] = pID;
-			++ii;
+			svar.buffer.emplace_back(pID);
 			++pID;
 			++svar.simPts;
 		}
 		itr += 1.0;
 	}
+
+	/* Put in the points that should be the back */
+	for (size_t &pi : svar.back)
+	{
+		StateVecD xi = pnp1[pi].xi;
+		xi[1] -= itr*svar.dx;
+		pn.emplace_back(Particle(xi, pn[pi], pID, PartState.BACK_));
+		pnp1.emplace_back(Particle(xi, pnp1[pi], pID, PartState.BACK_));
+		svar.buffer.emplace_back(pID);
+		pi = pID;
+		++pID;
+		++svar.simPts;
+	}
+	itr += 1.0;
+	
 }
 
 void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)

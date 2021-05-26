@@ -482,8 +482,8 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 
 		for (size_t ii = svar.totPts - svar.nrefresh; ii < svar.totPts; ++ii)
 		{ /*Fill the vector of the last particles*/
-			pn[ii].b = PartState.BACK_;
-			pnp1[ii].b = PartState.BACK_;
+			pn[ii].b = PartState.PIPE_;
+			pnp1[ii].b = PartState.PIPE_;
 			svar.back.emplace_back(ii);
 		}
 

@@ -147,7 +147,7 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 		for (size_t ii=start; ii < end; ++ii)
 		{	/****** FLUID PARTICLES **************/
 			
-			/* START = pipe particle receiving prescribed motion            */
+			/* BUFFER = pipe particle receiving prescribed motion            */
 			/* BACK = the latest particle in that column                    */
 			/* PIPE = in the pipe, with free motion                         */
 			/* FREE = free of the pipe and receives an aero force           */
@@ -295,9 +295,6 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 					}	
 				}
 
-				
-
-
 				/*For any other particles, intergrate as normal*/
 				#ifdef NOALE
 				pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(c*pn[ii].f+d*res[ii]);
@@ -313,41 +310,29 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
 				// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
 
-				if(pnp1[ii].b == PartState.BACK_)
-				{	/* Define the buffer particle position based on this particle */
+				// if(pnp1[ii].b == PartState.BACK_)
+				// {	/* Define the buffer particle position based on this particle */
 
-					/* Find the right index to find the particles behind it. */
-					auto pIDit = find(svar.back.begin(),svar.back.end(),ii);
+				// 	/* Find the right index to find the particles behind it. */
+				// 	auto pIDit = find(svar.back.begin(),svar.back.end(),ii);
 
-					if(pIDit != svar.back.end())
-					{
-						size_t index = pIDit-svar.back.begin();
+				// 	if(pIDit != svar.back.end())
+				// 	{
+				// 		size_t index = pIDit-svar.back.begin();
 
-						real jj = 1.0;
-						for(size_t const& pi:svar.buffer[index])
-						{
-							StateVecD xi = vec;
-							xi(1) -= jj*svar.dx;
-							xi = svar.Rotate*xi + svar.Start;
+				// 		real jj = 1.0;
+				// 		for(size_t const& pi:svar.buffer[index])
+				// 		{
 							
-							pnp1[pi].xi = pn[pi].xi + dt*pn[pi].v;
+				// 			jj += 1.0;
+				// 		}
+				// 	}
+				// 	else
+				// 	{
+				// 		cout << "Couldnt find the particle in the back vector" << endl;
+				// 	}
 
-							// pnp1[pi].v = (pn[ii].v /* + pnp1[ii].vPert*/) + dt * (a * pn[ii].f + b * res[ii]);
-							// pnp1[ii].f = res[ii];
-							// pnp1[ii].Af = Af[ii];
-							pnp1[pi].Rrho = Rrho[pi];
-
-							pnp1[pi].rho = pn[pi].rho+dt*(a*pn[pi].Rrho+b*Rrho[pi]);
-							pnp1[pi].p = B*(pow(pnp1[pi].rho/fvar.rho0,gam)-1);
-							jj += 1.0;
-						}
-					}
-					else
-					{
-						cout << "Couldnt find the particle in the back vector" << endl;
-					}
-
-				}
+				// }
 
 				// if(res[ii].norm() > 10)
 				// {
@@ -424,6 +409,19 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 				
 
 			}
+			else //if(pnp1[ii].b == PartState.BUFFER_ || pnp1[ii].b == PartState.BACK_)
+			{	/* Particle will be of either buffer or back, and both a prescribed. */
+				pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
+
+				// pnp1[pi].v = (pn[ii].v /* + pnp1[ii].vPert*/) + dt * (a * pn[ii].f + b * res[ii]);
+				// pnp1[ii].f = res[ii];
+				// pnp1[ii].Af = Af[ii];
+				pnp1[ii].Rrho = Rrho[ii];
+
+				pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
+				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
+			}
+			
 
 			pnp1[ii].curve = curve[ii];
 			pnp1[ii].s = outlist[ii].size();
