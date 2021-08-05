@@ -33,6 +33,7 @@ void Read_SIM_Var(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
   	uint lineno = 0;
   	svar.scale = 1.0;
 	svar.framet = getDouble(in, lineno, "Frame time");
+	svar.dt_min = getDouble(in,lineno,"Minimum timestep");
 	svar.Nframe = getInt(in, lineno, "Number of frames");
 	svar.outframe = getInt(in, lineno, "Output frame info");
 	svar.outtype = getInt(in, lineno, "Output data type");
@@ -40,7 +41,7 @@ void Read_SIM_Var(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 	svar.boutform = getInt(in, lineno, "Boundary time output");
 	svar.gout = getInt(in, lineno, "Output ghost particles to file");
 	svar.subits = getInt(in, lineno, "Max sub iterations");
-	svar.nmax = getInt(in, lineno, "Max number of particles");
+	svar.finPts = getInt(in, lineno, "Max number of particles");
 	/*Get post processing options*/
 	svar.cellSize = getDouble(in, lineno, "Post processing mesh size");
 	svar.postRadius = getDouble(in, lineno, "Post processing support radius");
@@ -136,9 +137,19 @@ void Read_FLUID_Var(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 	svar.outdir = svar.outfolder;
 	if(svar.Asource != 0)
 	{
-		svar.meshfile = getString(fluid, lineno, "Mesh input file");
-  		svar.solfile = getString(fluid,lineno, "Mesh solution file");
-  		svar.scale = getDouble(fluid,lineno, "Mesh scale");
+		svar.CDForFOAM = getInt(fluid, lineno, "Mesh source type, netCDF or OpenFOAM");
+		if(svar.CDForFOAM == 1)
+		{
+			svar.foamdir = getString(fluid, lineno, "OpenFOAM source directory");
+			svar.foamtime = getString(fluid,lineno, "OpenFOAM solution time");
+		}
+		else
+		{
+			svar.meshfile = getString(fluid, lineno, "Mesh input file");
+			svar.solfile = getString(fluid,lineno, "Mesh solution file");
+			svar.scale = getDouble(fluid,lineno, "Mesh scale");
+		}
+  		
   		avar.vRef = getDouble(fluid, lineno, "Gas ref Vel");
   		avar.pRef = getDouble(fluid, lineno, "Get ref Press");
   		avar.T = getDouble(fluid, lineno, "Gas ref Temp");
@@ -440,8 +451,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 
 	if(svar.Asource == 1 || svar.Asource == 2)
 	{
-		cout << "Mesh filename: " << svar.meshfile << endl;
-		cout << "Solution filename: " << svar.solfile << endl;
 		cout << "Reference velocity: " << avar.vRef << endl;
 		cout << "Reference pressure: " << avar.pRef << endl;
 		cout << "Reference temperature: " << avar.T << endl;
@@ -455,8 +464,16 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	cout << "Input folder: " << svar.infolder << endl;
 	if(svar.Asource == 1 || svar.Asource == 2)
 	{
-		cout << "Input mesh face file: " << svar.meshfile  << endl;
-		cout << "Input solution file: " << svar.solfile << endl;
+		if(svar.CDForFOAM == 0)
+		{
+			cout << "Mesh filename: " << svar.meshfile << endl;
+			cout << "Solution filename: " << svar.solfile << endl;
+		}
+		else
+		{
+			cout << "OpenFOAM root directory: " << svar.foamdir << endl;
+			cout << "OpenFOAM solution time: " << svar.foamtime << endl;
+		}
 	}
 
 	cout << "Output folder: " << svar.outfolder << endl << endl;
@@ -656,7 +673,7 @@ void Write_ASCII_Timestep(std::fstream& fp, SIM& svar, State const& pnp1,
 			fp << setw(width) << pnp1[ii].m;
 	        fp << setw(width) << pnp1[ii].v.norm();
 	        fp << setw(width) << pnp1[ii].f.norm();
-	        fp << setw(width) << pnp1[ii].b << setw(width) << pnp1[ii].theta;
+	        fp << setw(width) << pnp1[ii].b << setw(width) << pnp1[ii].s;
 	        fp << setw(width) << pnp1[ii].Af.norm() << "\n";
 	  	}
 	  	fp << std::flush;
@@ -677,29 +694,23 @@ void Write_First_Step(std::fstream& f1, std::fstream& fb, std::fstream& fg,
 			Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1,svar.fuelFile);
 		}
 
-		if (svar.Bcase != 0 && svar.Bcase !=4)
+		if (svar.Bcase != 0 && svar.Bcase!=3 && svar.Bcase !=4)
 		{
 			/*Write boundary particles*/
 			Init_Binary_PLT(svar,"Boundary.szplt","Boundary Particles",svar.boundFile);
 
-			if(svar.boutform == 0 && svar.restart == 0)
-			{   //Don't write a strand, so zone is static. 
-				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",0,svar.boundFile); 
-				int32_t i = tecFileWriterClose(&svar.boundFile);			
-				if(i == -1)
-				{
-					cout << "Failed to close boundary file" << endl;
-					exit(-1);
-				}
-			}
-			else if(svar.restart == 0)
+			if(svar.restart == 0)
 				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2,svar.boundFile); 
 		}	
 
-		if (svar.ghost == 1 && svar.gout == 1)
+		if (svar.ghost > 0 && svar.gout == 1)
 		{
 			/*Write boundary particles*/
-			Init_Binary_PLT(svar,"Ghost.szplt","Ghost Particles",svar.ghostFile);		
+			Init_Binary_PLT(svar,"Ghost.szplt","Ghost Particles",svar.ghostFile);
+			if(svar.restart == 0 && !airP.empty())
+			{
+				Write_Binary_Timestep(svar,airP,0,airP.size(),"Ghost",3,svar.ghostFile);
+			}		
 		}	
 	}
 	else if (svar.outtype == 1)
@@ -714,8 +725,6 @@ void Write_First_Step(std::fstream& f1, std::fstream& fb, std::fstream& fg,
 			{
 				Write_ASCII_header(fb,svar);
 				Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");
-				if(svar.boutform == 0)
-					fb.close();
 			}
 			else
 			{
@@ -739,7 +748,7 @@ void Write_First_Step(std::fstream& f1, std::fstream& fb, std::fstream& fg,
 			exit(-1);
 		}
 
-		if(svar.ghost == 1 && svar.gout == 1)
+		if(svar.ghost > 0 && svar.gout == 1)
 		{
 			string ghostfile = svar.outfolder;
 			ghostfile.append("Ghost.plt");
@@ -758,29 +767,29 @@ void Write_First_Step(std::fstream& f1, std::fstream& fb, std::fstream& fg,
 	}
 }
 
-void Write_Timestep(std::fstream& f1, std::fstream& fb, std::fstream& fg, uint ghost_strand, 
+void Write_Timestep(std::fstream& f1, std::fstream& fb, std::fstream& fg, 
 				SIM& svar, State const& pnp1, State const& airP)
 {
 	if (svar.outtype == 0)
 	{
-		if(svar.Bcase != 0 && svar.Bcase != 4 && svar.boutform == 1)
+		if(svar.Bcase != 0 && svar.Bcase!=3 && svar.Bcase != 4)
 		{	/*Write boundary particles*/
 			Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2,svar.boundFile); 
 		}
 		Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1,svar.fuelFile); /*Write sim particles*/
-		if(svar.ghost == 1 && svar.gout == 1 && airP.size() != 0)
-			Write_Binary_Timestep(svar,airP,0,airP.size(),"Ghost",ghost_strand,svar.ghostFile);
+		if(svar.ghost > 0 && svar.gout == 1 && airP.size() != 0)
+			Write_Binary_Timestep(svar,airP,0,airP.size(),"Ghost",3,svar.ghostFile);
 	} 
 	else if (svar.outtype == 1)
 	{
 		Write_ASCII_Timestep(f1,svar,pnp1,0,svar.bndPts,svar.totPts,"Fuel");
-		if(svar.Bcase != 0 && svar.Bcase != 4 && svar.boutform == 1)
+		if(svar.Bcase != 0 && svar.Bcase != 4)
 		{
 			State empty;
 			Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");
 		}
 
-		if(svar.ghost == 1 && svar.gout == 1)
+		if(svar.ghost > 0 && svar.gout == 1)
 			Write_ASCII_Timestep(fg,svar,airP,0,0,airP.size(),"Ghost");
 	}
 }

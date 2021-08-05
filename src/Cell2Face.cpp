@@ -27,7 +27,7 @@ typedef struct CELL
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
 	/*Standard contructor*/
-	CELL(const uint nElem, const uint nPts)
+	CELL(const size_t nElem, const size_t nPts)
 	{
 		numElem = nElem; 
 		numPoint = nPts;
@@ -36,16 +36,16 @@ typedef struct CELL
 	}
 	
 	/*Zone info*/
-	uint numElem, numPoint;
+	size_t numElem, numPoint;
 
 	/*Point based data*/
 	vector<StateVecD> verts;
 
 	/*Cell based data*/
-	vector<vector<uint>> elems;
+	vector<vector<size_t>> elems;
 
 	/*Surface faces*/
-	vector<vector<uint>> sfaces;
+	vector<vector<size_t>> sfaces;
 }CELL;
 
 typedef struct FACE
@@ -77,14 +77,14 @@ typedef struct FACE
 		nWall += flocal.nWall;
 	}
 
-	uint numFaces, nFar, nWall;
+	size_t numFaces, nFar, nWall;
 	vector<StateVecD> verts;
-	vector<vector<uint>> faces; /*Face indexes*/
+	vector<vector<size_t>> faces; /*Face indexes*/
 	vector<std::pair<int,int>> celllr; /*Cell left and right of the face*/
 
 	// int* nFacesPElem;
 
-	const uint numElem, numPoint;
+	const size_t numElem, numPoint;
 }FACE;
 
 
@@ -105,11 +105,11 @@ vector<int> Find_Bmap_Markers(string const& bmapIn)
 
 	vector<int> markers;
 	/*Search for the markers that have either farfield or symmetry plane*/
-	uint lineno = 0;
+	size_t lineno = 0;
 	string line;
 
-	uint blockno = 0;
-	uint blockstart = 1; /*A store of when this block starts to search through*/
+	size_t blockno = 0;
+	size_t blockstart = 1; /*A store of when this block starts to search through*/
 
 	while(getline(fin,line))
 	{
@@ -181,14 +181,14 @@ vector<int> Find_Bmap_Markers(string const& bmapIn)
 }
 
 
-vector<vector<uint>> Get_Surface(int& fin, vector<int> const& markers)
+vector<vector<size_t>> Get_Surface(int& fin, vector<int> const& markers)
 {
 	#ifdef DEBUG
 	dbout << "Entering Get_Surface..." << endl;
 	#endif
 	int retval;
 
-	vector<vector<uint>> faceVec;
+	vector<vector<size_t>> faceVec;
 
 	int surfTDim, surfQDim, pPSTDim, pPSQDim;
 	size_t nsurfT, nsurfQ, nPpST, nPpSQ;
@@ -207,7 +207,7 @@ vector<vector<uint>> Get_Surface(int& fin, vector<int> const& markers)
 			dbout << "Number of triangles: " << nsurfT << endl;
 		#endif
 
-		vector<vector<uint>> localVec = Get_Element(fin, "points_of_surfacetriangles", nsurfT, nPpST);
+		vector<vector<size_t>> localVec = Get_Element(fin, "points_of_surfacetriangles", nsurfT, nPpST);
 
 		faceVec.insert(faceVec.end(), localVec.begin(), localVec.end());
 	}
@@ -226,7 +226,7 @@ vector<vector<uint>> Get_Surface(int& fin, vector<int> const& markers)
 			dbout << "Number of quadrilaterals: " << nsurfQ << endl;
 		#endif
 
-		vector<vector<uint>> localVec = Get_Element(fin, "points_of_surfacequadrilaterals", nsurfQ, nPpSQ);
+		vector<vector<size_t>> localVec = Get_Element(fin, "points_of_surfacequadrilaterals", nsurfQ, nPpSQ);
 
 		faceVec.insert(faceVec.end(),localVec.begin(),localVec.end());
 	}
@@ -247,7 +247,7 @@ vector<vector<uint>> Get_Surface(int& fin, vector<int> const& markers)
 
 	faceMarkers = Get_Int_Scalar(fin, "boundarymarker_of_surfaces", nMarkers);
 
-	vector<vector<uint>> farVec;
+	vector<vector<size_t>> farVec;
 
 	/*Want to find which surfaces are the ones I want to look for*/
 	for(size_t ii = 0; ii < nMarkers; ++ii)
@@ -255,7 +255,7 @@ vector<vector<uint>> Get_Surface(int& fin, vector<int> const& markers)
 		if(std::find(markers.begin(),markers.end(),faceMarkers[ii])!= markers.end())
 		{	/*The face is an inner boundary*/
 			/*Pre sort to save time in the loop*/
-			vector<uint> v = faceVec[ii];
+			vector<size_t> v = faceVec[ii];
 			std::sort(v.begin(),v.end());
 			farVec.emplace_back(v);
 		}
@@ -269,7 +269,7 @@ vector<vector<uint>> Get_Surface(int& fin, vector<int> const& markers)
 }
 
 
-void Add_Face(vector<uint> const& face, std::pair<int,int> const& leftright,
+void Add_Face(vector<size_t> const& face, std::pair<int,int> const& leftright,
 	FACE& fdata)
 {
 	/*Break the face down into two triangles*/
@@ -277,8 +277,8 @@ void Add_Face(vector<uint> const& face, std::pair<int,int> const& leftright,
 	{	/*Break the face down into two triangles*/
 		fdata.celllr.emplace_back(leftright);
 		fdata.celllr.emplace_back(leftright);
-		vector<uint> face1 = {face[0],face[1],face[2]};
-		vector<uint> face2 = {face[0],face[2],face[3]};
+		vector<size_t> face1 = {face[0],face[1],face[2]};
+		vector<size_t> face2 = {face[0],face[2],face[3]};
 		fdata.faces.emplace_back(face1);
 		fdata.faces.emplace_back(face2);
 		fdata.numFaces+=2;
@@ -292,17 +292,17 @@ void Add_Face(vector<uint> const& face, std::pair<int,int> const& leftright,
 }
 
 
-void CheckFaces(const vector<vector<uint>>& vertincells,
-	 const vector<vector<uint>>& lfaces, const uint lindex, const uint lgeom, 
-	const CELL& cdata, vector<vector<uint>>& colour, FACE& fdata)
+void CheckFaces(const vector<vector<size_t>>& vertincells,
+	 const vector<vector<size_t>>& lfaces, const size_t lindex, const size_t lgeom, 
+	const CELL& cdata, vector<vector<size_t>>& colour, FACE& fdata)
 {
 	std::pair<int,int> leftright;
-	uint lfaceindex = 0;
+	size_t lfaceindex = 0;
 	for(auto const& face:lfaces)
 	{	/*Define that the cell of the top-level cell search is on the 'left'*/
 
 		/*Create an ordered list of the left side of the face*/
-		vector<uint> lface = face;
+		vector<size_t> lface = face;
 		std::sort(lface.begin(),lface.end());
 
 		/* Search through each vertex of the face, and see if this face exists*/
@@ -315,8 +315,8 @@ void CheckFaces(const vector<vector<uint>>& vertincells,
 					continue;	
 
 				/*Define that the cell of the inner search is on the 'right'*/
-				vector<uint> rcell = cdata.elems[rindex];
-				vector<vector<uint>> rfaces;
+				vector<size_t> rcell = cdata.elems[rindex];
+				vector<vector<size_t>> rfaces;
 
 				if(rcell.size() == 4)
 				{	/*Tetraeder*/
@@ -360,7 +360,7 @@ void CheckFaces(const vector<vector<uint>>& vertincells,
 							  {rcell[7],rcell[6],rcell[5],rcell[4]}};				 
 				}
 
-				uint rfaceindex = 0;
+				size_t rfaceindex = 0;
 				for(auto& rface:rfaces)
 				{
 					std::sort(rface.begin(),rface.end());
@@ -425,9 +425,9 @@ void BuildFaces(const CELL& cdata, FACE& fdata)
 	#ifdef DEBUG
 	dbout << "Entering BuildFaces..." << endl;
 	#endif
-	uint nElem = cdata.numElem;
-	uint nPts = cdata.numPoint;
-	uint unmfaces=0;
+	size_t nElem = cdata.numElem;
+	size_t nPts = cdata.numPoint;
+	size_t unmfaces=0;
 
 	// for(auto const& vert:cdata.elems[33])
 	// 	cout << vert << "  ";
@@ -435,9 +435,9 @@ void BuildFaces(const CELL& cdata, FACE& fdata)
 	// cout << endl;
 
 	/*Vector of which cells the vertex is referenced in*/
-	vector<vector<uint>> vertincells(nPts);
+	vector<vector<size_t>> vertincells(nPts);
 
-	for(uint ii = 0; ii < nElem; ++ii)
+	for(size_t ii = 0; ii < nElem; ++ii)
 	{
 		for(auto const& vert:cdata.elems[ii])
 		{	/*Add count for every mention of the vertex, and push back the cell id*/
@@ -445,7 +445,7 @@ void BuildFaces(const CELL& cdata, FACE& fdata)
 		}
 	}
 
-	// uint numFaces = 0;
+	// size_t numFaces = 0;
 	// cout << vertmentions[0] << endl;
 	// for(auto const& vert:vertincells[0])
 	// 	cout << vert << "  ";
@@ -453,24 +453,24 @@ void BuildFaces(const CELL& cdata, FACE& fdata)
 	// cout << endl;
 
 	/*Create a colour vector to identify if a face has been identified*/
-	vector<vector<uint>> colour(cdata.elems.size());
-	for(uint ii = 0; ii < nElem; ++ii)
+	vector<vector<size_t>> colour(cdata.elems.size());
+	for(size_t ii = 0; ii < nElem; ++ii)
 	{
 		if(cdata.elems[ii].size() == 8)
 		{
-			colour[ii] = vector<uint>(6,0);
+			colour[ii] = vector<size_t>(6,0);
 		}
 		else if(cdata.elems[ii].size() == 6)
 		{
-			colour[ii] = vector<uint>(5,0);
+			colour[ii] = vector<size_t>(5,0);
 		}
 		else if(cdata.elems[ii].size() == 5)
 		{
-			colour[ii] = vector<uint>(5,0);
+			colour[ii] = vector<size_t>(5,0);
 		}
 		else if(cdata.elems[ii].size() == 4)
 		{
-			colour[ii] = vector<uint>(4,0);
+			colour[ii] = vector<size_t>(4,0);
 		}
 	}
 
@@ -478,21 +478,21 @@ void BuildFaces(const CELL& cdata, FACE& fdata)
 	dbout << "Starting main loop..." << endl;
 	#endif
 
-	// uint cellSum=0;
+	// size_t cellSum=0;
 	#pragma omp parallel shared(vertincells)
 	{
 		/*Create local copy of the face data*/
 		FACE flocal;
-		// uint cellCount = 0;
-		// uint reported_Count = 0;
-		// uint localCount = 0;
+		// size_t cellCount = 0;
+		// size_t reported_Count = 0;
+		// size_t localCount = 0;
 
 		#pragma omp for schedule(static) nowait 
-		for(uint lindex = 0; lindex < nElem; ++lindex)
+		for(size_t lindex = 0; lindex < nElem; ++lindex)
 		{	
-			vector<uint> lcell = cdata.elems[lindex];
-			vector<vector<uint>> lfaces;
-			uint lgeom=0;
+			vector<size_t> lcell = cdata.elems[lindex];
+			vector<vector<size_t>> lfaces;
+			size_t lgeom=0;
 			/*Check size of the inner vector, as that will show which geometry it is*/
 			if(lcell.size() == 4)
 			{	/*Tetraeder*/
@@ -753,8 +753,8 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 
 	/*Create the C array for the faces*/
 	int* faces = new int[fdata.numFaces*3];
-	for(uint ii = 0; ii < fdata.numFaces; ++ii)
-		for(uint jj = 0; jj < 3; ++jj)
+	for(size_t ii = 0; ii < fdata.numFaces; ++ii)
+		for(size_t jj = 0; jj < 3; ++jj)
 		{
 			faces[index(ii,jj,3)] = static_cast<int>(fdata.faces[ii][jj]);
 		}
@@ -772,10 +772,10 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 
 	// /*State how many faces there are per element*/
 	// int* nFacesPElem = new int[fdata.numElem];
-	// for(uint ii = 0; ii < fdata.numElem; ++ii)
+	// for(size_t ii = 0; ii < fdata.numElem; ++ii)
 	// 	nFacesPElem[ii] = 0; 
 
-	// for(uint ii = 0; ii < fdata.numFaces; ++ii)
+	// for(size_t ii = 0; ii < fdata.numFaces; ++ii)
 	// {	/*Count the mentions of a cell*/
 	// 	nFacesPElem[fdata.celllr[ii].first]++;
 	// }
@@ -786,7 +786,7 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 	int* left = new int[fdata.numFaces];
 	int* right = new int[fdata.numFaces];
 
-	for(uint ii = 0; ii < fdata.numFaces; ++ii)
+	for(size_t ii = 0; ii < fdata.numFaces; ++ii)
 	{
 		left[ii] = fdata.celllr[ii].first;
 		right[ii] = fdata.celllr[ii].second;
@@ -812,7 +812,7 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 	double* y = new double[fdata.numPoint];
 	double* z = new double[fdata.numPoint];
 
-	for(uint ii = 0; ii < fdata.numPoint; ++ii)
+	for(size_t ii = 0; ii < fdata.numPoint; ++ii)
 	{
 		x[ii] = fdata.verts[ii](0);
 		y[ii] = fdata.verts[ii](1);
@@ -863,8 +863,8 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 		exit(-1);
 	}
 
-	uint TotalNumFaceNodes = 0;
-	for(uint ii = 0; ii < fdata.faces.size(); ++ii)
+	size_t TotalNumFaceNodes = 0;
+	for(size_t ii = 0; ii < fdata.faces.size(); ++ii)
 	{
 		TotalNumFaceNodes += fdata.faces[ii].size();
 	}
@@ -876,17 +876,17 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 	fout << "TotalNumFaceNodes=" << TotalNumFaceNodes << endl;
 	fout << "NumConnectedBoundaryFaces=0 TotalNumBoundaryConnections=0" << endl;
 
-	uint w = 15;
-	uint preci = 6;
+	size_t w = 15;
+	size_t preci = 6;
 	fout << std::left << std::scientific << std::setprecision(preci);
 	// fout << fdata.numElem << " " << fdata.numFaces << "  " <<  fdata.numPoint << endl;
 	
 	/*Write vertices in block format (Each dimension in turn)*/
-	uint newl = 0;
+	size_t newl = 0;
 	fout << std::setw(1);
-	for(uint DIM = 0; DIM < SIMDIM; ++DIM)
+	for(size_t DIM = 0; DIM < SIMDIM; ++DIM)
 	{
-		for(uint ii = 0; ii < fdata.verts.size(); ++ii)
+		for(size_t ii = 0; ii < fdata.verts.size(); ++ii)
 		{
 			fout << std::setw(w) << fdata.verts[ii](DIM);
 			newl++;
@@ -907,7 +907,7 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 	/*Inform of how many vertices in each face*/
 	fout << "#node count per face" << endl;
 	newl = 0;
-	for (uint ii = 0; ii < fdata.faces.size(); ++ii)
+	for (size_t ii = 0; ii < fdata.faces.size(); ++ii)
 	{
 		fout << std::setw(w) << fdata.faces[ii].size();
 		newl++;
@@ -921,7 +921,7 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 	fout << endl;
 	/*Write the face data*/
 	fout << "#face nodes" << endl;
-	for (uint ii = 0; ii < fdata.faces.size(); ++ii)
+	for (size_t ii = 0; ii < fdata.faces.size(); ++ii)
 	{
 		for(auto const& vertex:fdata.faces[ii])
 		{	/*Write face vertex indexes*/
@@ -937,7 +937,7 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 	/*Write face left and right*/
 	newl = 0;
 	fout << "#left elements" << endl;
-	for (uint ii = 0; ii < fdata.celllr.size(); ++ii)
+	for (size_t ii = 0; ii < fdata.celllr.size(); ++ii)
 	{
 		fout << std::setw(w) << fdata.celllr[ii].first+1 ;
 		newl++;
@@ -952,7 +952,7 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 
 	fout << "#right elements" << endl;
 	newl = 0;
-	for (uint ii = 0; ii < fdata.celllr.size(); ++ii)
+	for (size_t ii = 0; ii < fdata.celllr.size(); ++ii)
 	{
 		if(fdata.celllr[ii].second < 0)
 			fout<< std::setw(w) << 0 ;
@@ -1001,10 +1001,10 @@ void Write_Cell_Data(const CELL& cdata)
 	/*Write vertices*/
 	fout << std::left << std::scientific << std::setprecision(6);
 	fout << std::setw(1);
-	for(uint ii = 0; ii < SIMDIM; ++ii)
+	for(size_t ii = 0; ii < SIMDIM; ++ii)
 	{	
-		uint kk = 0;
-		for(uint jj = 0; jj < cdata.verts.size(); ++jj)
+		size_t kk = 0;
+		for(size_t jj = 0; jj < cdata.verts.size(); ++jj)
 		{
 			fout << std::setw(15) << cdata.verts[jj][ii];
 			kk++;
@@ -1023,7 +1023,7 @@ void Write_Cell_Data(const CELL& cdata)
 
 	/*Write element indexing*/
 	fout << std::fixed;
-	for(uint ii = 0; ii < cdata.elems.size(); ++ii)
+	for(size_t ii = 0; ii < cdata.elems.size(); ++ii)
 	{	
 		for(auto elem:cdata.elems[ii])
 		{
@@ -1051,12 +1051,12 @@ void Write_Griduns(const FACE& fdata)
 		exit(-1);
 	}
 
-	uint w = 12;
+	size_t w = 12;
 	fout << std::left << std::fixed;
 	fout << setw(w) << fdata.numElem << setw(w) << 
 		fdata.numFaces << setw(w) << fdata.numPoint << endl;
 
-	for(uint ii = 0; ii < fdata.numFaces; ++ii)
+	for(size_t ii = 0; ii < fdata.numFaces; ++ii)
 	{
 		for(auto const& vert:fdata.faces[ii])
 			fout << setw(w) << vert;
@@ -1066,10 +1066,10 @@ void Write_Griduns(const FACE& fdata)
 
 	fout << std::scientific << std::setprecision(6);
 	w = 15;
-	for(uint ii = 0; ii < fdata.numPoint; ++ii)
+	for(size_t ii = 0; ii < fdata.numPoint; ++ii)
 	{
 		fout << setw(w) << ii;
-		for(uint jj = 0; jj < SIMDIM; ++jj)
+		for(size_t jj = 0; jj < SIMDIM; ++jj)
 		{
 			fout << setw(w) << fdata.verts[ii](jj);
 		}
@@ -1120,7 +1120,7 @@ int main (int argc, char** argv)
 	/*Retrieve the cdata*/
 	int nTetDimID, nPpTDimID;
 	size_t nTets, nPpTe;
-	vector<vector<uint>> tets; 
+	vector<vector<size_t>> tets; 
 	if ((retval = nc_inq_dimid(meshID, "no_of_tetraeders", &nTetDimID)))
 	{
 		cout << "No tetraeders in mesh file." << endl;
@@ -1135,7 +1135,7 @@ int main (int argc, char** argv)
 	/* Retrieve prism data */
 	int nPriDimID, nPpPrDimID;
 	size_t nPris, nPpPr;
-	vector<vector<uint>> prism;
+	vector<vector<size_t>> prism;
 	if ((retval = nc_inq_dimid(meshID, "no_of_prisms", &nPriDimID)))
 	{
 		cout << "No prisms in mesh file." << endl;
@@ -1150,7 +1150,7 @@ int main (int argc, char** argv)
 	/* Get pyramid data */
 	int nPyrDimID, nPpPyDimID;
 	size_t nPyrs, nPpPy;
-	vector<vector<uint>> pyra;
+	vector<vector<size_t>> pyra;
 	if ((retval = nc_inq_dimid(meshID, "no_of_pyramids", &nPyrDimID)))
 	{
 		cout << "No pyramids in mesh file." << endl;
@@ -1165,7 +1165,7 @@ int main (int argc, char** argv)
 	/* Get hexahedral data */
 	int nHexDimID, nPpHeDimID;
 	size_t nHexs, nPpHe;
-	vector<vector<uint>> hexa;
+	vector<vector<size_t>> hexa;
 	if ((retval = nc_inq_dimid(meshID, "no_of_hexaeders", &nHexDimID)))
 	{
 		cout << "No hexaeders in mesh file." << endl;

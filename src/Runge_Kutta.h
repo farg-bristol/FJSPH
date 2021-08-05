@@ -39,50 +39,6 @@ int Check_RK_Error(SIM const& svar, size_t const& start, size_t const& end,
 	return 0;
 }
 
-
-void Step_1(real const& dt, 
-		StateVecD const& xin, StateVecD const& veln, real const& rhon, /*State at time n*/
-		StateVecD const& res_1, real const& Rrho_1, 	/*residuals at step 1*/
-		StateVecD& xi_2, StateVecD& vel_2, real& rho_2) /*State at step 1*/
-{
-	xi_2 = xin + 0.5 * dt * veln;
-	vel_2 = veln + 0.5 * dt * res_1;
-	rho_2 = rhon + 0.5 * dt * Rrho_1;
-}
-
-void Step_2(real const& dt, 
-		StateVecD const& xin, StateVecD const& veln, real const& rhon,	/*State at time n*/
-		StateVecD const& vel_2, StateVecD const& res_2, real const& Rrho_2, /*residuals at step 2*/
-		StateVecD& xi_3, StateVecD& vel_3, real& rho_3) /*State at step 2*/
-{
-	xi_3 = xin + 0.5 * dt * vel_2;
-	vel_3 = veln + 0.5 * dt * res_2;
-	rho_3 = rhon + 0.5 * dt * Rrho_2;
-}
-
-void Step_3(real const& dt, 
-		StateVecD const& xin, StateVecD const& veln, real const& rhon,	/*State at time n*/
-		StateVecD const& vel_3, StateVecD const& res_3, real const& Rrho_3, /*residuals at step 3*/
-		StateVecD& xi_4, StateVecD& vel_4, real& rho_4) /*State at step 3*/
-{
-	xi_4 = xin + dt * vel_3;
-	vel_4 = veln + dt * res_3;
-	rho_4 = rhon + dt * Rrho_3;
-}
-
-void Step_4(real const& dt, 
-		StateVecD const& xi_1, StateVecD const& vel_1, real const& rho_1, 	/*State at time n*/
-		 StateVecD const& res_1, real const& Rrho_1,
-		StateVecD const& vel_2, StateVecD const& res_2, real const& Rrho_2, /*residuals at step 2*/
-		StateVecD const& vel_3, StateVecD const& res_3, real const& Rrho_3, /*residuals at step 3*/
-		StateVecD const& vel_4, StateVecD const& res_4, real const& Rrho_4, /*residuals at step 4*/
-		StateVecD& xi_np1, StateVecD& vel_np1, real& rho_np1)	/*State at time n+1*/
-{
-	xi_np1 = xi_1 +  (dt/6.0) * (vel_1 + 2.0 * vel_2 + 2.0 * vel_3 + vel_4);
-	vel_np1 = vel_1 + (dt/6.0) * (res_1 + 2.0 * res_2 + 2.0 * res_3 + res_4);
-	rho_np1 = rho_1 + (dt/6.0) * (Rrho_1 + 2.0 * Rrho_2 + 2.0 * Rrho_3 + Rrho_4);
-}
-
 /* <summary> Peform the first stage of the Runge-Kutta integration
 	to get the first guess of time n+1 (regarded here as time n+1/4)
 	to perform neighbour search and dissipation terms before freezing </summary */
@@ -139,18 +95,12 @@ int Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 		for (size_t ii=start; ii < end; ++ii)
 		{	/****** FLUID PARTICLES **************/
 			
-			/* START = pipe particle receiving prescribed motion            */
+			/* BUFFER = pipe particle receiving prescribed motion            */
 			/* BACK = the latest particle in that column                    */
 			/* PIPE = in the pipe, with free motion                         */
 			/* FREE = free of the pipe and receives an aero force           */
 
-			/*Check if the particle is clear of the starting area*/
-			if(st_2[ii].b == PartState.START_ || st_2[ii].b == PartState.BACK_)
-			{   
-				st_2[ii].xi = pn[ii].xi + 0.5*dt*pn[ii].v;
-			}
-
-			if(st_2[ii].b > PartState.START_)
+			if(st_2[ii].b > PartState.BUFFER_)
 			{	
 
 				// Step_1(dt,pn[ii].xi,pn[ii].v,pn[ii].rho,pn[ii].f,pn[ii].Rrho,
@@ -185,6 +135,12 @@ int Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 						cells.vFnp1[st_2[ii].cellID] +=st_2[ii].v;
 					}	
 				}
+			}
+			else
+			{
+				st_2[ii].xi = pn[ii].xi + dt * pn[ii].v;
+				st_2[ii].rho = pn[ii].rho + 0.5 * dt * pn[ii].Rrho;
+				st_2[ii].p = B*(pow(st_2[ii].rho/fvar.rho0,gam)-1);
 			}
 		}
 
@@ -344,20 +300,12 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 		for (size_t ii=start; ii < end; ++ii)
 		{	/****** FLUID PARTICLES **************/
 			
-			/* START = pipe particle receiving prescribed motion            */
+			/* BUFFER = pipe particle receiving prescribed motion            */
 			/* BACK = the latest particle in that column                    */
 			/* PIPE = in the pipe, with free motion                         */
 			/* FREE = free of the pipe and receives an aero force           */
 
-			/*Check if the particle is clear of the starting area*/
-			if(st_2[ii].b == PartState.START_ || st_2[ii].b == PartState.BACK_)
-			{   
-				/*For the particles marked 1, perform a prescribed motion*/
-				st_3[ii].xi = pn[ii].xi + 0.5 * dt * pn[ii].v;
-				
-			}
-
-			if(st_2[ii].b > PartState.START_)
+			if(st_3[ii].b > PartState.BUFFER_)
 			{	
 				// Step_2(dt,pn[ii].xi,pn[ii].v,pn[ii].rho,
 				// 		st_2[ii].v,res_2[ii],Rrho_2[ii],
@@ -371,6 +319,13 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 				st_3[ii].rho = pn[ii].rho + 0.5 * dt * Rrho_2[ii];
 				st_3[ii].p = B * (pow(st_3[ii].rho / fvar.rho0, gam) - 1);
 				// st_3[ii].p = fvar.Cs*fvar.Cs * (st_3[ii].rho - fvar.rho0);
+
+			}
+			else
+			{
+				st_3[ii].xi = pn[ii].xi + dt * pn[ii].v;
+				st_3[ii].rho = pn[ii].rho + 0.5 * dt * Rrho_2[ii];
+				st_3[ii].p = B * (pow(st_3[ii].rho / fvar.rho0, gam) - 1);
 			}
 
 			// #pragma omp critical
@@ -407,19 +362,19 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 		for (size_t ii=start; ii < end; ++ii)
 		{	/****** FLUID PARTICLES **************/
 			
-			/* START = pipe particle receiving prescribed motion            */
+			/* BUFFER = pipe particle receiving prescribed motion            */
 			/* BACK = the latest particle in that column                    */
 			/* PIPE = in the pipe, with free motion                         */
 			/* FREE = free of the pipe and receives an aero force           */
 
 			/*Check if the particle is clear of the starting area*/
-			if(st_3[ii].b == PartState.START_ || st_3[ii].b == PartState.BACK_)
-			{   
-				/*For the particles marked 1, perform a prescribed motion*/
-				st_4[ii].xi = pn[ii].xi + dt*pn[ii].v;
-			}
+			// if(st_3[ii].b == PartState.START_ || st_3[ii].b == PartState.BACK_)
+			// {   
+			// 	/*For the particles marked 1, perform a prescribed motion*/
+			// 	st_4[ii].xi = pn[ii].xi + dt*pn[ii].v;
+			// }
 
-			if(st_3[ii].b > PartState.START_)
+			if(st_4[ii].b > PartState.BUFFER_)
 			{	
 				// Step_3(dt,pn[ii].xi,pn[ii].v,pn[ii].rho,
 				// 		st_3[ii].v,res_3[ii],Rrho_3[ii],
@@ -433,6 +388,12 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 				st_4[ii].rho = pn[ii].rho + dt * Rrho_3[ii];
 				st_4[ii].p = B*(pow(st_4[ii].rho/fvar.rho0,gam)-1);
 				// st_4[ii].p = fvar.Cs*fvar.Cs * (st_4[ii].rho - fvar.rho0);
+			}
+			else
+			{
+				st_4[ii].xi = pn[ii].xi + dt * pn[ii].v;
+				st_4[ii].rho = pn[ii].rho + dt * Rrho_3[ii];
+				st_4[ii].p = B*(pow(st_4[ii].rho/fvar.rho0,gam)-1);
 			}
 		}
 	}
@@ -482,20 +443,20 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 			/* FREE = free of the pipe and receives an aero force           */
 
 			/*Check if the particle is clear of the starting area*/
-			if(pnp1[ii].b == PartState.START_ || pnp1[ii].b == PartState.BACK_)
-			{   
-				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
-				if(vec(1) > svar.clear)
-				{	/*Tag it as clear if it's higher than the plane of the exit*/
-					pnp1[ii].b=PartState.PIPE_;
-				}
-				else
-				{	/*For the particles marked 1, perform a prescribed motion*/
-					pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-				}
-			}
+			// if(pnp1[ii].b == PartState.START_ || pnp1[ii].b == PartState.BACK_)
+			// {   
+			// 	StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
+			// 	if(vec(1) > svar.clear)
+			// 	{	/*Tag it as clear if it's higher than the plane of the exit*/
+			// 		pnp1[ii].b=PartState.PIPE_;
+			// 	}
+			// 	else
+			// 	{	/*For the particles marked 1, perform a prescribed motion*/
+			// 		pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
+			// 	}
+			// }
 
-			if(pnp1[ii].b > PartState.START_)
+			if(pnp1[ii].b > PartState.BUFFER_)
 			{	
 				if(pnp1[ii].b == PartState.PIPE_)
 				{	/*Do a check to see if it needs to be given an aero force*/
@@ -554,7 +515,6 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 				// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
 
 				pnp1[ii].f = res_4[ii];
-
 				pnp1[ii].Rrho = Rrho_4[ii];
 
 				if(svar.Asource == 2 && pnp1[ii].b == PartState.FREE_)
@@ -570,6 +530,15 @@ int Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 						cells.vFnp1[pnp1[ii].cellID] += pnp1[ii].v;
 					}	
 				}
+			}
+			else
+			{
+				pnp1[ii].xi = pn[ii].xi + dt * pn[ii].v;
+
+				pnp1[ii].rho = pn[ii].rho +
+								(dt / 6.0) * (pn[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii]);
+
+				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
 			}
 
 			pnp1[ii].theta = wDiff[ii];

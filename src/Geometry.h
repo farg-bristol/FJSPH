@@ -1,10 +1,9 @@
 #ifndef GEOMETRY_H
 #define GEOMETRY_H
 
-#include "Third_Party/Eigen/Core"
-#include "Third_Party/Eigen/Geometry"
 #include "Var.h"
 #include "IOFunctions.h"
+#include "Third_Party/Eigen/Geometry"
 
 #define PERTURB(i,j) pow(MEPSILON,pow(2,i*SIMDIM-j))
 
@@ -25,26 +24,93 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
         #pragma omp for schedule(static) nowait
         for(size_t ii = start; ii < end; ++ii)
         {
-            if(dp.lam[ii] < 0.2)
-            {   /*If less that 0.2, then its a surface particle by default*/
-                pnp1[ii].surf = 1;
+            if(pnp1[ii].b < PartState.PIPE_)
+            {
+                pnp1[ii].surf = 0;
             }
-            else if(dp.lam[ii] < 0.75)
+            else if(dp.lam_ng[ii] < 0.2)
+            {   /*If less that 0.2, then its a surface particle by default*/
+                real woccl_ = 0.0;
+                StateVecD Vdiff = StateVecD::Zero();
+                if (svar.Asource == 1)
+                {
+                    Vdiff = (pnp1[ii].cellV) - pnp1[ii].v/* dp.avgV[ii]*/;
+                }
+                else if (svar.Asource == 2)
+                {
+                    Vdiff = (pnp1[ii].cellV+cells.cPertnp1[pnp1[ii].cellID]) - pnp1[ii].v /*dp.avgV[ii]*/;
+                }
+                #if SIMDIM == 3
+                else if(svar.Asource == 3)
+                {   
+                    StateVecD Vel = svar.vortex.getVelocity(pnp1[ii].xi);
+                    Vdiff = Vel - pnp1[ii].v /*dp.avgV[ii]*/;
+                }
+                #endif
+                else 
+                {
+                    Vdiff = avar.vInf - pnp1[ii].v /*dp.avgV[ii]*/;
+                }
+
+                for(std::pair<size_t,real> const& jj:outlist[ii])
+                {
+                    if(jj.first == ii || pnp1[jj.first].b == PartState.GHOST_)
+                        continue;
+
+                    /*Occlusion for Gissler Aero Method*/
+                    if (pnp1[ii].b == PartState.FREE_ && (avar.acase == 4 || avar.acase == 1))
+                    {
+                        StateVecD const Rij = pnp1[jj.first].xi - pnp1[ii].xi;
+                        real const r = sqrt(jj.second);
+                        real const frac = -Rij.dot(Vdiff)/(Vdiff.norm()*r);
+                        
+                        if (frac > woccl_)
+                        {
+                            woccl_ = frac;
+                        }
+                    }
+                }
+
+                pnp1[ii].surf = 1;
+                pnp1[ii].woccl = woccl_; 
+            }
+            else if(dp.lam_ng[ii] < 0.75)
             {   /*Particle could be a surface particle. Perform a test*/
-            
+                real woccl_ = 0.0;
+                StateVecD Vdiff = StateVecD::Zero();
+                if (svar.Asource == 1)
+                {
+                    Vdiff = (pnp1[ii].cellV) - pnp1[ii].v/* dp.avgV[ii]*/;
+                }
+                else if (svar.Asource == 2)
+                {
+                    Vdiff = (pnp1[ii].cellV+cells.cPertnp1[pnp1[ii].cellID]) - pnp1[ii].v /*dp.avgV[ii]*/;
+                }
+                #if SIMDIM == 3
+                else if(svar.Asource == 3)
+                {   
+                    StateVecD Vel = svar.vortex.getVelocity(pnp1[ii].xi);
+                    Vdiff = Vel - pnp1[ii].v /*dp.avgV[ii]*/;
+                }
+                #endif
+                else 
+                {
+                    Vdiff = avar.vInf - pnp1[ii].v /*dp.avgV[ii]*/;
+                }
+
                 // Create point T
-                StateVecD xi = pnp1[ii].xi;
-                StateVecD pointT = xi + h * dp.norm[ii].normalized();
+                StateVecD const xi = pnp1[ii].xi;
+                StateVecD const pointT = xi + h * dp.norm[ii].normalized();
 
                 uint surf = 1; /*Begin by assuming a surface, and proving otherwise*/
                 for(std::pair<size_t,real> const& jj:outlist[ii])
                 {
-                    if(jj.first == ii)
+                    if(jj.first == ii || pnp1[jj.first].b == PartState.GHOST_)
                         continue;
                     
-                    StateVecD x_jT = pnp1[jj.first].xi - pointT;
-                    real r = sqrt(jj.second);
-
+                    StateVecD const x_jT = pnp1[jj.first].xi - pointT;
+                    real const r = sqrt(jj.second);
+                    
                     if(r >= sqrt(2)*h)
                     {
                         if (x_jT.norm() < h)
@@ -55,26 +121,38 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                     }
                     else  
                     {
-#if SIMDIM == 2
-                        StateVecD tau(dp.norm[ii](1),-dp.norm[ii](0));
-                        if((abs(dp.norm[ii].normalized().dot(x_jT)) + abs(tau.normalized().dot(x_jT))) < h )
-                        {
-                            surf = 0;
-                            break;
-                        }
-#else
-                        StateVecD Rij = pnp1[jj.first].xi - xi; 
-                        if(acos(dp.norm[ii].normalized().dot(Rij/sqrt(jj.second))) < M_PI/4.0)
-                        {
-                            surf = 0; 
-                            break;
-                        }
-#endif
+                        #if SIMDIM == 2
+                            StateVecD tau(dp.norm[ii](1),-dp.norm[ii](0));
+                            if((abs(dp.norm[ii].normalized().dot(x_jT)) + abs(tau.normalized().dot(x_jT))) < h )
+                            {
+                                surf = 0;
+                                break;
+                            }
+                        #else
+                            StateVecD Rij = pnp1[jj.first].xi - xi; 
+                            if(acos(dp.norm[ii].normalized().dot(Rij/sqrt(jj.second))) < M_PI/4.0)
+                            {
+                                surf = 0; 
+                                break;
+                            }
+                        #endif
                     }
-                    
+
+                    /*Occlusion for Gissler Aero Method*/
+                    if (pnp1[ii].b == PartState.FREE_ && (avar.acase == 4 || avar.acase == 1))
+                    {
+                        StateVecD const Rij = pnp1[jj.first].xi - pnp1[ii].xi;
+                        real const frac = -Rij.dot(Vdiff)/(Vdiff.norm()*r);
+                        
+                        if (frac > woccl_)
+                        {
+                            woccl_ = frac;
+                        }
+                    }    
                 }
+
                 pnp1[ii].surf = surf;
-                
+                pnp1[ii].woccl = woccl_; 
             }
             else
             {   /*If its eigenvalue is high, then by default it cannot be a surface*/
@@ -82,106 +160,70 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
             }
         }
 
-        #pragma omp for schedule(static) nowait
-        for(size_t ii = start; ii < end; ++ii)
-        {
-            /*Find the curvature for the surface particles*/
-            if(dp.lam[ii] < 0.75 )
-            {
-                real curve = 0.0;
-                real correc = 0.0;
+        // #pragma omp for schedule(static) nowait
+        // for(size_t ii = start; ii < end; ++ii)
+        // {
+        //     /*Find the curvature for the surface particles*/
+        //     if(dp.lam[ii] < 0.75 )
+        //     {
+        //         real curve = 0.0;
+        //         real correc = 0.0;
 
-                real woccl_ = 0.0;
-                StateVecD Vdiff = StateVecD::Zero();
+        //         if(dp.lam[ii] < 0.75 && pnp1[ii].b == PartState.FREE_)
+        //         {
+                
+        //             for(std::pair<size_t,real> const& jj:outlist[ii])
+        //             {
+        //                 if (ii == jj.first)
+        //                     continue;
 
-                if(dp.lam[ii] < 0.75 && pnp1[ii].b == PartState.FREE_)
-                {
-                    if (svar.Asource == 1)
-                    {
-                        Vdiff = (pnp1[ii].cellV) - pnp1[ii].v/* dp.avgV[ii]*/;
-                    }
-                    else if (svar.Asource == 2)
-                    {
-                        Vdiff = (pnp1[ii].cellV+cells.cPertnp1[pnp1[ii].cellID]) - pnp1[ii].v /*dp.avgV[ii]*/;
-                    }
-                    else 
-                    {
-                        Vdiff = avar.vInf - pnp1[ii].v /*dp.avgV[ii]*/;
-                    }
+        //                 StateVecD Rij = pnp1[jj.first].xi - pnp1[ii].xi;
+        //                 real r = sqrt(jj.second);
+        //                 real volj = pnp1[jj.first].m/pnp1[jj.first].rho;
+        //                 StateVecD diffK = volj *  GradK(Rij,r,fvar.H,fvar.correc);                      
 
-#if SIMDIM == 3
-                    if(svar.Asource == 3)
-                    {   
-                        StateVecD Vel = svar.vortex.getVelocity(pnp1[ii].xi);
-                        Vdiff = Vel - pnp1[ii].v /*dp.avgV[ii]*/;
-                    }
-#endif
-                }
+        //                 if (pnp1[jj.first].surf == 1)
+        //                 {
+        //                     curve -= (dp.norm[jj.first].normalized()-dp.norm[ii].normalized()).dot(diffK);
+        //                     correc += volj * Kernel(r,fvar.H,fvar.correc);
+        //                     // curve += curves[jj] * pnp1[jj].m/pnp1[jj].rho* kern / dp.kernsum[ii];
+        //                 }
+        //             }
+        //         }
 
-                for(std::pair<size_t,real> const& jj:outlist[ii])
-                {
-                    if (ii == jj.first)
-                        continue;
+        //         curves[ii] = curve/correc;
+        //         correcs[ii] = correc;
+        //     }
+        // }
 
-                    StateVecD Rij = pnp1[jj.first].xi - pnp1[ii].xi;
-                    real r = sqrt(jj.second);
-                    real volj = pnp1[jj.first].m/pnp1[jj.first].rho;
-                    StateVecD diffK = volj *  GradK(Rij,r,fvar.H,fvar.correc);
+        // #pragma omp for schedule(static) nowait
+        // for(size_t ii = start; ii < end; ++ii)
+        // {
+        //     /*Find the curvature for the surface particles*/
+        //     if(pnp1[ii].surf == 1)
+        //     {
+        //         real curve = 0.0;
 
+        //         for(std::pair<size_t,real> const& jj:outlist[ii])
+        //         {
+        //             if (pnp1[jj.first].surf != 1)
+        //                 continue;
 
-                    /*Occlusion for Gissler Aero Method*/
-                    if (pnp1[ii].b == PartState.FREE_ && (avar.acase == 4 || avar.acase == 1))
-                    {
-                        real const frac = -Rij.dot(Vdiff)/(Vdiff.norm()*r);
-                        
-                        if (frac > woccl_)
-                        {
-                            woccl_ = frac;
-                        }
-                    } 
+        //             if (ii == jj.first)
+        //             {
+        //                 curve += curves[ii] * fvar.correc/correcs[ii];
+        //                 continue;
+        //             }
 
-                    if (pnp1[jj.first].surf == 1)
-                    {
-                        curve -= (dp.norm[jj.first].normalized()-dp.norm[ii].normalized()).dot(diffK);
-                        correc += volj * Kernel(r,fvar.H,fvar.correc);
-                        // curve += curves[jj] * pnp1[jj].m/pnp1[jj].rho* kern / dp.kernsum[ii];
-                    }
-                }
+        //             real r = sqrt(jj.second);
+        //             real kern = pnp1[jj.first].m/pnp1[jj.first].rho * Kernel(r,fvar.H,fvar.correc);
 
-                curves[ii] = curve/correc;
-                correcs[ii] = correc;
-                pnp1[ii].woccl = woccl_; 
-            }
-        }
+        //             curve += curves[jj.first] * kern/correcs[ii];
+        //         }
 
-        #pragma omp for schedule(static) nowait
-        for(size_t ii = start; ii < end; ++ii)
-        {
-            /*Find the curvature for the surface particles*/
-            if(pnp1[ii].surf == 1)
-            {
-                real curve = 0.0;
-
-                for(std::pair<size_t,real> const& jj:outlist[ii])
-                {
-                    if (pnp1[jj.first].surf != 1)
-                        continue;
-
-                    if (ii == jj.first)
-                    {
-                        curve += curves[ii] * fvar.correc/correcs[ii];
-                        continue;
-                    }
-
-                    real r = sqrt(jj.second);
-                    real kern = pnp1[jj.first].m/pnp1[jj.first].rho * Kernel(r,fvar.H,fvar.correc);
-
-                    curve += curves[jj.first] * kern/correcs[ii];
-                }
-
-                pnp1[ii].curve = curve;
-            }
-        }   
+        //         pnp1[ii].curve = curve;
+        //     }
+        // }   
     }
 }
 
@@ -672,10 +714,10 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
     else if (svar.Bcase == 3)
     {   /*Jet flow*/
         /*Take the height of the jet, and find the volume of the cylinder*/
-#if SIMDIM == 3 
-        real cVol = svar.Jet(1) * (M_PI * pow((svar.Jet(0)/2.0),2));
+#if SIMDIM == 3
+        real cVol = (M_PI * pow((svar.Jet(0) / 2.0), 2)) * (svar.Jet(1) + 6 * svar.Pstep); /* Area of circle * depth */
 #else
-        real cVol = svar.Jet(1) * svar.Jet(0);
+        real cVol = svar.Jet(0) * (svar.Jet(1) + 6 * svar.Pstep); /* diameter * depth + buffer zone */
 #endif
         real volume = pow(svar.Pstep,SIMDIM)*real(svar.simPts);
 

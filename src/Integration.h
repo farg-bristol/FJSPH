@@ -11,6 +11,7 @@
 #include "Neighbours.h"
 #include "Resid.h"
 #include "Crossing.h"
+#include "Shifting.h"
 #ifdef RK
 #include "Runge_Kutta.h"
 #else
@@ -34,10 +35,10 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	// Find maximum safe timestep
 	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
-		[](Particle p1, Particle p2){return p1.f.norm()< p2.f.norm();});
+		[](Particle const& p1, Particle const& p2){return p1.f.norm()< p2.f.norm();});
 
 	vector<Particle>::iterator maxUi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
-		[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
+		[](Particle const& p1, Particle const& p2){return p1.v.norm()< p2.v.norm();});
 
 	real maxf = maxfi->f.squaredNorm();
 	real maxU = maxUi->v.norm();
@@ -52,28 +53,41 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	// 	exit(-1);
 	// }
 
-/***********************************************************************************/
-/***********************************************************************************/
-/***********************************************************************************/
-	svar.dt = 0.125*std::min(dtf,std::min(dtc,dtv));
-/***********************************************************************************/
-/***********************************************************************************/
-/***********************************************************************************/
+	/***********************************************************************************/
+	/***********************************************************************************/
+	/***********************************************************************************/
+	#ifdef RK
+		svar.dt = 0.125*std::min(dtf,std::min(dtc,dtv));
+	#else
+		svar.dt = 0.175*std::min(dtf,std::min(dtc,dtv));
+	#endif
+	/***********************************************************************************/
+	/***********************************************************************************/
+	/***********************************************************************************/
+
+	if(svar.dt < svar.dt_min)
+		svar.dt = svar.dt_min;
 
 	if (svar.dt > (svar.frame+1)*svar.framet-svar.t)
 	{
-		svar.dt = (svar.frame+1)*svar.framet-svar.t;
+		svar.dt = (svar.frame+1)*svar.framet-svar.t + 1e-10;
 	}
 
-// #ifdef DEBUG
+
+	// #ifdef DEBUG
 	cout << "time: " << svar.t << " dt: " << svar.dt << "  dtv: " << dtv <<  "  dtf: " << dtf << "  dtc: " << dtc << " Maxf: " << maxf << endl;
-// #endif
+	// #endif
+
+	TREE.NP1.index->buildIndex();
+	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+
+	dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
 
 	// Check if the particle has moved to a new cell
 	if (svar.Asource == 1 || svar.Asource == 2)
 	{
 		// cout << "Finding cells" << endl;
-		FindCell(svar,fvar.sr,TREE,cells,pnp1, pn);
+		FindCell(svar,fvar.sr,TREE,cells,dp,pn,pnp1);
 		if (svar.totPts != pnp1.size())
 		{	//Rebuild the neighbour list
 			// cout << "Updating neighbour list" << endl;
@@ -83,11 +97,26 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			svar.totPts = pnp1.size();
 			TREE.NP1.index->buildIndex();
 			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+			dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
 		}	
+	}
+	
+	Detect_Surface(svar,fvar,avar,svar.bndPts,svar.totPts,dp,outlist,cells,pnp1);
+
+	if(svar.ghost == 1)
+	{	/* Poisson points */
+		PoissonGhost(svar,fvar,avar,cells,TREE.NP1,outlist,pn,pnp1);
+		dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+	}
+	else if (svar.ghost == 2)
+	{	/* Lattice points */
+		LatticeGhost(svar,fvar,cells,TREE,outlist,pn,pnp1);
+		dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
 	}
 
 	size_t const start = svar.bndPts;
 	size_t end = svar.totPts;
+	size_t end_ng = svar.bndPts + svar.simPts;
 	// const size_t piston = svar.psnPts;
 
 	// cout << "Cells found" << endl;
@@ -123,47 +152,6 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		std::sort(cellsused.begin(),cellsused.end());
 	}
 
-
-	// Check if a particle is running low on neighbours, and add ficticious particles
-	std::vector<std::vector<Part>> air;
-	if(svar.ghost == 1)
-	{
-		air = vector<vector<Part>>(start,vector<Part>());
-		#pragma omp parallel shared(pnp1, outlist)
-		{
-			std::vector<std::vector<Part>> local;
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = start; ii < end; ++ii)
-			{
-				std::vector<Part> temp;
-				if(pnp1[ii].surf == 1 && pnp1[ii].b == PartState.FREE_ && outlist[ii].size() > 0.4*avar.nfull)
-				{
-					temp = PoissonSample::generatePoissonPoints(svar,fvar,avar,cells,ii,pnp1,outlist,dp.norm[ii],dp.avgV[ii]);
-				}
-				local.emplace_back(temp);
-			}
-
-			#pragma omp for schedule(static) ordered
-	    	for(int i=0; i<omp_get_num_threads(); i++)
-	    	{
-	    		#pragma omp ordered
-	    		air.insert(air.end(),local.begin(),local.end());
-	    	}
-		}
-	}
-	airP.clear();
-
-	// #pragma omp parallel for schedule(static) ordered
-	for(size_t ii = 0; ii < air.size(); ++ii)
-		for(size_t jj = 0; jj < air[ii].size(); ++jj)
-			airP.emplace_back(PartToParticle(air[ii][jj]));
-
-	#pragma omp parallel for shared(outlist) schedule(static)
-	for(size_t ii = start; ii < end; ++ii)
-	{
-		pnp1[ii].theta = outlist[ii].size(); 
-	}
-
 	vector<StateVecD> xih(end-start);
 	
 	#ifndef RK
@@ -179,57 +167,6 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	StateVecD dropVel = StateVecD::Zero();
 	StateVecD Force = StateVecD::Zero();
 
-	/****** UPDATE TREE ***********/
-	TREE.NP1.index->buildIndex();
-	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-	
-	// airP.clear();
-	vector<vector<Part>> neighb;
-	neighb.reserve(end);
-	
-
-	#pragma omp parallel shared(pnp1, outlist, air)
-	{
-		vector<vector<Part>> local;
-		if(svar.ghost == 1 )
-		{
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = 0; ii < end; ++ii)
-			{
-				vector<Part> temp;
-				temp.reserve(outlist[ii].size());
-				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj.first],jj.second)); 
-
-				if(air[ii].size()>0)
-				{
-					temp.insert(temp.end(), air[ii].begin(), air[ii].end());
-				}
-				local.push_back(temp);
-			}
-		}
-		else
-		{
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = 0; ii < end; ++ii)
-			{
-				vector<Part> temp;
-				temp.reserve(outlist[ii].size());
-				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj.first], jj.second));
-
-				local.push_back(temp);
-			}
-		}
-
-		#pragma omp for schedule(static) ordered
-    	for(int i=0; i<omp_get_num_threads(); i++)
-    	{
-    		#pragma omp ordered
-    		neighb.insert(neighb.end(),local.begin(),local.end());
-    	}
-	}
-
 	#pragma omp parallel for
 	for(size_t ii = start; ii < end; ++ii )
 	{
@@ -244,12 +181,12 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	if (errstate)
 		cout << "First step indicates instability. Caution..." << endl;
 	#else
-		Get_Resid(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
-			cells,cellsused,neighb,outlist,dp,pn,pnp1,airP,Force,dropVel);
+		Do_NB_Iter(TREE,svar,fvar,avar,start,end_ng,a,b,c,d,B,gam,
+			cells,cellsused,outlist,dp,pn,pnp1,Force,dropVel);
 	
 		uint nUnstab = 0;
 
-		void(Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
+		void(Check_Error(TREE,svar,fvar,start,end_ng,error1,error2,logbase,
 								cellsused,outlist,xih,pn,pnp1,k,nUnstab));
 		k++; //Update iteration count
 
@@ -261,95 +198,38 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	TREE.NP1.index->buildIndex();
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
-	dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
+	dSPH_PreStep(svar,fvar,end,pnp1,outlist,dp);
 
-	Detect_Surface(svar,fvar,avar,start,end,dp,outlist,cells,pnp1);
+	if (svar.Asource == 1 || svar.Asource == 2)
+	{
+		// cout << "Finding cells" << endl;
+		FindCell(svar,fvar.sr,TREE,cells,dp,pn,pnp1);
+		if (svar.totPts != pnp1.size())
+		{	//Rebuild the neighbour list
+			// cout << "Updating neighbour list" << endl;
+			// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
+			svar.delNum += svar.totPts-pnp1.size();
+			svar.simPts -= svar.totPts-pnp1.size();
+			svar.totPts = pnp1.size();
+			end = svar.totPts;
+			end_ng = svar.bndPts + svar.simPts;
+			TREE.NP1.index->buildIndex();
+			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+			dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+		}	
+	}
+
+	Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 
 	// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
 	#ifndef NOALE
-		Particle_Shift(svar,fvar,start,end,outlist,dp,pnp1);
+		if(svar.ghost > 0)
+			Particle_Shift_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
+		else
+			Particle_Shift_No_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
 	#endif
-
-	air.clear();
-	if(svar.ghost == 1)
-	{
-		air = vector<vector<Part>>(start,vector<Part>());
-		#pragma omp parallel shared(pnp1, outlist)
-		{
-			vector<vector<Part>> local;
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = start; ii < end; ++ii)
-			{
-				vector<Part> temp;
-				if(pnp1[ii].surf == 1 && pnp1[ii].b == PartState.FREE_ && outlist[ii].size() > 0.4*avar.nfull)
-				{
-					temp = PoissonSample::generatePoissonPoints
-						(svar,fvar,avar,cells,ii,pnp1,outlist,dp.norm[ii],dp.avgV[ii]);
-				}
-				local.emplace_back(temp);
-			}
-
-			#pragma omp for schedule(static) ordered
-	    	for(int i=0; i < omp_get_num_threads(); i++)
-	    	{
-	    		#pragma omp ordered
-	    		air.insert(air.end(),local.begin(),local.end());
-	    	}
-		}
-	}
-	airP.clear();
-
-	// #pragma omp parallel for schedule(static) ordered
-	for(size_t ii = 0; ii < air.size(); ++ii)
-		for(size_t jj = 0; jj < air[ii].size(); ++jj)
-			airP.emplace_back(PartToParticle(air[ii][jj]));
-
-	neighb.clear();
-	neighb.reserve(end);
 	
 	dropVel = StateVecD::Zero();
-
-	#pragma omp parallel shared(pnp1, outlist, air)
-	{
-		std::vector<std::vector<Part>> local;
-		if(svar.ghost == 1 )
-		{
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = 0; ii < end; ++ii)
-			{
-				std::vector<Part> temp;
-				temp.reserve(outlist[ii].size());
-				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj.first], jj.second));
-
-				if(air[ii].size()>0)
-				{
-					temp.insert(temp.end(), air[ii].begin(), air[ii].end());
-				}
-				local.push_back(temp);
-			}
-		}
-		else
-		{
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = 0; ii < end; ++ii)
-			{
-				std::vector<Part> temp;
-				temp.reserve(outlist[ii].size());
-				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj.first], jj.second));
-
-				local.push_back(temp);
-			}
-		}
-
-		#pragma omp for schedule(static) ordered
-    	for(int i=0; i<omp_get_num_threads(); i++)
-    	{
-    		#pragma omp ordered
-    		neighb.insert(neighb.end(),local.begin(),local.end());
-    	}
-	}
 
 	if(svar.Asource == 2)
 	{
@@ -448,10 +328,10 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		State st_2 = pnp1;
 
 		error1 = Runge_Kutta4(TREE,svar,fvar,avar,start,end,B,gam,cells,cellsused,neighb,outlist,
-					dp,logbase,pn,st_2,pnp1,airP,Force,dropVel);
+					dp,logbase,pn,st_2,pnp1,Force,dropVel);
 	#else 
-		Newmark_Beta(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,cells,cellsused,neighb,
-			outlist,dp,logbase,k,error1,error2,xih,pn,pnp1,airP,Force,dropVel);
+		Newmark_Beta(TREE,svar,fvar,avar,start,end_ng,a,b,c,d,B,gam,cells,cellsused,
+			outlist,dp,logbase,k,error1,error2,xih,pn,pnp1,Force,dropVel);
 	#endif	
 
 	/*Add time to global*/
@@ -460,53 +340,84 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	// cout << "Timestep Params: " << maxf << " " << fvar.Cs + svar.maxmu << " " << dtf << " " << dtcv << endl;
 	// cout << "New Time: " << svar.t << endl;
 
+	airP.clear();
+	for(size_t ii = end_ng; ii < end; ++ii)
+	{
+		airP.emplace_back(pnp1[ii]);
+	}
+
+	/* Remove the ghost particles */
+	// if(svar.ghost != 0)
+	// {
+	// 	pnp1.erase(pnp1.begin()+svar.bndPts+svar.simPts, pnp1.begin()+svar.bndPts+svar.simPts+svar.gstPts);
+	// 	pn.erase(pn.begin()+svar.bndPts+svar.simPts, pn.begin()+svar.bndPts+svar.simPts+svar.gstPts);
+	// 	dp.erase(svar.bndPts+svar.simPts, svar.bndPts+svar.simPts+svar.gstPts);
+	// 	outlist.erase(outlist.begin()+svar.bndPts+svar.simPts, outlist.begin()+svar.bndPts+svar.simPts+svar.gstPts);
+	// 	svar.totPts = svar.bndPts + svar.simPts;
+	// 	svar.gstPts = 0;
+	// }
+
 	/*Check if more particles need to be created*/
 	if(svar.Bcase == 2 || svar.Bcase == 3)
 	{
-		if(svar.Bclosed == 0)
+		uint nAdd = 0;
+		uint partID = end_ng;
+		/* Check if any buffer particles have become pipe particles */
+		for (size_t ii = 0; ii < svar.back.size(); ++ii)
 		{
-			uint nAdd = 0;
-			for (auto& back:svar.back)
-			{	
-				if(svar.totPts < svar.nmax)
-				{
-					/*Check that the starting area is clear first...*/
-					StateVecD vec = svar.Transp*(pnp1[back].xi-svar.Start);
-					real clear;
-					if(svar.Bcase == 2)
-						clear =  svar.dx-svar.Jet(1)*3;
-					else
-						clear = svar.dx-svar.Jet(1);
-					
-					if(vec[1] > clear)
-					{	/*Create a new particle behind the last one*/
-						StateVecD xi = vec;
-						xi(1) -= svar.dx;
-						xi = svar.Rotate*xi;
-						xi += svar.Start;
-
-						pn.emplace_back(Particle(xi,pnp1[back],svar.totPts,PartState.BACK_));
-						pnp1.emplace_back(Particle(xi,pnp1[back],svar.totPts,PartState.BACK_));
-
-						pnp1[back].b = PartState.START_;
-						/*Update the back vector*/
-						back = svar.totPts;
-						svar.simPts++;
-						svar.totPts++;
-						nAdd++;
-					}
-				}
-				else
-				{
-					svar.Bclosed = 1;
-				}	
-			}
+			size_t const& pID = svar.back[ii];
+			/*Check that the starting area is clear first...*/
+			StateVecD const vec = svar.Transp*(pnp1[pID].xi-svar.Start);
+			real clear;
+			if(svar.Bcase == 2)
+				clear =  -(3.0 * svar.Jet(1)-svar.dx) ;
+			else
+				clear = -(svar.Jet(1)-svar.dx);
 			
-			if(nAdd != 0)
+
+			if(vec[1] > clear)
 			{
-				TREE.NP1.index->buildIndex();
-				FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+				/* Particle has cleared the back zone */
+				pnp1[pID].b = PartState.PIPE_;
+
+				/* Update the back vector */
+				pnp1[svar.buffer[ii][0]].b = PartState.BACK_;
+				svar.back[ii] = svar.buffer[ii][0];
+
+				/* Update the buffer vector */
+				svar.buffer[ii][0] = svar.buffer[ii][1];
+				svar.buffer[ii][1] = svar.buffer[ii][2];
+				svar.buffer[ii][2] = svar.buffer[ii][3];
+
+				/* Create a new particle */
+				if(svar.totPts < svar.finPts)
+				{
+					StateVecD xi = svar.Transp*(pnp1[svar.buffer[ii][3]].xi-svar.Start);
+
+					xi[1] -= svar.dx;
+					xi = svar.Rotate*xi + svar.Start;
+
+					pnp1.insert(pnp1.begin() + partID,
+					Particle(xi,pnp1[svar.buffer[ii][3]],PartState.BUFFER_,partID));
+					svar.buffer[ii][3] = partID;
+					if(svar.Asource == 0)
+					{
+						pnp1[partID].cellRho = pnp1[pID].cellRho;
+					}
+
+					svar.simPts++;
+					svar.totPts++;
+					partID++;
+					nAdd++;
+				}
 			}
+
+		}
+
+		if(nAdd != 0)
+		{
+			TREE.NP1.index->buildIndex();
+			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 		}
 	}
 
@@ -646,120 +557,49 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 {
 	size_t const start = svar.bndPts;
 	size_t end = svar.totPts;
-	// cout << "Calculating first step" << endl;
+	size_t end_ng = svar.bndPts + svar.simPts;
 
 	#if DEBUG 
 		dbout << "Starting first step. ";
 		dbout << "  Start index: " << start << "  End index: " << end << endl;
 	#endif
 
+	dSPH_PreStep(svar,fvar,end,pnp1,outlist,dp);
 	if (svar.Asource == 1 || svar.Asource == 2)
 	{
-		FindCell(svar,fvar.sr,TREE,cells,pnp1,pn);
+		FindCell(svar,fvar.sr,TREE,cells,dp,pnp1,pn);
 		if (svar.totPts != pnp1.size())
 		{	//Rebuild the neighbour list
 			// cout << "Updating neighbour list" << endl;
 			// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
 			svar.delNum += svar.totPts-pnp1.size();
 			svar.totPts = pnp1.size();
+			svar.simPts = svar.totPts-svar.bndPts;
+			end = svar.totPts;
+			end_ng = end;
 			TREE.NP1.index->buildIndex();
 			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+			dSPH_PreStep(svar,fvar,end,pnp1,outlist,dp);
+			
 		}
 	}
 
-	// cout << "Retrieved the cells" << endl;
+	Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 
-	std::vector<std::vector<Part>> neighb;
-	neighb.reserve(end);
-	for(size_t ii = 0; ii < start; ++ii)
-		neighb.emplace_back();
-
-	/****** UPDATE TREE ***********/
-	TREE.NP1.index->buildIndex();
-	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-
-	dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
-	
-	Detect_Surface(svar,fvar,avar,start,end,dp,outlist,cells,pnp1);
-	
-	vector<vector<Part>> air;
 	if(svar.ghost == 1)
-	{
-		air = vector<vector<Part>>(start,vector<Part>());
-		#pragma omp parallel shared(pnp1, outlist)
-		{
-			std::vector<std::vector<Part>> local;
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = start; ii < end; ++ii)
-			{
-				std::vector<Part> temp;
-				if(pnp1[ii].surf == 1 && pnp1[ii].b == PartState.FREE_ && outlist[ii].size() > 0.4*avar.nfull)
-				{
-					temp = PoissonSample::generatePoissonPoints(svar,fvar,avar,cells,ii,pnp1,outlist,dp.norm[ii],dp.avgV[ii]);
-				}
-				local.emplace_back(temp);
-			}
-
-			#pragma omp for schedule(static) ordered
-	    	for(int i=0; i<omp_get_num_threads(); i++)
-	    	{
-	    		#pragma omp ordered
-	    		air.insert(air.end(),local.begin(),local.end());
-	    	}
-		}
+	{	/* Poisson points */
+		PoissonGhost(svar,fvar,avar,cells,TREE.NP1,outlist,pn,pnp1);
+		dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+		// Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 	}
-	airP.clear();
-
-	// #pragma omp parallel for schedule(static) ordered
-	for(size_t ii = 0; ii < air.size(); ++ii)
-		for(size_t jj = 0; jj < air[ii].size(); ++jj)
-			airP.emplace_back(PartToParticle(air[ii][jj]));
-
-	neighb.clear();
-	neighb.reserve(end);
-	
-
-	#pragma omp parallel shared(pnp1, outlist, air)
-	{
-		std::vector<std::vector<Part>> local;
-		if(svar.ghost == 1 )
-		{
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = 0; ii < end; ++ii)
-			{
-				std::vector<Part> temp;
-				temp.reserve(outlist[ii].size());
-				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj.first], jj.second));
-
-				if(air[ii].size()>0)
-				{
-					temp.insert(temp.end(), air[ii].begin(), air[ii].end());
-				}
-				local.push_back(temp);
-			}
-		}
-		else
-		{
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = 0; ii < end; ++ii)
-			{
-				std::vector<Part> temp;
-				temp.reserve(outlist[ii].size());
-				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj.first], jj.second));
-
-				local.push_back(temp);
-			}
-		}
-
-		#pragma omp for schedule(static) ordered
-    	for(int i=0; i<omp_get_num_threads(); i++)
-    	{
-    		#pragma omp ordered
-    		neighb.insert(neighb.end(),local.begin(),local.end());
-    	}
+	else if (svar.ghost == 2)
+	{	/* Lattice points */
+		LatticeGhost(svar,fvar,cells,TREE,outlist,pn,pnp1);
+		dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+		// Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 	}
+
+	end = svar.totPts;
 
 	#ifndef RK
 	uint k = 0;	
@@ -845,12 +685,13 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 		if(errstate)
 			cout << "First step indicates instability. Caution..." << endl;
 	#else
-		Get_Resid(TREE, svar, fvar, avar, start, end, a, b, c, d, B, gam,
-				cells, cellsused, neighb, outlist, dp, pn, pnp1, airP, Force, dropVel);
+
+		Do_NB_Iter(TREE, svar, fvar, avar, start, end_ng, a, b, c, d, B, gam,
+				cells, cellsused, outlist, dp, pn, pnp1, Force, dropVel);
 
 		uint nUnstab = 0;
 
-		void(Check_Error(TREE, svar, fvar, start, end, error1, error2, logbase,
+		void(Check_Error(TREE, svar, fvar, start, end_ng, error1, error2, logbase,
 						cellsused, outlist, xih, pn, pnp1, k, nUnstab));
 		k++; //Update iteration count
 
@@ -885,100 +726,39 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	TREE.NP1.index->buildIndex();
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
-	dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
+	dSPH_PreStep(svar,fvar,end,pnp1,outlist,dp);
 
-	Detect_Surface(svar,fvar,avar,start,end,dp,outlist,cells,pnp1);
+	if (svar.Asource == 1 || svar.Asource == 2)
+	{
+		FindCell(svar,fvar.sr,TREE,cells,dp,pnp1,pn);
+		if (svar.totPts != pnp1.size())
+		{	//Rebuild the neighbour list
+			// cout << "Updating neighbour list" << endl;
+			// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
+			svar.delNum += svar.totPts-pnp1.size();
+			svar.totPts = pnp1.size();
+			svar.simPts = svar.totPts-svar.bndPts;
+			end = svar.totPts;
+			end_ng = end;
+			TREE.NP1.index->buildIndex();
+			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+			dSPH_PreStep(svar,fvar,end,pnp1,outlist,dp);
+			
+		}
+	}
+
+	Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 	
-	air.clear();
-	if(svar.ghost == 1)
-	{
-		air = vector<vector<Part>>(start,vector<Part>());
-		#pragma omp parallel shared(pnp1, outlist)
-		{
-			std::vector<std::vector<Part>> local;
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = start; ii < end; ++ii)
-			{
-				std::vector<Part> temp;
-				if(pnp1[ii].surf == 1 && pnp1[ii].b == PartState.FREE_ && outlist[ii].size() > 0.4*avar.nfull)
-				{
-					temp = PoissonSample::generatePoissonPoints(svar,fvar,avar,cells,ii,pnp1,outlist,dp.norm[ii],dp.avgV[ii]);
-				}
-				local.emplace_back(temp);
-			}
-
-			#pragma omp for schedule(static) ordered
-	    	for(int i=0; i<omp_get_num_threads(); i++)
-	    	{
-	    		#pragma omp ordered
-	    		air.insert(air.end(),local.begin(),local.end());
-	    	}
-		}
-	}
-	airP.clear();
-
-	// #pragma omp parallel for schedule(static) ordered
-	for(size_t ii = 0; ii < air.size(); ++ii)
-		for(size_t jj = 0; jj < air[ii].size(); ++jj)
-			airP.emplace_back(PartToParticle(air[ii][jj]));
-
-	neighb.clear();
-	neighb.reserve(end);
-
-	#pragma omp parallel shared(pnp1, outlist, air)
-	{
-		std::vector<std::vector<Part>> local;
-		if(svar.ghost == 1 )
-		{
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = 0; ii < end; ++ii)
-			{
-				std::vector<Part> temp;
-				temp.reserve(outlist[ii].size());
-				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj.first], jj.second));
-
-				if(air[ii].size()>0)
-				{
-					temp.insert(temp.end(), air[ii].begin(), air[ii].end());
-				}
-				local.push_back(temp);
-			}
-		}
-		else
-		{
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = 0; ii < end; ++ii)
-			{
-				std::vector<Part> temp;
-				temp.reserve(outlist[ii].size());
-				for(auto jj:outlist[ii])
-					temp.push_back(Part(pnp1[jj.first], jj.second));
-
-				local.push_back(temp);
-			}
-		}
-
-		#pragma omp for schedule(static) ordered
-    	for(int i=0; i<omp_get_num_threads(); i++)
-    	{
-    		#pragma omp ordered
-    		neighb.insert(neighb.end(),local.begin(),local.end());
-    	}
-	}
-
-
-
 	/*Do time integration*/
 	#ifdef RK
 		State st_2 = pnp1;
 
 		error1 = Runge_Kutta4(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused, neighb, outlist,
-							  dp, logbase, pn, st_2, pnp1, airP, Force, dropVel);
-#else
+							  dp, logbase, pn, st_2, pnp1, Force, dropVel);
+	#else
 
-		Newmark_Beta(TREE, svar, fvar, avar, start, end, a, b, c, d, B, gam, cells, cellsused, neighb,
-					outlist, dp, logbase, k, error1, error2, xih, pn, pnp1, airP, Force, dropVel);
+		Newmark_Beta(TREE, svar, fvar, avar, start, end_ng, a, b, c, d, B, gam, cells, cellsused,
+				outlist, dp, logbase, k, error1, error2, xih, pn, pnp1, Force, dropVel);
 	#endif
 
 	/*Reset positions*/
@@ -992,6 +772,24 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	// 	cout << "L Mag: " << dp.L[ii].determinant() << "  gradRho: " << dp.gradRho[ii].norm() << "  norm: " << dp.norm[ii].norm() 
 	// 	<< "  avgV: " << dp.avgV[ii].norm() << "  lam: " << dp.lam[ii] << "  kernsum: " << dp.kernsum[ii] << endl;
 	// }
+
+	airP.clear();
+	for(size_t ii = end_ng; ii < end; ++ii)
+	{
+		airP.emplace_back(pnp1[ii]);
+	}
+
+	/* Remove the ghost particles */
+	if(svar.ghost != 0)
+	{
+		pnp1.erase(pnp1.begin()+svar.bndPts+svar.simPts, pnp1.begin()+svar.bndPts+svar.simPts+svar.gstPts);
+		pn.erase(pn.begin()+svar.bndPts+svar.simPts, pn.begin()+svar.bndPts+svar.simPts+svar.gstPts);
+		dp.erase(svar.bndPts+svar.simPts, svar.bndPts+svar.simPts+svar.gstPts);
+		outlist.erase(outlist.begin()+svar.bndPts+svar.simPts, outlist.begin()+svar.bndPts+svar.simPts+svar.gstPts);
+		svar.totPts = svar.bndPts + svar.simPts;
+		svar.gstPts = 0;
+
+	}
 
 #if DEBUG 	
 		dbout << "Exiting first step. Error: " << error1 << endl;

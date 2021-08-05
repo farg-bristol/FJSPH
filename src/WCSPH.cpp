@@ -12,6 +12,7 @@
 
 #include "Var.h"
 #include "IO.h"
+#include "FOAMIO.h"
 #include "Neighbours.h"
 #include "Kernel.h"
 #include "Init.h"
@@ -56,10 +57,24 @@ int main(int argc, char *argv[])
 	if(svar.Asource == 1 || svar.Asource == 2)
 	{
 		#if SIMDIM == 3
-		Read_TAUMESH_FACE(svar,cells,fvar,avar);
-		// Read_TAUMESH(svar,cells,fvar);
+			if(svar.CDForFOAM == 0)
+			{
+				Read_TAUMESH_FACE(svar,cells,fvar,avar);
+			}
+			else
+			{
+				FOAM::Read_FOAM(svar,cells);
+			}
 		#else
-		Read_TAUMESH_EDGE(svar,cells,fvar,avar);
+			if (svar.CDForFOAM == 0)
+			{
+				Read_TAUMESH_EDGE(svar,cells,fvar,avar);
+			}
+			else
+			{
+				cout << "OpenFOAM mesh input is currently unsupported in two-dimensions" << endl;
+				exit(-1);
+			}
 		#endif
 	}
 	else if (svar.Asource == 4)
@@ -87,12 +102,11 @@ int main(int argc, char *argv[])
 
 	if(svar.Bcase == 2 || svar.Bcase == 3)
 	{
-		cout << "Final particle count:  " << svar.nmax << endl;
+		cout << "Final particle count:  " << svar.finPts << endl;
 	}
 
-	svar.finPts = svar.nmax;
-	pn.reserve(svar.nmax);
-  	pnp1.reserve(svar.nmax);
+	pn.reserve(svar.finPts);
+  	pnp1.reserve(svar.finPts);
 
 	// if (svar.Bcase == 6){
 	// 	Write_Mesh_Data(svar,cells);
@@ -108,8 +122,16 @@ int main(int argc, char *argv[])
   		InitSPH(svar,fvar,avar,pn,pnp1);
 
   		// Redefine the mass and spacing to make sure the required mass is conserved
-  		if(svar.Bcase == 4 || svar.Bcase == 3)
-	  		Set_Mass(svar,fvar,avar,pn,pnp1);
+  		// if(svar.Bcase == 4 || svar.Bcase == 3)
+	  	// 	Set_Mass(svar,fvar,avar,pn,pnp1);
+		if(svar.Asource == 0)
+		{
+			for(size_t ii = 0; ii < pnp1.size(); ++ii)
+			{
+				pn[ii].cellRho = avar.rhog;
+				pnp1[ii].cellRho = avar.rhog;
+			}
+		}
   	}
 
 	// Define svar.clear to state a particle is clear of the starting area
@@ -121,8 +143,7 @@ int main(int argc, char *argv[])
 	// Check if cells have been initialsed before making a tree off it
 	if(cells.cCentre.size() == 0)
 		cells.cCentre.emplace_back(StateVecD::Zero());
-	if (cells.bVerts.size() == 0)
-		cells.bVerts.emplace_back(StateVecD::Zero());
+
 	if(cells.fNum.size() == 0)
 	{
 		cells.fNum.emplace_back();
@@ -147,7 +168,6 @@ int main(int argc, char *argv[])
 	TREE.NP1.index->buildIndex();
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
-	
 	// real aMom = 0.0;
 	// for(size_t ii = 0; ii < cells.size(); ii++)
 	// {
@@ -157,6 +177,8 @@ int main(int argc, char *argv[])
 
 	// svar.aMom = aMom;
 	// svar.tMom = aMom;
+	
+	// Init_Binary_PLT(svar,"Ghost.szplt","Ghost Particles",svar.ghostFile);
 
 	///*** Perform an iteration to populate the vectors *****/
 	if(svar.restart == 0)
@@ -165,15 +187,48 @@ int main(int argc, char *argv[])
 	}
 	else
 	{
-		size_t const start = svar.bndPts;
-		size_t const end = svar.totPts;
-		dSPH_PreStep(svar,fvar,start,end,pnp1,outlist,dp);
+		if(svar.ghost == 1)
+		{	/* Poisson points */
+			PoissonGhost(svar,fvar,avar,cells,TREE.NP1,outlist,pn,pnp1);
+		}
+		else if (svar.ghost == 2)
+		{	/* Lattice points */
+			LatticeGhost(svar,fvar,cells,TREE,outlist,pn,pnp1);
+		}
 
-		Detect_Surface(svar,fvar,avar,start,end,dp,outlist,cells,pnp1);
+		size_t const start = svar.bndPts;
+		size_t end = svar.totPts;
+		size_t end_ng = svar.bndPts + svar.simPts;
+
+		dSPH_PreStep(svar,fvar,end,pnp1,outlist,dp);
+
+		if (svar.Asource == 1 || svar.Asource == 2)
+		{
+			// cout << "Finding cells" << endl;
+			FindCell(svar,fvar.sr,TREE,cells,dp,pn,pnp1);
+			if (svar.totPts != pnp1.size())
+			{	//Rebuild the neighbour list
+				// cout << "Updating neighbour list" << endl;
+				// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
+				svar.delNum += svar.totPts-pnp1.size();
+				svar.simPts -= svar.totPts-pnp1.size();
+				svar.totPts = pnp1.size();
+				end = svar.totPts;
+				end_ng = svar.bndPts + svar.simPts;
+				TREE.NP1.index->buildIndex();
+				FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+				dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+			}	
+		}
+
+		Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 
 		// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
 		#ifndef NOALE
-			Particle_Shift(svar,fvar,start,end,outlist,dp,pnp1);
+			if(svar.ghost > 0)
+				Particle_Shift_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
+			else
+				Particle_Shift_No_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
 		#endif
 	}
 
@@ -190,12 +245,6 @@ int main(int argc, char *argv[])
 	f3 << std::scientific << std::setw(10);
 
 	// pertLog << std::scientific << std::setprecision(8);
-	uint ghost_strand = 0;
-	if(svar.boutform == 0)
-		ghost_strand = 2;
-	else
-		ghost_strand = 3;
-
 	Write_First_Step(f1,fb,fg,svar,pnp1,airP);
 	
 	if(svar.restart == 0)
@@ -205,7 +254,7 @@ int main(int argc, char *argv[])
 			cout << "Checking Pipe..." << endl;
 			real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
 			real r = 0.5*holeD;
-#if SIMDIM == 3
+			#if SIMDIM == 3
 			real stepb = (svar.Pstep*svar.Bstep);
 	    	real dtheta = atan((stepb)/(r));
 			for(real theta = 0; theta < 2*M_PI; theta += dtheta)
@@ -222,7 +271,7 @@ int main(int argc, char *argv[])
 			    	exit(-1);
 			    }
 	    	}
-#else
+			#else
 	    	for(real x = -r; x <= r; x+=svar.Pstep)
 	    	{
 	    		StateVecD xi(x,0.0);
@@ -237,14 +286,15 @@ int main(int argc, char *argv[])
 			    	exit(-1);
 			    }
 	    	}
-#endif
+			#endif
 		}
 
-#if SIMDIM == 3
+		#if SIMDIM == 3
 			if(svar.Asource == 3)
 				svar.vortex.write_VLM_Panels(svar.outfolder);		
-#endif
+		#endif
 	}
+
 	/*Timing calculation + error sum output*/
 	t2 = high_resolution_clock::now();
 	duration = duration_cast<microseconds>(t2-t1).count()/1e6;
@@ -277,18 +327,18 @@ int main(int argc, char *argv[])
 
 	///************************* MAIN LOOP ********************/
 	
-#ifdef DEBUG
-	const real a = 1 - svar.gamma;
-	const real b = svar.gamma;
-	const real c = 0.5*(1-2*svar.beta);
-	const real d = svar.beta;
-	const real B = fvar.B;
-	const real gam = fvar.gam;
-	dbout << "Newmark Beta integration parameters" << endl;
-	dbout << "a: " << a << "  b: " << b << endl;
-	dbout << "c: " << c << "  d: " << d << endl;
-	dbout << "B: " << B << "  gam: " << gam << endl << endl; 
-#endif
+	#ifdef DEBUG
+		const real a = 1 - svar.gamma;
+		const real b = svar.gamma;
+		const real c = 0.5*(1-2*svar.beta);
+		const real d = svar.beta;
+		const real B = fvar.B;
+		const real gam = fvar.gam;
+		dbout << "Newmark Beta integration parameters" << endl;
+		dbout << "a: " << a << "  b: " << b << endl;
+		dbout << "c: " << c << "  d: " << d << endl;
+		dbout << "B: " << B << "  gam: " << gam << endl << endl; 
+	#endif
 
 	for (uint frame = 0; frame < svar.Nframe; ++frame)
 	{
@@ -335,7 +385,7 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		Write_Timestep(f1,fb,fg,ghost_strand,svar,pnp1,airP);
+		Write_Timestep(f1,fb,fg,svar,pnp1,airP);
 	}
 
 	/*Wrap up simulation files and close them*/

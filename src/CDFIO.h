@@ -5,7 +5,7 @@
 #include "IOFunctions.h"
 #include "Geometry.h"
 
-#include <netcdf.h>
+#include <netcdf>
 // using namespace netCDF;
 // using namespace netCDF::exceptions;
 #define NC_ERR 2
@@ -646,27 +646,15 @@ void Read_SOLUTION(string const &solIn, FLUID const &fvar, AERO const &avar,
 
 	/*Get other scalar data that may or may not exist*/
 	vector<real> press = Get_Scalar_Property_real(solID, "pressure", solPts);
-	if (press.size() == 0)
-	{
-		/*Pressure data doesn't exist, so go to cp*/
-		vector<real> cp = Get_Scalar_Property_real(solID, "cp", solPts);
+	vector<real> dens = Get_Scalar_Property_real(solID, "density",solPts);
 
-		/*Then convert cp to pressure. can get global attributes from sol file.. Maybe...*/
-		press = CpToPressure(cp, avar);
-	}
-	else
-	{
-#pragma omp parallel for
-		for (uint ii = 0; ii < press.size(); ++ii)
-			press[ii] -= avar.pRef;
-	}
+	// vector<real> dens(solPts);
 
-	vector<real> dens(solPts);
-
-#pragma omp parallel for
+	#pragma omp parallel for
 	for (uint ii = 0; ii < press.size(); ++ii)
 	{
-		dens[ii] = fvar.rho0 * pow((press[ii] / fvar.B + 1), 1 / fvar.gam);
+		press[ii] -= avar.pRef; /* Want value to be gauge pressure */
+		// dens[ii] = fvar.rho0 * pow((press[ii] / fvar.B + 1), 1 / fvar.gam);
 	}
 
 	if (press.size() == 0)
@@ -679,6 +667,9 @@ void Read_SOLUTION(string const &solIn, FLUID const &fvar, AERO const &avar,
 	{ /*Get the used vertices*/
 		vector<real> newP;
 		vector<real> newR;
+		newP.reserve(usedVerts.size());
+		newR.reserve(usedVerts.size());
+
 		for (auto index : usedVerts)
 		{
 			newP.emplace_back(press[index]);
@@ -705,7 +696,7 @@ void Read_SOLUTION(string const &solIn, FLUID const &fvar, AERO const &avar,
 	Average_Point_to_Cell(vel, cells.cVel, cells.elems);
 	// Average_Point_to_Cell(dens,cells.SPHRho,cells.elems);
 	Average_Point_to_Cell(press, cells.cP, cells.elems);
-	Average_Point_to_Cell(realDens, cells.cRho, cells.elems);
+	Average_Point_to_Cell(dens, cells.cRho, cells.elems);
 
 	/*Check the data*/
 	// for(auto value:dens)
@@ -725,26 +716,26 @@ void Read_SOLUTION(string const &solIn, FLUID const &fvar, AERO const &avar,
 
 void Place_Edges(int &fin, size_t const &nElem, size_t const &nPnts, size_t const &nEdge, MESH &cells)
 {
-#ifdef DEBUG
-	dbout << "Reading element left/right and placing faces" << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Reading element left/right and placing faces" << endl;
+	#endif
 
 	vector<int> left = Get_Scalar_Property_int(fin,"left_element_of_edges",nEdge);
 	vector<int> right = Get_Scalar_Property_int(fin,"right_element_of_edges",nEdge);
 
 	vector<std::pair<int, int>> leftright(nEdge);
 
-#pragma omp parallel shared(leftright)
+	#pragma omp parallel shared(leftright)
 	{
 		/*Create local of */
 
-#pragma omp for schedule(static) nowait
+		#pragma omp for schedule(static) nowait
 		for (size_t ii = 0; ii < nEdge; ++ii)
 		{
 			int lindex = left[ii];
 			int rindex = right[ii];
 			leftright[ii] = std::pair<int, int>(lindex, rindex);
-#pragma omp critical
+			#pragma omp critical
 			{
 				cells.cFaces[lindex].emplace_back(ii);
 				if (rindex >= 0)
@@ -755,16 +746,16 @@ void Place_Edges(int &fin, size_t const &nElem, size_t const &nPnts, size_t cons
 
 	cells.leftright = leftright;
 
-#ifdef DEBUG
-	dbout << "End of placing edges in elements." << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "End of placing edges in elements." << endl;
+	#endif
 
 	/*Now go through the faces and see which vertices are unique, to get element data*/
 	cout << "Building elements..." << endl;
-#pragma omp parallel
+	#pragma omp parallel
 	{
-// vector<vector<uint>> local;
-#pragma omp for schedule(static) nowait
+		// vector<vector<uint>> local;
+		#pragma omp for schedule(static) nowait
 		for (uint ii = 0; ii < cells.cFaces.size(); ++ii)
 		{
 			for (auto const &index : cells.cFaces[ii])
@@ -774,7 +765,7 @@ void Place_Edges(int &fin, size_t const &nElem, size_t const &nPnts, size_t cons
 				{
 					if (std::find(cells.elems[ii].begin(), cells.elems[ii].end(), vert) == cells.elems[ii].end())
 					{ /*Vertex doesn't exist in the elems vector yet.*/
-#pragma omp critical
+						#pragma omp critical
 						{
 							cells.elems[ii].emplace_back(vert);
 						}
@@ -783,22 +774,22 @@ void Place_Edges(int &fin, size_t const &nElem, size_t const &nPnts, size_t cons
 			}
 		}
 
-/*Find cell centres*/
-#pragma omp single
+		/*Find cell centres*/
+		#pragma omp single
 		{
 			cout << "Finding cell centres..." << endl;
 		}
 
 		Average_Point_to_Cell(cells.verts, cells.cCentre, cells.elems);
 
-/*Find cell centres*/
-#pragma omp single
+		/*Find cell centres*/
+		#pragma omp single
 		{
 			cout << "Finding cell volumes..." << endl;
 		}
 
-// Find cell volumes
-#pragma omp for schedule(static) nowait
+		// Find cell volumes
+		#pragma omp for schedule(static) nowait
 		for (size_t ii = 0; ii < cells.elems.size(); ++ii)
 		{
 			cells.cVol[ii] = Cell_Volume(cells.verts, cells.faces, cells.elems[ii], cells.cFaces[ii], cells.cCentre[ii]);
@@ -806,10 +797,10 @@ void Place_Edges(int &fin, size_t const &nElem, size_t const &nPnts, size_t cons
 	}
 	cout << "Elements built." << endl;
 
-#ifdef DEBUG
-	dbout << "All elements defined." << endl
-		  << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "All elements defined." << endl
+			<< endl;
+	#endif
 }
 
 void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &avar)
@@ -819,11 +810,11 @@ void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 	meshIn.append(svar.meshfile);
 	solIn.append(svar.solfile);
 
-#ifdef DEBUG
-	dbout << "Attempting read of NetCDF file." << endl;
-	dbout << "Mesh file: " << meshIn << endl;
-	dbout << "Solution file: " << solIn << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Attempting read of NetCDF file." << endl;
+		dbout << "Mesh file: " << meshIn << endl;
+		dbout << "Solution file: " << solIn << endl;
+	#endif
 
 	/*Read the mesh data*/
 	int retval;
@@ -896,14 +887,15 @@ void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 		exit(-1);
 	}
 
-#ifdef DEBUG
-	dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << endl;
+	#endif
 
 	cout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << endl;
 
 	cells.numPoint = nPnts;
 	cells.numElem = nElem;
+	cells.numFace = nEdge;
 
 	cells.elems = vector<vector<size_t>>(nElem);
 	cells.cFaces = vector<vector<size_t>>(nElem);
@@ -945,11 +937,11 @@ void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 	/*Get face left and right, and put the faces in the elements*/
 	Place_Edges(meshID, nElem, nPnts, nEdge, cells);
 
-#ifdef DEBUG
-	dbout << "End of interaction with mesh file and ingested data." << endl
-		  << endl;
-	dbout << "Opening solultion file." << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "End of interaction with mesh file and ingested data." << endl
+			<< endl;
+		dbout << "Opening solultion file." << endl;
+	#endif
 
 	Read_SOLUTION(solIn, fvar, avar, ignored, cells, uVerts);
 
@@ -967,15 +959,14 @@ void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 
 void Place_Faces(int &fin, size_t const &nFace, MESH &cells)
 {
-#ifdef DEBUG
-	dbout << "Reading element left/right and placing faces" << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Reading element left/right and placing faces" << endl;
+	#endif
 
 	vector<int> left = Get_Scalar_Property_int(fin,"left_element_of_faces",nFace);
 	vector<int> right = Get_Scalar_Property_int(fin,"right_element_of_faces",nFace);
 
 	vector<std::pair<int, int>> leftright(nFace);
-	vector<size_t> bIndex;
 	#pragma omp parallel shared(leftright)
 	{
 		#pragma omp for schedule(static) nowait
@@ -987,15 +978,7 @@ void Place_Faces(int &fin, size_t const &nFace, MESH &cells)
 			#pragma omp critical
 			{
 				cells.cFaces[lindex].emplace_back(ii);
-				if (rindex >= 0)
-					cells.cFaces[rindex].emplace_back(ii);
-				else if (rindex == -1)
-				{ /*Create a list of vertices on the boundary*/
-					for (auto const &vindex : cells.faces[ii])
-					{
-						bIndex.emplace_back(vindex);
-					}
-				}
+				cells.cFaces[rindex].emplace_back(ii);
 			}
 		}
 	}
@@ -1005,25 +988,12 @@ void Place_Faces(int &fin, size_t const &nFace, MESH &cells)
 		dbout << "Building boundary indexes." << endl;
 	#endif
 
-	/*Sort and erase duplicates*/
-	std::sort(bIndex.begin(), bIndex.end());
-	bIndex.erase(std::unique(bIndex.begin(), bIndex.end()), bIndex.end());
-
-	vector<StateVecD> bVerts(bIndex.size());
-	cells.bIndex = bIndex;
 	cells.leftright = leftright;
 
 	/*Now go through the faces and see which vertices are unique, to get element data*/
 	cout << "Building elements..." << endl;
 	#pragma omp parallel
 	{
-
-		#pragma omp for schedule(static) nowait
-		for (size_t ii = 0; ii < bIndex.size(); ++ii)
-		{
-			bVerts[ii] = cells.verts[bIndex[ii]];
-		}
-
 		// Create list of unique vertex indices for each element
 		#pragma omp for schedule(static) nowait
 		for (size_t ii = 0; ii < cells.cFaces.size(); ++ii)
@@ -1066,7 +1036,6 @@ void Place_Faces(int &fin, size_t const &nFace, MESH &cells)
 		}
 	}
 
-	cells.bVerts = bVerts;
 	cout << "Elements built." << endl;
 
 	#ifdef DEBUG
@@ -1165,6 +1134,7 @@ void Read_TAUMESH_FACE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 
 	cells.numPoint = nPnts;
 	cells.numElem = nElem;
+	cells.numFace = nFace;
 
 	cells.elems = vector<vector<size_t>>(nElem);
 	cells.cFaces = vector<vector<size_t>>(nElem);
@@ -1208,174 +1178,5 @@ void Read_TAUMESH_FACE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 		cells.cMass[ii] = cells.cRho[ii] * cells.cVol[ii];
 	}
 }
-
-/*****************************************************************************/
-/****************** WRITING NETCDF DATA FUNCTIONS ****************************/
-/*****************************************************************************/
-
-// void Write_Group(NcGroup& zone, State const& pnp1,
-// 	uint const start, uint const end, uint const outform)
-// {
-// 	/*Write the Particles group*/
-
-// 	uint const size = end - start;
-// 	NcDim posDim = zone.addDim("Point",size);
-
-// 	NcVar xVar = zone.addVar("x",ncFloat,posDim);
-// 	NcVar yVar = zone.addVar("y",ncFloat,posDim);
-// 	NcVar zVar = zone.addVar("z",ncFloat,posDim);
-// 	NcVar idVar = zone.addVar("id",ncInt,posDim);
-
-// 	// xVar.putAtt("units","m");
-// 	// yVar.putAtt("units","m");
-// 	// zVar.putAtt("units","m");
-// 	real* x = new real[size];
-// 	real* y = new real[size];
-// 	real* z = new real[size];
-// 	int* id = new int[size];
-
-// 	for(uint i = start; i < end; ++i)
-// 	{
-// 		x[i-start] = pnp1[i].xi[0];
-// 		y[i-start] = pnp1[i].xi[1];
-// 		#if SIMDIM == 3
-// 			z[i-start] = pnp1[i].xi[2];
-// 		#else
-// 			z[i-start] = 0.0;
-// 		#endif
-
-// 		id[i-start] = pnp1[i].partID;
-// 	}
-
-// 	xVar.putVar(x);
-// 	yVar.putVar(y);
-// 	zVar.putVar(z);
-
-// 	idVar.putVar(id);
-
-// 	if(outform == 1)
-// 	{	/*Write fluid data*/
-// 		NcVar press = zone.addVar("Pressure", ncFloat,posDim);
-// 		NcVar dens = zone.addVar("Density",ncFloat,posDim);
-// 		NcVar acc = zone.addVar("Acceleration",ncFloat,posDim);
-// 		NcVar vel = zone.addVar("Velocity",ncFloat,posDim);
-
-// 		// press.putAtt("units","Pa");
-// 		// dens.putAtt("units","kg/m^3");
-// 		// acc.putAtt("units","m/s^2");
-// 		// vel.putAtt("units","m/s");
-
-// 		real* p = new real[size];
-// 		real* rho = new real[size];
-// 		real* f = new real[size];
-// 		real* v = new real[size];
-
-// 		for(uint i = start; i < end; ++i)
-// 		{
-// 			p[i-start] = pnp1[i].p;
-// 			rho[i-start] = pnp1[i].rho;
-// 			f[i-start] = pnp1[i].f.norm();
-// 			v[i-start] = pnp1[i].v.norm();
-// 		}
-
-// 		press.putVar(p);
-// 		dens.putVar(rho);
-// 		acc.putVar(f);
-// 		vel.putVar(v);
-// 	}
-
-// 	if(outform == 2)
-// 	{	/*Write research data*/
-// 		NcVar aero = zone.addVar("Aerodynamic Force", ncFloat,posDim);
-// 		NcVar surf = zone.addVar("Surface Tension", ncFloat,posDim);
-// 		NcVar Sx = zone.addVar("S_x", ncFloat,posDim);
-// 		NcVar Sy = zone.addVar("S_y", ncFloat,posDim);
-// 		NcVar B = zone.addVar("Boundary",ncInt,posDim);
-// 		NcVar theta = zone.addVar("Theta",ncInt,posDim);
-
-// 		// aero.putAtt("units","N");
-// 		// surf.putAtt("units","N");
-// 		// Sx.putAtt("units","N");
-// 		// Sy.putAtt("units","N");
-
-// 		real* af = new real[size]{0.0};
-// 		real* sf = new real[size]{0.0};
-// 		real* sx = new real[size]{0.0};
-// 		real* sy = new real[size]{0.0};
-// 		int* b = new int[size]{0};
-// 		int* t = new int[size]{0};
-
-// 		for(uint i = start; i < end; ++i)
-// 		{
-// 			af[i-start] = pnp1[i].Af.norm();
-// 			sf[i-start] = pnp1[i].Sf.norm();
-// 			sx[i-start] = pnp1[i].Sf(0);
-// 			sy[i-start] = pnp1[i].Sf(1);
-// 			b[i-start] = pnp1[i].b;
-// 			t[i-start] = pnp1[i].theta;
-// 		}
-
-// 		aero.putVar(af);
-// 		surf.putVar(sf);
-// 		Sx.putVar(sx);
-// 		Sy.putVar(sy);
-// 		B.putVar(b);
-// 		theta.putVar(t);
-
-// 		if (SIMDIM == 3)
-// 		{
-// 			NcVar Sz = zone.addVar("S_z",ncFloat,posDim);
-// 			// Sz.putAtt("units","m");
-// 			real* sz = new real[size]{0.0};
-// 			for(uint i = start; i < end; ++i)
-// 				sz[i-start] = pnp1[i].Sf[2];
-
-// 			Sz.putVar(sz);
-// 		}
-// 	}
-// }
-
-// void Write_CDF_File(NcFile &nf, SIM &svar, State &pnp1)
-// {	/*Write the timestep to a group*/
-// 	string time = "Step #";
-// 	// time.append(std::to_string(svar.t));
-// 	time.append(std::to_string(svar.stepno));
-// 	NcGroup ts(nf.addGroup(time));
-
-// 	/*Write the Particles group*/
-// 	Write_Group(ts, pnp1, svar.bndPts, svar.totPts, svar.outform);
-// }
-
-// void Write_CDF_File(NcFile& nd, SIM& svar, State const& pnp1)
-// {	/*Write the timestep to a group*/
-// 	string timefile = svar.outfolder;
-// 	timefile.append("/h5/fuel_");
-// 	std::ostringstream step;
-// 	step << std::setfill('0') << std::setw(4);
-// 	step << svar.frame;
-// 	timefile.append(step.str());
-// 	timefile.append(".h5part");
-
-// 	NcFile nf(timefile, NcFile::replace);
-// 	string steps = "Step#";
-// 	steps.append(std::to_string(svar.frame));
-// 	NcGroup ts(nf.addGroup(steps));
-// 	NcDim tDim = ts.addDim("time",1);
-// 	NcVar tVar = ts.addVar("time",ncFloat,tDim);
-// 	tVar.putVar(&svar.t);
-
-// 	/*Write the Particles group*/
-// 	Write_Group(ts, pnp1, svar.bndPts, svar.totPts, svar.outform);
-
-// }
-
-// void Write_Boundary_CDF(SIM const& svar, State const& pnp1)
-// {
-// 	std::string file = svar.outfolder;
-// 	file.append("/h5/Boundary.h5part");
-// 	NcFile bound(file, NcFile::replace);
-// 	NcGroup part(bound.addGroup("Boundary"));
-// 	Write_Group(bound, pnp1, 0, svar.bndPts, svar.outform);
-// }
 
 #endif

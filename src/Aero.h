@@ -41,8 +41,8 @@ StateVecD AeroForce(StateVecD const& Vdiff, AERO const& avar, real const mass)
 }
 
 /*Gissler et al (2017)*/
-StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff, 
-				real const& mass, real const& lam, real const& woccl)
+StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff, real const& rho,
+				 real const& lam, real const& woccl)
 {
 	// real const nfull = avar.nfull;
 
@@ -51,7 +51,7 @@ StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff,
 	// if (ymax > 1.0)
 	// 	ymax = 1.0;
 
-	real const Re = 2.0*avar.rhog*Vdiff.norm()*avar.L/avar.mug;
+	real const Re = 2.0*rho*Vdiff.norm()*avar.L/avar.mug;
 	
 
 	real const frac2 = std::min(3.0/2.0 * lam, 1.0);
@@ -83,13 +83,13 @@ StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff,
 	// cout << "Re: " << Re << "  Cds: " << Cdi << "  "  << Cdl << "  " << Cds  << endl;
 	// cout << "F: " << F(0) << "  " << F(1) << endl << endl;
 
-	return 0.5*avar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai;
+	return 0.5*rho*Vdiff.norm()*Vdiff*Cdi*Ai;
 
 
 }
 
-StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff,
-		StateVecD const& norm, real const& size, real const& Pbasei)
+StateVecD CalcAeroForce(AERO const& avar, Particle const& pi, StateVecD const& Vdiff,
+		StateVecD const& norm, real const& curve, real const& size, real const& Pbasei)
 {
 	StateVecD Fd= StateVecD::Zero();
 
@@ -151,30 +151,29 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 			real const frac1 = (1.0 - frac2);
 
 
-#if SIMDIM == 3 
+			#if SIMDIM == 3 
 			// real const Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
 			real const Adrop = M_PI*pow(avar.L,2);
-#endif
-#if SIMDIM == 2
+			#else
 			// real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax);
 			real const Adrop = 2*avar.L;
-#endif
+			#endif
 
 			real const Aunocc = frac1*Adrop + frac2*avar.aPlate;
 
-// #if SIMDIM == 2
-// 			real area = avar.L;
-// #else
-// 			real area = M_PI*avar.L*avar.L;
-// #endif
+			// #if SIMDIM == 2
+			// 			real area = avar.L;
+			// #else
+			// 			real area = M_PI*avar.L*avar.L;
+			// #endif
 
 			real press = 0.5*avar.rhog*Vdiff.squaredNorm()*Cp;
 
-#if SIMDIM == 3
+			#if SIMDIM == 3
 			Fd = -7.5*norm.normalized()*Aunocc*press;
-#else
+			#else
 			Fd = -norm.normalized()*Aunocc*press;
-#endif
+			#endif
 
 			// if (theta <= 1.0  && theta >= -1.0)
 			// {
@@ -192,7 +191,7 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 	}
 	else if(avar.acase == 4)
 	{	
-		Fd = GisslerForce(avar,Vdiff,pi.m,size,pi.woccl);
+		Fd = GisslerForce(avar,Vdiff,pi.cellRho,size,pi.woccl);
 	}
 	else if(avar.acase == 5)
 	{
@@ -260,21 +259,21 @@ StateVecD CalcAeroForce(AERO const& avar, Part const& pi, StateVecD const& Vdiff
 
 
 		/*Overall Cp*/
-		if(pi.curve > 200.0)
+		if(curve > 200.0)
 		{
 			if(abs(theta) < 1.570796)
 				Cp_tot = 0.5*cos(2.0*abs(theta))+0.5;
 			else
 				Cp_tot = 0.0;
 		}
-		else if (pi.curve > 0.0)
+		else if (curve > 0.0)
 		{
-			real frac = (pi.curve)/(200.0);
+			real frac = (curve)/(200.0);
 			Cp_tot = frac + (1.0-frac)*Cp_p;
 		}
-		else if (pi.curve > -200.0)
+		else if (curve > -200.0)
 		{
-			real frac = (pi.curve + 200.0)/(200.0);
+			real frac = (curve + 200.0)/(200.0);
 			Cp_tot = frac*Cp_p + (1.0-frac)*Cp_s;
 		}
 		else

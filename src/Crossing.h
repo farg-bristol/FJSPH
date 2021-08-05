@@ -474,6 +474,7 @@ void FirstCell(SIM& svar, Vec_Tree const& CELL_INDEX, MESH const& cells, Particl
             pi.cellID = cell;
             pi.cellV = cells.cVel[cell];
             pi.cellP = cells.cP[cell];
+            pi.cellRho = cells.cRho[cell];
 
             break;
         }
@@ -492,6 +493,7 @@ void FirstCell(SIM& svar, Vec_Tree const& CELL_INDEX, MESH const& cells, Particl
                 pi.cellID = cell;
                 pi.cellV = cells.cVel[cell];
                 pi.cellP = cells.cP[cell];
+                pi.cellRho = cells.cRho[cell];
 
                 break;
             }
@@ -577,7 +579,7 @@ void FirstCell(SIM& svar, Vec_Tree const& CELL_INDEX, MESH const& cells, Particl
             }
         }
 
-        if(cross == 0)
+        if(cross == 0 && pi.b != PartState.GHOST_)
         {
             #pragma omp single
             {
@@ -592,7 +594,7 @@ void FirstCell(SIM& svar, Vec_Tree const& CELL_INDEX, MESH const& cells, Particl
 /* <summary> Find the cells for all non-boundary particles. Checks for whether a paricle is free.  */
 /* It is assumed that the particle does have a previous cell defined, and checks this cell */
 /* before going to the KD Tree to find the nearest cells to iterate through. </summary> */
-void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, State& pnp1, State& pn)
+void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, DELTAP const& dp, State& pn, State& pnp1)
 {
     /*Find which cell the particle is in*/
     vector<size_t> toDelete;
@@ -605,7 +607,7 @@ void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, 
     #pragma omp for schedule(static) nowait 
     for (size_t ii = start; ii < end; ++ii)
     {
-        if (pnp1[ii].b == PartState.FREE_)
+        if (pnp1[ii].b == PartState.FREE_ && dp.lam_ng[ii] < 0.75)
         {   
             StateVecD testp = pnp1[ii].xi;  
             uint inside_flag = 0;
@@ -666,6 +668,7 @@ void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, 
                         pnp1[ii].cellID = cell;
                         pnp1[ii].cellV = cells.cVel[cell];
                         pnp1[ii].cellP = cells.cP[cell];
+                        pnp1[ii].cellRho = cells.cRho[cell];
                         inside_flag = 1;
 
                         // cout << "Found new cell at " << count << " in list" << endl;
@@ -685,6 +688,7 @@ void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, 
                             pnp1[ii].cellID = cell;
                             pnp1[ii].cellV = cells.cVel[cell];
                             pnp1[ii].cellP = cells.cP[cell];
+                            pnp1[ii].cellRho = cells.cRho[cell];
                             break;
                         }
                     }
@@ -713,7 +717,7 @@ void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, 
                 nanoflann::KNNResultSet<real> resultSet(num_results);
                 resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
                 
-    TREE.CELL.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
+                TREE.CELL.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
                 uint count = 0;
                 for(auto const& cell:ret_indexes)
                 {   
@@ -726,6 +730,7 @@ void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, 
                         pnp1[ii].cellID = cell;
                         pnp1[ii].cellV = cells.cVel[cell];
                         pnp1[ii].cellP = cells.cP[cell];
+                        pnp1[ii].cellRho = cells.cRho[cell];
                         inside_flag = 1;
 
                         // cout << "Found new cell at " << count << " in list" << endl;
@@ -745,6 +750,7 @@ void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, 
                             pnp1[ii].cellID = cell;
                             pnp1[ii].cellV = cells.cVel[cell];
                             pnp1[ii].cellP = cells.cP[cell];
+                            pnp1[ii].cellRho = cells.cRho[cell];
                             break;
                         }
                     }
@@ -820,6 +826,10 @@ void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, 
             }
                  
         } //end if particle is valid
+        else
+        {
+            pnp1[ii].cellID = 0;
+        }
     }   // End of particle loop
 
     #pragma omp for schedule(static) ordered

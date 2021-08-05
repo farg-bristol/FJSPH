@@ -137,7 +137,7 @@ int MakeOutputDir(int argc, char *argv[], SIM& svar)
 					if(Combine_SZPLT(file) == -1)
 						exit(-1);
 					
-					if(svar.Bcase != 0 && svar.Bcase !=4)
+					if(svar.Bcase != 0 && svar.Bcase != 3 && svar.Bcase !=4)
 					{
 			  			file = svar.outfolder;
 						file.append("Boundary.szplt");
@@ -178,7 +178,7 @@ int MakeOutputDir(int argc, char *argv[], SIM& svar)
 							if(Combine_SZPLT(file) == -1)
 								exit(-1);
 
-							if(svar.Bcase != 0 && svar.Bcase !=4)
+							if(svar.Bcase != 0 && svar.Bcase != 3 && svar.Bcase !=4)
 							{	//Check if files exist
 								file = svar.outfolder;
 								file.append("Boundary.szplt.szdat");
@@ -255,7 +255,7 @@ int MakeOutputDir(int argc, char *argv[], SIM& svar)
 			file = svar.outfolder;
 	  		file.append("Boundary.szplt");
 
-	  		if(svar.Bcase != 0 && svar.Bcase != 4)
+	  		if(svar.Bcase != 0 && svar.Bcase != 3 && svar.Bcase != 4)
 	  		{
 		  		if(stat( file.c_str(), &info ) == 0)
 		  		{
@@ -536,254 +536,6 @@ void CheckContents(void* const& inputHandle, SIM& svar, int32_t& numZones, doubl
 
     I = tecZoneGetSolutionTime(inputHandle, numZones, &time);
     cout << "Latest zone time: " << time << endl << endl;
-}
-
-/*Make a guess on how big the array is going to be (doesn't need to be totally exact)*/
-int ParticleCount(SIM &svar)
-{
-	int partCount = 0;
-	real step = svar.Pstep*svar.Bstep;
-	int Ny = ceil(svar.Box(1)/step);
-	int Nx = ceil(svar.Box(0)/step);
-
-	#if(SIMDIM == 3)
-		int Nz = ceil(svar.Box(2)/step);
-	#endif
-
-		if(svar.Bcase == 0)
-			partCount += svar.simPts; /*Simulation pn*/
-		else if (svar.Bcase == 1)
-		{
-			#if (SIMDIM == 3)
-				partCount = Nx*Nz + 2*Nx*Ny + 2*Ny*Nz; /*Boundary particles*/
-			#else
-				partCount = 2*Ny + Nx; /*Boundary particles*/
-			#endif
-			partCount += svar.simPts; /*Simulation pn*/
-		}
-		else if (svar.Bcase == 2)
-		{
-			#if SIMDIM == 3
-			{
-				real holeD = svar.Jet(0)+4*svar.Pstep; /*Diameter of hole (or width)*/
-
-	            /*Find the points on the side of the pipe (Assume a circle)*/
-	            float dtheta = atan((step)/(0.5*holeD));
-	            Ny = ceil(svar.Jet(1)/step);
-	            int holeWall = ceil(2*M_PI/dtheta)*Ny;
-
-				/*Simulation Points*/
-				int simCount = 0;
-				real jetR = 0.5*(svar.Jet(0));
-				
-				/*Do the centerline of points*/
-				for (real z = -jetR; z <= jetR; z+= svar.dx)
-					simCount++;
-
-				for (real x = svar.dx; x < jetR ; x+=svar.dx)
-				{ /*Do the either side of the centerline*/
-					for (real z = -jetR; z <= jetR; z+= svar.dx)
-					{	/*If the point is inside the hole diameter, add it*/
-						if(((x*x)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
-			    			simCount += 2;
-					}
-				}
-
-				/*Need to add the pn already present*/
-				int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
-
-				partCount = holeWall + simPts;
-			}
-			#else
-			{
-	            /*Find the points on the side of the pipe*/
-	            Ny = ceil((svar.Jet(1)*3)/step);
-	            int holeWall = 2*Ny;
-
-				/*Simulation Points*/
-				int simCount = 0;
-				real jetR = 2*(0.5*(svar.Jet(0)));
-				for (real x = -jetR; x <= jetR; x+= svar.dx)
-					simCount++;
-
-				/*Need to add the pn already present*/
-				int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
-
-				partCount = holeWall + simPts;
-			}
-			#endif
-		}
-		else if(svar.Bcase == 3)
-		{	
-			#if SIMDIM == 3
-			{
-				real holeD = svar.Jet(0)+4*svar.Pstep; /*Diameter of hole (or width)*/
-
-	            /*Find the points on the side of the pipe (Assume a circle)*/
-	            float dtheta = atan((step)/(0.5*holeD));
-	            Ny = ceil(svar.Jet(1)/step);
-	            int holeWall = ceil(2*M_PI/dtheta)*Ny;
-
-				/*Simulation Points*/
-				int simCount = 0;
-				real jetR = 0.5*(svar.Jet(0));
-				
-				/*Do the centerline of points*/
-				for (real z = -jetR; z <= jetR; z+= svar.dx)
-					simCount++;
-
-				for (real x = svar.dx; x < jetR ; x+=svar.dx)
-				{ /*Do the either side of the centerline*/
-					for (real z = -jetR; z <= jetR; z+= svar.dx)
-					{	/*If the point is inside the hole diameter, add it*/
-						if(((x*x)/(jetR*jetR) + (z*z)/(jetR*jetR)) <= 1.0 )
-			    			simCount += 2;
-					}
-				}
-
-				/*Need to add the pn already present*/
-				int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
-
-				partCount = holeWall + simPts;
-			}
-			#else
-			{
-	            /*Find the points on the side of the pipe*/
-	            Ny = ceil(svar.Jet(1)/step);
-	            int holeWall = 2*Ny;
-
-				/*Simulation Points*/
-				int simCount = 0;
-				real jetR = 0.5*(svar.Jet(0));
-				for (real x = -jetR; x <= jetR; x+= svar.dx)
-					simCount++;
-
-				/*Need to add the pn already present*/
-				int simPts = simCount*svar.nmax + simCount*ceil(svar.Jet[1]/svar.dx);
-
-				partCount = holeWall + simPts;
-			}
-			#endif
-		}
-		else if (svar.Bcase == 4)
-		{	
-			#if SIMDIM == 3
-				uint simCount = 0;
-				real radius = 0.5*svar.Start(0);
-
-				for (real y = 0; y <= radius; y+=svar.dx)
-				{	
-					real xradius = sqrt(radius*radius - y*y);
-
-					simCount++;
-
-					for (real z = svar.dx; z <= xradius; z+= svar.dx)
-					{ /*Do the centerline of points*/
-						simCount +=2;
-					}
-
-					for (real x = svar.dx; x <= xradius ; x+=svar.dx)
-					{ /*Do the either side of the centerline*/
-						simCount += 2;
-
-						for (real z = svar.dx; z <= xradius; z+= svar.dx)
-						{
-							if(((x*x) + (z*z) + (y*y)) <= (radius*radius) )
-				    		{   /*If the point is inside the hole diameter, add it*/
-								simCount += 4;
-							}
-						}	
-					}
-				}
-				
-				for (real y = -svar.dx; y >= -radius; y-=svar.dx)
-				{	
-					real xradius = sqrt(radius*radius - y*y);
-
-					simCount++;
-
-					for (real z = svar.dx; z <= xradius; z+= svar.dx)
-					{ /*Do the centerline of points*/
-						simCount +=2;
-					}
-
-					for (real x = svar.dx; x <= xradius ; x+=svar.dx)
-					{ /*Do the either side of the centerline*/
-						simCount += 2;
-
-						for (real z = svar.dx; z <= xradius; z+= svar.dx)
-						{
-							if(((x*x) + (z*z) + (y*y)) <= (radius*radius) )
-				    		{   /*If the point is inside the hole diameter, add it*/
-								simCount += 4;
-							}
-						}	
-					}
-				}
-
-				partCount = simCount;
-			#else
-				uint simCount = 0;
-				real radius = 0.5*svar.Start(0);
-				for (real y = 0; y <= radius; y+=svar.dx)
-				{	
-					++simCount;
-					for (real x = svar.dx; x <= radius ; x+=svar.dx)
-					{ /*Do the either side of the centerline*/
-							if(((x*x) + (y*y)) <= (radius*radius))
-				    		{   /*If the point is inside the hole diameter, add it*/
-								++simCount;
-								++simCount;
-							}	
-					}
-				}
-
-				for (real y = -svar.dx; y >= -radius; y-=svar.dx)
-				{	
-					++simCount;
-					for (real x = svar.dx; x <= radius ; x+=svar.dx)
-					{ /*Do the either side of the centerline*/
-							if(((x*x) + (y*y)) <= (radius*radius))
-				    		{   /*If the point is inside the hole diameter, add it*/
-								++simCount;
-								++simCount;
-							}	
-					}
-				}
-
-				partCount = simCount;
-			#endif
-		}
-		else if (svar.Bcase == 5) 
-		{	/*Piston driven flow*/
-
-			#if SIMDIM == 2
-				/*Create the reservoir tank*/
-				real tankW = svar.Start(0);
-				real tankD = svar.Start(1);
-				real stepb = (svar.Pstep*svar.Bstep);
-
-				uint pisCnt = ceil((tankW + 8*svar.dx-4*svar.Pstep)/stepb);
-				
-				/*Create the reservoir tank*/
-				uint wall = ceil((tankD+4*svar.dx+6*svar.Pstep)/stepb);
-				
-				/*Create the tapering section*/
-				real theta = atan(svar.Jet(1)/(0.5*tankW-0.5*svar.Jet(0)));
-				real stepy = stepb*sin(theta);
-				uint taper = ceil((svar.Jet(1))/stepy);
-
-				/*Create the exit bit.*/
-				uint exit = ceil(svar.Jet(1)/stepb);
-
-				/*Simulation Particles*/
-				uint simCount = ceil(tankW/svar.dx)*ceil(tankD/svar.dx);	
-
-				partCount = pisCnt + 2*(wall+taper+exit) + simCount;
-			#endif
-		}	
-
-	return partCount;
 }
 
 void GetYcoef(AERO& avar, const FLUID& fvar, const real diam)
