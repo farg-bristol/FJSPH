@@ -929,301 +929,301 @@ namespace FOAM
         // Write_Face_Data(cells);
     }
 
-    void Write_Declaration(ofstream &fout)
-    {
-        fout << 
-        "/*--------------------------------*- C++ -*----------------------------------*\\\n" <<
-        "| =========                 |                                                 |\n" <<
-        "| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |\n" << 
-        "|  \\\\    /   O peration     | Version:  v2006                                 |\n" <<
-        "|   \\\\  /    A nd           | Website:  www.openfoam.com                      |\n" <<
-        "|    \\\\/     M anipulation  |                                                 |\n" <<
-        "\\*---------------------------------------------------------------------------*/\n" ;
-    }
+    // void Write_Declaration(ofstream &fout)
+    // {
+    //     fout << 
+    //     "/*--------------------------------*- C++ -*----------------------------------*\\\n" <<
+    //     "| =========                 |                                                 |\n" <<
+    //     "| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |\n" << 
+    //     "|  \\\\    /   O peration     | Version:  v2006                                 |\n" <<
+    //     "|   \\\\  /    A nd           | Website:  www.openfoam.com                      |\n" <<
+    //     "|    \\\\/     M anipulation  |                                                 |\n" <<
+    //     "\\*---------------------------------------------------------------------------*/\n" ;
+    // }
 
-    /* Read the header section of an openfoam file, and identify the file class and binary information. */
-    void Write_Header(ofstream &fout, string &class_, string& location, string& object, int &binary, int &labelSize, int &scalarSize)
-    {
-        Write_Declaration(fout);
+    // /* Read the header section of an openfoam file, and identify the file class and binary information. */
+    // void Write_Header(ofstream &fout, string &class_, string& location, string& object, int &binary, int &labelSize, int &scalarSize)
+    // {
+    //     Write_Declaration(fout);
 
-        fout << "FoamFile\n";
-        fout << "{\n";
-        fout << "    version      2.0;\n";
-        if(binary == 1) 
-            fout << "    format      binary;\n"; 
-        else
-            fout << "    format      ascii;\n";
+    //     fout << "FoamFile\n";
+    //     fout << "{\n";
+    //     fout << "    version      2.0;\n";
+    //     if(binary == 1) 
+    //         fout << "    format      binary;\n"; 
+    //     else
+    //         fout << "    format      ascii;\n";
 
-        fout << "    class       " << class_ << ";\n";
-        if(binary == 1) 
-            fout << "    arch      \"LSB;label=" << labelSize << ";scalar=" << scalarSize << "\";\n";
-        fout << "    location    \"" << location << "\";\n";
-        fout << "    object      " << object << ";\n";
-        fout << "}\n";
-        fout <<"// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //\n\n\n"; 
-    }
+    //     fout << "    class       " << class_ << ";\n";
+    //     if(binary == 1) 
+    //         fout << "    arch      \"LSB;label=" << labelSize << ";scalar=" << scalarSize << "\";\n";
+    //     fout << "    location    \"" << location << "\";\n";
+    //     fout << "    object      " << object << ";\n";
+    //     fout << "}\n";
+    //     fout <<"// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //\n\n\n"; 
+    // }
 
-    /* Write the boundary patch information. Only need to consider walls, patches, and symmetry planes */
-    void Write_Patch(ofstream &fout, string const& name, size_t const& nFaces, size_t const& startFace, int const& wall_type)
-    {
-        fout << "    " << name << "\n";
-        fout << "    {\n";
-        if(wall_type == 0)
-        {
-            fout << "    type            wall;\n";
-            fout << "    inGroups        1(wall);\n";
-        }
-        else if (wall_type == 1)
-        {
-            fout << "    type            patch;\n";
-        }
-        else if (wall_type == 2)
-        {
-            fout << "    type            symmetryPlane;\n";
-        }
-        fout << "    nFaces          " << nFaces << ";\n";
-        fout << "    startFace       " << startFace << ";\n";
-        fout << "    }\n";
-    }
+    // /* Write the boundary patch information. Only need to consider walls, patches, and symmetry planes */
+    // void Write_Patch(ofstream &fout, string const& name, size_t const& nFaces, size_t const& startFace, int const& wall_type)
+    // {
+    //     fout << "    " << name << "\n";
+    //     fout << "    {\n";
+    //     if(wall_type == 0)
+    //     {
+    //         fout << "    type            wall;\n";
+    //         fout << "    inGroups        1(wall);\n";
+    //     }
+    //     else if (wall_type == 1)
+    //     {
+    //         fout << "    type            patch;\n";
+    //     }
+    //     else if (wall_type == 2)
+    //     {
+    //         fout << "    type            symmetryPlane;\n";
+    //     }
+    //     fout << "    nFaces          " << nFaces << ";\n";
+    //     fout << "    startFace       " << startFace << ";\n";
+    //     fout << "    }\n";
+    // }
 
-    /* Read the boundary file of the mesh, and find out where the boundary faces begin. */
-    /* Boundary is in ascii no matter what. Can use to determine if system is in binary or not */
-    void Write_Boundary(SIM &svar, vector<string> const& names, vector<size_t> &nFaces, vector<size_t> &startFaces, vector<int> &walls, int &binary, int& labelSize, int& scalarSize)
-    {
-        // Open folder
-        cout << "Writing boundary file..." << endl;
-        string file = svar.foamdir;
-        file.append("/constant/polyMesh/boundary");
-        std::ofstream fout(file);
+    // /* Read the boundary file of the mesh, and find out where the boundary faces begin. */
+    // /* Boundary is in ascii no matter what. Can use to determine if system is in binary or not */
+    // void Write_Boundary(SIM &svar, vector<string> const& names, vector<size_t> &nFaces, vector<size_t> &startFaces, vector<int> &walls, int &binary, int& labelSize, int& scalarSize)
+    // {
+    //     // Open folder
+    //     cout << "Writing boundary file..." << endl;
+    //     string file = svar.foamdir;
+    //     file.append("/constant/polyMesh/boundary");
+    //     std::ofstream fout(file);
 
-        if (!fout.is_open())
-        {
-            cout << "Failed to open boundary file" << endl;
-            exit(-1);
-        }
+    //     if (!fout.is_open())
+    //     {
+    //         cout << "Failed to open boundary file" << endl;
+    //         exit(-1);
+    //     }
 
-        string object = "boundary";
-        string location = "/constant/polyMesh";
-        string class_ = "polyBoundaryMesh";
-        Write_Header(fout, class_, location, object, binary, labelSize, scalarSize);
+    //     string object = "boundary";
+    //     string location = "/constant/polyMesh";
+    //     string class_ = "polyBoundaryMesh";
+    //     Write_Header(fout, class_, location, object, binary, labelSize, scalarSize);
 
-        size_t nSurfaces = nFaces.size();
+    //     size_t nSurfaces = nFaces.size();
 
-        fout << nSurfaces << "\n";
-        fout << "(\n";
-        for(size_t ii = 0; ii < nSurfaces; ++ii)
-        {
-            Write_Patch(fout, names[ii], nFaces[ii], startFaces[ii], walls[ii]);
-        }
+    //     fout << nSurfaces << "\n";
+    //     fout << "(\n";
+    //     for(size_t ii = 0; ii < nSurfaces; ++ii)
+    //     {
+    //         Write_Patch(fout, names[ii], nFaces[ii], startFaces[ii], walls[ii]);
+    //     }
 
-        fout.close();
-    }
+    //     fout.close();
+    // }
 
-    /* General function to read the scalar data from an OpenFOAM ascii file */
-    void Write_Label_Field(string &file, vector<int> &field, size_t &nCells)
-    {
-        std::ofstream fout(file);
+    // /* General function to read the scalar data from an OpenFOAM ascii file */
+    // void Write_Label_Field(string &file, vector<int> &field, size_t &nCells)
+    // {
+    //     std::ofstream fout(file);
 
-        int binary, labelSize, scalarSize;
-        size_t nFaces;
+    //     int binary, labelSize, scalarSize;
+    //     size_t nFaces;
 
-        Read_Preamble(fin, file, "labelList", binary, labelSize, scalarSize, nFaces);
+    //     Read_Preamble(fin, file, "labelList", binary, labelSize, scalarSize, nFaces);
 
-        cout << "Number of faces: " << nFaces << endl;
+    //     cout << "Number of faces: " << nFaces << endl;
 
-        if (binary == 0)
-        {
-            ascii::Read_Label_Data(fin, nFaces, field, nCells);
-        }
-        else
-        {
-            int pos = fin.tellg();
-            fin.close();
-            fin.open(file, std::ifstream::binary);
-            fin.seekg(pos + 1);
-            binary::Read_Label_Data(fin, labelSize, scalarSize, nFaces, field, nCells);
-        }
+    //     if (binary == 0)
+    //     {
+    //         ascii::Read_Label_Data(fin, nFaces, field, nCells);
+    //     }
+    //     else
+    //     {
+    //         int pos = fin.tellg();
+    //         fin.close();
+    //         fin.open(file, std::ifstream::binary);
+    //         fin.seekg(pos + 1);
+    //         binary::Read_Label_Data(fin, labelSize, scalarSize, nFaces, field, nCells);
+    //     }
 
-        fin.close();
-    }
+    //     fin.close();
+    // }
 
-    /* General function to read the scalar data from an OpenFOAM ascii file */
-    void Read_Solution_Scalar(string &file, vector<real> &field)
-    {
-        std::ifstream fin(file, std::ios::in);
+    // /* General function to read the scalar data from an OpenFOAM ascii file */
+    // void Read_Solution_Scalar(string &file, vector<real> &field)
+    // {
+    //     std::ifstream fin(file, std::ios::in);
 
-        int binary, labelSize, scalarSize;
-        size_t nInternal;
+    //     int binary, labelSize, scalarSize;
+    //     size_t nInternal;
 
-        Read_Preamble(fin, file, "volScalarField", binary, labelSize, scalarSize, nInternal);
+    //     Read_Preamble(fin, file, "volScalarField", binary, labelSize, scalarSize, nInternal);
 
-        cout << "Number of cells: " << nInternal << endl;
+    //     cout << "Number of cells: " << nInternal << endl;
 
-        if (binary == 0)
-        {
-            ascii::Read_Scalar_Data(fin, nInternal, field);
-        }
-        else
-        {
-            int pos = fin.tellg();
-            fin.close();
-            fin.open(file, std::ifstream::binary);
-            fin.seekg(pos + 1);
-            binary::Read_Scalar_Data(fin, labelSize, scalarSize, nInternal, field);
-        }
+    //     if (binary == 0)
+    //     {
+    //         ascii::Read_Scalar_Data(fin, nInternal, field);
+    //     }
+    //     else
+    //     {
+    //         int pos = fin.tellg();
+    //         fin.close();
+    //         fin.open(file, std::ifstream::binary);
+    //         fin.seekg(pos + 1);
+    //         binary::Read_Scalar_Data(fin, labelSize, scalarSize, nInternal, field);
+    //     }
 
-        fin.close();
-    }
+    //     fin.close();
+    // }
 
-    /* General function to read the vector data from an OpenFOAM ascii file */
-    void Read_Solution_Vector(string &file, vector<Eigen::Matrix<real, 3, 1>> &field)
-    {
-        std::ifstream fin(file, std::ios::in);
+    // /* General function to read the vector data from an OpenFOAM ascii file */
+    // void Read_Solution_Vector(string &file, vector<Eigen::Matrix<real, 3, 1>> &field)
+    // {
+    //     std::ifstream fin(file, std::ios::in);
 
-        int binary, labelSize, scalarSize;
-        size_t nInternal;
+    //     int binary, labelSize, scalarSize;
+    //     size_t nInternal;
 
-        Read_Preamble(fin, file, "volVectorField", binary, labelSize, scalarSize, nInternal);
+    //     Read_Preamble(fin, file, "volVectorField", binary, labelSize, scalarSize, nInternal);
 
-        cout << "Number of cells: " << nInternal << endl;
+    //     cout << "Number of cells: " << nInternal << endl;
 
-        if (binary == 0)
-        {
-            ascii::Read_Vector_Data(fin, nInternal, field);
-        }
-        else
-        {
-            int pos = fin.tellg();
-            fin.close();
-            fin.open(file, std::ifstream::binary);
-            fin.seekg(pos + 1);
-            binary::Read_Vector_Data(fin, labelSize, scalarSize, nInternal, field);
-        }
+    //     if (binary == 0)
+    //     {
+    //         ascii::Read_Vector_Data(fin, nInternal, field);
+    //     }
+    //     else
+    //     {
+    //         int pos = fin.tellg();
+    //         fin.close();
+    //         fin.open(file, std::ifstream::binary);
+    //         fin.seekg(pos + 1);
+    //         binary::Read_Vector_Data(fin, labelSize, scalarSize, nInternal, field);
+    //     }
 
-        fin.close();
-    }
+    //     fin.close();
+    // }
 
-    /* General function to read the vector data from an OpenFOAM ascii file */
-    void Read_Points(string &file, vector<Eigen::Matrix<real, 3, 1>> &pnts)
-    {
-        std::ifstream fin(file);
+    // /* General function to read the vector data from an OpenFOAM ascii file */
+    // void Read_Points(string &file, vector<Eigen::Matrix<real, 3, 1>> &pnts)
+    // {
+    //     std::ifstream fin(file);
 
-        int binary, labelSize, scalarSize;
-        size_t nPnts;
+    //     int binary, labelSize, scalarSize;
+    //     size_t nPnts;
 
-        Read_Preamble(fin, file, "vectorField", binary, labelSize, scalarSize, nPnts);
+    //     Read_Preamble(fin, file, "vectorField", binary, labelSize, scalarSize, nPnts);
 
-        cout << "Number of points: " << nPnts << endl;
+    //     cout << "Number of points: " << nPnts << endl;
 
-        if (binary == 0)
-        {
-            ascii::Read_Vector_Data(fin, nPnts, pnts);
-        }
-        else
-        {
-            int pos = fin.tellg();
-            fin.close();
-            fin.open(file, std::ifstream::binary);
-            fin.seekg(pos + 1);
-            binary::Read_Vector_Data(fin, labelSize, scalarSize, nPnts, pnts);
-        }
+    //     if (binary == 0)
+    //     {
+    //         ascii::Read_Vector_Data(fin, nPnts, pnts);
+    //     }
+    //     else
+    //     {
+    //         int pos = fin.tellg();
+    //         fin.close();
+    //         fin.open(file, std::ifstream::binary);
+    //         fin.seekg(pos + 1);
+    //         binary::Read_Vector_Data(fin, labelSize, scalarSize, nPnts, pnts);
+    //     }
 
-        fin.close();
-    }
+    //     fin.close();
+    // }
 
-    /* Function to read the face data from an OpenFOAM binary file */
-    void Write_Faces(string &file, MESH& cells)
-    {
-        std::ofstream fin(file, std::ios::in);
+    // /* Function to read the face data from an OpenFOAM binary file */
+    // void Write_Faces(string &file, MESH& cells)
+    // {
+    //     std::ofstream fin(file, std::ios::in);
 
         
 
-        string class_;
-        int binary, labelSize, scalarSize;
+    //     string class_;
+    //     int binary, labelSize, scalarSize;
 
-        Read_Header(fin, class_, binary, labelSize, scalarSize);
+    //     Read_Header(fin, class_, binary, labelSize, scalarSize);
 
-        if (binary == 0)
-        {
-            if (class_ != "faceList")
-            {
-                cout << "File " << file << " is not the correct class." << endl;
-                cout << "File is class \"" << class_ << "\" and should be \"faceList\"" << endl;
-                cout << "Please check your input" << endl;
-                exit(-1);
-            }
-        }
-        else
-        {
-            if (class_ != "faceCompactList")
-            {
-                cout << "File " << file << " is not the correct class." << endl;
-                cout << "File is class \"" << class_ << "\" and should be \"faceCompactList\"" << endl;
-                cout << "Please check your input" << endl;
-                exit(-1);
-            }
-        }
+    //     if (binary == 0)
+    //     {
+    //         if (class_ != "faceList")
+    //         {
+    //             cout << "File " << file << " is not the correct class." << endl;
+    //             cout << "File is class \"" << class_ << "\" and should be \"faceList\"" << endl;
+    //             cout << "Please check your input" << endl;
+    //             exit(-1);
+    //         }
+    //     }
+    //     else
+    //     {
+    //         if (class_ != "faceCompactList")
+    //         {
+    //             cout << "File " << file << " is not the correct class." << endl;
+    //             cout << "File is class \"" << class_ << "\" and should be \"faceCompactList\"" << endl;
+    //             cout << "Please check your input" << endl;
+    //             exit(-1);
+    //         }
+    //     }
 
-        getline(fin, line);
-        while (line == "" || line.find("//") == 0)
-        { /* Skip through to things begin */
-            getline(fin, line);
-        }
+    //     getline(fin, line);
+    //     while (line == "" || line.find("//") == 0)
+    //     { /* Skip through to things begin */
+    //         getline(fin, line);
+    //     }
 
-        /* Get how many faces to expect */
-        size_t nFaces;
-        std::istringstream iss(line);
-        iss >> nFaces;
+    //     /* Get how many faces to expect */
+    //     size_t nFaces;
+    //     std::istringstream iss(line);
+    //     iss >> nFaces;
 
-        if (binary == 0)
-        {
-            cout << "Number of faces: " << nFaces << endl;
-            ascii::Read_Face_Data(fin, nFaces, faces);
-        }
-        else
-        {
-            /* Will be the number of faces plus 1. */
-            nFaces--;
-            cout << "Number of faces: " << nFaces << endl;
+    //     if (binary == 0)
+    //     {
+    //         cout << "Number of faces: " << nFaces << endl;
+    //         ascii::Read_Face_Data(fin, nFaces, faces);
+    //     }
+    //     else
+    //     {
+    //         /* Will be the number of faces plus 1. */
+    //         nFaces--;
+    //         cout << "Number of faces: " << nFaces << endl;
 
-            int pos = fin.tellg();
-            fin.close();
-            fin.open(file, std::ifstream::binary);
-            fin.seekg(pos + 1);
-            binary::Read_Face_Data(fin, labelSize, scalarSize, nFaces, faces);
-        }
+    //         int pos = fin.tellg();
+    //         fin.close();
+    //         fin.open(file, std::ifstream::binary);
+    //         fin.seekg(pos + 1);
+    //         binary::Read_Face_Data(fin, labelSize, scalarSize, nFaces, faces);
+    //     }
 
-        fin.close();
-    }
+    //     fin.close();
+    // }
 
-    void Write_polyMesh(SIM const &svar, vector<std::pair<size_t, size_t>> const &surfBounds, vector<int> const &walls, MESH &cells)
-    {
-        string file = svar.foamdir;
+    // void Write_polyMesh(SIM const &svar, vector<std::pair<size_t, size_t>> const &surfBounds, vector<int> const &walls, MESH &cells)
+    // {
+    //     string file = svar.foamdir;
 
-        /* Get point values */
-        cout << "Writing point data..." << endl;
-        file.append("/constant/polyMesh/points");
-        Write_Points(file, cells);
+    //     /* Get point values */
+    //     cout << "Writing point data..." << endl;
+    //     file.append("/constant/polyMesh/points");
+    //     Write_Points(file, cells);
 
-        /* Get face vertex data */
-        cout << "Reading face data..." << endl;
-        file = svar.foamdir;
-        file.append("/constant/polyMesh/faces");
-        Write_Faces(file, cells);
+    //     /* Get face vertex data */
+    //     cout << "Reading face data..." << endl;
+    //     file = svar.foamdir;
+    //     file.append("/constant/polyMesh/faces");
+    //     Write_Faces(file, cells);
 
-        /* Get owner data. Considered as cell left (normal direction unimportant) */
-        cout << "Reading owner data..." << endl;
-        file = svar.foamdir;
-        file.append("/constant/polyMesh/owner");
-        size_t nCells = 0;
-        Write_Label_Field(file, cells);
+    //     /* Get owner data. Considered as cell left (normal direction unimportant) */
+    //     cout << "Reading owner data..." << endl;
+    //     file = svar.foamdir;
+    //     file.append("/constant/polyMesh/owner");
+    //     size_t nCells = 0;
+    //     Write_Label_Field(file, cells);
 
-        /* Read neighbour data. This may well not have the same number of faces. */
-        cout << "Reading neighbour data..." << endl;
-        file = svar.foamdir;
-        file.append("/constant/polyMesh/neighbour");
-        Write_Label_Field(file, cells);
-    }
+    //     /* Read neighbour data. This may well not have the same number of faces. */
+    //     cout << "Reading neighbour data..." << endl;
+    //     file = svar.foamdir;
+    //     file.append("/constant/polyMesh/neighbour");
+    //     Write_Label_Field(file, cells);
+    // }
 }
 #endif
 #endif

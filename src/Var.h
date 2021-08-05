@@ -104,17 +104,17 @@ typedef struct PState{
 	{
 		BOUND_ = 0;
 	    PISTON_ = 1;
-		BACK_ = 2; 
-		BUFFER_ = 3;
+		BUFFER_ = 2;
+		BACK_ = 3; 
 		PIPE_ = 4;
 		FREE_ = 5;
 		GHOST_ = 6;
 	}
 
 	size_t BOUND_ ,
-    PISTON_, 
+    PISTON_,
+	BUFFER_, 
 	BACK_,
-	BUFFER_,
 	PIPE_,
 	FREE_,
 	GHOST_;
@@ -145,17 +145,19 @@ typedef struct SIM {
 	}
 
 	StateVecI xyPART; 				/*Starting sim particles in x and y box*/
-	size_t simPts,bndPts,totPts;	/*Simulation particles, Boundary particles, total particles*/
-	size_t finPts;					/*How many points there will be at simulation end*/
-	size_t psnPts;					/*Piston Points*/
-	size_t nrefresh; 				/*Crossflow refresh particle number*/
-	size_t delNum;                  /*Number of deleted particles*/
-	size_t intNum;                  /*Number of internal particles*/
-	uint nmax;                      /*Max number of particles*/
+		/* Particle counts */
+	size_t totPts;					 /* Total count */
+	size_t simPts,bndPts;			 /* Fluid count, Boundary count */
+	size_t gstPts;                   /* Ghost count */
+	size_t finPts;					 /* End count */
+	size_t psnPts;					 /* Piston count */
+	size_t delNum;                   /* Number of deleted particles */
+	size_t intNum;                   /* Number of internal particles */
+	size_t nrefresh; 				 /* last add call particle number */
+	uint addcount;					 /* Current Number of add-particle calls */
 	uint outframe;	                /*Terminal output frame interval*/
 	uint outtype;                   /*ASCII or binary output*/
 	uint outform, boutform, gout;   /*Output type. Fluid properties or Research.*/
-	uint addcount;					/*Current Number of add-particle calls*/
 	real Pstep,Bstep, dx, clear;	/*Initial spacings for particles and boundary*/
 	real diam;                      /*Droplet diameter*/
 	uint nrad;                      /*Points along the radius of the jet/droplet*/
@@ -170,6 +172,7 @@ typedef struct SIM {
 	uint Nframe; 			        /*Max number of frames to output*/
 	uint frame;						/*Current frame number*/
 	real dt, framet;			    /*Timestep, frame times*/
+	real dt_min;	
 	double t;                       /*Simulation time*/
 	real beta,gamma;				/*Newmark-Beta Parameters*/
 	real maxmu;                     /*Maximum viscosity component (CFL)*/
@@ -178,7 +181,7 @@ typedef struct SIM {
 	
 	uint framecount;                /*How many frames have been output*/
 	vector<size_t> back;            /*Particles at the back of the pipe*/
-	vector<size_t> buffer;          /*ID of particles inside the buffer zone */
+	vector<vector<size_t>> buffer;          /*ID of particles inside the buffer zone */
 	uint iter;                      /*Current iteration number to renormalise*/
 
 	uint CDForFOAM;
@@ -342,6 +345,7 @@ typedef struct MESH
 	vector<real> cP;
 	vector<real> cMass;
 	vector<real> cRho;
+	// vector<real> cRho_SPH;
 	
 	// Cell information for the momentum balance
 	vector<StateVecD> cPertn;
@@ -370,6 +374,7 @@ typedef class DELTAP {
 			
 			lam = vector<real>(size,0.0);
 			lam_nb = vector<real>(size,0.0);
+			lam_ng = vector<real>(size,0.0);
 			kernsum = vector<real>(size,0.0);
 		}
 
@@ -385,20 +390,32 @@ typedef class DELTAP {
 
 		void update(vector<StateMatD> const& L_, vector<StateVecD> const& gradRho_, 
 			vector<StateVecD> const& norm_, vector<StateVecD> const& avgV_,
-			vector<real> const& lam_, vector<real> const& lam_nb_, 
+			vector<real> const& lam_, vector<real> const& lam_nb_, vector<real> const& lam_ng_,
 			vector<real> const& kernsum_)
 		{
 			L = L_; gradRho = gradRho_; norm = norm_; 
-			avgV = avgV_; lam = lam_; lam_nb = lam_nb_;
+			avgV = avgV_; lam = lam_; lam_nb = lam_nb_; lam_ng = lam_ng_;
 			kernsum = kernsum_;
 		}
 
 		void clear()
 		{
 			L.clear(); gradRho.clear(); norm.clear(); 
-			avgV.clear(); lam.clear(); lam_nb.clear();
+			avgV.clear(); lam.clear(); lam_nb.clear(); lam_ng.clear();
 			kernsum.clear();
 
+		}
+
+		void erase(size_t const& start, size_t const& end)
+		{
+			L.erase(L.begin()+start, L.begin()+end);
+			gradRho.erase(gradRho.begin()+start, gradRho.begin()+end);
+			norm.erase(norm.begin()+start, norm.begin()+end);
+			avgV.erase(avgV.begin()+start, avgV.begin()+end);
+			lam.erase(lam.begin()+start, lam.begin()+end);
+			lam_nb.erase(lam_nb.begin()+start, lam_nb.begin()+end);
+			lam_ng.erase(lam_ng.begin()+start, lam_ng.begin()+end);
+			kernsum.erase(kernsum.begin()+start, kernsum.begin()+end);
 		}
 
 		vector<StateMatD> L;
@@ -406,7 +423,9 @@ typedef class DELTAP {
 		vector<StateVecD> norm;
 		vector<StateVecD> avgV;
 
-		vector<real> lam, lam_nb;
+		vector<real> lam;		/* Eigenvalues with all particles considered */
+		vector<real> lam_nb; 	/* Eigenvalues without boundary particles (and ghost particles) */
+		vector<real> lam_ng; 	/* Eigenvalues without ghost particles */
 		vector<real> kernsum;
 
 
@@ -437,34 +456,30 @@ typedef class Particle {
 			b = bound; surf = 0;
 
 			xi = X;	v = Vi; f = StateVecD::Zero(); Af = StateVecD::Zero();
-			Rrho = 0.0; rho = Rhoi; p = press; m = Mi; curve = 0.0;
-			theta = 0.0; nNeigb = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0;
+			Rrho = 0.0; rho = Rhoi; p = press; m = Mi; 
+			s = 0.0; woccl = 0.0; pDist = 0.0;
 						
 			cellV = StateVecD::Zero();
-			cellP = 0.0;
+			cellP = 0.0; cellRho = 0.0;
 			internal = 0;
 
-			Sf = StateVecD::Zero();
-			normal = StateVecD::Zero();
 			vPert = StateVecD::Zero(); 
 		}
 
 		/*To add particles dynamically for boundary layer*/
-		Particle(StateVecD const& X, Particle const& pj, size_t const pID, int const bound)
+		Particle(StateVecD const& X, Particle const& pj, int const bound, size_t const pID)
 		{
 			partID = pID; cellID = 0; faceID = 0;
 			b = bound; surf = 0;
 
 			xi = X;	v = pj.v; f = StateVecD::Zero(); Af = StateVecD::Zero();
-			Rrho = 0.0; rho = pj.rho; p = pj.p; m = pj.m; curve = 0.0;
-			theta = 0.0; nNeigb = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0;
+			Rrho = 0.0; rho = pj.rho; p = pj.p; m = pj.m;
+			s = 0.0; woccl = 0.0; pDist = 0.0;
 
 			cellV = StateVecD::Zero();
-			cellP = 0.0;
+			cellP = 0.0; cellRho = 0.0;
 			internal = 0;
 
-			Sf = StateVecD::Zero();
-			normal = StateVecD::Zero();
 			vPert = StateVecD::Zero();
 		}
 
@@ -484,132 +499,17 @@ typedef class Particle {
 		uint b; //What state is a particle. See PartState above for possible options
 		uint surf; /*Is a particle a surface? 1 = yes, 0 = no*/
 		StateVecD xi, v, f, Af;
-		real Rrho, rho, p, m, curve, theta, nNeigb, s, woccl, pDist;
+		real Rrho, rho, p, m, s, woccl, pDist;
 		StateVecD cellV;
-		real cellP;
+		real cellP, cellRho;
 		uint internal; 
 
 		/*Mesh surface repulsion */
 		StateVecD bNorm;
 		real y;
 		
-		StateVecD Sf, normal, vPert;		
+		StateVecD vPert;		
 }Particle;
-
-typedef class Part {
-	public:
-		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-		Part(Particle const& pi)
-		{
-			xi = pi.xi; v = pi.v; Sf = pi.Sf;
-			normal = pi.normal;	vPert = pi.vPert;
-			rho = pi.rho; p = pi.p;	m = pi.m; curve = pi.curve;
-			woccl = pi.woccl; pDist = pi.pDist;
-			b = pi.b; surf = pi.surf;
-			cellV = pi.cellV;
-			partID = pi.partID;
-			cellID = pi.cellID;
-			cellP = pi.cellP;
-			internal = pi.internal;
-			bNorm = pi.bNorm;
-			y = pi.y;
-			nDist = 0.0;
-		}
-
-		Part(Particle const &pi, real const& dist)
-		{
-			xi = pi.xi;
-			v = pi.v;
-			Sf = pi.Sf;
-			normal = pi.normal;
-			vPert = pi.vPert;
-			rho = pi.rho;
-			p = pi.p;
-			m = pi.m;
-			curve = pi.curve;
-			woccl = pi.woccl;
-			pDist = pi.pDist;
-			nDist = dist; // Neighbour distance (squared)
-			b = pi.b;
-			surf = pi.surf;
-			cellV = pi.cellV;
-			partID = pi.partID;
-			cellID = pi.cellID;
-			cellP = pi.cellP;
-			internal = pi.internal;
-			bNorm = pi.bNorm;
-			y = pi.y;
-		}
-
-		Part(StateVecD const& xin, StateVecD const& vin, real const pin, 
-				real const rhoin, real const min, uint const bin, uint const pID)
-		{
-			xi = xin;
-			v = vin;
-			p = pin;
-			rho = rhoin;
-			m = min;
-			b = bin;
-			partID = pID;
-			cellV = StateVecD::Zero();
-			cellP = 0.0;
-			surf = 0;
-			internal = 0;
-
-		}
-
-		int size() const
-		{	/*For neighbour search, return size of xi vector*/
-			return(xi.size());
-		}
-
-		real operator[](int a) const
-		{	/*For neighbour search, return index of xi vector*/
-			return(xi[a]);
-		}
-
-		void operator=(Particle const& pi)
-		{
-			xi = pi.xi; v = pi.v; Sf = pi.Sf; 
-			normal = pi.normal; vPert = pi.vPert;
-			rho = pi.rho;	p = pi.p; m = pi.m; curve = pi.curve;
-			woccl = pi.woccl; pDist = pi.pDist; 
-			b = pi.b; surf = pi.surf;
-			cellV = pi.cellV;
-			partID = pi.partID;
-			cellID = pi.cellID;
-			cellP = pi.cellP;
-			internal = pi.internal;
-			bNorm = pi.bNorm;
-			y = pi.y;
-		}
-
-		StateVecD xi, v, Sf, normal, vPert;
-		real rho, p, m, curve, woccl, pDist, nDist;
-		uint b, surf; //What state is a particle.
-		StateVecD cellV;
-		size_t partID, cellID/*, faceID*/;
-		real cellP;
-		uint internal;
-		StateVecD bNorm;
-		real y;
-}Part;
-
-Particle PartToParticle(Part& pj)
-{
-	Particle pi;
-	pi.partID = pj.partID;
-	pi.xi = pj.xi; pi.v = pj.v; 
-	pi.rho = pj.rho; 
-	pi.p = pj.p;
-	pi.m = pj.m;
-	pi.b = pj.b;
-	pi.Sf = pj.Sf;
-	pi.cellV = pj.cellV;
-	pi.cellID = pj.cellID;
-	pi.cellP = pj.cellP;
-	return pi;
-}
 
 typedef std::vector<Particle> State;
 

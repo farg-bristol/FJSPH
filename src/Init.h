@@ -216,62 +216,61 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 	}
 	else if(svar.Bcase == 3)
 	{	/*Jet*/
-		int const interval = 20000;
-		#if SIMDIM == 3
-			real holeD = svar.Jet(0)+7*svar.dx; /*Diameter of hole (or width)*/
-			real stepb = (svar.Pstep*svar.Bstep);
+		// int const interval = 20000;
+		// #if SIMDIM == 3
+		// 	real holeD = svar.Jet(0)+6.75*svar.dx; /*Diameter of hole (or width)*/
+		// 	real stepb = (svar.Pstep*svar.Bstep);
 			
-			/*Create a bit of the pipe downward.*/
-			real r = 0.5*holeD;
-	    	real dtheta = atan((stepb)/(r));
+		// 	/*Create a bit of the pipe downward.*/
+		// 	real r = 0.5*holeD;
+	    // 	real dtheta = atan((stepb)/(r));
 
-	    	int ncirc = floor(2.0*M_PI/dtheta);
-	    	dtheta = 2.0*M_PI/real(ncirc);
+	    // 	int ncirc = floor(2.0*M_PI/dtheta);
+	    // 	dtheta = 2.0*M_PI/real(ncirc);
 
-			for(real ii = 0; ii < 4; ii+=1.0)
-			{
-				r = 0.5*holeD + ii*stepb;
-				for (real y = 0; y >= -svar.Jet(1)-stepb; y-=stepb)			
-				{	
-					for(real theta = 0; theta < 2*M_PI; theta += dtheta)
-					{
-						StateVecD perturb(random(interval), random(interval), random(interval));
-						StateVecD xi(r*sin(theta), y, r*cos(theta));
-						xi += perturb;
-						pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-						pID++;
-					}	
-				}
-			}
-		#else
+		// 	for(real ii = 0; ii < 4; ii+=1.0)
+		// 	{
+		// 		r = 0.5*holeD + ii*stepb;
+		// 		for (real y = 0; y >= -svar.Jet(1)-stepb; y-=stepb)			
+		// 		{	
+		// 			for(real theta = 0; theta < 2*M_PI; theta += dtheta)
+		// 			{
+		// 				StateVecD perturb(random(interval), random(interval), random(interval));
+		// 				StateVecD xi(r*sin(theta), y, r*cos(theta));
+		// 				xi += perturb;
+		// 				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 				pID++;
+		// 			}	
+		// 		}
+		// 	}
+		// #else
 
-			real jetR = 0.5*(svar.Jet(0)+5.5*svar.dx); /*Radius of hole (or width)*/
-			real stepb = (svar.Pstep*svar.Bstep);
+		// 	real jetR = 0.5*(svar.Jet(0)+2*svar.dx); /*Radius of hole (or width)*/
+		// 	real stepb = (svar.Pstep*svar.Bstep);
 			
-			/*Create a bit of the pipe downward.*/
-			for(real ii = 0; ii < 4; ii+=1.0)
-			{
-				real x = jetR + ii*stepb;
-				for (real y = 0.0; y >= -svar.Jet(1) - 2.0 * stepb; y-=stepb)			
-				{
-					StateVecD perturb(random(interval), random(interval));
-					StateVecD xi(-x,y);
-					xi += perturb;
-					xi += svar.Start;
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-					pID++;
-				}
+		// 	/*Create a bit of the pipe downward.*/
+		// 	for(real ii = 0; ii < 4; ii+=1.0)
+		// 	{
+		// 		real x = jetR + ii*stepb;
+		// 		for (real y = 0.0; y >= -svar.Jet(1) - 2.0 * stepb; y-=stepb)			
+		// 		{
+		// 			StateVecD perturb(random(interval), random(interval));
+		// 			StateVecD xi(-x,y);
+		// 			xi += perturb;
+		// 			pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 			pID++;
+		// 		}
 
-				for (real y = 0.0; y >= -svar.Jet(1) - 2.0 * stepb; y -= stepb)
-				{
-					StateVecD perturb(random(interval), random(interval));
-					StateVecD xi(x,y);
-					xi += perturb;
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-					pID++;
-				}
-			}
-		#endif
+		// 		for (real y = 0.0; y >= -svar.Jet(1) - 2.0 * stepb; y -= stepb)
+		// 		{
+		// 			StateVecD perturb(random(interval), random(interval));
+		// 			StateVecD xi(x,y);
+		// 			xi += perturb;
+		// 			pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 			pID++;
+		// 		}
+		// 	}
+		// #endif
 	}
 	else if (svar.Bcase == 5) 
 	{	
@@ -471,20 +470,13 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			pnp1.emplace_back(pi);
 
 		real y = -svar.Jet[1]+4*svar.dx;
-		for (y = -svar.dx; y >  -svar.Jet[1]; y-= svar.dx)
+		for (y = 2*svar.dx; y >  -svar.Jet[1]; y-= svar.dx)
 		{
 			#if SIMDIM == 3
 				Add_Radial_Points(y, svar, fvar, avar, pn, pnp1, PartState.PIPE_);
 			#else
 				AddPoints(y, svar, fvar, avar, pn, pnp1, PartState.PIPE_);
 			#endif
-		}
-
-		for (size_t ii = svar.totPts - svar.nrefresh; ii < svar.totPts; ++ii)
-		{ /*Fill the vector of the last particles*/
-			pn[ii].b = PartState.PIPE_;
-			pnp1[ii].b = PartState.PIPE_;
-			svar.back.emplace_back(ii);
 		}
 
 		Add_Buffer(svar,fvar,pn,pnp1);

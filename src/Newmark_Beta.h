@@ -31,11 +31,14 @@ int Check_Error(KDTREE& TREE, SIM& svar, FLUID const& fvar, size_t const& start,
 	// cout << RestartCount << "  " << k << "  " << error1  << "  " << svar.dt << endl;
 	// cout << k << "  " << error1 << "  " << error1 - error2 << "  " << svar.dt << endl;
 
-	if (error1-error2 > 0.0 /*|| std::isnan(error1)*/)
-	{	/*If simulation starts diverging, then reduce the timestep and try again.*/
-		nUnstab++;
+	if (k > svar.subits)
+	{
+	// if (error1-error2 > 0.0 /*|| std::isnan(error1)*/)
+	// {	/*If simulation starts diverging, then reduce the timestep and try again.*/
+		// nUnstab++;
 
-		if(nUnstab > 4)
+		// if(nUnstab > 4)
+		if(error1 > 0.0)
 		{
 			pnp1 = pn;
 			
@@ -80,10 +83,9 @@ int Check_Error(KDTREE& TREE, SIM& svar, FLUID const& fvar, size_t const& start,
 			return -1;
 		}
 
-		return 0;
-	}	/*Check if we've exceeded the maximum iteration count*/
-	else if (k > svar.subits)
-	{
+	// 	return 0;
+	// }	/*Check if we've exceeded the maximum iteration count*/
+	
 		return 1;
 	}
 
@@ -93,12 +95,11 @@ int Check_Error(KDTREE& TREE, SIM& svar, FLUID const& fvar, size_t const& start,
 	
 }
 
-void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
+void Do_NB_Iter(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
 	size_t const& start, size_t& end, 
 	real const& a, real const& b, real const& c, real const& d, real const& B, real const& gam,
-	MESH& cells, vector<size_t> const& cellsused,
-	vector<vector<Part>> const& neighb, outl const& outlist, DELTAP const& dp,
-	State& pn, State& pnp1, State& airP, StateVecD& Force, StateVecD& dropVel)
+	MESH& cells, vector<size_t> const& cellsused, outl const& outlist, DELTAP const& dp,
+	State& pn, State& pnp1, StateVecD& Force, StateVecD& dropVel)
 {
 	/*Update the state at time n+1*/
 	
@@ -111,7 +112,9 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 	Force = StateVecD::Zero();
 	svar.AForce = StateVecD::Zero();
 
-	Forces(svar,fvar,avar,cells,pnp1,neighb,outlist,dp,res,Rrho,Af,Force,curve); /*Guess force at time n+1*/
+	Get_Boundary_Pressure(fvar,start,outlist,pnp1);
+
+	Forces(svar,fvar,avar,cells,pnp1,outlist,dp,res,Rrho,Af,Force); /*Guess force at time n+1*/
 
 	#pragma omp parallel shared(pn,svar,fvar,res,Af,Rrho,curve) /*reduction(+:Force,dropVel)*/
 	{
@@ -130,17 +133,17 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 			}
 		}
 
-		#pragma omp for schedule(static) nowait
-		for (size_t ii=0; ii < start; ++ii)
-		{	/****** BOUNDARY PARTICLES ***********/
-			pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+Rrho[ii]);
-			pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-			// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
-			// pnp1[ii].p = fvar.pPress;
-			// pnp1[ii].rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
-			// pnp1[ii].f = res[ii];
-			pnp1[ii].Rrho = Rrho[ii];
-		}
+		// #pragma omp for schedule(static) nowait
+		// for (size_t ii=0; ii < start; ++ii)
+		// {	/****** BOUNDARY PARTICLES ***********/
+		// 	pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+Rrho[ii]);
+		// 	pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
+		// 	// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
+		// 	// pnp1[ii].p = fvar.pPress;
+		// 	// pnp1[ii].rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
+		// 	// pnp1[ii].f = res[ii];
+		// 	pnp1[ii].Rrho = Rrho[ii];
+		// }
 
 
 		#pragma omp for nowait 
@@ -153,114 +156,7 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 			/* FREE = free of the pipe and receives an aero force           */
 
 			/*Check if the particle is clear of the starting area*/
-// 			if (pnp1[ii].b == PartState.BACK_)
-// 			{
-// // 				StateVecD xin = svar.Transp*pn[ii].xi;
-// // 				StateVecD veln  = svar.Transp*(pn[ii].v /*+ pnp1[ii].vPert*/);
-// // 				StateVecD acc = svar.Transp*res[ii];
-// // 				StateVecD accn = svar.Transp*pn[ii].f;
-
-// // 				/*Integrate the pipe x-direction as normal, and allow particles to find their spacing.*/
-// //  				StateVecD xi = StateVecD::Zero();
-// //  				xi(0) = xin(0) + 0.25*(dt2*(c*accn(0)+d*acc(0)));
-// //  				xi(1) = xin(1) + dt*veln(1);
- 				
-// // 				StateVecD v  = StateVecD::Zero();
-// // 				v(0) = veln(0) + 0.25*(dt*(a*accn(0)+b*acc(0)));
-// // 				v(1) = veln(1);
-
-// // #if SIMDIM == 3
-// // 				xi(2) = xin(2) + 0.25*(dt2*(c*accn(2)+d*acc(2)));
-// // 				v(2) = veln(2) + 0.25*(dt*(a*accn(2)+b*acc(2)));
-// // #endif
-
-// // 				xi = svar.Rotate*xi;
-// // 				v = svar.Rotate*v;
-				
-// // 				pnp1[ii].xi = xi;
-// // 				pnp1[ii].v = v;
-// // #if SIMDIM == 3
-// // 				pnp1[ii].f = svar.Rotate*StateVecD(acc(0),0.0,acc(2));
-// // #else
-// // 				pnp1[ii].f = svar.Rotate*StateVecD(acc(0),0.0);
-// // #endif
-
-// 				pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-// 				// pnp1[ii].f = res[ii];
-// 				pnp1[ii].Rrho = Rrho[ii];
-// 				pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
-// 				pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
-// 			}
-// 			else if(pnp1[ii].b == PartState.BACK_ )
-// 			{   
-// 				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
-// 				if(vec(1) > svar.clear)
-// 				{	/*Tag it as clear if it's higher than the plane of the exit*/
-// 					pnp1[ii].b=PartState.PIPE_;
-// 				}
-// 				else
-// 				{	/*For the particles marked 1, perform a prescribed motion*/
-
-// 					/*Try setting a force to maintain a minimum jet-wise velocity*/
-
-// 					/*Need to transform into the vertical domain...*/
-// // 					StateVecD xin = svar.Transp*pn[ii].xi;
-// // 				    StateVecD veln  = svar.Transp*(pn[ii].v /*+ pnp1[ii].vPert*/);
-// // 					// StateVecD vel = svar.Transp*pnp1[ii].v;
-// // 					StateVecD acc = svar.Transp*res[ii];
-// // 					StateVecD accn = svar.Transp*pn[ii].f;
-
-// // 					// if(vel(1) < (getVelocity(avar.vJet,vec(0)*vec(0),0.5*svar.Jet(0) + 2*svar.dx))(1))
-// // 					// {
-// // 					// 	acc(1) += 1e2 * pow(vel(1)-avar.vJetMag,2);
-// // 					// }
-
-// // 					// acc = svar.Rotate * acc;
-
-
-// // 					// pnp1[ii].xi = pn[ii].xi+ dt*(pn[ii].v + pnp1[ii].vPert)+dt2*(c*pn[ii].f+d*acc);
-// // 					// pnp1[ii].v =  (pn[ii].v /*+ pnp1[ii].vPert*/) +dt*(a*pn[ii].f+b*acc);
-// // 					// pnp1[ii].f = svar.Rotate*acc;
-
-// // 					// StateVecD xi = xin + dt*(veln + svar.Transp*pnp1[ii].vPert)+dt2*(c*accn+d*accnp1);
-// // 	 				// 	pnp1[ii].xi = svar.Rotate*(xi+svar.Start);
-// // 	 				// 	pnp1[ii].v = svar.Rotate*v;
-
-// // 					/*Integrate the pipe x-direction as normal, and allow particles to find their spacing.*/
-// // 	 				StateVecD xi = StateVecD::Zero();
-// // 	 				xi(0) = xin(0) + 0.25*(dt2*(c*accn(0)+d*acc(0)));
-// // 	 				xi(1) = xin(1) + dt*veln(1);
-
-	 				
-// // 					StateVecD v  = StateVecD::Zero();
-// // 					v(0) = veln(0) + 0.25*(dt*(a*accn(0)+b*acc(0)));
-// //  					v(1) = veln(1);
-
-// // #if SIMDIM == 3
-// // 					xi(2) = xin(2) + 0.25*(dt2*(c*accn(2)+d*acc(2)));
-// // 					v(2) = veln(2) + 0.25*(dt*(a*accn(2)+b*acc(2)));
-// // #endif
-
-// // 					xi = svar.Rotate*xi;
-// //  					v = svar.Rotate*v;
-					
-// // 					pnp1[ii].xi = xi;
-// // 					pnp1[ii].v = v;
-// // #if SIMDIM == 3
-// // 					pnp1[ii].f = svar.Rotate*StateVecD(acc(0),0.0,acc(2));
-// // #else
-// // 					pnp1[ii].f = svar.Rotate*StateVecD(acc(0),0.0);
-// // #endif
-// 					// cout << acc(0) << "  " << acc(1) << endl;
-// 					// pnp1[ii].xi = pn[ii].xi+dt*(pn[ii].v + pnp1[ii].vPert)+dt2*(c*pn[ii].f+d*res[ii]);
-// 					pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-// 					// pnp1[ii].f = res[ii];
-// 					pnp1[ii].Rrho = Rrho[ii];
-// 					pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*pnp1[ii].Rrho);
-// 					pnp1[ii].p = fvar.B*(pow(pnp1[ii].rho/fvar.rho0,fvar.gam)-1);
-// 					// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
-// 				}
-// 			}				
+			
 
 			if(pnp1[ii].b > PartState.BUFFER_)
 			{	
@@ -271,7 +167,7 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 					if(vec(1) > 0.0)
 					{
 						pnp1[ii].b = PartState.FREE_;
-						if(svar.Asource == 1 || svar.Asource == 2)
+						if(dp.lam_ng[ii] < 0.75 && (svar.Asource == 1 || svar.Asource == 2))
 						{
 							/*retrieve the cell it's in*/
 							uint to_del = 0;
@@ -310,36 +206,6 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
 				// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
 
-				// if(pnp1[ii].b == PartState.BACK_)
-				// {	/* Define the buffer particle position based on this particle */
-
-				// 	/* Find the right index to find the particles behind it. */
-				// 	auto pIDit = find(svar.back.begin(),svar.back.end(),ii);
-
-				// 	if(pIDit != svar.back.end())
-				// 	{
-				// 		size_t index = pIDit-svar.back.begin();
-
-				// 		real jj = 1.0;
-				// 		for(size_t const& pi:svar.buffer[index])
-				// 		{
-							
-				// 			jj += 1.0;
-				// 		}
-				// 	}
-				// 	else
-				// 	{
-				// 		cout << "Couldnt find the particle in the back vector" << endl;
-				// 	}
-
-				// }
-
-				// if(res[ii].norm() > 10)
-				// {
-				// 	#pragma omp critical
-				// 	cout << res[ii](0) << "  " << res[ii](1) << "  " << Af[ii](0) << "  " << Af[ii](1) <<  endl;
-				// }
-
 				Force += res[ii]*pnp1[ii].m;
 				dropVel += (pnp1[ii].v + pnp1[ii].vPert);
 				
@@ -348,51 +214,6 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 				// pnp1[ii].curve = curve[ii];
 				pnp1[ii].pDist = vec.norm();
 
-
-				// if(pnp1[ii].xi(0) != pnp1[ii].xi(0))
-				// {
-				// 	cout << "Position is nan:  " << ii << endl;
-				// }
-
-				// if(pnp1[ii].v != pnp1[ii].v)
-				// {
-				// 	cout << "velocity is nan:  " << ii << endl;
-				// }
-
-				// if(pnp1[ii].f != pnp1[ii].f)
-				// {
-				// 	cout << "Force is nan:  " << ii << endl;
-				// }
-
-// #if SIMDIM == 2
-// 					if(real(outlist[ii].size()) < 5.26 * wDiff[ii] +30)
-// 					{
-// 						pnp1[ii].normal = norm[ii];
-// 						pnp1[ii].surf = curve[ii];
-// 						pnp1[ii].theta = 1.0;
-// 					}
-// 					else
-// 					{
-// 						pnp1[ii].normal = StateVecD::Zero();
-// 						pnp1[ii].surf = 0.0;
-// 						pnp1[ii].theta = 0.0;
-// 					}
-// #else
-// 					if(real(outlist[ii].size()) < 297.25 * wDiff[ii] + 34)
-// 					{
-// 						pnp1[ii].theta = wDiff[ii];
-// 						pnp1[ii].normal = norm[ii];
-// 						pnp1[ii].surf = curve[ii];
-// 					}
-// 					else
-// 					{
-// 						pnp1[ii].normal = StateVecD::Zero();
-// 						pnp1[ii].surf = 0.0;
-// 						pnp1[ii].theta = 0.0;
-// 					}
-// #endif
-
-				
 				if(svar.Asource == 2 && pnp1[ii].b == PartState.FREE_)
 				{
 					#pragma omp atomic
@@ -406,31 +227,77 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 						cells.vFnp1[pnp1[ii].cellID] += pnp1[ii].v;
 					}	
 				}
-				
 
+				
 			}
-			else //if(pnp1[ii].b == PartState.BUFFER_ || pnp1[ii].b == PartState.BACK_)
-			{	/* Particle will be of either buffer or back, and both a prescribed. */
-				pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
+			// else
+			// {
+			// 	pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
+
+			// 	// pnp1[pi].v = (pn[ii].v /* + pnp1[ii].vPert*/) + dt * (a * pn[ii].f + b * res[ii]);
+			// 	// pnp1[ii].f = res[ii];
+			// 	// pnp1[ii].Af = Af[ii];
+			// 	pnp1[ii].Rrho = Rrho[ii];
+
+			// 	pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
+			// 	pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
+			// }
+			pnp1[ii].s = dp.lam_ng[ii];
+
+
+			
+		} /*End fluid particles*/
+
+		/* Do the buffer particles */
+		#pragma omp for schedule(static)
+		for(size_t ii = 0; ii < svar.back.size(); ++ii)
+		{	
+			// size_t const& pID = svar.back[ii];
+			// StateVecD vec = svar.Transp*(pnp1[pID].xi-svar.Start);
+			// StateVecD v = pnp1[pID].v;
+			for(size_t jj = 0; jj < 4; ++jj)
+			{	/* Define buffer off the back particle */
+				// StateVecD xi = vec;
+				// xi[1] -= real(jj+1.0)*svar.dx;
+				// xi = svar.Rotate*xi + svar.Start;
+
+				size_t const& buffID = svar.buffer[ii][jj];
+
+				// pnp1[buffID].xi = xi;
+				// pnp1[buffID].v = v;
+				// pnp1[buffID].rho = fvar.rhoJ;
+				// pnp1[buffID].p = fvar.pPress;	
+				// pnp1[buffID].Rrho = Rrho[buffID];
+				// pnp1[buffID].rho = pn[buffID].rho+dt*
+				// 	(a*pn[buffID].Rrho+b*Rrho[buffID]);
+				// pnp1[buffID].p = B*(pow(pnp1[buffID].rho/fvar.rho0,gam)-1);
+
+				real frac = std::min(1.0,real(jj+1)/3.0);
+				// #ifdef NOALE
+				// pnp1[buffID].xi = frac*xi + (1.0-frac)*(pn[buffID].xi+dt*pn[buffID].v+dt2*(c*pn[buffID].f+d*res[buffID]));
+				// #else 
+				// pnp1[buffID].xi = frac*xi + (1.0-frac)*(pn[buffID].xi+dt*(pn[buffID].v + pnp1[buffID].vPert)+dt2*(c*pn[buffID].f+d*res[ii]));
+				// #endif
+				// pnp1[buffID].v =  frac*v + (1.0-frac)*((pn[buffID].v/* + pnp1[buffID].vPert*/) +dt*(a*pn[buffID].f+b*res[buffID]));
+				// pnp1[buffID].f = res[buffID];
+				// // pnp1[buffID].Af = Af[buffID];
+				pnp1[buffID].Rrho = Rrho[buffID];
+
+ 				pnp1[buffID].rho = frac * fvar.rhoJ + (1.0-frac) * (pn[buffID].rho+dt*(a*pn[buffID].Rrho+b*Rrho[buffID]));
+				pnp1[buffID].p = frac * fvar.pPress + (1.0-frac) * (B*(pow(pnp1[buffID].rho/fvar.rho0,gam)-1));
+
+				pnp1[buffID].xi = pn[buffID].xi + dt*pn[buffID].v;
 
 				// pnp1[pi].v = (pn[ii].v /* + pnp1[ii].vPert*/) + dt * (a * pn[ii].f + b * res[ii]);
 				// pnp1[ii].f = res[ii];
 				// pnp1[ii].Af = Af[ii];
-				pnp1[ii].Rrho = Rrho[ii];
+				// pnp1[buffID].Rrho = Rrho[buffID];
 
-				pnp1[ii].rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
-				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-			}
-			
-
-			pnp1[ii].curve = curve[ii];
-			pnp1[ii].s = outlist[ii].size();
-
-			// pnp1[ii].theta = wDiff[ii];
-			pnp1[ii].nNeigb = real(outlist[ii].size());
-			// pnp1[ii].bNorm = norm[ii];
-			
-		} /*End fluid particles*/
+				// pnp1[buffID].rho = pn[buffID].rho+dt*(a*pn[buffID].Rrho+b*Rrho[buffID]);
+				// pnp1[buffID].p = B*(pow(pnp1[buffID].rho/fvar.rho0,gam)-1);
+				
+			}	
+		}
 
 	}/*End pragma omp parallel*/
 
@@ -440,10 +307,9 @@ void Get_Resid(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& ava
 void Newmark_Beta(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
 	size_t const& start, size_t& end, 
 	real const& a, real const& b, real const& c, real const& d, real const& B, real const& gam,
-	MESH& cells, vector<size_t>& cellsused,
-	vector<vector<Part>> const& neighb, outl& outlist, DELTAP const& dp,
+	MESH& cells, vector<size_t>& cellsused, outl& outlist, DELTAP const& dp,
 	real& logbase, uint& k, real& error1, real& error2, vector<StateVecD>& xih,
-	State& pn, State& pnp1, State& airP, StateVecD& Force, StateVecD& dropVel)
+	State& pn, State& pnp1, StateVecD& Force, StateVecD& dropVel)
 {
 	uint nUnstab = 0;
 
@@ -454,8 +320,8 @@ void Newmark_Beta(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 		for (size_t  ii=start; ii < end; ++ii)
 			xih[ii-start] = pnp1[ii].xi;	
 		
-		Get_Resid(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
-			cells,cellsused,neighb,outlist,dp,pn,pnp1,airP,Force,dropVel);
+		Do_NB_Iter(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
+			cells,cellsused,outlist,dp,pn,pnp1,Force,dropVel);
 
 		int errstate = Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
 							cellsused,outlist,xih,pn,pnp1,k,nUnstab);

@@ -45,7 +45,7 @@ void Write_Input_ASCII(SIM const& svar, FLUID const& fvar, AERO const& avar)
 	restf << svar.boutform << setw(width) << "#Boundary time output" << endl;
 	restf << svar.gout << setw(width) << "#Ghost particle output" << endl;
 	restf << svar.subits << setw(width) << "#Maximum sub iterations" << endl;
-	restf << svar.nmax << setw(width) << "#Maximum number of particles" << endl;
+	restf << svar.finPts << setw(width) << "#Maximum number of particles" << endl;
 	restf << svar.cellSize << setw(width) << "#Post processing mesh size" << endl;
 	restf << svar.postRadius << setw(width) << "#Post processing support radius" << endl;
 	restf << svar.dx << setw(width) << "#Particle actual spacing" << endl;
@@ -159,7 +159,6 @@ void Write_Input_TECIO(SIM const& svar, FLUID const& fvar, AERO const& avar)
 	var.append("outframe,"); varTypes.emplace_back(5);
 	var.append("outtype,"); varTypes.emplace_back(5);
 	var.append("outform,"); varTypes.emplace_back(5);
-	var.append("boutform,"); varTypes.emplace_back(5);
 	var.append("gout,"); varTypes.emplace_back(5);
 	var.append("subits,"); varTypes.emplace_back(5);
 	var.append("nmax,"); varTypes.emplace_back(3);
@@ -230,7 +229,7 @@ void Write_Input_TECIO(SIM const& svar, FLUID const& fvar, AERO const& avar)
 	}
 #endif
 
-    int32_t outputZone;
+    int32_t frame;
     zone = "Restart data";
     int64_t size = SIMDIM;
 	// Get zone data types
@@ -239,7 +238,7 @@ void Write_Input_TECIO(SIM const& svar, FLUID const& fvar, AERO const& avar)
     vector<int32_t> passiveVarList(varTypes.size(),0);
 
 	if(tecZoneCreateIJK(fileHandle,zone.c_str(),size,1,1,&varTypes[0],
-		&shareVarFromZone[0],&valueLocation[0],&passiveVarList[0],0,0,0,&outputZone))
+		&shareVarFromZone[0],&valueLocation[0],&passiveVarList[0],0,0,0,&frame))
 	{
 		cerr << "Failed to create IJK zone." << endl;
 		exit(-1);
@@ -249,143 +248,23 @@ void Write_Input_TECIO(SIM const& svar, FLUID const& fvar, AERO const& avar)
 	vector<uint8_t> uintVar(size,0);
 	vector<int32_t> intVar(size,0);
 
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, svar.framet))
-	{
-		cerr << "Failed to write frame time interval" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	intVar[0] = static_cast<int32_t>(svar.Nframe);
-	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varnum, 0, size, &intVar[0]))
-	{
-		cerr << "Failed to write number of frames" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	uintVar[0] = static_cast<uint8_t>(svar.outframe);
-	if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, varnum, 0, size, &uintVar[0]))
-	{
-		cerr << "Failed to write output frame info" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	uintVar[0] = static_cast<uint8_t>(svar.outtype);
-	if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, varnum, 0, size, &uintVar[0]))
-	{
-		cerr << "Failed to write output data type" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	uintVar[0] = static_cast<uint8_t>(svar.outform);
-	if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, varnum, 0, size, &uintVar[0]))
-	{
-		cerr << "Failed to write output content" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	uintVar[0] = static_cast<uint8_t>(svar.boutform);
-	if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, varnum, 0, size, &uintVar[0]))
-	{
-		cerr << "Failed to write boundary time output" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	uintVar[0] = static_cast<uint8_t>(svar.gout);
-	if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, varnum, 0, size, &uintVar[0]))
-	{
-		cerr << "Failed to write ghost output" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	uintVar[0] = static_cast<uint8_t>(svar.subits);
-	if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, varnum, 0, size, &uintVar[0]))
-	{
-		cerr << "Failed to write sub interations" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	intVar[0] = static_cast<int32_t>(svar.nmax); 
-	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varnum, 0, size, &intVar[0]))
-	{
-		cerr << "Failed to write max particles" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, svar.cellSize))
-	{
-		cerr << "Failed to write cell size" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, svar.postRadius))
-	{
-		cerr << "Failed to write post process support radius" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, svar.dx))
-	{
-		cerr << "Failed to write dx" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, svar.Pstep))
-	{
-		cerr << "Failed to write Pstep" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, svar.Bstep))
-	{
-		cerr << "Failed to write Bstep" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	intVar[0] = static_cast<uint32_t>(svar.Bcase);
-	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varnum, 0, size, &intVar[0]))
-	{
-		cerr << "Failed to write boundary case" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	intVar[0] = static_cast<uint32_t>(svar.Asource);
-	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varnum, 0, size, &intVar[0]))
-	{
-		cerr << "Failed to write aerodynamic source" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	intVar[0] = static_cast<uint32_t>(avar.acase);
-	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varnum, 0, size, &intVar[0]))
-	{
-		cerr << "Failed to write aerodynamic case" << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	intVar[0] = static_cast<uint32_t>(svar.ghost);
-	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varnum, 0, size, &intVar[0]))
-	{
-		cerr << "Failed to write ghost particle option" << endl;
-		exit(-1);
-	}
-	varnum++;
+	Write_Real_Value(fileHandle, frame, varnum, size, svar.framet, "frame time interval");
+	Write_Int_Value(fileHandle, frame, varnum, size, svar.Nframe, "number of frames");
+	Write_UInt_Value(fileHandle, frame, varnum, size, svar.outframe, "output frame info");
+	Write_UInt_Value(fileHandle, frame, varnum, size, svar.outtype, "output data type");
+	Write_UInt_Value(fileHandle, frame, varnum, size, svar.outform, "output content");
+	Write_UInt_Value(fileHandle, frame, varnum, size, svar.gout, "ghost output");
+	Write_UInt_Value(fileHandle, frame, varnum, size, svar.subits, "sub iterations");
+	Write_Int_Value(fileHandle, frame, varnum, size, svar.finPts, "max particles");
+	Write_Real_Value(fileHandle, frame, varnum, size, svar.cellSize, "cell size");
+	Write_Real_Value(fileHandle, frame, varnum, size, svar.postRadius, "post process support radius");
+	Write_Real_Value(fileHandle, frame, varnum, size, svar.dx, "dx");
+	Write_Real_Value(fileHandle, frame, varnum, size, svar.Pstep, "Pstep");
+	Write_Real_Value(fileHandle, frame, varnum, size, svar.Bstep, "Bstep");
+	Write_Int_Value(fileHandle, frame, varnum, size, svar.Bcase, "boundary case");
+	Write_Int_Value(fileHandle, frame, varnum, size, svar.Asource, "aerodynamic source");
+	Write_Int_Value(fileHandle, frame, varnum, size, avar.acase, "aerodynamic case");
+	Write_Int_Value(fileHandle, frame, varnum, size, svar.ghost, "ghost particle option");
 
 	vector<real> vecreal(SIMDIM);
 	for(size_t dim = 0; dim < SIMDIM; dim++)
@@ -393,12 +272,8 @@ void Write_Input_TECIO(SIM const& svar, FLUID const& fvar, AERO const& avar)
 		vecreal[dim] = svar.Start(dim);
 	}
 
-	if(Write_Real_Vector(fileHandle, outputZone, varnum, SIMDIM, vecreal))
-	{
-		cerr << "Failed to write start coordinates." << endl;
-		exit(-1);
-	}
-	varnum++;
+	Write_Real_Vector(fileHandle, frame, varnum, size, vecreal, "start coordinates");
+
 
 	if(svar.Bcase < 2)
 	{
@@ -407,53 +282,29 @@ void Write_Input_TECIO(SIM const& svar, FLUID const& fvar, AERO const& avar)
 		{
 			vecint[dim] = static_cast<int32_t>(svar.xyPART(dim));
 		}
-
-		if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varnum, 0, size, &intVar[0]))
-		{
-			cerr << "Failed to write particle dimension counts." << endl;
-			exit(-1);
-		}
-		varnum++;
+		
+		Write_Int_Vector(fileHandle, frame, varnum, size, vecint, "particle dimension counts");
 
 		for(size_t dim = 0; dim < SIMDIM; dim++)
 		{
 			vecreal[dim] = svar.Box(dim);
 		}
 
-		if(Write_Real_Vector(fileHandle, outputZone, varnum, size, vecreal))
-		{
-			cerr << "Failed to write box dimensions." << endl;
-			exit(-1);
-		}
-		varnum++;
+		Write_Real_Vector(fileHandle, frame, varnum, size, vecreal, "box dimensions");
 
-		if(Write_Real_Value(fileHandle, outputZone, varnum, size, fvar.pPress))
-		{
-			cerr << "Failed to write starting pressure." << endl;
-			exit(-1);
-		}
-		varnum++;
+		Write_Real_Value(fileHandle, frame, varnum, size, fvar.pPress, "starting pressure");
 	}
 	else
 	{
-		if(Write_Real_Value(fileHandle, outputZone, varnum, size, svar.nrad))
-		{
-			cerr << "Failed to write particle number along diameter." << endl;
-			exit(-1);
-		}
-		varnum++;
+		Write_Int_Value(fileHandle, frame, varnum, size, svar.nrad, "diameter particle number");
 
 		for(size_t dim = 0; dim < SIMDIM; dim++)
 		{
 			vecreal[dim] = svar.Angle(dim);
 		}
 
-		if(Write_Real_Vector(fileHandle, outputZone, varnum, size, vecreal))
-		{
-			cerr << "Failed to write starting angle." << endl;
-			exit(-1);
-		}
-		varnum++;
+		Write_Real_Vector(fileHandle, frame, varnum, size, vecreal, "starting angles");
+
 
 		vector<real> vec2(3,0.0);
 		for(size_t dim = 0; dim < 2; dim++)
@@ -461,165 +312,50 @@ void Write_Input_TECIO(SIM const& svar, FLUID const& fvar, AERO const& avar)
 			vec2[dim] = svar.Jet(dim);
 		}
 
-		if(Write_Real_Vector(fileHandle, outputZone, varnum, size, vec2))
-		{
-			cerr << "Failed to write jet dimensions." << endl;
-			exit(-1);
-		}
-		varnum++;
+		Write_Real_Vector(fileHandle, frame, varnum, size, vec2, "jet dimensions");
 
-		if(Write_Real_Value(fileHandle, outputZone, varnum, size, fvar.pPress))
-		{
-			cerr << "Failed to write starting pressure." << endl;
-			exit(-1);
-		}
-		varnum++;
+		Write_Real_Value(fileHandle, frame, varnum, size, fvar.pPress, "starting pressure");
+
 
 		for(size_t dim = 0; dim < SIMDIM; dim++)
 		{
 			vecreal[dim] = avar.vJet(dim);
 		}
 
-		if(Write_Real_Vector(fileHandle, outputZone, varnum, size, vecreal))
-		{
-			cerr << "Failed to write jet velocity." << endl;
-			exit(-1);
-		}
-		varnum++;
+		Write_Real_Vector(fileHandle, frame, varnum, size, vecreal, "jet velocity");
 
 		for(size_t dim = 0; dim < SIMDIM; dim++)
 		{
 			vecreal[dim] = avar.vInf(dim);
 		}
-
-		if(Write_Real_Vector(fileHandle, outputZone, varnum, SIMDIM, vecreal))
-		{
-			cerr << "Failed to write freestream velocity." << endl;
-			exit(-1);
-		}
-		varnum++;
+		
+		Write_Real_Vector(fileHandle, frame, varnum, size, vecreal, "freestream velocity");
 
 		if(avar.acase == 2 || avar.acase == 3)
   		{
-  			if(Write_Real_Value(fileHandle, outputZone, varnum, size, avar.a))
-			{
-				cerr << "Failed to write parameter a." << endl;
-				exit(-1);
-			}
-			varnum++;
-
-			if(Write_Real_Value(fileHandle, outputZone, varnum, size, avar.h1))
-			{
-				cerr << "Failed to write parameter h1." << endl;
-				exit(-1);
-			}
-			varnum++;
-
-			if(Write_Real_Value(fileHandle, outputZone, varnum, size, avar.b))
-			{
-				cerr << "Failed to write parameter b." << endl;
-				exit(-1);
-			}
-			varnum++;
-
-			if(Write_Real_Value(fileHandle, outputZone, varnum, size, avar.h2))
-			{
-				cerr << "Failed to write parameter h2." << endl;
-				exit(-1);
-			}
-			varnum++;
+			Write_Real_Value(fileHandle, frame, varnum, size, avar.a, "parameter a");
+			Write_Real_Value(fileHandle, frame, varnum, size, avar.h1, "parameter h1");
+			Write_Real_Value(fileHandle, frame, varnum, size, avar.b, "parameter b");
+			Write_Real_Value(fileHandle, frame, varnum, size, avar.h2, "parameter h2");
   		}
 	}
 
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, fvar.alpha))
-	{
-		cerr << "Failed to write artificial dissipation factor." << endl;
-		exit(-1);
-	}
-	varnum++;
-
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, fvar.contangb))
-	{
-		cerr << "Failed to write contact angle." << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, fvar.rho0))
-	{
-		cerr << "Failed to write liquid density." << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, avar.rhog))
-	{
-		cerr << "Failed to write gasy density." << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, fvar.Cs))
-	{
-		cerr << "Failed to write speed of sound." << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, fvar.mu))
-	{
-		cerr << "Failed to write liquid viscosity." << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, avar.mug))
-	{
-		cerr << "Failed to write gas viscosity." << endl;
-		exit(-1);
-	}
-	varnum++;
-
-	if(Write_Real_Value(fileHandle, outputZone, varnum, size, fvar.sig))
-	{
-		cerr << "Failed to write surface tension." << endl;
-		exit(-1);
-	}
-	varnum++;
-
+	Write_Real_Value(fileHandle, frame, varnum, size, fvar.alpha, "artificial dissipation factor");
+	Write_Real_Value(fileHandle, frame, varnum, size, fvar.contangb, "contact angle");
+	Write_Real_Value(fileHandle, frame, varnum, size, fvar.rho0, "liquid density");
+	Write_Real_Value(fileHandle, frame, varnum, size, avar.rhog, "gas density");
+	Write_Real_Value(fileHandle, frame, varnum, size, fvar.Cs, "speed of sound");
+	Write_Real_Value(fileHandle, frame, varnum, size, fvar.mu, "liquid viscosity");
+	Write_Real_Value(fileHandle, frame, varnum, size, avar.mug, "gas viscosity");
+	Write_Real_Value(fileHandle, frame, varnum, size, fvar.sig, "surface tension");
+	
 	if(svar.Asource > 0)
 	{
-		if(Write_Real_Value(fileHandle, outputZone, varnum, size, svar.scale))
-		{
-			cerr << "Failed to write mesh scale." << endl;
-			exit(-1);
-		}
-		varnum++;
-
-		if(Write_Real_Value(fileHandle, outputZone, varnum, size, avar.vRef))
-		{
-			cerr << "Failed to write mesh freestream velocity." << endl;
-			exit(-1);
-		}
-		varnum++;
-
-		if(Write_Real_Value(fileHandle, outputZone, varnum, size, avar.pRef))
-		{
-			cerr << "Failed to write mesh freestream pressure." << endl;
-			exit(-1);
-		}
-		varnum++;
-
-		if(Write_Real_Value(fileHandle, outputZone, varnum, size, avar.T))
-		{
-			cerr << "Failed to write mesh freestream temperature." << endl;
-			exit(-1);
-		}
-		varnum++;
+		Write_Real_Value(fileHandle, frame, varnum, size, svar.scale, "scale");
+		Write_Real_Value(fileHandle, frame, varnum, size, avar.vRef, "reference velocity");
+		Write_Real_Value(fileHandle, frame, varnum, size, avar.pRef, "reference pressure");
+		Write_Real_Value(fileHandle, frame, varnum, size, avar.T, "reference temperature");
 	}
-
 
 	if(tecFileWriterClose(&fileHandle))
 	{
@@ -656,7 +392,7 @@ void Read_Restart(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 	svar.boutform = getInt(in, lineno, "Boundary time output");
 	svar.gout = getInt(in, lineno, "Output ghost particles to file");
 	svar.subits = getInt(in, lineno, "Max sub iterations");
-	svar.nmax = getInt(in, lineno, "Max number of particles");
+	svar.finPts = getInt(in, lineno, "Max number of particles");
 	/*Get post processing options*/
 	svar.cellSize = getDouble(in, lineno, "Post processing mesh size");
 	svar.postRadius = getDouble(in, lineno, "Post processing support radius");
@@ -777,389 +513,116 @@ void Read_Input_TECIO(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 		exit(-1);
 	}
 
-	vector<uint8_t> uintVec(iMax,0);
-	vector<int32_t> intVec(iMax,0);
-	vector<real> realVec(iMax,0.0);
-
 	int32_t varnum = 1;
+	int var;
+	Read_Real_Value(inputHandle, frame, varnum, iMax, svar.framet, "frame time interval");
+	Read_Int_Value(inputHandle, frame, varnum, iMax, var, "number of frames");
+	svar.Nframe = var;
+	Read_UInt_Value(inputHandle, frame, varnum, iMax, svar.outframe, "output frame info");
+	Read_UInt_Value(inputHandle, frame, varnum, iMax, svar.outtype, "output data type");
+	Read_UInt_Value(inputHandle, frame, varnum, iMax, svar.outform, "output content");
+	Read_UInt_Value(inputHandle, frame, varnum, iMax, svar.gout, "ghost output");
+	Read_UInt_Value(inputHandle, frame, varnum, iMax, svar.subits, "sub iterations");
+	Read_Int_Value(inputHandle, frame, varnum, iMax, var, "max particles");
+	svar.finPts = var;
+	Read_Real_Value(inputHandle, frame, varnum, iMax, svar.cellSize, "cell size");
+	Read_Real_Value(inputHandle, frame, varnum, iMax, svar.postRadius, "post process support radius");
+	Read_Real_Value(inputHandle, frame, varnum, iMax, svar.dx, "dx");
+	Read_Real_Value(inputHandle, frame, varnum, iMax, svar.Pstep, "Pstep");
+	Read_Real_Value(inputHandle, frame, varnum, iMax, svar.Bstep, "Bstep");
+	Read_Int_Value(inputHandle, frame, varnum, iMax, svar.Bcase, "boundary case");
+	Read_Int_Value(inputHandle, frame, varnum, iMax, svar.Asource, "aerodynamic source");
+	Read_Int_Value(inputHandle, frame, varnum, iMax, avar.acase, "aerodynamic case");
+	Read_Int_Value(inputHandle, frame, varnum, iMax, svar.ghost, "ghost particle option");
 
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read frame time interval" << endl;
-		exit(-1);
-	}
-	svar.framet = realVec[0];
-	varnum++;
+	vector<real> vecreal;
+	vector<int> vecint;
 
-	if(tecZoneVarGetInt32Values(inputHandle, frame, varnum, 1, iMax, &intVec[0]))
-	{
-		cerr << "Failed to read number of frames" << endl;
-		exit(-1);
-	}
-	svar.Nframe = static_cast<uint>(intVec[0]);
-	varnum++;
-
-	if(tecZoneVarGetUInt8Values(inputHandle, frame, varnum, 1, iMax, &uintVec[0]))
-	{
-		cerr << "Failed to read output frame info" << endl;
-		exit(-1);
-	}
-	svar.outframe = static_cast<uint>(uintVec[0]);
-	varnum++;
-
-	if(tecZoneVarGetUInt8Values(inputHandle, frame, varnum, 1, iMax, &uintVec[0]))
-	{
-		cerr << "Failed to read output data type" << endl;
-		exit(-1);
-	}
-	svar.outtype = static_cast<uint>(uintVec[0]);
-	varnum++;
-
-	if(tecZoneVarGetUInt8Values(inputHandle, frame, varnum, 1, iMax, &uintVec[0]))
-	{
-		cerr << "Failed to read output content" << endl;
-		exit(-1);
-	}
-	svar.outform = static_cast<uint>(uintVec[0]);
-	varnum++;
-
-	if(tecZoneVarGetUInt8Values(inputHandle, frame, varnum, 1, iMax, &uintVec[0]))
-	{
-		cerr << "Failed to read boundary time output" << endl;
-		exit(-1);
-	}
-	svar.boutform = static_cast<uint>(uintVec[0]);
-	varnum++;
-
-	if(tecZoneVarGetUInt8Values(inputHandle, frame, varnum, 1, iMax, &uintVec[0]))
-	{
-		cerr << "Failed to read ghost output" << endl;
-		exit(-1);
-	}
-	svar.gout = static_cast<uint>(uintVec[0]);
-	varnum++;
-
-	if(tecZoneVarGetUInt8Values(inputHandle, frame, varnum, 1, iMax, &uintVec[0]))
-	{
-		cerr << "Failed to read sub interations" << endl;
-		exit(-1);
-	}
-	svar.subits = static_cast<uint>(uintVec[0]);
-	varnum++;
-
-	if(tecZoneVarGetInt32Values(inputHandle, frame, varnum, 1, iMax, &intVec[0]))
-	{
-		cerr << "Failed to read max particles" << endl;
-		exit(-1);
-	}
-	svar.nmax = static_cast<uint>(intVec[0]);
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read cell size" << endl;
-		exit(-1);
-	}
-	svar.cellSize = realVec[0];
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read post process support radius" << endl;
-		exit(-1);
-	}
-	svar.postRadius = realVec[0];
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read dx" << endl;
-		exit(-1);
-	}
-	svar.dx = realVec[0];
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read Pstep" << endl;
-		exit(-1);
-	}
-	svar.Pstep = realVec[0];
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read Bstep" << endl;
-		exit(-1);
-	}
-	svar.Bstep = realVec[0];
-	varnum++;
-
-	if(tecZoneVarGetInt32Values(inputHandle, frame, varnum, 1, iMax, &intVec[0]))
-	{
-		cerr << "Failed to read boundary case" << endl;
-		exit(-1);
-	}
-	svar.Bcase = static_cast<int>(intVec[0]);
-	varnum++;
-
-	if(tecZoneVarGetInt32Values(inputHandle, frame, varnum, 1, iMax, &intVec[0]))
-	{
-		cerr << "Failed to read aerodynamic source" << endl;
-		exit(-1);
-	}
-	svar.Asource = static_cast<int>(intVec[0]);
-	varnum++;
-
-	if(tecZoneVarGetInt32Values(inputHandle, frame, varnum, 1, iMax, &intVec[0]))
-	{
-		cerr << "Failed to read aerodynamic case" << endl;
-		exit(-1);
-	}
-	avar.acase = static_cast<int>(intVec[0]);
-	varnum++;
-
-	if(tecZoneVarGetInt32Values(inputHandle, frame, varnum, 1, iMax, &intVec[0]))
-	{
-		cerr << "Failed to read ghost particle option" << endl;
-		exit(-1);
-	}
-	svar.ghost = static_cast<int>(intVec[0]);
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, SIMDIM, realVec))
-	{
-		cerr << "Failed to read start coordinates" << endl;
-		exit(-1);
-	}
-
+	Read_Real_Vector(inputHandle, frame, varnum, iMax, vecreal, "start coordinates");
+	
 	for(size_t dim = 0; dim < SIMDIM; dim++)
 	{
-		svar.Start(dim) = realVec[dim];
+		svar.Start(dim) = vecreal[dim];
 	}
-	varnum++;
 
 	if(svar.Bcase < 2)
 	{
-		if(tecZoneVarGetInt32Values(inputHandle, frame, varnum, 1, iMax, &intVec[0]))
-		{
-			cerr << "Failed to read particle dimension counts" << endl;
-			exit(-1);
-		}
+		Read_Int_Vector(inputHandle, frame, varnum, iMax, vecint, "particle dimension counts");
 
 		for(size_t dim = 0; dim < SIMDIM; dim++)
 		{
-			svar.xyPART(dim) = static_cast<int>(intVec[dim]);
+			svar.xyPART(dim) = vecint[dim];
 		}
-		varnum++;
 
-		if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-		{
-			cerr << "Failed to read box dimensions" << endl;
-			exit(-1);
-		}
+		Read_Real_Vector(inputHandle, frame, varnum, iMax, vecreal, "box dimensions");
+		
 		for(size_t dim = 0; dim < SIMDIM; dim++)
 		{
-			svar.Box(dim) = realVec[dim];
+			svar.Box(dim) = vecreal[dim];
 		}
-		varnum++;
 
-		if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-		{
-			cerr << "Failed to read starting pressure" << endl;
-			exit(-1);
-		}
-		fvar.pPress = realVec[0];
-		varnum++;
+		Read_Real_Value(inputHandle, frame, varnum, iMax, fvar.pPress, "starting pressure");
 	}
 	else
-	{	
-		if(tecZoneVarGetInt32Values(inputHandle, frame, varnum, 1, iMax, &intVec[0]))
-		{
-			cerr << "Failed to read particle dimension counts" << endl;
-			exit(-1);
-		}
-		svar.nrad = intVec[0];
-		varnum++;
+	{
+		Read_Int_Value(inputHandle, frame, varnum, iMax, var, "diameter particle number");
+		svar.nrad = var;
 
-		if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-		{
-			cerr << "Failed to read starting angle" << endl;
-			exit(-1);
-		}
+		Read_Real_Vector(inputHandle, frame, varnum, iMax, vecreal, "starting angles");
+		
 		for(size_t dim = 0; dim < SIMDIM; dim++)
 		{
-			svar.Angle(dim) = realVec[dim];
+			svar.Angle(dim) = vecreal[dim];
 		}
-		varnum++;
 
-		StateVecD angles = svar.Angle;
-		angles = angles*M_PI/180;
-		svar.Rotate = GetRotationMat(angles);
-
-		if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-		{
-			cerr << "Failed to read jet dimensions" << endl;
-			exit(-1);
-		}
+		Read_Real_Vector(inputHandle, frame, varnum, iMax, vecreal, "jet dimensions");
+	
 		for(size_t dim = 0; dim < 2; dim++)
 		{
-			svar.Jet(dim) = realVec[dim];
+			svar.Jet(dim) = vecreal[dim];
 		}
-		varnum++;
 
-		if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-		{
-			cerr << "Failed to read starting pressure" << endl;
-			exit(-1);
-		}
-		fvar.pPress = realVec[0];
-		varnum++;
 		
-		if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-		{
-			cerr << "Failed to read jet velocity" << endl;
-			exit(-1);
-		}
-		for (size_t dim = 0; dim < SIMDIM; dim++)
-		{
-			avar.vJet(dim) = realVec[dim];
-		}
-		varnum++;
+		Read_Real_Value(inputHandle, frame, varnum, iMax, fvar.pPress, "starting pressure");
 
-
-		if(Read_Real_Value(inputHandle, frame, varnum, SIMDIM, realVec))
-		{
-			cerr << "Failed to read freestream velocity" << endl;
-			exit(-1);
-		}
+		Read_Real_Vector(inputHandle, frame, varnum, iMax, vecreal, "jet velocity");
+		
 		for(size_t dim = 0; dim < SIMDIM; dim++)
 		{
-			avar.vInf(dim) = realVec[dim];
+			avar.vJet(dim) = vecreal[dim];
 		}
-		varnum++;
+		
+		Read_Real_Vector(inputHandle, frame, varnum, iMax, vecreal, "freestream velocity");
+		
+		for(size_t dim = 0; dim < SIMDIM; dim++)
+		{
+			avar.vInf(dim) = vecreal[dim];
+		}
 
 		if(avar.acase == 2 || avar.acase == 3)
   		{
-  			if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-			{
-				cerr << "Failed to read parameter a" << endl;
-				exit(-1);
-			}
-			avar.a = realVec[0];
-			varnum++;
-
-			if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-			{
-				cerr << "Failed to read parameter h1" << endl;
-				exit(-1);
-			}
-			avar.h1 = realVec[0];
-			varnum++;
-
-			if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-			{
-				cerr << "Failed to read parameter b" << endl;
-				exit(-1);
-			}
-			avar.b = realVec[0];
-			varnum++;
-
-			if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-			{
-				cerr << "Failed to read parameter h2" << endl;
-				exit(-1);
-			}
-			avar.h2 = realVec[0];
-			varnum++;
+			Read_Real_Value(inputHandle, frame, varnum, iMax, avar.a, "parameter a");
+			Read_Real_Value(inputHandle, frame, varnum, iMax, avar.h1, "parameter h1");
+			Read_Real_Value(inputHandle, frame, varnum, iMax, avar.b, "parameter b");
+			Read_Real_Value(inputHandle, frame, varnum, iMax, avar.h2, "parameter h2");
   		}
 	}
 
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read artificial dissipation factor" << endl;
-		exit(-1);
-	}
-	fvar.alpha = realVec[0];
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read contact angle" << endl;
-		exit(-1);
-	}
-	fvar.contangb = realVec[0];
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read liquid density" << endl;
-		exit(-1);
-	}
-	fvar.rho0 = realVec[0];
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read gasy density" << endl;
-		exit(-1);
-	}
-	avar.rhog = realVec[0];
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read speed of sound" << endl;
-		exit(-1);
-	}
-	fvar.Cs = realVec[0];
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read liquid viscosity" << endl;
-		exit(-1);
-	}
-	fvar.mu = realVec[0];
-	varnum++;
-
-	if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-	{
-		cerr << "Failed to read gas viscosity" << endl;
-		exit(-1);
-	}
-	avar.mug = realVec[0];
-	varnum++;
-
+	Read_Real_Value(inputHandle, frame, varnum, iMax, fvar.alpha, "artificial dissipation factor");
+	Read_Real_Value(inputHandle, frame, varnum, iMax, fvar.contangb, "contact angle");
+	Read_Real_Value(inputHandle, frame, varnum, iMax, fvar.rho0, "liquid density");
+	Read_Real_Value(inputHandle, frame, varnum, iMax, avar.rhog, "gas density");
+	Read_Real_Value(inputHandle, frame, varnum, iMax, fvar.Cs, "speed of sound");
+	Read_Real_Value(inputHandle, frame, varnum, iMax, fvar.mu, "liquid viscosity");
+	Read_Real_Value(inputHandle, frame, varnum, iMax, avar.mug, "gas viscosity");
+	Read_Real_Value(inputHandle, frame, varnum, iMax, fvar.sig, "surface tension");
+	
 	if(svar.Asource > 0)
 	{
-		if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-		{
-			cerr << "Failed to read mesh scale" << endl;
-			exit(-1);
-		}
-		varnum++;
-
-		if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-		{
-			cerr << "Failed to read mesh freestream velocity" << endl;
-			exit(-1);
-		}
-		varnum++;
-
-		if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-		{
-			cerr << "Failed to read mesh freestream pressure" << endl;
-			exit(-1);
-		}
-		varnum++;
-
-		if(Read_Real_Value(inputHandle, frame, varnum, iMax, realVec))
-		{
-			cerr << "Failed to read mesh freestream temperature" << endl;
-			exit(-1);
-		}
-		varnum++;
+		Read_Real_Value(inputHandle, frame, varnum, iMax, svar.scale, "scale");
+		Read_Real_Value(inputHandle, frame, varnum, iMax, avar.vRef, "reference velocity");
+		Read_Real_Value(inputHandle, frame, varnum, iMax, avar.pRef, "reference pressure");
+		Read_Real_Value(inputHandle, frame, varnum, iMax, avar.T, "reference temperature");
 	}
 
 	if(tecFileReaderClose(&inputHandle))
@@ -1190,7 +653,7 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 		}
 	}
 
-	if(svar.boutform == 0 && (svar.Bcase != 4 && svar.Bcase !=0))
+	if((svar.Bcase != 4 && svar.Bcase != 3 && svar.Bcase !=0))
 	{
 		cout << "Time data for the boundary has not been output. Cannot restart." << endl;
 		exit(-1);
@@ -1231,7 +694,7 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 		cout << "Checking Fuel file..." << endl;
 		CheckContents(fuelHandle,svar,fuelFrames,fuelTime);
 
-		if (svar.Bcase != 4 && svar.Bcase !=0)
+		if (svar.Bcase!= 3 && svar.Bcase != 4 && svar.Bcase !=0)
 		{
 			string boundf = outdir;
 			boundf.append("Boundary.szplt");
@@ -1357,41 +820,75 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 	}
 
 	// Go through the particles giving them the properties of the cell
+	vector<size_t> buffer;
 	#pragma omp parallel for 
 	for(size_t ii = 0; ii < svar.totPts; ++ii)
 	{
 		pn[ii].partID = ii;
 		pn[ii].p =  fvar.B*(pow(pn[ii].rho/fvar.rho0,fvar.gam)-1);
 
-		if((svar.Asource == 1 || svar.Asource == 2) && svar.outform == 5)
-		{
-			if(pn[ii].b == PartState.FREE_)
-			{
-				pn[ii].cellV = cells.cVel[pn[ii].cellID];
-				pn[ii].cellP = cells.cP[pn[ii].cellID];
-			}
-		}
-
 		if(pn[ii].b == PartState.BACK_)
 		{
+			#pragma omp critical
 			svar.back.emplace_back(ii);
 		}
-
-		/* Need to create buffer zone array */
-
+		else if(pn[ii].b == PartState.BUFFER_)
+		{
+			#pragma omp critical
+			buffer.emplace_back(ii);
+		}
+		
 		// Initialise the rest of the values to 0
-		pn[ii].curve = 0.0;
-		pn[ii].theta = 0.0;
-		pn[ii].nNeigb = 0.0;
 		pn[ii].s = 0.0;
 		pn[ii].woccl = 0.0;
 		pn[ii].pDist = 0.0;
 		pn[ii].internal = 0;
 
-		pn[ii].Sf = StateVecD::Zero();
-		pn[ii].normal = StateVecD::Zero();
 		pn[ii].vPert = StateVecD::Zero();
-	}		
+	}	
+
+	/* Put the particles into the buffer vector */
+	svar.buffer = vector<vector<size_t>>(svar.back.size(),vector<size_t>(4));
+	real eps = 0.01*svar.dx; /* Tolerance value */
+	for(size_t ii = 0; ii < svar.back.size(); ++ii)
+	{
+		StateVecD const test = svar.Transp*(pn[svar.back[ii]].xi-svar.Start);
+		
+		for(size_t index = 0; index < buffer.size(); ++index)
+		{
+			/* Check which particle in the back vector it corresponds to by checking which  */
+			/* particle it lies behind */
+			StateVecD const xi = svar.Transp*(pn[buffer[index]].xi-svar.Start);
+			// cout << test[0] << "  " << test[1] << "  " << xi[0] << "  " << xi[1] << endl;
+
+			if(xi[0] < test[0] + eps && xi[0] > test[0] - eps)
+			{	/* X coordinate is within bounds, so should lie behind this point */
+
+				/* Start wit the furthest away, and go closer */
+				if (xi[1] < test[1] - 4.0*svar.dx + eps)
+				{
+					svar.buffer[ii][3] = buffer[index];
+				}
+				else if (xi[1] < test[1] - 3.0*svar.dx + eps)
+				{
+					svar.buffer[ii][2] = buffer[index];
+				}
+				else if (xi[1] < test[1] - 2.0*svar.dx + eps)
+				{
+					svar.buffer[ii][1] = buffer[index];
+				}
+				else if (xi[1] < test[1] - svar.dx + eps)
+				{
+					svar.buffer[ii][0] = buffer[index];
+				}
+				else
+				{
+					cout << "Couldn't identify where to place the buffer particle" << endl;
+					exit(-1);
+				}
+			}
+		}
+	}	
 	
 	pnp1 = pn;
 

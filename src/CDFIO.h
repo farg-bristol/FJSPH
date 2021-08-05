@@ -646,27 +646,15 @@ void Read_SOLUTION(string const &solIn, FLUID const &fvar, AERO const &avar,
 
 	/*Get other scalar data that may or may not exist*/
 	vector<real> press = Get_Scalar_Property_real(solID, "pressure", solPts);
-	if (press.size() == 0)
-	{
-		/*Pressure data doesn't exist, so go to cp*/
-		vector<real> cp = Get_Scalar_Property_real(solID, "cp", solPts);
+	vector<real> dens = Get_Scalar_Property_real(solID, "density",solPts);
 
-		/*Then convert cp to pressure. can get global attributes from sol file.. Maybe...*/
-		press = CpToPressure(cp, avar);
-	}
-	else
-	{
-#pragma omp parallel for
-		for (uint ii = 0; ii < press.size(); ++ii)
-			press[ii] -= avar.pRef;
-	}
+	// vector<real> dens(solPts);
 
-	vector<real> dens(solPts);
-
-#pragma omp parallel for
+	#pragma omp parallel for
 	for (uint ii = 0; ii < press.size(); ++ii)
 	{
-		dens[ii] = fvar.rho0 * pow((press[ii] / fvar.B + 1), 1 / fvar.gam);
+		press[ii] -= avar.pRef; /* Want value to be gauge pressure */
+		// dens[ii] = fvar.rho0 * pow((press[ii] / fvar.B + 1), 1 / fvar.gam);
 	}
 
 	if (press.size() == 0)
@@ -679,6 +667,9 @@ void Read_SOLUTION(string const &solIn, FLUID const &fvar, AERO const &avar,
 	{ /*Get the used vertices*/
 		vector<real> newP;
 		vector<real> newR;
+		newP.reserve(usedVerts.size());
+		newR.reserve(usedVerts.size());
+
 		for (auto index : usedVerts)
 		{
 			newP.emplace_back(press[index]);
@@ -705,7 +696,7 @@ void Read_SOLUTION(string const &solIn, FLUID const &fvar, AERO const &avar,
 	Average_Point_to_Cell(vel, cells.cVel, cells.elems);
 	// Average_Point_to_Cell(dens,cells.SPHRho,cells.elems);
 	Average_Point_to_Cell(press, cells.cP, cells.elems);
-	Average_Point_to_Cell(realDens, cells.cRho, cells.elems);
+	Average_Point_to_Cell(dens, cells.cRho, cells.elems);
 
 	/*Check the data*/
 	// for(auto value:dens)
@@ -725,26 +716,26 @@ void Read_SOLUTION(string const &solIn, FLUID const &fvar, AERO const &avar,
 
 void Place_Edges(int &fin, size_t const &nElem, size_t const &nPnts, size_t const &nEdge, MESH &cells)
 {
-#ifdef DEBUG
-	dbout << "Reading element left/right and placing faces" << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Reading element left/right and placing faces" << endl;
+	#endif
 
 	vector<int> left = Get_Scalar_Property_int(fin,"left_element_of_edges",nEdge);
 	vector<int> right = Get_Scalar_Property_int(fin,"right_element_of_edges",nEdge);
 
 	vector<std::pair<int, int>> leftright(nEdge);
 
-#pragma omp parallel shared(leftright)
+	#pragma omp parallel shared(leftright)
 	{
 		/*Create local of */
 
-#pragma omp for schedule(static) nowait
+		#pragma omp for schedule(static) nowait
 		for (size_t ii = 0; ii < nEdge; ++ii)
 		{
 			int lindex = left[ii];
 			int rindex = right[ii];
 			leftright[ii] = std::pair<int, int>(lindex, rindex);
-#pragma omp critical
+			#pragma omp critical
 			{
 				cells.cFaces[lindex].emplace_back(ii);
 				if (rindex >= 0)
@@ -755,16 +746,16 @@ void Place_Edges(int &fin, size_t const &nElem, size_t const &nPnts, size_t cons
 
 	cells.leftright = leftright;
 
-#ifdef DEBUG
-	dbout << "End of placing edges in elements." << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "End of placing edges in elements." << endl;
+	#endif
 
 	/*Now go through the faces and see which vertices are unique, to get element data*/
 	cout << "Building elements..." << endl;
-#pragma omp parallel
+	#pragma omp parallel
 	{
-// vector<vector<uint>> local;
-#pragma omp for schedule(static) nowait
+		// vector<vector<uint>> local;
+		#pragma omp for schedule(static) nowait
 		for (uint ii = 0; ii < cells.cFaces.size(); ++ii)
 		{
 			for (auto const &index : cells.cFaces[ii])
@@ -774,7 +765,7 @@ void Place_Edges(int &fin, size_t const &nElem, size_t const &nPnts, size_t cons
 				{
 					if (std::find(cells.elems[ii].begin(), cells.elems[ii].end(), vert) == cells.elems[ii].end())
 					{ /*Vertex doesn't exist in the elems vector yet.*/
-#pragma omp critical
+						#pragma omp critical
 						{
 							cells.elems[ii].emplace_back(vert);
 						}
@@ -783,22 +774,22 @@ void Place_Edges(int &fin, size_t const &nElem, size_t const &nPnts, size_t cons
 			}
 		}
 
-/*Find cell centres*/
-#pragma omp single
+		/*Find cell centres*/
+		#pragma omp single
 		{
 			cout << "Finding cell centres..." << endl;
 		}
 
 		Average_Point_to_Cell(cells.verts, cells.cCentre, cells.elems);
 
-/*Find cell centres*/
-#pragma omp single
+		/*Find cell centres*/
+		#pragma omp single
 		{
 			cout << "Finding cell volumes..." << endl;
 		}
 
-// Find cell volumes
-#pragma omp for schedule(static) nowait
+		// Find cell volumes
+		#pragma omp for schedule(static) nowait
 		for (size_t ii = 0; ii < cells.elems.size(); ++ii)
 		{
 			cells.cVol[ii] = Cell_Volume(cells.verts, cells.faces, cells.elems[ii], cells.cFaces[ii], cells.cCentre[ii]);
@@ -806,10 +797,10 @@ void Place_Edges(int &fin, size_t const &nElem, size_t const &nPnts, size_t cons
 	}
 	cout << "Elements built." << endl;
 
-#ifdef DEBUG
-	dbout << "All elements defined." << endl
-		  << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "All elements defined." << endl
+			<< endl;
+	#endif
 }
 
 void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &avar)
@@ -819,11 +810,11 @@ void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 	meshIn.append(svar.meshfile);
 	solIn.append(svar.solfile);
 
-#ifdef DEBUG
-	dbout << "Attempting read of NetCDF file." << endl;
-	dbout << "Mesh file: " << meshIn << endl;
-	dbout << "Solution file: " << solIn << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Attempting read of NetCDF file." << endl;
+		dbout << "Mesh file: " << meshIn << endl;
+		dbout << "Solution file: " << solIn << endl;
+	#endif
 
 	/*Read the mesh data*/
 	int retval;
@@ -896,9 +887,9 @@ void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 		exit(-1);
 	}
 
-#ifdef DEBUG
-	dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << endl;
+	#endif
 
 	cout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << endl;
 
@@ -946,11 +937,11 @@ void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 	/*Get face left and right, and put the faces in the elements*/
 	Place_Edges(meshID, nElem, nPnts, nEdge, cells);
 
-#ifdef DEBUG
-	dbout << "End of interaction with mesh file and ingested data." << endl
-		  << endl;
-	dbout << "Opening solultion file." << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "End of interaction with mesh file and ingested data." << endl
+			<< endl;
+		dbout << "Opening solultion file." << endl;
+	#endif
 
 	Read_SOLUTION(solIn, fvar, avar, ignored, cells, uVerts);
 
@@ -968,9 +959,9 @@ void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 
 void Place_Faces(int &fin, size_t const &nFace, MESH &cells)
 {
-#ifdef DEBUG
-	dbout << "Reading element left/right and placing faces" << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Reading element left/right and placing faces" << endl;
+	#endif
 
 	vector<int> left = Get_Scalar_Property_int(fin,"left_element_of_faces",nFace);
 	vector<int> right = Get_Scalar_Property_int(fin,"right_element_of_faces",nFace);

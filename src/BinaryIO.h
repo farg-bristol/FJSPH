@@ -22,46 +22,135 @@ enum fileType_e { FULL = 0, GRID = 1, SOLUTION = 2 };
 /*************************************************************************/
 /**************************** BINARY INPUTS ******************************/
 /*************************************************************************/
-int Read_Real_Value(void* const& inputHandle, int32_t const& frame, int32_t const& varCount, 
-					int64_t const& iMax, vector<real>& var)
+void Read_Real_Value(void* const& inputHandle, int32_t const& frame, int32_t& varCount, 
+					int64_t const& iMax, real& var, string const& varName)
 {
+	int retval;
+	vector<real> varvec(iMax);
 #if FOD == 1
-	return tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &var[0]);
+	retval = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &varvec[0]);
 #else
-	return tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &var[0]);
+	retval = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &varvec[0]);
 #endif
+
+	if(retval)
+	{
+		cout << "Failed to read \"" << varName << "\". frame: " << 
+			frame << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	var = varvec[0];
+
+	++varCount;
+}
+
+void Read_Int_Value(void* const& inputHandle, int32_t const& frame, int32_t& varCount, 
+					int64_t const& iMax, int& var, string const& varName)
+{
+	vector<int32_t> varvec(iMax);
+	if(tecZoneVarGetInt32Values(inputHandle, frame, varCount, 1, iMax, &varvec[0]))
+	{
+		cout << "Failed to read \"" << varName << "\". frame: " << 
+			frame << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	var = static_cast<int>(varvec[0]);
+	++varCount;
+}
+
+void Read_UInt_Value(void* const& inputHandle, int32_t const& frame, int32_t& varCount, 
+					int64_t const& iMax, uint& var, string const& varName)
+{
+	vector<uint8_t> varvec(iMax);
+	if(tecZoneVarGetUInt8Values(inputHandle, frame, varCount, 1, iMax, &varvec[0]))
+	{
+		cout << "Failed to read \"" << varName << "\". frame: " << 
+			frame << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	var = static_cast<uint>(varvec[0]);
+	++varCount;
+}
+
+void Read_Real_Vector(void* const& inputHandle, int32_t const& frame, int32_t& varCount, 
+					int64_t const& iMax, vector<real>& var, string const& varName)
+{
+	int retval;
+	var = vector<real>(iMax);
+#if FOD == 1
+	retval = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &var[0]);
+#else
+	retval = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &var[0]);
+#endif
+
+	if(retval)
+	{
+		cout << "Failed to read \"" << varName << "\". frame: " << 
+			frame << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+
+	++varCount;
+}
+
+void Read_Int_Vector(void* const& inputHandle, int32_t const& frame, int32_t& varCount, 
+					int64_t const& iMax, vector<int>& var, string const& varName)
+{
+	vector<int32_t> varvec(iMax);
+	if(tecZoneVarGetInt32Values(inputHandle, frame, varCount, 1, iMax, &varvec[0]))
+	{
+		cout << "Failed to read \"" << varName << "\". frame: " << 
+			frame << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	var = vector<int>(iMax);
+	for(int64_t ii = 0; ii < iMax; ++ii)
+	{
+		var[ii] = static_cast<int>(varvec[ii]);
+	}
+	++varCount;
+}
+
+void Read_UInt_Vector(void* const& inputHandle, int32_t const& frame, int32_t& varCount, 
+					int64_t const& iMax, vector<uint>& var, string const& varName)
+{
+	vector<uint8_t> varvec(iMax);
+	if(tecZoneVarGetUInt8Values(inputHandle, frame, varCount, 1, iMax, &varvec[0]))
+	{
+		cout << "Failed to read \"" << varName << "\". frame: " << 
+			frame << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	var = vector<uint>(iMax);
+	for(int64_t ii = 0; ii < iMax; ++ii)
+	{
+		var[ii] = static_cast<uint>(varvec[ii]);
+	}
+	++varCount;
 }
 
 vector<StateVecD> Read_Binary_Vector(void* inputHandle, INTEGER4& frame, 
-		INTEGER4& varCount, INTEGER8& iMax)
+		INTEGER4& varCount, INTEGER8& iMax, string const& varName)
 {
 	vector<real> xVar(iMax,0.0);
 	vector<real> yVar(iMax,0.0);
 
     // cout << "Trying to get vector x-component. Var: " << varCount << endl;
-	if(Read_Real_Value(inputHandle, frame, varCount, iMax, xVar))
-	{
-		cerr << "Failed to read x-component of vector. frame: " << frame << ". varCount: " << varCount << endl;
-		exit(-1);
-	}
-	++varCount;
+	string name = "x-component of ";
+	name.append(varName);
+	Read_Real_Vector(inputHandle, frame, varCount, iMax, xVar, name);
+	
     // cout << "Trying to get vector y-component. Var: " << varCount << endl;
-	if(Read_Real_Value(inputHandle, frame, varCount, iMax, yVar))
-	{
-		cerr << "Failed to read y-component of vector. frame: " << frame << ". varCount: " << varCount << endl;
-		exit(-1);
-	}
-	++varCount;
+	name = "y-component of ";
+	name.append(varName);
+	Read_Real_Vector(inputHandle, frame, varCount, iMax, yVar, name);
 
 #if SIMDIM == 3
 	vector<real> zVar(iMax,0.0);
 	// cout << "Trying to get vector z-component. Var: " << varCount << endl;
-	if(Read_Real_Value(inputHandle, frame, varCount, iMax, zVar))
-	{
-		cerr << "Failed to read z-component of vector. frame: " << frame << ". varCount: " << varCount << endl;
-		exit(-1);
-	}
-	++varCount;
+	name = "z-component of ";
+	name.append(varName);
+	Read_Real_Vector(inputHandle, frame, varCount, iMax, zVar, name);
 #endif
 
 	vector<StateVecD> vec(iMax);
@@ -80,7 +169,6 @@ vector<StateVecD> Read_Binary_Vector(void* inputHandle, INTEGER4& frame,
 
 	return vec;
 }
-
 
 void Read_Binary_Timestep(void* inputHandle, SIM& svar, int32_t frame, State& pn)
 {
@@ -110,89 +198,60 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, int32_t frame, State& pn
 	vector<real> m(iMax,0.0);
 	vector<StateVecD> vel(iMax);
 	vector<StateVecD> acc(iMax);
-	vector<uint8_t> b(iMax,0);
+	vector<uint> b(iMax,0);
 	vector<StateVecD> cellV;
 	vector<real> cellP;
-	vector<int32_t> cellID;
+	vector<real> cellRho;
+	vector<int> cellID;
 	
 	int32_t varCount = 1;
 
-	xi = Read_Binary_Vector(inputHandle, frame, varCount, iMax);
+	xi = Read_Binary_Vector(inputHandle, frame, varCount, iMax, "position");
 
 	/*Get density and mass*/
 	// cout << "Trying to get variable: " << varCount << endl;
-	if(Read_Real_Value(inputHandle, frame, varCount, iMax, rho))
-	{
-		cout << "Failed to read density. frame: " << frame << endl;
-		exit(-1);
-	}	
-	++varCount;
+	Read_Real_Vector(inputHandle, frame, varCount, iMax, rho, "density");
+
 	// cout << "Trying to get variable: " << varCount << endl;
-	if(Read_Real_Value(inputHandle, frame, varCount, iMax, Rrho))
-	{
-		cout << "Failed to read Rrho. frame: " << frame << endl;
-		exit(-1);
-	}
-	++varCount;  
+	Read_Real_Vector(inputHandle, frame, varCount, iMax, Rrho, "density gradient");
+
 	// cout << "Trying to get variable: " << varCount << endl;
-	if(Read_Real_Value(inputHandle, frame, varCount, iMax, m))
-	{
-		cout << "Failed to read mass. frame: " << frame << endl;
-		exit(-1);
-	}
-	++varCount;  
+	Read_Real_Vector(inputHandle, frame, varCount, iMax, m, "mass");
 
-	vel = Read_Binary_Vector(inputHandle, frame, varCount, iMax); 
+	vel = Read_Binary_Vector(inputHandle, frame, varCount, iMax, "velocity"); 
 
+	acc = Read_Binary_Vector(inputHandle, frame, varCount, iMax, "acceleration");
 
-	acc = Read_Binary_Vector(inputHandle, frame, varCount, iMax);
+	Read_UInt_Vector(inputHandle, frame, varCount, iMax, b, "particle type");
 
-	if(tecZoneVarGetUInt8Values(inputHandle, frame, varCount, 1, iMax, &b[0]))
-	{
-		cout << "Failed to read particle type. frame: " << frame << endl;
-		exit(-1);
-	}
-	++varCount; 
 
 	if(svar.outform == 3)
 	{	/*Get the cell information for the points*/
 		cellV = vector<StateVecD>(iMax);
 		cellP = vector<real>(iMax,0.0);
-		cellID = vector<int32_t>(iMax,0);
+		cellID = vector<int>(iMax,0);
 
-		cellV = Read_Binary_Vector(inputHandle, frame, varCount, iMax);
+		cellV = Read_Binary_Vector(inputHandle, frame, varCount, iMax, "cell velocity");
 		
 		/*Get pressure*/
 		// cout << "Trying to get variable: " << varCount << endl;
-		if(Read_Real_Value(inputHandle, frame, varCount, iMax, cellP))
-		{
-			cerr << "Failed to read cell pressure. frame: " << frame << endl;
-			exit(-1);
-		}
-		++varCount;
+		Read_Real_Vector(inputHandle, frame, varCount, iMax, cellP, "cell pressure");
+
+		Read_Real_Vector(inputHandle, frame, varCount, iMax, cellRho, "cell density");
+
 		// cout << "Trying to get variable: " << varCount << endl;
-		if(tecZoneVarGetInt32Values(inputHandle, frame, varCount, 1, iMax, &cellID[0]))
-		{
-			cerr << "Failed to read cell ID. frame: " << frame << endl;
-			exit(-1);
-		}
-		++varCount;
+		Read_Int_Vector(inputHandle, frame, varCount, iMax, cellID, "cell ID");
 	}
 	else if (svar.outform == 5)
 	{
 		// cout << "Trying to get variable: " << varCount << endl;
-		cellID = vector<int32_t>(iMax,0);
-		if(tecZoneVarGetInt32Values(inputHandle, frame, varCount, 1, iMax, &cellID[0]))
-		{
-			cerr << "Failed to read cell ID. frame: " << frame << endl;
-			exit(-1);
-		}
-		++varCount;
+		cellID = vector<int>(iMax,0);
+		Read_Int_Vector(inputHandle, frame, varCount, iMax, cellID, "cell ID");
 	}
 	
 	pn = vector<Particle>(iMax);
 	/*Now put it into the state vector*/
-	for(size_t ii= 0; ii < static_cast<size_t>(iMax); ++ii)
+	for(int64_t ii= 0; ii < iMax; ++ii)
 	{
 		pn[ii].xi = xi[ii];
 		pn[ii].rho = rho[ii];
@@ -209,6 +268,7 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, int32_t frame, State& pn
 			{
 				pn[ii].cellV = cellV[ii];
 				pn[ii].cellP = cellP[ii];
+				pn[ii].cellRho = cellRho[ii];
 			}
 		}		
 	} 
@@ -218,26 +278,104 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, int32_t frame, State& pn
 /*************************************************************************/
 /*************************** BINARY OUTPUTS ******************************/
 /*************************************************************************/
-int Write_Real_Vector(void* const& fileHandle, int32_t& outputZone, int32_t const& var, int64_t const& size,
-						vector<real> const& varVec)
+void Write_Real_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+						vector<real> const& varVec, string const& varName)
 {
+	int retval;
 #if FOD == 1
-	return tecZoneVarWriteDoubleValues(fileHandle, outputZone, var, 0, size, &varVec[0]);
+	retval =  tecZoneVarWriteDoubleValues(fileHandle, outputZone, varCount, 0, size, &varVec[0]);
 #else
-	return tecZoneVarWriteFloatValues(fileHandle, outputZone, var, 0, size, &varVec[0]);
+	retval =  tecZoneVarWriteFloatValues(fileHandle, outputZone, varCount, 0, size, &varVec[0]);
 #endif	
+
+	if(retval)
+	{
+		cout << "Failed to read \"" << varName << "\". frame: " << 
+			outputZone << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	varCount++;
 }
 
-int Write_Real_Value(void* const& fileHandle, int32_t& outputZone, int32_t const& var, int64_t const& size,
-						real const& value)
+void Write_Int_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+						vector<int32_t> const& varVec, string const& varName)
 {
+	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varCount, 0, size, &varVec[0]))
+	{
+		cout << "Failed to read \"" << varName << "\". frame: " << 
+			outputZone << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	varCount++;
+}
+
+void Write_UInt_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+						vector<uint8_t> const& varVec, string const& varName)
+{
+	if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, varCount, 0, size, &varVec[0]))
+	{
+		cout << "Failed to read \"" << varName << "\". frame: " << 
+			outputZone << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	varCount++;
+}
+
+void Write_Real_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+						real const& value, string const& varName)
+{
+	int retval;
 	vector<real> rvec(size,0.0);
 	rvec[0] = value;
 #if FOD == 1
-	return tecZoneVarWriteDoubleValues(fileHandle, outputZone, var, 0, size, &rvec[0]);
+	retval = tecZoneVarWriteDoubleValues(fileHandle, outputZone, varCount, 0, size, &rvec[0]);
 #else
-	return tecZoneVarWriteFloatValues(fileHandle, outputZone, var, 0, size, &rvec[0]);
+	retval = tecZoneVarWriteFloatValues(fileHandle, outputZone, varCount, 0, size, &rvec[0]);
 #endif	
+
+	if(retval)
+	{
+		cout << "Failed to read \"" << varName << "\". frame: " << 
+			outputZone << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	varCount++;
+}
+
+void Write_Int_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+						int32_t const& value, string const& varName)
+{
+	int retval;
+	vector<int32_t> rvec(size,0.0);
+	rvec[0] = value;
+
+	retval = tecZoneVarWriteInt32Values(fileHandle, outputZone, varCount, 0, size, &rvec[0]);
+
+	if(retval)
+	{
+		cout << "Failed to read \"" << varName << "\". frame: " << 
+			outputZone << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	varCount++;
+}
+
+void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+						uint8_t const& value, string const& varName)
+{
+	int retval;
+	vector<uint8_t> rvec(size,0.0);
+	rvec[0] = value;
+
+	retval = tecZoneVarWriteUInt8Values(fileHandle, outputZone, varCount, 0, size, &rvec[0]);
+
+	if(retval)
+	{
+		cout << "Failed to read \"" << varName << "\". frame: " << 
+			outputZone << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	varCount++;
 }
 
 void Write_Binary_Timestep(SIM const& svar, State const& pnp1, 
@@ -278,12 +416,9 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 		for(uint ii = start; ii < end; ++ii)
 			x[ii-start] = pnp1[ii].xi(dim)/svar.scale;
 
-		if(Write_Real_Vector(fileHandle, outputZone, var, size, x))
-		{
-			cerr << "Failed to write position coordinate " << dim << endl;
-			exit(-1);
-		}
-		var++;
+		string name = "position coordinate ";
+		name.append(std::to_string(dim));
+		Write_Real_Vector(fileHandle, outputZone, var, size, x, name);
 	}
 
 	if(svar.outform != 0)
@@ -302,24 +437,12 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 			m[ii-start] = pnp1[ii].m;
 		}
 
-			if(Write_Real_Vector(fileHandle, outputZone, var, size, rho))
-			{
-				cerr << "Failed to write density" << endl;
-				exit(-1);
-			}
-			var++;
-			if(Write_Real_Vector(fileHandle, outputZone, var, size, Rrho))
-			{
-				cerr << "Failed to write Rrho" << endl;
-				exit(-1);
-			}
-			var++;
-			if(Write_Real_Vector(fileHandle, outputZone, var, size, m))
-			{
-				cerr << "Failed to write mass" << endl;
-				exit(-1);
-			}
-			var++;
+		Write_Real_Vector(fileHandle, outputZone, var, size, rho, "density");
+
+		Write_Real_Vector(fileHandle, outputZone, var, size, Rrho, "density gradient");
+
+		Write_Real_Vector(fileHandle, outputZone, var, size, m, "mass");
+
 	}
 
 	if(svar.outform == 1 || svar.outform == 4)
@@ -334,18 +457,9 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 			a[ii-start] = pnp1[ii].f.norm();
 		}
 
-		if(Write_Real_Vector(fileHandle, outputZone, var, size, v))
-		{
-			cerr << "Failed to write velocity magnitude" << endl;
-			exit(-1);
-		}
-		var++;
-		if(Write_Real_Vector(fileHandle, outputZone, var, size, a))
-		{
-			cerr << "Failed to write acceleration magnitude" << endl;
-			exit(-1);
-		}
-		var++;
+		Write_Real_Vector(fileHandle, outputZone, var, size, v, "velocity magnitude");
+
+		Write_Real_Vector(fileHandle, outputZone, var, size, a, "acceleration magnitude");
 
 		if(svar.outform == 4)
 		{
@@ -355,25 +469,17 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 			#pragma omp parallel for
 		  	for(uint ii = start; ii < end; ++ii)
 		  	{
-		  		nNb[ii-start] = pnp1[ii].curve;
+		  		nNb[ii-start] = pnp1[ii].s;
 		  		aF[ii-start] = pnp1[ii].surf;
 	  		}
 
-			if(Write_Real_Vector(fileHandle, outputZone, var, size, nNb))
-			{
-				cerr << "Failed to write real value" << endl;
-				exit(-1);
-			}
-			var++;
-			if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, var, 0, size, &aF[0]))
-			{
-				cerr << "Failed to write number of Neighbours" << endl;
-				exit(-1);
-			}
-			var++;
+			Write_Real_Vector(fileHandle, outputZone, var, size, nNb, "real value");
+			
+			Write_UInt_Vector(fileHandle, outputZone, var, size, aF, "neighbour count");
 		}
 	}
-	else if (svar.outform == 2 || svar.outform == 3 || svar.outform == 5)
+	else if (svar.outform == 2 || svar.outform == 3 || svar.outform == 5 
+			|| svar.outform == 6 || svar.outform == 7)
 	{
 
 		vector<real> vx(size);
@@ -401,64 +507,35 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
   			b[ii-start] = static_cast<uint8_t>(pnp1[ii].b);
   	}
 
-  		if(Write_Real_Vector(fileHandle, outputZone, var, size, vx))
-  		{
-			cerr << "Failed to write velocity x-component" << endl;
-			exit(-1);
-		}
-		var++;
+  		Write_Real_Vector(fileHandle, outputZone, var, size, vx, "velocity x-component");
 
-		if(Write_Real_Vector(fileHandle, outputZone, var, size, vy))
-  		{
-			cerr << "Failed to write velocity y-component" << endl;
-			exit(-1);
-		}
-		var++;
+		Write_Real_Vector(fileHandle, outputZone, var, size, vy, "velocity y-component");
 
 		#if SIMDIM == 3
-			if(Write_Real_Vector(fileHandle, outputZone, var, size, vz))
-			{
-				cerr << "Failed to write velocity z-component" << endl;
-				exit(-1);
-			}
-			var++;
+			Write_Real_Vector(fileHandle, outputZone, var, size, vz, "velocity z-component");
 		#endif
 
-  		if(Write_Real_Vector(fileHandle, outputZone, var, size, ax))
-  		{
-			cerr << "Failed to write acceleration x-component" << endl;
-			exit(-1);
-		}
-		var++;
+  		Write_Real_Vector(fileHandle, outputZone, var, size, ax, "acceleration x-component");
 
-		if(Write_Real_Vector(fileHandle, outputZone, var, size, ay))
-  		{
-			cerr << "Failed to write acceleration y-component" << endl;
-			exit(-1);
-		}
-		var++;
+		Write_Real_Vector(fileHandle, outputZone, var, size, ay, "acceleration y-component");
 
 		#if SIMDIM == 3
-			if(Write_Real_Vector(fileHandle, outputZone, var, size, az))
-			{
-				cerr << "Failed to write acceleration z-component" << endl;
-				exit(-1);
-			}
-			var++;
+			Write_Real_Vector(fileHandle, outputZone, var, size, az, "acceleration z-component");
 		#endif
-		if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, var, 0, size, &b[0]))
-		{
-			cerr << "Failed to write particle type" << endl;
-			exit(-1);
-		}
-		var++;
+
+		Write_UInt_Vector(fileHandle, outputZone, var, size, b, "particle type");
+
 
 		if (svar.outform == 3)
 		{
 			vector<int32_t> cID(size);
 			vector<real> cVx(size);
 			vector<real> cVy(size);
+			#if SIMDIM == 3
+				vector<real> cVz(size);
+			#endif			
 			vector<real> cP(size);
+			vector<real> cRho(size);
 
 			#pragma omp parallel for
 			for(uint ii = start; ii < end; ++ii)
@@ -466,47 +543,27 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 				cID[ii-start] = static_cast<int32_t>(pnp1[ii].cellID);
 				cVx[ii-start] = pnp1[ii].cellV(0);
 				cVy[ii-start] = pnp1[ii].cellV(1);
+				#if SIMDIM == 3
+				cVz[ii-start] = pnp1[ii].cellV(2);
+				#endif
 				cP[ii-start] = pnp1[ii].cellP;
+				cRho[ii-start] = pnp1[ii].cellRho;
 			}
 
-			if(Write_Real_Vector(fileHandle, outputZone, var, size, cVx))
-			{
-				cerr << "Failed to write cell velocity x-component" << endl;
-				exit(-1);
-			}
-			var++;
-			if(Write_Real_Vector(fileHandle, outputZone, var, size, cVy))
-			{
-				cerr << "Failed to write cell velocity y-component" << endl;
-				exit(-1);
-			}
-			var++;
+
+			Write_Real_Vector(fileHandle, outputZone, var, size, cVx, "cell velocity x-component");
+
+			Write_Real_Vector(fileHandle, outputZone, var, size, cVy, "cell velocity y-component");
 
 			#if SIMDIM == 3
-				vector<real> cVz(size);
-				#pragma omp parallel for
-				for(uint ii = start; ii < end; ++ii)
-					cVz[ii-start] = pnp1[ii].cellV(2);
-				if(Write_Real_Vector(fileHandle, outputZone, var, size, cVz))
-				{
-					cerr << "Failed to write cell velocity z-component" << endl;
-					exit(-1);
-				}
-				var++;
+				Write_Real_Vector(fileHandle, outputZone, var, size, cVz, "cell velocity z-component");
 			#endif
 
-			if(Write_Real_Vector(fileHandle, outputZone, var, size, cP))
-			{
-				cerr << "Failed to write cell pressure" << endl;
-				exit(-1);
-			}
-			var++;
-			if(tecZoneVarWriteInt32Values(fileHandle, outputZone, var, 0, size, &cID[0]))
-			{
-				cerr << "Failed to write cell ID" << endl;
-				exit(-1);
-			}
-			var++;
+			Write_Real_Vector(fileHandle, outputZone, var, size, cP, "cell pressure");
+
+			Write_Real_Vector(fileHandle, outputZone, var, size, cRho, "cell density");
+
+			Write_Int_Vector(fileHandle, outputZone, var, size, cID, "cell ID");
 		}
 		else if (svar.outform == 5)
 		{
@@ -517,13 +574,53 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 				cID[ii-start] = static_cast<int32_t>(pnp1[ii].cellID);
 			}
 
-			if(tecZoneVarWriteInt32Values(fileHandle, outputZone, var, 0, size, &cID[0]))
-			{
-				cerr << "Failed to write cell ID" << endl;
-				exit(-1);
-			}
-			var++;
+			Write_Int_Vector(fileHandle, outputZone, var, size, cID, "cell ID");
 		}
+		else if(svar.outform == 6 || svar.outform == 7)
+		{
+			vector<real> nNb(size);
+			vector<real> aF(size);
+
+			#pragma omp parallel for
+		  	for(uint ii = start; ii < end; ++ii)
+		  	{
+		  		nNb[ii-start] = pnp1[ii].s;
+		  		aF[ii-start] = pnp1[ii].surf;
+	  		}
+
+			Write_Real_Vector(fileHandle, outputZone, var, size, nNb, "real value");
+			
+			Write_Real_Vector(fileHandle, outputZone, var, size, aF, "aero force");
+
+			if(svar.outform == 7)
+			{
+				vector<real> aFx(size);
+				vector<real> aFy(size);
+				#if SIMDIM == 3
+					vector<real> aFz(size);
+				#endif			
+
+				#pragma omp parallel for
+				for(uint ii = start; ii < end; ++ii)
+				{
+					aFx[ii-start] = pnp1[ii].Af(0);
+					aFy[ii-start] = pnp1[ii].Af(1);
+					#if SIMDIM == 3
+					aFz[ii-start] = pnp1[ii].Af(2);
+					#endif
+				}
+
+				Write_Real_Vector(fileHandle, outputZone, var, size, aFx, "aero force x-component");
+
+				Write_Real_Vector(fileHandle, outputZone, var, size, aFy, "aero force y-component");
+
+				#if SIMDIM == 3
+					Write_Real_Vector(fileHandle, outputZone, var, size, aFz, "aero force z-component");
+				#endif
+			}
+		}
+
+
 	    
 	}
 	
@@ -565,7 +662,7 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 		}
 		else if (svar.outform == 3)
 		{
-			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_Vx,Cell_Vz,Cell_P,Cell_ID";
+			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_Vx,Cell_Vz,Cell_P,Cell_Rho,Cell_ID";
 		}
 		else if (svar.outform == 4)
 		{
@@ -574,6 +671,14 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 		else if (svar.outform == 5)
 		{
 			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_ID";
+		}
+		else if (svar.outform == 6)
+		{
+			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,lambda,surface";
+		}
+		else if (svar.outform == 7)
+		{
+			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,lambda,surface,a_aero_x,a_aero_z";
 		}
 #endif
 
@@ -590,7 +695,7 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 		else if (svar.outform == 3)
 		{
 			variables = 
-		"X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_ID";
+		"X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_Rho,Cell_ID";
 		}
 		else if (svar.outform == 4)
 		{
@@ -599,6 +704,14 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 		else if (svar.outform == 5)
 		{
 			variables = "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_ID";
+		}
+		else if (svar.outform == 6)
+		{
+			variables = "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,lambda,surface";
+		}
+		else if (svar.outform == 7)
+		{
+			variables = "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,lambda,surface,a_aero_x,a_aero_z";
 		}
 #endif
 
@@ -631,7 +744,8 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 				varTypes.emplace_back(realType);  //vy
 			}
 		}
-		else if (svar.outform == 2 || svar.outform == 3 || svar.outform == 5)
+		else if (svar.outform == 2 || svar.outform == 3 || 
+			svar.outform == 5 || svar.outform == 6 || svar.outform == 7)
 		{
 			varTypes.emplace_back(realType);  //vx
 			varTypes.emplace_back(realType);  //vy
@@ -651,12 +765,27 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 				varTypes.emplace_back(realType);  //cell_Vz
 				#endif
 				varTypes.emplace_back(realType);  //cell_P
+				varTypes.emplace_back(realType);  //cell_Rho
 				varTypes.emplace_back(3);  //cell_ID
 			}
 
 			if(svar.outform == 5)
 			{
 				varTypes.emplace_back(3);  //cell_ID
+			}
+
+			if(svar.outform == 6 || svar.outform == 7)
+			{
+				varTypes.emplace_back(realType); /* Lambda */
+				varTypes.emplace_back(realType);	/* surface */
+				if(svar.outform == 7)
+				{
+					varTypes.emplace_back(realType);
+					varTypes.emplace_back(realType);
+					#if SIMDIM == 3
+					varTypes.emplace_back(realType);  //cell_Vz
+					#endif
+				}
 			}
 
 		}
