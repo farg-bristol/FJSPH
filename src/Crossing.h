@@ -136,8 +136,8 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
 
         }    
         cout << "Face intersections: " << intersects << endl;
-        string fout = svar.outfolder;
-        fout.append("FailedCellContainment.dat");
+        string fout = svar.output_prefix;
+        fout.append("_FailedCellContainment.dat");
 
         cout << "Writing to file: " << fout << endl;
 
@@ -154,25 +154,38 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
             /*Number of points*/
             size_t size = cells.elems[index].size();
             uint numFaces = 0;
-            uint TotalNumFaceNodes;
+            uint TotalNumFaceNodes = 0;
+            uint nQuad = 0;
+            uint nTrig = 0;
             if(size == 8)
             {   /*Hexahedron*/
-                numFaces = 12;
+                numFaces = 6;
+                TotalNumFaceNodes = numFaces*4;
+                nQuad = 6;
+                nTrig = 0;
             }
             else if (size == 6)
             {   /*Prism*/
-                numFaces = 8;
+                numFaces = 5;
+                TotalNumFaceNodes = 3*4 + 2*3; /* 3 square faces, 2 triangle faces */
+                nQuad = 3;
+                nTrig = 2;
             }
             else if (size == 5)
             {   /*Pyramid*/
-                numFaces = 6;
+                numFaces = 5; 
+                TotalNumFaceNodes = 4 + 4*3; /* 1 square faces, 4 triangle faces */
+                nQuad = 1;
+                nTrig = 4;
             }
             else if (size == 4)
             {   /*Tetrahedron*/
                 numFaces = 4;
+                nQuad = 0;
+                nTrig = 4;
             }
             
-            TotalNumFaceNodes = numFaces*3;
+            
 
             /*Write zone header information*/
             f1 << "ZONE T=\"Cell " << index << "\""<< endl;
@@ -184,7 +197,7 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
             /*Write vertices in block format*/
             for(size_t dim = 0; dim < SIMDIM; ++dim)
             {
-            for(auto const& cellv:cells.elems[index])
+                for(auto const& cellv:cells.elems[index])
                 {
                     f1 << std::setw(w) << cells.verts[cellv][dim] ;   
                 }
@@ -196,11 +209,16 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
             // f1 << endl;
 
             /*Write how many vertices per face*/
-            for(size_t ii = 0; ii < numFaces; ++ii)
+            for(size_t ii = 0; ii < nQuad; ++ii)
             {
-                f1  << std::setw(5) << 3;
+                f1  << std::setw(5) << 4;
+            }
+            for(size_t ii = 0; ii < nTrig; ++ii)
+            {
+                f1 << std::setw(5) << 3;
             }
             f1 << endl;
+
             /*Write the face vertex list*/
             for(auto const& faces:cells.cFaces[index])
             {
@@ -278,8 +296,8 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
         cout << "Intersect? " << inside_flag << endl;
         
 
-        string fout = svar.outfolder;
-        fout.append("FailedCellContainment.dat");
+        string fout = svar.output_prefix;
+        fout.append("_FailedCellContainment.dat");
 
         cout << "Writing to file: " << fout << endl;
 
@@ -855,4 +873,188 @@ void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, 
             back-=toDelete.size();
     }
 }
+
+/* IMPLICIT PARTICLE TRACKING FUNCTIONS */
+
+/* Function to check if the cell contains the point being tested, and if it needs perturbing */
+/* Change function to find the shortest intersection with the infinite planes of each face */
+vector<uint> CheckCellFace(size_t const& cell, MESH const& cells, size_t const& curr_face, 
+                    StateVecD const& testp, StateVecD const& rayp)
+{
+    vector<uint> intersects;
+    bool perturb = 0;
+    // size_t face_intersect = std::numeric_limits<size_t>::max(); 
+    for (auto const& cFace:cells.cFaces[cell]) 
+    {   // Step through cell faces
+
+        vector<size_t> const& face = cells.faces[cFace];
+        // if(Crossings2D(cells.verts,face,testp))  
+        
+        if(Cross_Plane(cells.verts,face,testp,rayp,perturb))             
+        {   /* Intersects a face */
+            intersects.emplace_back(static_cast<uint>(cFace));
+        }
+
+
+        // if(perturb)
+        // {
+        //     perturb = FALSE;
+ 
+        //     if(Cross_Plane_P(cells.verts,face,testp,rayp,perturb))
+        //     {
+        //         intersects.emplace_back(static_cast<int>(cFace));
+        //     }
+
+        //     if(perturb)
+        //     {
+        //         cout << "Still can't tell if face was crossed after perturbing" << endl;
+        //     }
+        //     // cout << "point needs perturbing" << endl;
+        //     // pert++;
+        //     // return FALSE;
+        // }
+
+        /* Assuming convex cells, and point is residing on a face, */
+        /* stop at the first interecting face */
+    }
+    return intersects;
+}
+
+void FindFace(SIM const& svar, MESH const& cells, IPTPart const& pn, IPTPart& pnp1)
+{
+    /* Want to find the intersection of the droplet vector with a cell face. */
+
+    /* Velocity vector = average of start and end */
+    StateVecD testv = 0.5*(pnp1.v + pn.v);
+
+    /* Test point: starting position*/
+    StateVecD testp = pn.xi - 1e3*testv.normalized();
+    StateVecD rayp = pn.xi + 1e3*testv.normalized();
+
+    vector<uint> intersects;
+
+    intersects = CheckCellFace(pn.cellID,cells,pn.faceID,testp,rayp);
+    
+    // {
+    //     // if(pert == 1)
+    //     // {
+    //     //     testp = pn.xi + vec<real,3>(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
+            
+    //     //     if(!CheckCellFace(pn.cellID,cells,pn.faceID,testp,rayp,pnp1.faceID,pert))
+    //     //     {
+    //     //         cout << "Still can't identify which cell point is in even after perturbation" << endl;
+    //     //         pnp1.going = 0; 
+    //     //     }
+    //     // }
+    //     // else
+    //     // {
+    //         cout << "Couldn't tell which face was crossed." << endl;
+    //         pnp1.going = 0;
+    //     // }
+    // }
+
+    /* Found the faces that were crossed. Now find the time spent in the cell */
+    
+    int nextface = pn.faceID; /* At least use a reasonable face */
+    real mindist = 1e6;
+    int hasintersect = 0;
+    for(size_t ii = 0; ii < intersects.size(); ++ii)
+    {
+        // /* Ignore the current face. It's not an option. */
+        if(intersects[ii] == pn.faceID)
+            continue;
+
+        vector<size_t> const& face = cells.faces[intersects[ii]];
+        
+        real dt = 0.0;
+        real denom = 0.0;
+
+        RayNormalIntersection(cells, pn.xi, testv, face, pn.cellID, dt, denom);
+
+        /* Check for if the face normal points in or out of the cell */
+        // if(cells.leftright[intersects[ii]].first != pn.cellID)
+        // {
+        //     /* face normal is pointing into the cell, so flip the sign*/
+        //     dt = -dt;
+        // }
+
+        if(denom > 0)
+        {
+            /* face normal product with the velocity vector is positive */
+            /* so it isn't behind the particle */
+            
+            if ( dt < mindist)
+            {
+                nextface = intersects[ii];
+                if(dt > MEPSILON)
+                {
+                    mindist = dt;
+                    // cout << "Updated dt: " << dt  << " Crossing face: " << nextface << endl;
+                }
+                else
+                {
+                    /* Calculation has resulted in a roundoff suggesting a */
+                    /* negative intersection distance, so set distance to zero */
+                    /* so particle containment is updated, but not position */
+                    // cout << "distance is near 0" << endl;
+                    mindist = MEPSILON;
+                }
+            }
+
+            hasintersect = 1;
+        }        
+    }
+
+    if (hasintersect == 0)
+    {
+        // cout << "Could not find a positive intersection for some reason..." << endl;
+        // cout << "No of intersections with planes: " << intersects.size() << endl;
+        // cout << "ParticleID: " << pnp1.partID << " position: " << pn.xi[0] << "  " << pn.xi[1]
+        // << "  " << pn.xi[2] << " velocity n: " << pn.v[0] << "  " << pn.v[1] << "  " << pn.v[2] <<
+        //  " velocity np1: " << pnp1.v[0] << "  " << pnp1.v[1] << "  " << pnp1.v[2] << endl;
+        pnp1.xi = pn.xi;
+        pnp1.v = pn.v;
+        pnp1.dt = 0.0;
+
+        pnp1.going = 0;
+    }
+    else
+    {
+        // auto min_t = std::min_element(dists.begin(),dists.end(),
+        // [](std::pair<real,size_t> const& p1, std::pair<real,size_t> const& p2)
+        // {return p1.first < p2.first;});
+
+        /* This is the face that has actually been crossed */
+        // pnp1.dt = min_t->first;
+        // pnp1.faceID = min_t->second;
+
+        pnp1.dt = mindist;
+        pnp1.faceID = nextface;
+            
+        /* Update the face and cell data */
+        int newcell=0;
+        
+        if(cells.leftright[nextface].first == static_cast<int>(pn.cellID))    
+            newcell = cells.leftright[nextface].second;
+        else
+            newcell = cells.leftright[nextface].first;
+
+        // cout << "first: " << cells.leftright[pnp1.faceID].first << " second: " <<
+        //     cells.leftright[pnp1.faceID].second << " cellID: " << pn.cellID << " newcell: "
+        //     << newcell << endl;
+        
+        if(newcell > -1)
+        {
+            pnp1.cellID = newcell; 
+            pnp1.cellV = cells.cVel[newcell];
+            pnp1.cellRho = cells.cRho[newcell];
+        }
+        else
+        {
+            pnp1.cellID = newcell; 
+        }
+    }  
+}
+
+
 #endif

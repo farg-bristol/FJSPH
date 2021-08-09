@@ -56,11 +56,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	/***********************************************************************************/
 	/***********************************************************************************/
 	/***********************************************************************************/
-	#ifdef RK
 		svar.dt = 0.125*std::min(dtf,std::min(dtc,dtv));
-	#else
-		svar.dt = 0.175*std::min(dtf,std::min(dtc,dtv));
-	#endif
 	/***********************************************************************************/
 	/***********************************************************************************/
 	/***********************************************************************************/
@@ -73,10 +69,9 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		svar.dt = (svar.frame+1)*svar.framet-svar.t + 1e-10;
 	}
 
-
-	// #ifdef DEBUG
+	#ifdef DEBUG
 	cout << "time: " << svar.t << " dt: " << svar.dt << "  dtv: " << dtv <<  "  dtf: " << dtf << "  dtc: " << dtc << " Maxf: " << maxf << endl;
-	// #endif
+	#endif
 
 	TREE.NP1.index->buildIndex();
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
@@ -176,7 +171,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	/*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
 	#ifdef RK
 	int errstate = (Get_First_RK(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused,
-								 neighb, outlist, dp, logbase, pn, pnp1, error1));
+								 outlist, dp, logbase, pn, pnp1, error1));
 
 	if (errstate)
 		cout << "First step indicates instability. Caution..." << endl;
@@ -327,7 +322,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	#ifdef RK
 		State st_2 = pnp1;
 
-		error1 = Runge_Kutta4(TREE,svar,fvar,avar,start,end,B,gam,cells,cellsused,neighb,outlist,
+		error1 = Runge_Kutta4(TREE,svar,fvar,avar,start,end,B,gam,cells,cellsused,outlist,
 					dp,logbase,pn,st_2,pnp1,Force,dropVel);
 	#else 
 		Newmark_Beta(TREE,svar,fvar,avar,start,end_ng,a,b,c,d,B,gam,cells,cellsused,
@@ -358,7 +353,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	// }
 
 	/*Check if more particles need to be created*/
-	if(svar.Bcase == 2 || svar.Bcase == 3)
+	if(svar.Scase == 4)
 	{
 		uint nAdd = 0;
 		uint partID = end_ng;
@@ -367,12 +362,12 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		{
 			size_t const& pID = svar.back[ii];
 			/*Check that the starting area is clear first...*/
-			StateVecD const vec = svar.Transp*(pnp1[pID].xi-svar.Start);
+			StateVecD const vec = svar.Transp*(pnp1[pID].xi-svar.sim_start);
 			real clear;
-			if(svar.Bcase == 2)
-				clear =  -(3.0 * svar.Jet(1)-svar.dx) ;
+			if(svar.Bcase == 3)
+				clear =  -(3.0 * svar.jet_depth-svar.dx) ;
 			else
-				clear = -(svar.Jet(1)-svar.dx);
+				clear = -(svar.jet_depth-svar.dx);
 			
 
 			if(vec[1] > clear)
@@ -392,10 +387,10 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				/* Create a new particle */
 				if(svar.totPts < svar.finPts)
 				{
-					StateVecD xi = svar.Transp*(pnp1[svar.buffer[ii][3]].xi-svar.Start);
+					StateVecD xi = svar.Transp*(pnp1[svar.buffer[ii][3]].xi-svar.sim_start);
 
 					xi[1] -= svar.dx;
-					xi = svar.Rotate*xi + svar.Start;
+					xi = svar.Rotate*xi + svar.sim_start;
 
 					pnp1.insert(pnp1.begin() + partID,
 					Particle(xi,pnp1[svar.buffer[ii][3]],PartState.BUFFER_,partID));
@@ -680,7 +675,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	/*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
 	#ifdef RK
 		int errstate = (Get_First_RK(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused,
-									neighb, outlist, dp, logbase, pn, pnp1, error1));
+									 outlist, dp, logbase, pn, pnp1, error1));
 
 		if(errstate)
 			cout << "First step indicates instability. Caution..." << endl;
@@ -753,7 +748,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	#ifdef RK
 		State st_2 = pnp1;
 
-		error1 = Runge_Kutta4(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused, neighb, outlist,
+		error1 = Runge_Kutta4(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused, outlist,
 							  dp, logbase, pn, st_2, pnp1, Force, dropVel);
 	#else
 
@@ -795,7 +790,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 		dbout << "Exiting first step. Error: " << error1 << endl;
 #endif
 
-	if (svar.Bcase == 4)
+	if (svar.Scase == 3)
 	{
 		// Calculate the force expected for a droplet of the same size.
 		svar.Force = Force;
@@ -832,7 +827,6 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 		AERO bigdrop;
 		bigdrop.rhog = avar.rhog;
 		bigdrop.mug = avar.mug;
-		bigdrop.nfull = avar.nfull;
 
 		// real temp = radius / std::cbrt(3.0/(4.0*M_PI));
 		GetYcoef(bigdrop,fvar,svar.diam);

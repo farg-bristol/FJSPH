@@ -107,7 +107,7 @@ int* Get_Int_Scalar(int &fin, string variable, size_t const &nPnts)
 }
 
 /*To run on the mesh file*/
-vector<vector<uint>> Get_Element(int &fin, string variable, size_t &nElem, size_t &nPnts)
+vector<vector<size_t>> Get_Element(int &fin, string variable, size_t &nElem, size_t &nPnts)
 {
 #ifdef DEBUG
     dbout << "Reading Element: " << variable << endl;
@@ -152,12 +152,12 @@ vector<vector<uint>> Get_Element(int &fin, string variable, size_t &nElem, size_
 #endif
 
     /*Convert it to a vector to store*/
-    uint ii, jj;
-    vector<vector<uint>> elemVec(nElem, vector<uint>(nPnts));
+    size_t ii, jj;
+    vector<vector<size_t>> elemVec(nElem, vector<size_t>(nPnts));
     for (ii = 0; ii < nElem; ++ii)
     {
         for (jj = 0; jj < nPnts; ++jj)
-            elemVec[ii][jj] = static_cast<uint>(elemArray[index(ii, jj, nPnts)]);
+            elemVec[ii][jj] = static_cast<size_t>(elemArray[index(ii, jj, nPnts)]);
     }
 
 #ifdef DEBUG
@@ -167,7 +167,7 @@ vector<vector<uint>> Get_Element(int &fin, string variable, size_t &nElem, size_
 }
 
 /*To run on the mesh file*/
-vector<Eigen::Vector3d> Get_Coordinate_Vector(int &fin, size_t const &nPnts)
+vector<Eigen::Matrix<real,3,1>> Get_Coordinate_Vector(int &fin, size_t const &nPnts)
 {
 #ifdef DEBUG
     dbout << "Reading coordinates." << endl;
@@ -179,10 +179,10 @@ vector<Eigen::Vector3d> Get_Coordinate_Vector(int &fin, size_t const &nPnts)
     double *coordZ = Get_Real_Scalar(fin, "points_zc", nPnts);
 
     /*Convert it to a vector to store*/
-    vector<Eigen::Vector3d> coordVec(nPnts);
+    vector<Eigen::Matrix<real,3,1>> coordVec(nPnts);
     for (uint ii = 0; ii < nPnts; ++ii)
     {
-        coordVec[ii] = Eigen::Vector3d(coordX[ii], coordY[ii], coordZ[ii]);
+        coordVec[ii] = Eigen::Matrix<real,3,1>(coordX[ii], coordY[ii], coordZ[ii]);
     }
     #ifdef DEBUG
         dbout << "Returning coordinates." << endl;

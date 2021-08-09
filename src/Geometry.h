@@ -394,6 +394,87 @@ bool get_line_intersection(vector<StateVecD> const& verts, vector<size_t> const&
         }            
         return( inside_flag );
     }
+
+    /* Check for intersection with the infinite plane (I.e. just do two volumes) */
+    /* Used for implicit particle tracking */
+    int Cross_Plane(vector<StateVecD> const& verts, vector<size_t> const& face, 
+        StateVecD const& point, StateVecD const& point2, bool& perturb)
+    {   /*Using Signed volumes of tetrahedra*/
+        /*Shewchuk J.R 1996 */
+        StateVecD const testp = point; 
+        StateVecD const rayp = point2;
+        real vol = testp[0]*(verts[face[0]][1] - verts[face[1]][1]) - testp[1]*(verts[face[0]][0] - verts[face[1]][0])
+                    + (verts[face[0]][0]*verts[face[1]][1]-verts[face[1]][0]*verts[face[0]][1]);
+        int flag1, flag2;
+        
+
+        // if(LessThanREError(vol1))
+        // {   // Perturb the test point so that it doesn't go into roundoff error  
+        //     perturb = TRUE;
+        //     return 0;  
+        // }
+        
+        flag1 = (vol < 0.0);
+
+        vol = rayp[0]*(verts[face[0]][1] - verts[face[1]][1]) - rayp[1]*(verts[face[0]][0] - verts[face[1]][0])
+                    + (verts[face[0]][0]*verts[face[1]][1]-verts[face[1]][0]*verts[face[0]][1]);
+        // ray point is very far so I don't see this falling into roundoff error 
+        // if(LessThanREError(vol1))
+        // {     
+        //     perturb = TRUE;
+        //     return 0;  
+        // }
+
+        flag2 = (vol < 0.0); 
+
+        /* If signs of the volumes alternate, */
+        /* then the ray intersects the infinite plane*/
+        if(flag1 != flag2)
+        {   
+            return 1;
+        }  
+        return 0;    
+    }
+
+    /* Check for the distance from the face the point lies. It is already assumed that the ray crosses */
+/* Used for implicit particle tracking */
+void RayNormalIntersection(MESH const& cells, StateVecD const& rayOrigin, StateVecD const& rayVector,
+                           vector<size_t> const& face, int const& cellID, real& dt, real& denom)
+{
+    /* find the normal vector of the face */
+    StateVecD norm(cells.verts[face[0]][1] - cells.verts[face[1]][1], cells.verts[face[1]][0] - cells.verts[face[0]][0]);
+
+    /* Check for normal orientation */
+    StateVecD celldir;
+
+    
+    /* Use the face centre as the second part for the direction */
+    StateVecD face_c = cells.verts[face[0]] + cells.verts[face[1]];
+    face_c /= 2.0;
+
+    celldir = face_c - cells.cCentre[cellID];
+    
+
+    if(norm.dot(celldir) < 0)
+    {
+        /* Normal points inwards to the cell , so flip it*/
+        norm = -1.0 * norm;
+    }
+
+    StateVecD temp_p = StateVecD::Zero();
+
+    /* Find the most distant point from the current point */
+    for(size_t ii = 0; ii < face.size(); ii++)
+    {
+        if( (cells.verts[face[ii]] - rayOrigin).squaredNorm() > temp_p.squaredNorm())
+            temp_p = (cells.verts[face[ii]] - rayOrigin);
+    }
+
+    /* Find numerator */
+    denom = rayVector.dot(norm);
+    dt = temp_p.dot(norm)/denom; 
+}
+
 #endif
 
 
@@ -415,11 +496,11 @@ int Crossings3D(vector<StateVecD> const& verts, vector<size_t> const& face,
             verts[face[2]](0), verts[face[2]](1), verts[face[2]](2), 1.0;
      
 
-    if(LessThanREError(vol1))
-    {   // Perturb the test point so that it doesn't go into roundoff error  
-        perturb = TRUE;
-        return 0;  
-    }
+    // if(LessThanREError(vol1))
+    // {   // Perturb the test point so that it doesn't go into roundoff error  
+    //     perturb = TRUE;
+    //     return 0;  
+    // }
     
     flag1 = (vol1.determinant() < 0.0);
 
@@ -451,11 +532,11 @@ int Crossings3D(vector<StateVecD> const& verts, vector<size_t> const& face,
         vol.row(2) << vtx1(0), vtx1(1), vtx1(2), 1.0;
         vol.row(3) << rayp(0), rayp(1), rayp(2),1.0;
 
-        if(LessThanREError(vol))
-        {   /*Perturb the test point, since all volume calculations need to be done with the new location*/
-            perturb = TRUE;
-            return 0; 
-        }
+        // if(LessThanREError(vol))
+        // {   /*Perturb the test point, since all volume calculations need to be done with the new location*/
+        //     perturb = TRUE;
+        //     return 0; 
+        // }
         
         flag3 = (vol.determinant() < 0.0);
 
@@ -469,11 +550,11 @@ int Crossings3D(vector<StateVecD> const& verts, vector<size_t> const& face,
             vol.row(1) << vtx0(0), vtx0(1), vtx0(2), 1.0;
             vol.row(2) << vtx1(0), vtx1(1), vtx1(2), 1.0;
 
-            if(LessThanREError(vol))
-            {
-                perturb = TRUE;
-                return 0; 
-            }
+            // if(LessThanREError(vol))
+            // {
+            //     perturb = TRUE;
+            //     return 0; 
+            // }
         
             flag4 = (vol.determinant() < 0.0);
 
@@ -485,77 +566,221 @@ int Crossings3D(vector<StateVecD> const& verts, vector<size_t> const& face,
     }  
     return 0;    
 }
+
+/* Check for intersection with the infinite plane (I.e. just do two volumes) */
+/* Used for implicit particle tracking */
+int Cross_Plane(vector<StateVecD> const& verts, vector<size_t> const& face, 
+    StateVecD const& point, StateVecD const& point2, bool& perturb)
+{   /*Using Signed volumes of tetrahedra*/
+    /*Shewchuk J.R 1996 */
+    StateVecD const testp = point; 
+    StateVecD const rayp = point2;
+    StateP1MatD vol1;
+    int flag1, flag2;
+    vol1 << testp[0]         , testp[1]         , testp[2]         , 1.0,
+            verts[face[0]][0], verts[face[0]][1], verts[face[0]][2], 1.0,
+            verts[face[1]][0], verts[face[1]][1], verts[face[1]][2], 1.0,
+            verts[face[2]][0], verts[face[2]][1], verts[face[2]][2], 1.0;
+     
+
+    // if(LessThanREError(vol1))
+    // {   // Perturb the test point so that it doesn't go into roundoff error  
+    //     perturb = TRUE;
+    //     return 0;  
+    // }
+    
+    flag1 = (vol1.determinant() < 0.0);
+
+    vol1.row(0) << rayp[0], rayp[1], rayp[2],1.0;
+
+    // ray point is very far so I don't see this falling into roundoff error 
+    // if(LessThanREError(vol1))
+    // {     
+    //     perturb = TRUE;
+    //     return 0;  
+    // }
+
+    flag2 = (vol1.determinant() < 0.0); 
+
+    /* If signs of the volumes alternate, */
+    /* then the ray intersects the infinite plane*/
+    if(flag1 != flag2)
+    {   
+        return 1;
+    }  
+    return 0;    
+}
+
+
+/* Check for intersection with the infinite plane (I.e. just do two volumes) */
+/* Used for implicit particle tracking */
+int Cross_Plane_P(vector<StateVecD> const& verts, vector<size_t> const& face, 
+    StateVecD const& point, StateVecD const& point2, bool& perturb)
+{   /*Using Signed volumes of tetrahedra*/
+    /*Shewchuk J.R 1996 */
+    StateVecD const testp = point; 
+    StateVecD const rayp = point2;
+    StateP1MatD vol1;
+    int flag1, flag2;
+    vol1 << testp[0]         , testp[1]         , testp[2]         , 1.0,
+            verts[face[0]][0] + PERTURB(0,0), verts[face[0]][1] + PERTURB(0,1), verts[face[0]][2] + PERTURB(0,2), 1.0,
+            verts[face[1]][0] + PERTURB(1,0), verts[face[1]][1] + PERTURB(1,1), verts[face[1]][2] + PERTURB(1,2), 1.0,
+            verts[face[2]][0] + PERTURB(2,0), verts[face[2]][1] + PERTURB(2,1), verts[face[2]][2] + PERTURB(2,2), 1.0;
+     
+
+    if(LessThanREError(vol1))
+    {   // Perturb the test point so that it doesn't go into roundoff error  
+        perturb = TRUE;
+        return 0;  
+    }
+    
+    flag1 = (vol1.determinant() < 0.0);
+
+    vol1.row(0) << rayp[0], rayp[1], rayp[2],1.0;
+
+    // ray point is very far so I don't see this falling into roundoff error 
+    if(LessThanREError(vol1))
+    {     
+        perturb = TRUE;
+        return 0;  
+    }
+
+    flag2 = (vol1.determinant() < 0.0); 
+
+    /* If signs of the volumes alternate, */
+    /* then the ray intersects the infinite plane*/
+    if(flag1 != flag2)
+    {   
+        return 1;
+    }  
+    return 0;    
+}
+
+/* Check for the distance from the face the point lies. It is already assumed that the ray crosses */
+/* Used for implicit particle tracking */
+void RayNormalIntersection(MESH const& cells, StateVecD const& rayOrigin, StateVecD const& rayVector,
+                           vector<size_t> const& face, int const& cellID, real& dt, real& denom)
+{
+    /* find the normal vector of the face */
+    StateVecD norm;
+    if(face.size() == 3)
+    {   /* Cross two edges of the triangle */
+        norm = (cells.verts[face[1]]-cells.verts[face[0]]).cross(cells.verts[face[2]]-cells.verts[face[0]]);
+    }   
+    else
+    {   /* Cross the two diagonals of the square */
+        norm = (cells.verts[face[3]]-cells.verts[face[1]]).cross(cells.verts[face[2]]-cells.verts[face[0]]);
+    }
+
+    /* Check for normal orientation */
+    StateVecD celldir;
+
+    
+    /* Use the face centre as the second part for the direction */
+    StateVecD face_c = StateVecD::Zero();
+    for(size_t ii = 0; ii < face.size(); ii++)
+    {
+        face_c += cells.verts[face[ii]];
+    }
+
+    face_c /= real(face.size());
+
+    celldir = face_c - cells.cCentre[cellID];
+    
+
+    if(norm.dot(celldir) < 0)
+    {
+        /* Normal points inwards to the cell , so flip it*/
+        norm = -1.0 * norm;
+    }
+
+    StateVecD temp_p = StateVecD::Zero();
+
+    /* Find the most distant point from the current point */
+    for(size_t ii = 0; ii < face.size(); ii++)
+    {
+        if( (cells.verts[face[ii]] - rayOrigin).squaredNorm() > temp_p.squaredNorm())
+            temp_p = (cells.verts[face[ii]] - rayOrigin);
+    }
+
+    /* Find numerator */
+    denom = rayVector.dot(norm);
+    dt = temp_p.dot(norm)/denom; 
+}
+
+
 #endif
+
 
 // Need cell elements to check size, and do the tet case. 
 // Need cell centres for every other element
 real Cell_Volume( vector<StateVecD> const& verts, vector<vector<size_t>> const& faces, vector<size_t> const& elems, 
 				 vector<size_t> const& cell,  StateVecD const& cCentre)
 {
-#if SIMDIM == 3
-	if(elems.size() == 4)
-	{
-		// Cell is a tetrahedron. Volume is trivial
-		StateP1MatD vol;
+    #if SIMDIM == 3
+        if(elems.size() == 4)
+        {
+            // Cell is a tetrahedron. Volume is trivial
+            StateP1MatD vol;
 
-		vol << verts[elems[0]](0), verts[elems[0]](1), verts[elems[0]](2), 1.0,
-	           verts[elems[1]](0), verts[elems[1]](1), verts[elems[1]](2), 1.0,
-	           verts[elems[2]](0), verts[elems[2]](1), verts[elems[2]](2), 1.0,
-	           verts[elems[3]](0), verts[elems[3]](1), verts[elems[3]](2), 1.0; 
+            vol << verts[elems[0]](0), verts[elems[0]](1), verts[elems[0]](2), 1.0,
+                verts[elems[1]](0), verts[elems[1]](1), verts[elems[1]](2), 1.0,
+                verts[elems[2]](0), verts[elems[2]](1), verts[elems[2]](2), 1.0,
+                verts[elems[3]](0), verts[elems[3]](1), verts[elems[3]](2), 1.0; 
 
-	    return abs(vol.determinant())/6.0;
-	}
-	
-	// Otherwise, volume is not so trivial
-	// Form tetrahedrons with the cell centre. 
-	real sum = 0.0;
-	
-	for(auto const& faceID:cell)
-	{
-		StateP1MatD vol;
-
-		const vector<size_t> face = faces[faceID];
-
-		vol << cCentre(0), cCentre(1), cCentre(2), 1.0,
-	           verts[face[0]](0), verts[face[0]](1), verts[face[0]](2), 1.0,
-	           verts[face[1]](0), verts[face[1]](1), verts[face[1]](2), 1.0,
-	           verts[face[2]](0), verts[face[2]](1), verts[face[2]](2), 1.0;
-
-	    sum += abs(vol.determinant())/6.0;
-	}
-	
-	return sum;
-#else 
-
-    if(elems.size() == 3)
-    {
-        StateP1MatD vol;
-
-        vol << verts[elems[0]](0), verts[elems[0]](1), 1.0,
-               verts[elems[1]](0), verts[elems[1]](1), 1.0,
-               verts[elems[2]](0), verts[elems[2]](1), 1.0;
-
-        return abs(vol.determinant())/2;
-    }
-
-
-    real sum = 0.0;
-    for(auto const& faceID:cell)
-    {
-        StateP1MatD vol;
+            return abs(vol.determinant())/6.0;
+        }
         
-        vector<size_t> const& face = faces[faceID];
+        // Otherwise, volume is not so trivial
+        // Form tetrahedrons with the cell centre. 
+        real sum = 0.0;
+        
+        for(auto const& faceID:cell)
+        {
+            StateP1MatD vol;
 
-        vol << cCentre(0), cCentre(1), 1.0,
-               verts[face[0]](0), verts[face[0]](1), 1.0,
-               verts[face[1]](0), verts[face[1]](1), 1.0;
+            const vector<size_t> face = faces[faceID];
 
-        sum += abs(vol.determinant())/2.0;
-    }
+            vol << cCentre(0), cCentre(1), cCentre(2), 1.0,
+                verts[face[0]](0), verts[face[0]](1), verts[face[0]](2), 1.0,
+                verts[face[1]](0), verts[face[1]](1), verts[face[1]](2), 1.0,
+                verts[face[2]](0), verts[face[2]](1), verts[face[2]](2), 1.0;
 
-    return sum;
+            sum += abs(vol.determinant())/6.0;
+        }
+        
+        return sum;
+    #else 
 
-#endif
+        if(elems.size() == 3)
+        {
+            StateP1MatD vol;
+
+            vol << verts[elems[0]](0), verts[elems[0]](1), 1.0,
+                verts[elems[1]](0), verts[elems[1]](1), 1.0,
+                verts[elems[2]](0), verts[elems[2]](1), 1.0;
+
+            return abs(vol.determinant())/2;
+        }
+
+
+        real sum = 0.0;
+        for(auto const& faceID:cell)
+        {
+            StateP1MatD vol;
+            
+            vector<size_t> const& face = faces[faceID];
+
+            vol << cCentre(0), cCentre(1), 1.0,
+                verts[face[0]](0), verts[face[0]](1), 1.0,
+                verts[face[1]](0), verts[face[1]](1), 1.0;
+
+            sum += abs(vol.determinant())/2.0;
+        }
+
+        return sum;
+
+    #endif
 }
 
 void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
@@ -684,7 +909,7 @@ void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
 void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
 {
 
-    if(svar.Bcase == 4)
+    if(svar.Scase == 3)
     {
         real volume = pow(svar.Pstep,SIMDIM)*real(svar.totPts);
     #if SIMDIM == 3
@@ -711,14 +936,14 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
 
 
     }
-    else if (svar.Bcase == 3)
+    else if (svar.Scase == 4)
     {   /*Jet flow*/
         /*Take the height of the jet, and find the volume of the cylinder*/
-#if SIMDIM == 3
-        real cVol = (M_PI * pow((svar.Jet(0) / 2.0), 2)) * (svar.Jet(1) + 6 * svar.Pstep); /* Area of circle * depth */
-#else
-        real cVol = svar.Jet(0) * (svar.Jet(1) + 6 * svar.Pstep); /* diameter * depth + buffer zone */
-#endif
+        #if SIMDIM == 3
+        real cVol = (M_PI * pow((svar.jet_diam / 2.0), 2)) * (svar.jet_depth + 6 * svar.Pstep); /* Area of circle * depth */
+        #else
+        real cVol = svar.jet_diam * (svar.jet_depth + 6 * svar.Pstep); /* diameter * depth + buffer zone */
+        #endif
         real volume = pow(svar.Pstep,SIMDIM)*real(svar.simPts);
 
         cout << "SPH Volume: " << volume << "  Starting jet expected volume: " << cVol << endl;
@@ -737,14 +962,14 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
 
     }
 
-#if SIMDIM == 3
+    #if SIMDIM == 3
     // svar.Pstep = 2*pow((3.0*fvar.simM)/(4.0*M_PI*fvar.rho0),1.0/3.0);
     svar.Pstep = pow(fvar.simM/fvar.rho0,1.0/3.0);
-#else
+    #else
     // svar.Pstep = 2*sqrt(fvar.simM/(fvar.rho0*M_PI));
     svar.Pstep = pow(fvar.simM/fvar.rho0,1.0/2.0);
+    #endif
 
-#endif
     svar.dx = svar.Pstep * pow(fvar.rho0/fvar.rhoJ,1.0/SIMDIM);
     GetYcoef(avar, fvar, svar.Pstep);
     fvar.H = 2.0*svar.Pstep;
@@ -755,31 +980,29 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
     fvar.dCont = fvar.delta * fvar.H * fvar.Cs;
     fvar.dMom = fvar.dCont * fvar.rho0;
 
+    #if SIMDIM == 3
+        #ifdef CUBIC
+            fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
+        #else
+            fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+        #endif
 
-#if SIMDIM == 3
-    #ifdef CUBIC
-        fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
+        avar.pVol = 4.0/3.0 * M_PI * pow(avar.L,SIMDIM);
+        avar.aPlate = svar.Pstep*svar.Pstep;
+        // avar.aPlate = 4.0*avar.L*avar.L;
     #else
-        fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
+        #ifdef CUBIC
+            fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
+        #else
+            fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
+        #endif    
+
+        avar.pVol = M_PI* avar.L*avar.L/4.0;
+        avar.aPlate = svar.Pstep;
+        // avar.aPlate = 2.0*avar.L;
     #endif
 
-    avar.pVol = 4.0/3.0 * M_PI * pow(avar.L,SIMDIM);
-    avar.aPlate = svar.Pstep*svar.Pstep;
-    // avar.aPlate = 4.0*avar.L*avar.L;
-#else
-    #ifdef CUBIC
-        fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
-    #else
-        fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
-    #endif    
-
-    avar.pVol = M_PI* avar.L*avar.L/4.0;
-    avar.aPlate = svar.Pstep;
-    // avar.aPlate = 2.0*avar.L;
-#endif
-
     fvar.dCont = 2.0 * fvar.delta * fvar.H * fvar.Cs;
-    fvar.artMu = std::max(fvar.mu, fvar.alpha * fvar.Cs * fvar.H * fvar.rho0);
     fvar.Wdx = Kernel(svar.Pstep, fvar.H, fvar.correc);
 
     for(size_t ii = 0; ii < svar.totPts; ii++)

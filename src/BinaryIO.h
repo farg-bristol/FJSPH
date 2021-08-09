@@ -644,7 +644,7 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
     int32_t FileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/
     int32_t fileFormat = 1; // 0 == PLT, 1 == SZPLT
 
-    string file = svar.outfolder;
+    string file = svar.output_prefix;
     file.append(filename);
 
     // cout << file << endl;
@@ -828,7 +828,7 @@ void Write_Cell_Data(MESH const& cdata)
 	fout << "TITLE = \"3D Mesh Solution\"\n";
 	fout << "VARIABLES = \"x (m)\" \"y (m)\" \"z (m)\"\n";
 	fout << "ZONE T=\"Cell Data\"" << endl;
-	fout << "N=" << cdata.numPoint << ", E=" << cdata.numElem << ", F=FEBLOCK, ET=BRICK" << endl
+	fout << "N=" << cdata.nPnts << ", E=" << cdata.nElem << ", F=FEBLOCK, ET=BRICK" << endl
 		 << endl;
 
 	/*Write vertices*/
@@ -883,8 +883,8 @@ void Write_Face_Data(MESH const& cells)
 	/*Write zone header information*/
 	f1 << "ZONE T=\"OpenFOAM MESH\"" << endl;
 	f1 << "ZONETYPE=FEPOLYHEDRON" << endl;
-	f1 << "NODES=" << cells.numPoint << " ELEMENTS=" << cells.numElem << " FACES=" << cells.numFace << endl;
-	size_t TotalNumFaceNodes = cells.numFace * 3;
+	f1 << "NODES=" << cells.nPnts << " ELEMENTS=" << cells.nElem << " FACES=" << cells.nFace << endl;
+	size_t TotalNumFaceNodes = cells.nFace * 3;
 	f1 << "TotalNumFaceNodes=" << TotalNumFaceNodes << endl;
 	f1 << "NumConnectedBoundaryFaces=0 TotalNumBoundaryConnections=0" << endl;
 
@@ -910,7 +910,7 @@ void Write_Face_Data(MESH const& cells)
 
 	/*Write how many vertices per face*/
 	n = 0;
-	for (size_t ii = 0; ii < cells.numFace; ++ii)
+	for (size_t ii = 0; ii < cells.nFace; ++ii)
 	{
 		f1 << std::setw(5) << 3;
 		n++;

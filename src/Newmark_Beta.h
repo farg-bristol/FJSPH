@@ -160,7 +160,7 @@ void Do_NB_Iter(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 
 			if(pnp1[ii].b > PartState.BUFFER_)
 			{	
-				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
+				StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.sim_start);
 
 				if(pnp1[ii].b == PartState.PIPE_)
 				{	/*Do a check to see if it needs to be given an aero force*/	

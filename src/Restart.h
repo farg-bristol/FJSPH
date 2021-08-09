@@ -10,39 +10,19 @@
 /*************************************************************************/
 /************************** RESTART OUTPUTS ******************************/
 /*************************************************************************/
-void Write_pn(SIM& svar, State const& pn)
-{
-	void* restartF = NULL;
-
-	string file = svar.outfolder;
-	file.append("Restart_pn.szplt");
-	Init_Binary_PLT(svar, file, "Restart State", restartF);
-
-	Write_Binary_Timestep(svar,pn,0,svar.bndPts,"Boundary",2,restartF); 
-
-	Write_Binary_Timestep(svar, pn, svar.bndPts, svar.totPts, "Fuel", 1, restartF);
-
-	if (tecFileWriterClose(&restartF))
-	{
-		cerr << "Failed to close file" << endl;
-	}
-}
-
-
 void Write_Input_ASCII(SIM const& svar, FLUID const& fvar, AERO const& avar)
 {
 	// Open the file.
-	string file = svar.outfolder;
-	file.append("Restart");
+	string file = svar.output_prefix;
+	file.append("_restart");
 	uint width = 60;
 	std::ofstream restf(file);
 	restf << std::scientific << std::setprecision(15);
 	restf << svar.framet << setw(width) << "#Frame time interval" << endl;
 	restf << svar.Nframe << setw(width) << "#Number of frames" << endl;
 	restf << svar.outframe << setw(width) << "#Output frame info" << endl;
-	restf << svar.outtype << setw(width) << "#Output data type" << endl;
+	restf << svar.out_encoding << setw(width) << "#Output data type" << endl;
 	restf << svar.outform << setw(width) << "#Output contents" << endl;
-	restf << svar.boutform << setw(width) << "#Boundary time output" << endl;
 	restf << svar.gout << setw(width) << "#Ghost particle output" << endl;
 	restf << svar.subits << setw(width) << "#Maximum sub iterations" << endl;
 	restf << svar.finPts << setw(width) << "#Maximum number of particles" << endl;
@@ -55,60 +35,60 @@ void Write_Input_ASCII(SIM const& svar, FLUID const& fvar, AERO const& avar)
 	restf << svar.Asource << setw(width) << "#Aerodynamic source" << endl; 
 	restf << avar.acase << setw(width) << "#Aerodynamic case" << endl;
 	restf << svar.ghost << setw(width) << "#Ghost particles?" << endl;
-	restf << svar.Start(0) << " " << svar.Start(1);
-#if SIMDIM == 3
-	restf << " " << svar.Start(2) << setw(28);
-#else
-	restf << setw(44);
-#endif
+	restf << svar.Start(0) << " " << svar.sim_start(1);
+	#if SIMDIM == 3
+		restf << " " << svar.Start(2) << setw(28);
+	#else
+		restf << setw(44);
+	#endif
 	restf << "#Fluid start position" << endl;
 
 	if(svar.Bcase < 2)
 	{
 		restf << svar.xyPART(0) << " " << svar.xyPART(1);
-#if SIMDIM == 3
-		restf << " " << svar.xyPART(2) << setw(28);
-#else
-		restf << setw(44);
-#endif
+		#if SIMDIM == 3
+			restf << " " << svar.xyPART(2) << setw(28);
+		#else
+			restf << setw(44);
+		#endif
 		restf << "#Particle counts" << endl;
 
 		restf << svar.Box(0) << " " << svar.Box(1);
-#if SIMDIM == 3
-		restf << " " << svar.Box(2);
-#endif
+		#if SIMDIM == 3
+			restf << " " << svar.Box(2);
+		#endif
 		restf << setw(width) << "#Box dimensions" << endl << endl;
 		restf << fvar.pPress << setw(width) << "#Pipe Pressure" << endl;
 	}
 	else
 	{
 		restf << svar.Angle(0) << " " << svar.Angle(1);
-#if SIMDIM == 3
-		restf << " " << svar.Angle(2) << setw(28);
-#else
-		restf << setw(44);
-#endif
+		#if SIMDIM == 3
+			restf << " " << svar.Angle(2) << setw(28);
+		#else
+			restf << setw(44);
+		#endif
 		restf << "#Fluid start rotation" << endl;
 
-		restf << svar.Jet(0) << " " << svar.Jet(1) << setw(width) << "#Jet dimensions" << endl;
+		restf << svar.jet_diam << " " << svar.jet_depth << setw(width) << "#Jet dimensions" << endl;
 		restf << fvar.pPress << setw(width) << "#Pipe Pressure" << endl;
-		StateVecD vJet = svar.Transp*avar.vJet;
-		restf << vJet(1) << setw(width) << "#Jet velocity" << endl;
+
+		restf << vJetMag << setw(width) << "#Jet velocity" << endl;
 		restf << avar.vInf(0) << " " << avar.vInf(1);
-#if SIMDIM == 3
-		restf << " " << avar.vInf(2)<< setw(28);
-#else
-		restf << setw(44);
-#endif
+		#if SIMDIM == 3
+			restf << " " << avar.vInf(2)<< setw(28);
+		#else
+			restf << setw(44);
+		#endif
 		restf << "#Freestream velocity" << endl;
 
-		if(avar.acase == 2 || avar.acase == 3)
-  		{
-  			restf << avar.a << setw(width) << "#a" << endl;
-  			restf << avar.h1 << setw(width) << "h1" << endl;
-  			restf << avar.b << setw(width) << "#b" << endl;
-  			restf << avar.h2 << setw(width) << "#h2" << endl;
-  		}
+		// if(avar.acase == 2 || avar.acase == 3)
+  		// {
+  		// 	restf << avar.a << setw(width) << "#a" << endl;
+  		// 	restf << avar.h1 << setw(width) << "h1" << endl;
+  		// 	restf << avar.b << setw(width) << "#b" << endl;
+  		// 	restf << avar.h2 << setw(width) << "#h2" << endl;
+  		// }
 	}
 
 	restf << endl;
@@ -143,8 +123,8 @@ void Write_Input_TECIO(SIM const& svar, FLUID const& fvar, AERO const& avar)
 	int32_t FileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/
     int32_t fileFormat = 1; // 0 == PLT, 1 == SZPLT
 
-    string file = svar.outfolder;
-	file.append("Restart.szplt");
+    string file = svar.output_prefix;
+	file.append("_restart.szplt");
 
 	vector<int32_t> varTypes;
 	#if FOD == 1
@@ -585,12 +565,9 @@ void Read_Input_TECIO(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 		
 		Read_Real_Value(inputHandle, frame, varnum, iMax, fvar.pPress, "starting pressure");
 
-		Read_Real_Vector(inputHandle, frame, varnum, iMax, vecreal, "jet velocity");
+		Read_Real_Value(inputHandle, frame, varnum, iMax, avar.vJetMag, "jet velocity");
 		
-		for(size_t dim = 0; dim < SIMDIM; dim++)
-		{
-			avar.vJet(dim) = vecreal[dim];
-		}
+
 		
 		Read_Real_Vector(inputHandle, frame, varnum, iMax, vecreal, "freestream velocity");
 		
@@ -599,13 +576,13 @@ void Read_Input_TECIO(string& infolder, SIM& svar, FLUID& fvar, AERO& avar)
 			avar.vInf(dim) = vecreal[dim];
 		}
 
-		if(avar.acase == 2 || avar.acase == 3)
-  		{
-			Read_Real_Value(inputHandle, frame, varnum, iMax, avar.a, "parameter a");
-			Read_Real_Value(inputHandle, frame, varnum, iMax, avar.h1, "parameter h1");
-			Read_Real_Value(inputHandle, frame, varnum, iMax, avar.b, "parameter b");
-			Read_Real_Value(inputHandle, frame, varnum, iMax, avar.h2, "parameter h2");
-  		}
+		// if(avar.acase == 2 || avar.acase == 3)
+  		// {
+		// 	Read_Real_Value(inputHandle, frame, varnum, iMax, avar.a, "parameter a");
+		// 	Read_Real_Value(inputHandle, frame, varnum, iMax, avar.h1, "parameter h1");
+		// 	Read_Real_Value(inputHandle, frame, varnum, iMax, avar.b, "parameter b");
+		// 	Read_Real_Value(inputHandle, frame, varnum, iMax, avar.h2, "parameter h2");
+  		// }
 	}
 
 	Read_Real_Value(inputHandle, frame, varnum, iMax, fvar.alpha, "artificial dissipation factor");
@@ -644,19 +621,13 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 		exit(-1);
 	}
 
-	if(svar.outform == 2)
+	if(svar.Asource != 0)
 	{
-		if(svar.Bcase == 6)
+		if(svar.outform != 3 || svar.outform != 5)
 		{
 			cout << "No cell information. Cannot restart" << endl;
 			exit(-1);
 		}
-	}
-
-	if((svar.Bcase != 4 && svar.Bcase != 3 && svar.Bcase !=0))
-	{
-		cout << "Time data for the boundary has not been output. Cannot restart." << endl;
-		exit(-1);
 	}
 
 #ifdef DEBUG
@@ -666,10 +637,10 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 	// Re-read the settings and fluid file
 	// cout << svar.outfolder << endl;
 
-	string outdir = svar.outfolder;
+	string outdir = svar.output_prefix;
 
 	// Now get the data from the files. Start with the boundary
-	if(svar.outtype == 0)
+	if(svar.out_encoding == 0)
 	{
 		State boundary, fuel, rest;	
 
@@ -681,7 +652,7 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 		double fuelTime, boundTime;
 
 		string fuelf = outdir;
-		fuelf.append("Fuel.szplt");
+		fuelf.append("_fuel.szplt");
 
 		if(tecFileReaderOpen(fuelf.c_str(),&fuelHandle))
 		{
@@ -852,13 +823,13 @@ void Restart(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1, MESH& c
 	real eps = 0.01*svar.dx; /* Tolerance value */
 	for(size_t ii = 0; ii < svar.back.size(); ++ii)
 	{
-		StateVecD const test = svar.Transp*(pn[svar.back[ii]].xi-svar.Start);
+		StateVecD const test = svar.Transp*(pn[svar.back[ii]].xi-svar.sim_start);
 		
 		for(size_t index = 0; index < buffer.size(); ++index)
 		{
 			/* Check which particle in the back vector it corresponds to by checking which  */
 			/* particle it lies behind */
-			StateVecD const xi = svar.Transp*(pn[buffer[index]].xi-svar.Start);
+			StateVecD const xi = svar.Transp*(pn[buffer[index]].xi-svar.sim_start);
 			// cout << test[0] << "  " << test[1] << "  " << xi[0] << "  " << xi[1] << endl;
 
 			if(xi[0] < test[0] + eps && xi[0] > test[0] - eps)

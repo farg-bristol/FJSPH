@@ -653,9 +653,9 @@ namespace FOAM
         cells.cCentre = cCentre;
         cells.cFaces = cFaces;
 
-        cells.numElem = nCells;
-        cells.numPoint = pnts.size();
-        cells.numFace = faces.size();
+        cells.nElem = nCells;
+        cells.nPnts = pnts.size();
+        cells.nFace = faces.size();
     }
 
     /* General function to read the scalar data from an OpenFOAM ascii file */
@@ -881,7 +881,7 @@ namespace FOAM
     {
         string timef = svar.foamdir;
         timef.append("/");
-        timef.append(svar.foamtime);
+        timef.append(svar.foamsol);
 
         cout << "Reading pressure data..." << endl;
         string file = timef;
@@ -896,16 +896,16 @@ namespace FOAM
         vector<StateVecD> vel;
         Read_Solution_Vector(file, vel);
 
-        if (press.size() != cells.numElem)
+        if (press.size() != cells.nElem)
         {
             cout << "Mismatch between solution size and mesh size" << endl;
-            cout << "Pressure vector size: " << press.size() << "  Mesh size: " << cells.numElem << endl;
+            cout << "Pressure vector size: " << press.size() << "  Mesh size: " << cells.nElem << endl;
         }
 
-        if (vel.size() != cells.numElem)
+        if (vel.size() != cells.nElem)
         {
             cout << "Mismatch between solution size and mesh size" << endl;
-            cout << "Velocity vector size: " << vel.size() << "  Mesh size: " << cells.numElem << endl;
+            cout << "Velocity vector size: " << vel.size() << "  Mesh size: " << cells.nElem << endl;
         }
 
         cells.cVel = vel;

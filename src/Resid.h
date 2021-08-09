@@ -313,32 +313,9 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 
 	#pragma omp parallel shared(RV,Rrho,Af)
 	{
-
-/******** LOOP 1 - Piston points: Calculate density and pressure. **********/
-		// #pragma omp for reduction(+:Rrhocontr)
-		// for (uint ii=0; ii < start; ++ii)
-		// {
-		// 	Part pi = pnp1[ii];
-
-		// 	for(auto j:outlist[ii])
-		// 	{
-		// 		Part pj = pnp1[j];
-		// 		StateVecD Rij = pj.xi-pi.xi;
-		// 		StateVecD Vij = pj.v-pi.v;
-		// 		real r = Rij.norm();
-		// 		StateVecD Grad = W2GradK(Rij, r,fvar.H,fvar.correc);
-		// 		Rrhocontr[ii] -= pj.m*(Vij.dot(Grad));
-		// 	}
-		// 	pnp1[ii].Rrho = Rrhocontr[ii]; /*drho/dt*/
-		// }
-
 		/*Gravity Vector*/
-		#if SIMDIM == 3
-			StateVecD const g(0.0,-9.81,0.0);
-		#else
-			StateVecD const g(0.0,-9.81);
-			// StateVecD const g(0.0,0.0);
-		#endif
+		StateVecD const& g = svar.grav;
+		
 
 /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/		
 		// #pragma omp for schedule(static) nowait /*Reduction defs in Var.h*/
@@ -444,7 +421,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 					}
 				#endif
 				// cout << ii << endl;
-				aero = CalcAeroForce(avar,pi,Vdiff,dp.norm[ii],0.0,dp.lam_ng[ii],Pbasei);
+				aero = CalcAeroForce(avar,pi,Vdiff,dp.norm[ii],dp.lam_ng[ii],Pbasei);
 				
 			}
 
@@ -452,7 +429,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 			{	/* Neighbour list loop. */
 				Particle const& pj = pnp1[jj.first];
 				/*Check if the position is the same, and skip the particle if yes*/
-				if(pi.partID == pj.partID)
+				if(ii == jj.first)
 				{
 					if(/* pi.surf == 1 */ dp.lam_ng[ii] < 0.75 && pi.b == PartState.FREE_)
 					{
@@ -472,6 +449,12 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 				// StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);
 				StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);/* gradK;*/
 
+				// if(gradK == StateVecD::Zero())
+				// {
+				// 	cout << ii << "  " << jj.first << endl;
+				// 	cout << rr << "  " << r << "  " << r/fvar.H << endl;
+ 				// }
+
 				if( /* dp.lam[ii] < 0.75 */ pi.surf == 1 )
 				{
 					// if(/* svar.iter % 10 == 0  &&*/ r > 1e-6*fvar.H)
@@ -482,8 +465,6 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 						curve -= (dp.norm[pj.partID].normalized()-dp.norm[ii].normalized()).dot(volj*gradK);
 						correc += volj * Kernel(r,fvar.H,fvar.correc)/*/dp.kernsum[ii]*/;
 					}	
-
-					
 				}
 				
 				if( dp.lam_ng[ii] < 0.75 /* pi.surf == 1 */ && pi.b == PartState.FREE_ && 

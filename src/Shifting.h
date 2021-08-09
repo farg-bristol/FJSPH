@@ -225,7 +225,7 @@ DELTAP const& dp, State& pnp1)
 			{	/* Neighbour list loop. */
 				Particle const& pj = pnp1[jj.first];
 
-				if(pj.partID == pi.partID /*|| pj.b == PartState.BOUND_*/)
+				if(ii == jj.first /*|| pj.b == PartState.BOUND_*/)
 					continue;
 
 				StateVecD const Rij = pj.xi-pi.xi;

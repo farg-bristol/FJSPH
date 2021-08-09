@@ -150,8 +150,7 @@ void Average_Point_to_Cell(vector<StateVecD> const &pData, vector<StateVecD> &cD
 {
 	vector<StateVecD> sum(elems.size(), StateVecD::Zero());
 
-#pragma omp parallel for reduction(+ \
-								   : sum)
+	#pragma omp parallel for reduction(+ : sum)
 	for (uint ii = 0; ii < elems.size(); ++ii)
 	{
 
@@ -171,8 +170,7 @@ void Average_Point_to_Cell(vector<real> const &pData, vector<real> &cData,
 {
 	vector<real> sum(elems.size(), 0.0);
 
-#pragma omp parallel for reduction(+ \
-								   : sum)
+	#pragma omp parallel for reduction(+ : sum)
 	for (uint ii = 0; ii < elems.size(); ++ii)
 	{
 
@@ -187,26 +185,50 @@ void Average_Point_to_Cell(vector<real> const &pData, vector<real> &cData,
 	cData = sum;
 }
 
-vector<real> CpToPressure(vector<real> const &Cp, AERO const &avar)
-{
-	vector<real> press(Cp.size());
-#pragma omp parallel for shared(Cp)
-	for (uint ii = 0; ii < Cp.size(); ++ii)
-	{
-		press[ii] = Cp[ii] * avar.qInf /*+ fvar.gasPress*/;
-	}
-	return press;
-}
-
 /*****************************************************************************/
 /*************** READING NETCDF CELL BASED DATA FUNCTIONS ********************/
 /*****************************************************************************/
+void Find_Angle_Alpha(SIM& svar)
+{
+#ifdef DEBUG
+	dbout << "Entering Find_Bmap_Markers..." << endl;
+#endif
+	string const &bmapIn = svar.taubmap;
+	std::ifstream fin(bmapIn, std::ios::in);
+
+	if (!fin.is_open())
+	{
+		cout << "Couldn't open the boundary map file." << endl;
+		cout << "Attempted path: " << bmapIn << endl;
+		exit(-1);
+	}
+
+	string line;
+	while (getline(fin, line))
+	{
+		Get_Number(line, "Angle alpha (degree)", svar.angle_alpha);
+	}
+
+	svar.angle_alpha *= M_PI/180.0;
+
+	#if SIMDIM == 3
+	svar.grav[2] = -9.81*cos(svar.angle_alpha);
+	#else
+	svar.grav[1] = -9.81*cos(svar.angle_alpha);	
+	#endif
+	svar.grav[0] = 9.81*sin(svar.angle_alpha);
+
+	#ifdef DEBUG
+		dbout << "Exiting Find_Angle_Alpha..." << endl;
+	#endif
+}
+
 /*To run on the solution file*/
 vector<real> Get_Scalar_Property_real(int &fin, string const &variable, size_t const &nPts)
 {
-#ifdef DEBUG
-	dbout << "Reading variable: " << variable << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Reading variable: " << variable << endl;
+	#endif
 	int retval;
 	int varID;
 
@@ -216,15 +238,15 @@ vector<real> Get_Scalar_Property_real(int &fin, string const &variable, size_t c
 		ERR(retval);
 	}
 
-#ifdef DEBUG
-	dbout << "Allocating array of: " << nPts << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Allocating array of: " << nPts << endl;
+	#endif
 
 	double *array = new double[nPts];
 
-#ifdef DEBUG
-	dbout << "Attempting to read NetCDF variable:  " << variable << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Attempting to read NetCDF variable:  " << variable << endl;
+	#endif
 
 	if ((retval = nc_get_var_double(fin, varID, &array[0])))
 	{
@@ -237,17 +259,17 @@ vector<real> Get_Scalar_Property_real(int &fin, string const &variable, size_t c
 	propVec.insert(propVec.end(), &array[0], &array[nPts]);
 	vector<real> var = propVec;
 
-#ifdef DEBUG
-	dbout << "returning vector" << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "returning vector" << endl;
+	#endif
 	return var;
 }
 
 vector<int> Get_Scalar_Property_int(int &fin, string variable, int nPts)
 {
-#ifdef DEBUG
-	dbout << "Reading variable: " << variable << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Reading variable: " << variable << endl;
+	#endif
 	int retval;
 	int varID;
 
@@ -257,15 +279,15 @@ vector<int> Get_Scalar_Property_int(int &fin, string variable, int nPts)
 		ERR(retval);
 	}
 
-#ifdef DEBUG
-	dbout << "Allocating array of: " << nPts << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Allocating array of: " << nPts << endl;
+	#endif
 
 	int *array = new int[nPts];
 
-#ifdef DEBUG
-	dbout << "Attempting to read NetCDF variable:  " << variable << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Attempting to read NetCDF variable:  " << variable << endl;
+	#endif
 
 	if ((retval = nc_get_var_int(fin, varID, &array[0])))
 	{
@@ -277,18 +299,18 @@ vector<int> Get_Scalar_Property_int(int &fin, string variable, int nPts)
 	vector<int> propVec;
 	propVec.insert(propVec.end(), &array[0], &array[nPts]);
 
-#ifdef DEBUG
-	dbout << "returning vector" << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "returning vector" << endl;
+	#endif
 	return propVec;
 }
 
 /*To run on the mesh file*/
 vector<vector<size_t>> Get_Element(int &fin, string const &variable, size_t const &nElem, size_t const &nPpEd)
 {
-#ifdef DEBUG
-	dbout << "Reading \"" << variable << "\"" << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Reading \"" << variable << "\"" << endl;
+	#endif
 	int retval;
 	int varID;
 
@@ -300,9 +322,9 @@ vector<vector<size_t>> Get_Element(int &fin, string const &variable, size_t cons
 	}
 
 // cout << nElem << "  " << nPoints << endl;
-#ifdef DEBUG
-	dbout << "Allocating array of: " << nElem << " by " << nPpEd << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Allocating array of: " << nElem << " by " << nPpEd << endl;
+	#endif
 
 	vector<vector<size_t>> elemVec(nElem, vector<size_t>(nPpEd));
 	
@@ -322,16 +344,16 @@ vector<vector<size_t>> Get_Element(int &fin, string const &variable, size_t cons
 			exit(-1);
 		}
 
-	#ifdef DEBUG
+		#ifdef DEBUG
 		dbout << "Attempting to read NetCDF elements." << endl;
-	#endif
+		#endif
 
 		cout << "Successfully read \"" << variable << "\"" << endl;
 		cout << "Number of cells: " << nElem << endl;
 
-	#ifdef DEBUG
+		#ifdef DEBUG
 		dbout << "Successfully read \"" << variable << "\"" << endl;
-	#endif
+		#endif
 
 		/*Convert it to a vector to store*/
 		for (size_t ii = 0; ii < nElem; ++ii)
@@ -346,9 +368,9 @@ vector<vector<size_t>> Get_Element(int &fin, string const &variable, size_t cons
 		exit(-1);
 	}
 
-#ifdef DEBUG
-	dbout << "Returning vector" << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Returning vector" << endl;
+	#endif
 	return elemVec;
 }
 
@@ -559,62 +581,62 @@ void Read_SOLUTION(string const &solIn, FLUID const &fvar, AERO const &avar,
 		exit(-1);
 	}
 
-#ifdef DEBUG
-	dbout << "Solution points: " << solPts << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Solution points: " << solPts << endl;
+	#endif
 
-#if SIMDIM == 3
-	if (solPts != cells.numPoint)
-	{
-		cout << "Solution file does not have the same number of vertices as the mesh." << endl;
-		cout << "Please check again." << endl;
-		exit(-1);
-	}
-#else
-	if (solPts / 2 != usedVerts.size())
-	{
-		cout << "Solution file size does not match size of mesh. Please check inputs." << endl;
-	}
-#endif
+	#if SIMDIM == 3
+		if (solPts != cells.nPnts)
+		{
+			cout << "Solution file does not have the same number of vertices as the mesh." << endl;
+			cout << "Please check again." << endl;
+			exit(-1);
+		}
+	#else
+		if (solPts / 2 != usedVerts.size())
+		{
+			cout << "Solution file size does not match size of mesh. Please check inputs." << endl;
+		}
+	#endif
 
 	vector<real> realDens = Get_Scalar_Property_real(solID, "density", solPts);
 
 	/*Get the velocities*/
 	vector<real> xvel, yvel, zvel;
-#if SIMDIM == 3
-	xvel = Get_Scalar_Property_real(solID, "x_velocity", solPts);
-	yvel = Get_Scalar_Property_real(solID, "y_velocity", solPts);
-	zvel = Get_Scalar_Property_real(solID, "z_velocity", solPts);
-#else
-	if (ignored == 1)
-	{
-		xvel = Get_Scalar_Property_real(solID, "y_velocity", solPts);
-		zvel = Get_Scalar_Property_real(solID, "z_velocity", solPts);
-	}
-	else if (ignored == 2)
-	{
+	#if SIMDIM == 3
 		xvel = Get_Scalar_Property_real(solID, "x_velocity", solPts);
+		yvel = Get_Scalar_Property_real(solID, "y_velocity", solPts);
 		zvel = Get_Scalar_Property_real(solID, "z_velocity", solPts);
-	}
-	else if (ignored == 3)
-	{
-		xvel = Get_Scalar_Property_real(solID, "x_velocity", solPts);
-		zvel = Get_Scalar_Property_real(solID, "y_velocity", solPts);
-	}
-#endif
+	#else
+		if (ignored == 1)
+		{
+			xvel = Get_Scalar_Property_real(solID, "y_velocity", solPts);
+			zvel = Get_Scalar_Property_real(solID, "z_velocity", solPts);
+		}
+		else if (ignored == 2)
+		{
+			xvel = Get_Scalar_Property_real(solID, "x_velocity", solPts);
+			zvel = Get_Scalar_Property_real(solID, "z_velocity", solPts);
+		}
+		else if (ignored == 3)
+		{
+			xvel = Get_Scalar_Property_real(solID, "x_velocity", solPts);
+			zvel = Get_Scalar_Property_real(solID, "y_velocity", solPts);
+		}
+	#endif
 
 	vector<StateVecD> vel(solPts);
 	/*Test for size*/
 	if (xvel.size() == solPts)
 	{ /*Turn the arrays into a state vector*/
-#pragma omp parallel for
+		#pragma omp parallel for
 		for (uint ii = 0; ii < solPts; ++ii)
 		{
-#if SIMDIM == 3
+			#if SIMDIM == 3
 			vel[ii] = StateVecD(xvel[ii], yvel[ii], zvel[ii]);
-#else
+			#else
 			vel[ii] = StateVecD(xvel[ii], zvel[ii]);
-#endif
+			#endif
 		}
 
 		if (usedVerts.size() != 0)
@@ -689,8 +711,7 @@ void Read_SOLUTION(string const &solIn, FLUID const &fvar, AERO const &avar,
 		exit(-1);
 	}
 
-	/*Average the data to a the cell*/
-	cells.SetCells();
+
 
 	cout << "Averaging points to cell centres..." << endl;
 	Average_Point_to_Cell(vel, cells.cVel, cells.elems);
@@ -805,10 +826,8 @@ void Place_Edges(int &fin, size_t const &nElem, size_t const &nPnts, size_t cons
 
 void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &avar)
 {
-	string meshIn = svar.infolder;
-	string solIn = svar.infolder;
-	meshIn.append(svar.meshfile);
-	solIn.append(svar.solfile);
+	string meshIn = svar.taumesh;
+	string solIn = svar.tausol;
 
 	#ifdef DEBUG
 		dbout << "Attempting read of NetCDF file." << endl;
@@ -893,9 +912,9 @@ void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 
 	cout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << endl;
 
-	cells.numPoint = nPnts;
-	cells.numElem = nElem;
-	cells.numFace = nEdge;
+	cells.nPnts = nPnts;
+	cells.nElem = nElem;
+	cells.nFace = nEdge;
 
 	cells.elems = vector<vector<size_t>>(nElem);
 	cells.cFaces = vector<vector<size_t>>(nElem);
@@ -931,7 +950,8 @@ void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 	{
 		vert *= cells.scale;
 	}
-	svar.Start *= cells.scale;
+	svar.sim_start *= cells.scale;
+	svar.bound_start *= cells.scale;
 	// svar.Jet/=cells.scale;
 
 	/*Get face left and right, and put the faces in the elements*/
@@ -1045,16 +1065,14 @@ void Place_Faces(int &fin, size_t const &nFace, MESH &cells)
 
 void Read_TAUMESH_FACE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &avar)
 {
-	string meshIn = svar.infolder;
-	string solIn = svar.infolder;
-	meshIn.append(svar.meshfile);
-	solIn.append(svar.solfile);
+	string meshIn = svar.taumesh;
+	string solIn = svar.tausol;
 
-#ifdef DEBUG
-	dbout << "Attempting read of NetCDF file." << endl;
-	dbout << "Mesh file: " << meshIn << endl;
-	dbout << "Solution file: " << solIn << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Attempting read of NetCDF file." << endl;
+		dbout << "Mesh file: " << meshIn << endl;
+		dbout << "Solution file: " << solIn << endl;
+	#endif
 
 	/*Read the mesh data*/
 	int retval;
@@ -1071,10 +1089,10 @@ void Read_TAUMESH_FACE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 
 	cout << "Mesh file open. Reading face data..." << endl;
 
-	int ptDimID, elemDimID, faceDimID, nPpFDimID;
-	size_t nPnts, nElem, nFace, nPpFc;
+	int hasTrig, hasQuad;
+	int ptDimID, elemDimID, faceDimID, surfDimID, faceTDimID, faceQDimID, nPpTFDimID, nPpQFDimID;
+	size_t nPnts, nElem, nFace, nSurf, nTFace, nQFace, nPpTFc, nPpQFc;
 
-	
 	// Retrieve how many elements there are.
 	if ((retval = nc_inq_dimid(meshID, "no_of_elements", &elemDimID)))
 	{
@@ -1101,19 +1119,7 @@ void Read_TAUMESH_FACE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 		exit(-1);
 	}
 
-	// Retrieve points per face 
-	if ((retval = nc_inq_dimid(meshID, "points_per_face", &nPpFDimID)))
-	{
-		ERR(retval);
-		exit(-1);
-	}
-
-	if ((retval = nc_inq_dimlen(meshID, nPpFDimID, &nPpFc)))
-	{
-		ERR(retval);
-		exit(-1);
-	}
-
+	/* Retrieve how many points there are */
 	if ((retval = nc_inq_dimid(meshID, "no_of_points", &ptDimID)))
 	{
 		ERR(retval);
@@ -1126,28 +1132,119 @@ void Read_TAUMESH_FACE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 		exit(-1);
 	}
 
-#ifdef DEBUG
-	dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << endl;
-#endif
+	if ((retval = nc_inq_dimid(meshID, "no_of_surfaceelements", &surfDimID)))
+	{
+		ERR(retval);
+		exit(-1);
+	}
+
+	if ((retval = nc_inq_dimlen(meshID, surfDimID, &nSurf)))
+	{
+		ERR(retval);
+		exit(-1);
+	}
+
+	// Retrieve triangle face dimensions
+	if ((retval = nc_inq_dimid(meshID, "no_of_triangles", &faceTDimID)))
+	{
+		cout << "No triangle faces" << endl;
+		hasTrig = 0;
+	}
+	else
+	{
+		if ((retval = nc_inq_dimlen(meshID, faceTDimID, &nTFace)))
+		{
+			ERR(retval);
+			exit(-1);
+		}
+
+		if ((retval = nc_inq_dimid(meshID, "points_per_triangle", &nPpTFDimID)))
+		{
+			ERR(retval);
+			exit(-1);
+		}
+
+		if ((retval = nc_inq_dimlen(meshID, nPpTFDimID, &nPpTFc)))
+		{
+			ERR(retval);
+			exit(-1);
+		}
+
+		hasTrig = 1;
+	}
+
+	// Retrieve quadrilateral face dimensions
+	if ((retval = nc_inq_dimid(meshID, "no_of_quadrilaterals", &faceQDimID)))
+	{
+		cout << "No quadrilateral faces" << endl;
+		hasQuad = 0;
+	}
+	else
+	{
+		if ((retval = nc_inq_dimlen(meshID, faceQDimID, &nQFace)))
+		{
+			ERR(retval);
+			exit(-1);
+		}
+
+		if ((retval = nc_inq_dimid(meshID, "points_per_quadrilateral", &nPpQFDimID)))
+		{
+			ERR(retval);
+			exit(-1);
+		}
+
+		if ((retval = nc_inq_dimlen(meshID, nPpQFDimID, &nPpQFc)))
+		{
+			ERR(retval);
+			exit(-1);
+		}
+
+		hasQuad = 1;
+	}
+
+	#ifdef DEBUG
+		dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << endl;
+	#endif
 
 	cout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << endl;
 
-	cells.numPoint = nPnts;
-	cells.numElem = nElem;
-	cells.numFace = nFace;
+	cells.nPnts = nPnts;
+	cells.nElem = nElem;
+	cells.nFace = nFace;
+	cells.nSurf = nSurf;
 
 	cells.elems = vector<vector<size_t>>(nElem);
 	cells.cFaces = vector<vector<size_t>>(nElem);
-	cells.cVol = vector<real>(nElem);
+	// cells.cVol = vector<real>(nElem);
 
 	cells.verts = vector<StateVecD>(nPnts);
 	// cells.leftright = vector<std::pair<int,int>>(nFace);
 
 	/*Get the faces of the mesh*/
-	cells.faces = Get_Element(meshID, "points_of_element_faces", nFace, nPpFc);
+	vector<vector<size_t>> trig, quad;
+	if (hasTrig)
+	{
+		trig = vector<vector<size_t>>(nTFace, vector<size_t>(nPpTFc));
+		trig = Get_Element(meshID, "points_of_triangles", nTFace, nPpTFc);
+	}
+
+	if (hasQuad)
+	{
+		quad = vector<vector<size_t>>(nQFace, vector<size_t>(nPpQFc));
+		quad = Get_Element(meshID, "points_of_quadrilaterals", nQFace, nPpQFc);
+	}
+
+	cells.faces.insert(cells.faces.end(), trig.begin(), trig.end());
+	cells.faces.insert(cells.faces.end(), quad.begin(), quad.end());
+
+	if (cells.faces.size() != cells.nFace)
+	{
+		cout << "Mismatch of number of faces to that defined." << endl;
+		cout << "number of faces: " << cells.nFace << " faces size: " << cells.faces.size() << endl;
+	}
 
 	/*Get the coordinates of the mesh*/
-	uint ignored = Get_Coordinates(meshID, nPnts, cells.verts);
+	Get_Coordinates(meshID, nPnts, cells.verts);
 	if (cells.verts.size() != nPnts)
 	{
 		cout << "Some data has been missed.\nPlease check how many points." << endl;
@@ -1159,18 +1256,20 @@ void Read_TAUMESH_FACE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &av
 	{
 		vert *= cells.scale;
 	}
-	svar.Start *= cells.scale;
+	svar.sim_start *= cells.scale;
+	svar.bound_start *= cells.scale;
 	// svar.Jet *= cells.scale;
 
 	/*Get face left and right, and put the faces in the elements*/
 	Place_Faces(meshID, nFace, cells);
 
-#ifdef DEBUG
-	dbout << "End of interaction with mesh file and ingested data." << endl
-		  << endl;
-	dbout << "Opening solultion file." << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "End of interaction with mesh file and ingested data." << endl
+			<< endl;
+		dbout << "Opening solultion file." << endl;
+	#endif
 	vector<uint> empty;
+	uint ignored = 0;
 	Read_SOLUTION(solIn, fvar, avar, ignored, cells, empty);
 
 	for (size_t ii = 0; ii < cells.cMass.size(); ii++)
