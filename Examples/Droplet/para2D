@@ -1,1 +1,42 @@
 
+                                   Reference velocity: 50
+                                   Reference pressure: 100000
+                                Reference temperature: 298
+                                    Reference density: 1.1025
+#                                      Reynolds number: 3.231E+06
+                       Sutherland reference viscosity: 1.716e-05
+                     Sutherland reference temperature: 298
+
+                          Reference dispersed density: 810
+                        Reference dispersed viscosity: 0.000142
+                            Reference surface tension: 0.0256
+                   2D offset vector (0 / x=1,y=2,z=3): 2
+
+                                  Output files prefix: sol
+
+# SPH parameters ------------------------------------: -
+                              SPH frame time interval: 1e-5
+                                      SPH frame count: 5000
+                 SPH output information (0/1/2/3/4/5): 6
+               SPH output encoding (0=ascii/1=binary): 1
+                               SPH ghost output (0/1): 0
+
+                                 SPH maximum timestep: 5e-7
+                                 SPH minimum timestep: 1e-9
+                                  SPH initial spacing: 0.00005
+                          SPH boundary spacing factor: 0.7
+                                 SPH aerodynamic case: Gissler
+                        SPH use ghost particles (0/1): 0
+                                SPH start coordinates: 0,0
+                       SPH boundary start coordinates: 0,0
+                              SPH start geometry type: sphere
+                           SPH boundary geometry type: (none)
+                                  SPH sphere diameter: 0.005
+                            SPH rotation angles (deg): 0,0
+
+                                SPH starting pressure: 000
+                                   SPH speed of sound: 300
+                      SPH artificial viscosity factor: 0.1
+                    SPH surface tension contact angle: 150.0
+                              SPH freestream velocity: 0,50
+                                SPH starting velocity: 0,0.0
