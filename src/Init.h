@@ -1,4 +1,4 @@
-/*********   WCSPH (Weakly Compressible Smoothed Particle Hydrodynamics) Code   *************/
+/*********   WCSPH (Weakly Compressible Smoothed Particles Hydrodynamics) Code   *************/
 /*********        Created by Jamie MacLeod, University of Bristol               *************/
 /*********                   FOR THREE DIMENSION CODE                           *************/
 
@@ -9,13 +9,64 @@
 #include "IO.h"
 #include "Add.h"
 
-void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& pnp1)
+void Init_Surface(SIM const& svar, MESH const& cells, vector<SURF>& surf_marks)
+{
+	surf_marks = vector<SURF>(svar.markers.size());
+
+	vector<vector<size_t>> faceIDs(svar.markers.size());
+	vector<vector<int>> markers(svar.markers.size());
+	/* for each surface, find how many faces are in it. */
+	for(std::pair<size_t,int> const& marker:cells.smarkers)
+	{
+		auto index = find(svar.markers.begin(),svar.markers.end(),marker.second);
+		if(index != svar.markers.end())
+		{
+			size_t mark = index - svar.markers.begin();
+			faceIDs[mark].emplace_back(marker.first);
+			markers[mark].emplace_back(marker.second);
+
+			// surf_faces[mark].back().faceID  = marker.first;
+			// if()
+			// cout << mark << "  " << markers.first << endl;
+			// cout << surf_faces[mark].back().faceID << "  " << markers.first << endl;
+			// surf_faces[mark].back().marker  = marker.second;
+		}
+		else
+		{
+			cout << "Couldn't find the marker in the index" << endl;
+		}
+		
+		
+	}
+
+	for(size_t ii = 0; ii < svar.markers.size(); ii++)
+	{
+		surf_marks[ii].name = svar.bnames[ii];
+		surf_marks[ii].marker = svar.markers[ii];
+		surf_marks[ii].output = svar.bwrite[ii];
+		
+		size_t nFaces = faceIDs[ii].size();
+		surf_marks[ii].faceIDs = faceIDs[ii];
+		surf_marks[ii].face_count = vector<uint>(nFaces,0);
+		surf_marks[ii].face_beta = vector<real>(nFaces,0.0);
+		surf_marks[ii].face_area = vector<real>(nFaces,0.0);
+
+	}
+
+	// /* allocate the impacte vector */
+	// for(size_t ii = 0; ii < nSurf; ++ii)
+	// {
+	// 	surfs[ii].alloc(nFaces[ii]);
+	// }
+}
+
+void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHState& pnp1)
 {
 
 	cout << "Initialising simulation..." << endl;
 
 	//Structure input initialiser
-	//Particle(StateVecD x, StateVecD v, StateVecD vh, StateVecD f, float rho, float Rrho, bool bound) :
+	//SPHPart(StateVecD x, StateVecD v, StateVecD vh, StateVecD f, float rho, float Rrho, bool bound) :
 	StateVecD v = StateVecD::Zero();   
 	// real rho=fvar.rho0;
 	// real press = fvar.B*(pow(rho/fvar.rho0,fvar.gam)-1);  
@@ -41,10 +92,10 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 				for (int k=0; k<=Nz; ++k) 
 				{	/*Create Left and right boundary faces*/
 					StateVecD xi(0.0,j*step,k*step);
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 					pID++;
 					xi(0) = svar.bound_box(0);
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 					pID++;
 				}
 				
@@ -54,10 +105,10 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 				for (int j=1; j<Ny; ++j)
 				{	/*Create top and bottom boundary faces*/
 					StateVecD xi(i*step,j*step,0);
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 					pID++;
 					// xi(2)= bound_box(2); //Top boundary (Typically omitted)
-					// pn.emplace_back(Particle(xi,v,f,rho,Rrho,bndM,0));
+					// pn.emplace_back(SPHPart(xi,v,f,rho,Rrho,bndM,0));
 				}
 				
 			}
@@ -66,10 +117,10 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 				for(int k = 0; k <= Nz; ++k) 
 				{	/*Create far and near boundary*/
 					StateVecD xi(i*step, 0, k*step);
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 					pID++;
 					xi(1) = svar.bound_box(1);
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 					pID++;
 				}
 			}
@@ -77,29 +128,29 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			for(int i = 0; i <= Ny ; ++i) 
 			{	/* Left Wall*/
 				StateVecD xi(-svar.bound_start(0)-2*svar.Pstep,i*step-svar.bound_start(1)-2*svar.Pstep);
-				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 				pID++;
 			}
 	/*			// Optional lid
 			for(int i = 1; i <Nx ; ++i) {
 				StateVecD xi(i*stepx,bound_box(1));
-				particles.emplace_back(Particle(xi,v,f,rho,Rrho,bndM,Bound));	
+				particles.emplace_back(SPHPart(xi,v,f,rho,Rrho,bndM,Bound));	
 			}
 			StateVecD x(stepx-svar.bound_start(0),(Ny+0.5)*stepy);
-			pn.emplace_back(Particle(x,v,f,rho,fvar.bndM,true));
+			pn.emplace_back(SPHPart(x,v,f,rho,fvar.bndM,true));
 			x(0) = svar.bound_box(0) -stepx;
-			pn.emplace_back(Particle(x,v,f,rho,fvar.bndM,true));
+			pn.emplace_back(SPHPart(x,v,f,rho,fvar.bndM,true));
 	*/
 			for(int i= Ny; i>0; --i) 
 			{	/*Right Wall*/
 				StateVecD xi(Nx*step-svar.bound_start(0)-2*svar.Pstep,i*step-svar.bound_start(1)-2*svar.Pstep);
-				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));	
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));	
 				pID++;
 			}
 			for(int i = Nx; i > 0; --i) 
 			{	/*Floor*/
 				StateVecD xi(i*step-svar.bound_start(0)-2*svar.Pstep,-svar.bound_start(1)-2*svar.Pstep);
-				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 				pID++;
 			}
 		#endif		
@@ -128,7 +179,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 						StateVecD perturb(random(interval), random(interval), random(interval));
 						StateVecD xi(r*sin(theta), y, r*cos(theta));
 						xi += perturb;
-						pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+						pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 						pID++;
 					}	
 				}
@@ -147,7 +198,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 					StateVecD perturb(random(interval), random(interval));
 					StateVecD xi(-x,y);
 					xi += perturb;
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 					pID++;
 				}
 
@@ -156,7 +207,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 					StateVecD perturb(random(interval), random(interval));
 					StateVecD xi(x,y);
 					xi += perturb;
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 					pID++;
 				}
 			}
@@ -177,7 +228,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(r*sin(theta), y, r*cos(theta));
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 					pID++;
 				}	
 			}
@@ -189,7 +240,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(x*sin(theta), y, x*cos(theta));
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 					pID++;
 				}	
 			}
@@ -202,7 +253,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(r*sin(theta), y, r*cos(theta));
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 					pID++;
 				}	
 			}
@@ -216,7 +267,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			for (real y = -svar.jet_depth*2; y >= -svar.jet_depth*3; y-=stepb)
 			{
 				StateVecD xi(-resR,y);
-				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 				pID++;
 			}	
 
@@ -226,7 +277,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 				/*Interpolate between resR and jetR*/
 				real x = resR + (y-2*svar.jet_depth)*(jetR-resR)/(-svar.jet_depth);
 				StateVecD xi(-x,y);
-				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 				pID++;
 			}
 
@@ -234,7 +285,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			for (real y = 0; y > -svar.jet_depth; y-=stepb)
 			{
 				StateVecD xi(-jetR,y);
-				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 				pID++;
 			}
 
@@ -242,7 +293,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			for (real y = -svar.jet_depth*2; y >= -svar.jet_depth*3; y-=stepb)
 			{
 				StateVecD xi(resR,y);
-				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 				pID++;
 			}
 
@@ -252,7 +303,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 				/*Interpolate between resR and jetR*/
 				real x = resR + (y-2*svar.jet_depth)*(jetR-resR)/(-svar.jet_depth);
 				StateVecD xi(x,y);
-				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 				pID++;
 			}
 
@@ -260,7 +311,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 			for (real y = 0; y > -svar.jet_depth; y-=stepb)
 			{
 				StateVecD xi(jetR,y);
-				pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 				pID++;
 			}
 		#endif
@@ -283,7 +334,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		// 	{ /*Do the centerline of points*/
 		// 		real y = -(2*svar.jet_depth+tankD+fvar.H);
 		// 		StateVecD xi(0.0,y,z);
-		// 		pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.simM,press,PartState.BOUND_,pID));
 		// 		++pID;
 		// 	}
 
@@ -295,13 +346,13 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		//     		{   /*If the point is inside the hole diameter, add it*/
 		//     			real y = -(2*svar.jet_depth+tankD+fvar.H);
 		// 				StateVecD xi(x,y,z);
-		// 				pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.BOUND_,pID));
+		// 				pn.emplace_back(SPHPart(xi,v,rho,fvar.simM,press,PartState.BOUND_,pID));
 		// 				++pID;
 		// 				++svar.simPts;
 		// 				++svar.nrefresh;
 
 		// 				xi(0) = -x;
-		// 				pn.emplace_back(Particle(xi,v,rho,fvar.simM,press,PartState.BOUND_,pID));
+		// 				pn.emplace_back(SPHPart(xi,v,rho,fvar.simM,press,PartState.BOUND_,pID));
 		// 				++pID;
 		// 			}
 		// 		}
@@ -316,7 +367,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		// 		{
 		// 			StateVecD xi(resR*sin(theta), y, resR*cos(theta));
 		// 			/*Apply Rotation...*/
-		// 			pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 			pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 		// 			pID++;
 		// 		}	
 		// 	}
@@ -330,7 +381,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		// 		{
 		// 			StateVecD xi(x*sin(theta), y, x*cos(theta));
 		// 			/*Apply Rotation...*/
-		// 			pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 			pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 		// 			pID++;
 		// 		}	
 		// 	}
@@ -343,7 +394,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		// 		{
 		// 			StateVecD xi(jetR*sin(theta), y, jetR*cos(theta));
 		// 			/*Apply Rotation...*/
-		// 			pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 			pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 		// 			pID++;
 		// 		}	
 		// 	}
@@ -363,7 +414,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		// 	for(real x = -(resR-fvar.H); x < (resR -fvar.H); x+=stepb)
 		// 	{
 		// 		StateVecD xi(x,-(2*svar.jet_depth+tankD+3*fvar.H));
-		// 		pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 		// 		pID++;
 		// 		svar.psnPts = pID;
 		// 	}
@@ -373,7 +424,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		// 	for (real y = -(svar.jet_depth*2+tankD+3*fvar.H); y <= -svar.jet_depth*2; y+=stepb)
 		// 	{
 		// 		StateVecD xi(-resR,y);
-		// 		pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 		// 		pID++;
 		// 	}
 
@@ -385,7 +436,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		// 		/*Interpolate between resR and jetR*/
 		// 		real x = resR - (y+2*svar.jet_depth)*(jetR-resR)/(-svar.jet_depth);
 		// 		StateVecD xi(-x,y);
-		// 		pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 		// 		pID++;
 		// 	}
 
@@ -393,7 +444,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		// 	for (real y = -svar.jet_depth; y < 0; y+=stepb)
 		// 	{
 		// 		StateVecD xi(-jetR,y);
-		// 		pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 		// 		pID++;
 		// 	}
 
@@ -401,7 +452,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		// 	for (real y = 0; y > -svar.jet_depth; y-=stepb)
 		// 	{
 		// 		StateVecD xi(jetR,y);
-		// 		pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 		// 		pID++;
 		// 	}
 
@@ -411,7 +462,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		// 		/*Interpolate between resR and jetR*/
 		// 		real x = resR - (y+2*svar.jet_depth)*(jetR-resR)/(-svar.jet_depth);
 		// 		StateVecD xi(x,y);
-		// 		pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 		// 		pID++;
 		// 	}
 
@@ -419,7 +470,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		// 	for (real y = -svar.jet_depth*2; y >= -(svar.jet_depth*2+tankD+3*fvar.H); y-=stepb)
 		// 	{
 		// 		StateVecD xi(resR,y);
-		// 		pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
 		// 		pID++;
 		// 	}
 		// #endif
@@ -460,7 +511,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 		svar.simPts = 0;
 		svar.totPts = pn.size();
 
-		// CreateRDroplet(svar,fvar,pn,pnp1);
+		// CreateRDroplet(svar,fvar,pn);
 		CreateDroplet(svar,fvar,pn);
 	}
 	else if (svar.Scase == 4)
@@ -507,7 +558,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 					for (int k=0; k < svar.xyPART(2); ++k )
 					{
 						StateVecD xi(i*svar.dx,	j*svar.dx, k*svar.dx);		
-						pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.FREE_,pID));
+						pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.FREE_,pID));
 						pID++;
 					}		
 				}
@@ -519,7 +570,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 				for(int j=0; j< svar.xyPART(1); ++j)
 				{				
 					StateVecD xi(i*svar.dx,j*svar.dx);		
-					pn.emplace_back(Particle(xi,v,rho,fvar.bndM,press,PartState.FREE_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.FREE_,pID));
 					// pn.back().cellP = 20000-fvar.gasPress;
 					pID++;
 				}
@@ -533,13 +584,21 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 	// svar.simPts+=10*10;
 
 	svar.totPts = pn.size();
+	svar.partID = pn.size();
+
+	
 
 	for(size_t ii = 0; ii < svar.bndPts; ++ii)
 		pn[ii].xi = (svar.Rotate * pn[ii].xi) + svar.bound_start;
 
 	for(size_t ii = svar.bndPts; ii < svar.totPts; ++ii)
+	{
 		pn[ii].xi = (svar.Rotate * pn[ii].xi) + svar.sim_start;
-
+		// if(svar.Asource == 0)
+		// {
+		// 	pn[ii].cellV = avar.vInf;
+		// }
+	}
 	pnp1 = pn;
 
 	// cout << "Boundary pn: " << svar.bndPts << endl;
@@ -555,7 +614,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& p
 	if(svar.totPts!=svar.bndPts+svar.simPts)
 	{
 		cerr<< "Mismatch of particle count." << endl;
-		cerr<< "Particle array size doesn't match defined values." << endl;
+		cerr<< "Particles array size doesn't match defined values." << endl;
 		cerr<< "Total Points: " << svar.totPts << "  Boundary Points: " << svar.bndPts
 			<< "  Simulation Points: " << svar.simPts << endl;
 		exit(-1);

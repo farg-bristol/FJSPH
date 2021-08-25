@@ -12,7 +12,7 @@
 
 /*Surface detection as described by Marrone, Colagrossi, Le Touze, Graziani - (2010)*/
 void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start, size_t const& end,
-                 DELTAP const& dp, outl const& outlist, MESH const& cells, State& pnp1)
+                 DELTAP const& dp, OUTL const& outlist, MESH const& cells, SPHState& pnp1)
 {
     #pragma omp parallel shared(pnp1)
     {
@@ -27,6 +27,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
             if(pnp1[ii].b < PartState.PIPE_)
             {
                 pnp1[ii].surf = 0;
+                pnp1[ii].woccl = 1;
             }
             else if(dp.lam_ng[ii] < 0.2)
             {   /*If less that 0.2, then its a surface particle by default*/
@@ -60,9 +61,9 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                     /*Occlusion for Gissler Aero Method*/
                     if (pnp1[ii].b == PartState.FREE_ && (avar.acase == 4 || avar.acase == 1))
                     {
-                        StateVecD const Rij = pnp1[jj.first].xi - pnp1[ii].xi;
                         real const r = sqrt(jj.second);
-                        real const frac = -Rij.dot(Vdiff)/(Vdiff.norm()*r);
+                        StateVecD const Rij = pnp1[ii].xi - pnp1[jj.first].xi;
+                        real const frac = Rij.dot(Vdiff)/(Vdiff.norm()*r);
                         
                         if (frac > woccl_)
                         {
@@ -72,7 +73,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                 }
 
                 pnp1[ii].surf = 1;
-                pnp1[ii].woccl = woccl_; 
+                pnp1[ii].woccl = std::max(0.0,std::min(woccl_,1.0)); 
             }
             else if(dp.lam_ng[ii] < 0.75)
             {   /*Particle could be a surface particle. Perform a test*/
@@ -80,22 +81,22 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                 StateVecD Vdiff = StateVecD::Zero();
                 if (svar.Asource == 1)
                 {
-                    Vdiff = (pnp1[ii].cellV) - pnp1[ii].v/* dp.avgV[ii]*/;
+                    Vdiff = (pnp1[ii].cellV) - dp.avgV[ii];
                 }
                 else if (svar.Asource == 2)
                 {
-                    Vdiff = (pnp1[ii].cellV+cells.cPertnp1[pnp1[ii].cellID]) - pnp1[ii].v /*dp.avgV[ii]*/;
+                    Vdiff = (pnp1[ii].cellV+cells.cPertnp1[pnp1[ii].cellID]) - dp.avgV[ii];
                 }
                 #if SIMDIM == 3
                 else if(svar.Asource == 3)
                 {   
                     StateVecD Vel = svar.vortex.getVelocity(pnp1[ii].xi);
-                    Vdiff = Vel - pnp1[ii].v /*dp.avgV[ii]*/;
+                    Vdiff = Vel - dp.avgV[ii];
                 }
                 #endif
                 else 
                 {
-                    Vdiff = avar.vInf - pnp1[ii].v /*dp.avgV[ii]*/;
+                    Vdiff = avar.vInf - pnp1[ii].v /* dp.avgV[ii] */;
                 }
 
                 // Create point T
@@ -129,8 +130,8 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                                 break;
                             }
                         #else
-                            StateVecD Rij = pnp1[jj.first].xi - xi; 
-                            if(acos(dp.norm[ii].normalized().dot(Rij/sqrt(jj.second))) < M_PI/4.0)
+                            StateVecD const Rij = pnp1[jj.first].xi - xi; 
+                            if(acos(dp.norm[ii].normalized().dot(Rij/r)) < M_PI/4.0)
                             {
                                 surf = 0; 
                                 break;
@@ -141,8 +142,8 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                     /*Occlusion for Gissler Aero Method*/
                     if (pnp1[ii].b == PartState.FREE_ && (avar.acase == 4 || avar.acase == 1))
                     {
-                        StateVecD const Rij = pnp1[jj.first].xi - pnp1[ii].xi;
-                        real const frac = -Rij.dot(Vdiff)/(Vdiff.norm()*r);
+                        StateVecD const Rij = pnp1[ii].xi - pnp1[jj.first].xi;
+                        real const frac = Rij.dot(Vdiff)/(Vdiff.norm()*r);
                         
                         if (frac > woccl_)
                         {
@@ -152,11 +153,12 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                 }
 
                 pnp1[ii].surf = surf;
-                pnp1[ii].woccl = woccl_; 
+                pnp1[ii].woccl = std::max(0.0,std::min(woccl_,1.0));  
             }
             else
             {   /*If its eigenvalue is high, then by default it cannot be a surface*/
                 pnp1[ii].surf = 0;
+                pnp1[ii].woccl = 1;
             }
         }
 
@@ -260,16 +262,16 @@ StateMatD GetRotationMat(StateVecD& angles)
 
 }
 
-std::pair<StateVecD,StateVecD> Find_MinMax(SIM& svar, const State& pnp1)
+std::pair<StateVecD,StateVecD> Find_MinMax(SIM& svar, const SPHState& pnp1)
 {
     /*Find the max and min positions*/
     auto xC = std::minmax_element(pnp1.begin(),pnp1.end(),
-                [](Particle p1, Particle p2){return p1.xi(0)< p2.xi(0);});
+                [](SPHPart p1, SPHPart p2){return p1.xi(0)< p2.xi(0);});
     auto yC = std::minmax_element(pnp1.begin(),pnp1.end(),
-                [](Particle p1, Particle p2){return p1.xi(1)< p2.xi(1);});
+                [](SPHPart p1, SPHPart p2){return p1.xi(1)< p2.xi(1);});
     #if SIMDIM == 3
         auto zC = std::minmax_element(pnp1.begin(),pnp1.end(),
-                [](Particle p1, Particle p2){return p1.xi(2)< p2.xi(2);});
+                [](SPHPart p1, SPHPart p2){return p1.xi(2)< p2.xi(2);});
 
         StateVecD minC = StateVecD(xC.first->xi(0),yC.first->xi(1),zC.first->xi(2));
         StateVecD maxC = StateVecD(xC.second->xi(0),yC.second->xi(1),zC.second->xi(2));
@@ -906,7 +908,7 @@ void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
 }
 
 
-void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, State& pn, State& pnp1)
+void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& pnp1)
 {
 
     if(svar.Scase == 3)

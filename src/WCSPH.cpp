@@ -18,7 +18,7 @@
 #include "Init.h"
 #include "Add.h"
 #include "Resid.h"
-#include "Crossing.h"
+#include "Containment.h"
 #include "Integration.h"
 
 using namespace std::chrono;
@@ -43,8 +43,9 @@ int main(int argc, char *argv[])
 	SIM svar;
 	FLUID fvar;
 	AERO avar;
-	outl outlist;
+	OUTL outlist;
 	MESH cells;
+	SURFS surf_marks;
 
 	GetInput(argc,argv,svar,fvar,avar);
 	
@@ -59,7 +60,8 @@ int main(int argc, char *argv[])
 		#if SIMDIM == 3
 			if(svar.CDForFOAM == 0)
 			{
-				Read_TAUMESH_FACE(svar,cells,fvar,avar);
+				TAU::Read_BMAP(svar);
+				TAU::Read_TAUMESH_FACE(svar,cells,fvar,avar);
 			}
 			else
 			{
@@ -68,7 +70,8 @@ int main(int argc, char *argv[])
 		#else
 			if (svar.CDForFOAM == 0)
 			{
-				Read_TAUMESH_EDGE(svar,cells,fvar,avar);
+				TAU::Read_BMAP(svar);
+				TAU::Read_TAUMESH_EDGE(svar,cells,fvar,avar);
 			}
 			else
 			{
@@ -76,11 +79,14 @@ int main(int argc, char *argv[])
 				exit(-1);
 			}
 		#endif
+
+		Init_Surface(svar,cells,surf_marks);
 	}
 	else if (svar.Asource == 4)
 	{
 		// Create single cell
 		Make_Cell(fvar,avar,cells);
+		Init_Surface(svar,cells,surf_marks);
 	}	
 
 	cout << std::setprecision(5);
@@ -95,9 +101,9 @@ int main(int argc, char *argv[])
 	/*Make a guess of how many there will be...*/
 	// int partCount = ParticleCount(svar);
     ///****** Initialise the particles memory *********/
-	State pn;	    /*Particles at n   */
-	State pnp1; 	/*Particles at n+1 */
-	State airP;
+	SPHState pn;	    /*Particles at n   */
+	SPHState pnp1; 	/*Particles at n+1 */
+	SPHState airP;
 	DELTAP dp;
 
 	if(svar.Scase == 4)
@@ -147,7 +153,7 @@ int main(int argc, char *argv[])
 	else
 	{
 		/* Read the files */
-		Restart(svar,fvar,cells,pn,pnp1);
+		Restart(svar,fvar,avar,cells,pn,pnp1);
 	}
 
 	// Check if cells have been initialsed before making a tree off it
@@ -203,7 +209,7 @@ int main(int argc, char *argv[])
 		}
 		else if (svar.ghost == 2)
 		{	/* Lattice points */
-			LatticeGhost(svar,fvar,cells,TREE,outlist,pn,pnp1);
+			LatticeGhost(svar,fvar,avar,cells,TREE,outlist,pn,pnp1);
 		}
 
 		size_t const start = svar.bndPts;
@@ -234,12 +240,17 @@ int main(int argc, char *argv[])
 		Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 
 		// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
-		#ifndef NOALE
+		#ifdef ALE
 			if(svar.ghost > 0)
 				Particle_Shift_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
 			else
 				Particle_Shift_No_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
 		#endif
+
+		/* Update shifting velocity and surface data */
+		SPHState::const_iterator first = pnp1.begin();
+		SPHState::const_iterator last = pnp1.begin() + end_ng;
+		pn = SPHState(first,last);
 	}
 
 	///*************** Open simulation files ***************/
@@ -357,7 +368,7 @@ int main(int argc, char *argv[])
 		
 		while (stept + MERROR < svar.framet)
 		{
-		    error = Integrate(TREE,svar,fvar,avar,cells,dp,pn,pnp1,airP,outlist);
+		    error = Integrate(TREE,svar,fvar,avar,cells,surf_marks,dp,pn,pnp1,airP,outlist);
 		    stept+=svar.dt;
 		    ++stepits;
 		}

@@ -3,8 +3,6 @@
 
 #include "Var.h"
 
-
-
 #ifdef CUBIC
 	///******Cubic Spline Kernel*******///
 	real const Kernel(real const dist, real const H, real const correc)

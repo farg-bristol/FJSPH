@@ -41,7 +41,7 @@ StateVecD AeroForce(StateVecD const& Vdiff, AERO const& avar, real const mass)
 }
 
 /*Gissler et al (2017)*/
-StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff, real const& rho,
+StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, real const& rho,
 				 real const& lam, real const& woccl)
 {
 	// real const nfull = avar.nfull;
@@ -54,26 +54,28 @@ StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff, real const& rho
 	real const Re = 2.0*rho*Vdiff.norm()*avar.L/avar.mug;
 	
 
-	real const frac2 = std::min(3.0/2.0 * lam, 1.0);
+	real const frac2 = std::min(8.0/3.0 * lam, 1.0);
 	real const frac1 = (1.0 - frac2);
 
  	real const Cds  = GetCd(Re);
 
 	// real const Cdl = Cds*(1+2.632*ymax);
 	real const Cdl = Cds;
-	real const	Cdi = frac1*Cdl + /*1.37**/frac2;
+	real const	Cdi = frac1*Cdl + 0.5* /*1.37**/frac2;
 
-#if SIMDIM == 3 
-	// real const Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
-	real const Adrop = M_PI*pow(avar.L,2);
-#else
-	// real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax) /** pow(avar.L,1)*/;
-	real const Adrop = 2*avar.L;
-#endif
+	#if SIMDIM == 3 
+		// real const Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
+		real const Adrop = M_PI*pow(avar.L,2);
+	#else
+		// real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax) /** pow(avar.L,1)*/;
+		real const Adrop = 2*avar.L;
+	#endif
 
 	real const Aunocc = (frac1*Adrop + frac2*avar.aPlate);
 
 	// real const Ai = (1.0-(std::max(std::min(woccl,1.0),0.0)))*Aunocc;
+	// real woccl_2 = std::min(1.0,std::max(0.0, Vdiff.normalized().dot(norm.normalized())));
+
 	real const Ai = (1.0 - woccl)*Aunocc;
 
 	// StateVecD F = 0.5*avar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai;
@@ -88,7 +90,7 @@ StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff, real const& rho
 
 }
 
-StateVecD CalcAeroForce(AERO const& avar, Particle const& pi, StateVecD const& Vdiff,
+StateVecD CalcAeroForce(AERO const& avar, SPHPart const& pi, StateVecD const& Vdiff,
 		StateVecD const& norm, real const& lam, real const& Pbasei)
 {
 	StateVecD Fd= StateVecD::Zero();
@@ -96,7 +98,7 @@ StateVecD CalcAeroForce(AERO const& avar, Particle const& pi, StateVecD const& V
 	// cout << avar.acase << endl;
 	if( avar.acase == 1)
 	{	/* Original Gissler */
-		Fd = GisslerForce(avar,Vdiff,pi.cellRho,lam,pi.woccl);
+		Fd = GisslerForce(avar,Vdiff,norm,pi.cellRho,lam,pi.woccl);
 	}
 	// else if(avar.acase == 2)
 	// {	/* Induced pressure based model */	
@@ -254,11 +256,6 @@ StateVecD CalcAeroForce(AERO const& avar, Particle const& pi, StateVecD const& V
 
 			Fd = frac2*(Fpress + Fskin) + frac1*F_drop;
 
-			if(Fpress != Fpress || Fskin != Fskin)
-			{
-				cout << Fpress(0) << "  " << Fpress(1) << "  " << Fskin(0) << "  " << Fskin(1) << endl;
-				cout << Vdiff(0) << "  " << Vdiff(1) << pi.partID << endl;
-			}
 		}
 
 	}

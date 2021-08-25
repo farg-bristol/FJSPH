@@ -8,8 +8,8 @@
 
 
 /*L matrix for delta-SPH calculation*/
-void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, State const& pnp1, 
-				 outl const& outlist, DELTAP& dp)
+void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHState const& pnp1, 
+				 OUTL const& outlist, DELTAP& dp)
 {
 	/************   RENORMALISATION MATRIX CALCULATION    ************/
 	dp.clear();
@@ -37,19 +37,20 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, State c
 			StateVecD avgV_ = StateVecD::Zero();
 			real kernsum_ = 0.0;
 		
-			Particle const& pi = pnp1[ii];
+			SPHPart const& pi = pnp1[ii];
 	
 			for(std::pair<size_t,real> const& jj:outlist[ii])
 			{
-				Particle const& pj = pnp1[jj.first];
 				/*Check if the position is the same, and skip the particle if yes*/
 				if(ii == jj.first)
 				{
-					kernsum_ +=  pj.m/pj.rho * fvar.correc;
-					avgV_ += pj.v * pj.m/pj.rho * fvar.correc;
+					kernsum_ +=  fvar.correc;
+					avgV_ += pi.v * fvar.correc;
 
 					continue;
 				}
+				
+				SPHPart const& pj = pnp1[jj.first];
 
 				StateVecD const Rij = pj.xi - pi.xi;
 				real const r = sqrt(jj.second);
@@ -68,8 +69,8 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, State c
                     if(pj.b != PartState.GHOST_)
                     {   /* Ignore ghost particles */   
                         norm_ += volj*Grad;
-                        avgV_ += pj.v * volj * kern;
-                        kernsum_ += volj * kern;
+                        avgV_ += pj.v * kern;
+                        kernsum_ += kern;
                     }
 				}
 
@@ -139,11 +140,11 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, State c
 		// 	// StateVecD gradRho_ = StateVecD::Zero();
 		// 	StateVecD norm_ = StateVecD::Zero();
 		// 	StateVecD avgV_ = StateVecD::Zero();
-		// 	Particle const& pi(pnp1[ii]);
+		// 	SPHPart const& pi(pnp1[ii]);
 
 		// 	for(size_t const& jj:outlist[ii])
 		// 	{
-		// 		Particle const& pj(pnp1[jj]);
+		// 		SPHPart const& pj(pnp1[jj]);
 		// 		/*Check if the position is the same, and skip the particle if yes*/
 		// 		if(pi.partID == pj.partID)
 		// 			continue;
@@ -190,14 +191,14 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, State c
 	dp.kernsum = kernsum;
 }
 
-#ifndef NOALE
-void Particle_Shift_No_Ghost(SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, outl const& outlist,
-DELTAP const& dp, State& pnp1)
+#ifdef ALE
+void Particle_Shift_No_Ghost(SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
+DELTAP const& dp, SPHState& pnp1)
 {
 	/*Implement particle shifting technique - Sun, Colagrossi, Marrone, Zhang (2018)*/
 
-	// vector<Particle>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
-	// 	[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
+	// vector<SPHPart>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
+	// 	[](SPHPart p1, SPHPart p2){return p1.v.norm()< p2.v.norm();});
 
 	// real const maxU = fvar.maxU/**maxUi->v.norm()*/;
 
@@ -212,7 +213,7 @@ DELTAP const& dp, State& pnp1)
 			if(dp.lam_nb[ii] < 0.55)
 				continue;
 
-			Particle const& pi = pnp1[ii];
+			SPHPart const& pi = pnp1[ii];
 			
 			StateVecD deltaU = StateVecD::Zero();
 			StateVecD gradLam = StateVecD::Zero();
@@ -223,7 +224,7 @@ DELTAP const& dp, State& pnp1)
 
 			for (std::pair<size_t,real> const& jj:outlist[ii])
 			{	/* Neighbour list loop. */
-				Particle const& pj = pnp1[jj.first];
+				SPHPart const& pj = pnp1[jj.first];
 
 				if(ii == jj.first /*|| pj.b == PartState.BOUND_*/)
 					continue;
@@ -265,11 +266,11 @@ DELTAP const& dp, State& pnp1)
 				
 				/*Apply the partial shifting*/
 				if (f == 0)
-				{   /*Particle in the body of fluid, so treat as normal*/
+				{   /*SPHPart in the body of fluid, so treat as normal*/
 					pnp1[ii].vPert = deltaU;
 				}
 				else /*Already checked if eigenvalue is less than 0.55*/
-				{	/*Particle in the surface region, so apply a partial shifting*/
+				{	/*SPHPart in the surface region, so apply a partial shifting*/
 				    if(norm.dot(deltaU) >= 0.0)
 					{	/*Check if particle is heading towards or away from the surface*/
 						if(woccl < M_PI/12.0)
@@ -298,13 +299,13 @@ DELTAP const& dp, State& pnp1)
 	}
 }
 
-void Particle_Shift_Ghost(SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, outl const& outlist,
-DELTAP const& dp, State& pnp1)
+void Particle_Shift_Ghost(SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
+DELTAP const& dp, SPHState& pnp1)
 {
 	/*Implement particle shifting technique - Sun, Colagrossi, Marrone, Zhang (2018)*/
 
-	// vector<Particle>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
-	// 	[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
+	// vector<SPHPart>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
+	// 	[](SPHPart p1, SPHPart p2){return p1.v.norm()< p2.v.norm();});
 
 	// real const maxU = fvar.maxU/**maxUi->v.norm()*/;
 
@@ -319,7 +320,7 @@ DELTAP const& dp, State& pnp1)
 			if(dp.lam_nb[ii] < 0.55)
 				continue;
 
-			Particle const& pi = pnp1[ii];
+			SPHPart const& pi = pnp1[ii];
 			
 			StateVecD deltaU = StateVecD::Zero();
 			StateVecD gradLam = StateVecD::Zero();
@@ -329,7 +330,7 @@ DELTAP const& dp, State& pnp1)
 
 			for (std::pair<size_t,real> const& jj:outlist[ii])
 			{	/* Neighbour list loop. */
-				Particle const& pj = pnp1[jj.first];
+				SPHPart const& pj = pnp1[jj.first];
 
 				if(pj.partID == pi.partID /*|| pj.b == PartState.BOUND_*/)
 					continue;
@@ -374,19 +375,19 @@ DELTAP const& dp, State& pnp1)
 #endif
 
 // void Apply_XSPH(FLUID const& fvar, size_t const& start, size_t const& end, 
-// 				outl const& outlist, DELTAP const& dp, State& pnp1)
+// 				OUTL const& outlist, DELTAP const& dp, SPHState& pnp1)
 // {
 // 	#pragma omp parallel
 // 	{
 // 		#pragma omp for schedule(static) nowait
 // 		for(size_t ii = start; ii < end; ++ii)
 // 		{	
-// 			Particle const& pi(pnp1[ii]);
+// 			SPHPart const& pi(pnp1[ii]);
 
 // 			StateVecD vPert_ = StateVecD::Zero();
 // 			for (size_t const& jj:outlist[ii])
 // 			{	 Neighbour list loop. 
-// 				Particle const& pj(pnp1[jj]);
+// 				SPHPart const& pj(pnp1[jj]);
 
 // 				if(pj.partID == pi.partID || pj.b == PartState.BOUND_)
 // 				{
@@ -408,7 +409,7 @@ DELTAP const& dp, State& pnp1)
 
 
 // /*Numerical particle density for Nair & Poeschel (2017) surface tension*/
-// real GetNumpartdens(SIM const& svar, FLUID const& fvar, State const& pnp1, outl const& outlist)
+// real GetNumpartdens(SIM const& svar, FLUID const& fvar, SPHState const& pnp1, OUTL const& outlist)
 // {
 // 	real npd = 0.0;
 // 	uint const& end = svar.totPts;

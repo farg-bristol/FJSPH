@@ -1,4 +1,4 @@
-/*********   WCSPH (Weakly Compressible Smoothed Particle Hydrodynamics) Code   *************/
+/*********   WCSPH (Weakly Compressible Smoothed SPHPart Hydrodynamics) Code   *************/
 /*********        Created by Jamie MacLeod, University of Bristol               *************/
 
 #ifndef VAR_H
@@ -147,6 +147,7 @@ typedef struct SIM {
 		restart = 0;
 		scale = 1.0;
 
+		partID = 0;
 		simPts = 0; bndPts = 0; totPts = 0;
 		gstPts = 0;  psnPts = 0; delNum = 0; 
 		intNum = 0;	nrefresh = 0; addcount = 0;
@@ -185,6 +186,7 @@ typedef struct SIM {
 		t = 0.0;
 		dt = 2e-10;
 		framet = -1;
+		dt_max = 1;
 		dt_min = 0.0;
 		beta = 0.25; gamma = 0.5;
 		maxmu = 0;
@@ -201,15 +203,18 @@ typedef struct SIM {
 		mass = 0;
 		tMom = 0; aMom = 0;
 	
-		/* Particle tracking settings */
+		/* SPHPart tracking settings */
 		eqOrder = 2;
-		max_x = 999999;
+		max_x_sph = 9999999;
+		max_x = 9999999;
 		nSuccess = 0; nFailed = 0;
+		IPT_diam = 0.0; IPT_area = 0.0;
+		cellsout = 0; streakout = 1; partout = 0;
 	}
 
 	/* File input parameters */
 	uint CDForFOAM;
-	std::string infolder, output_prefix, outdir;
+	std::string infile, output_prefix, outdir;
 	std::string restart_prefix;
 
 	/* OpenFOAM files */
@@ -220,12 +225,17 @@ typedef struct SIM {
 	std::string taumesh, taubmap, tausol;
 	int offset_axis;
 	real angle_alpha;
+	vector<int> markers;
+	vector<string> bnames;
+	vector<int> bwrite; /* If surface wants data writing */
 
 	/* TECIO File outputs */
 	void* boundFile; /*TECIO file handles*/
 	void* fuelFile;
 	void* ghostFile;
 	vector<int32_t> varTypes;
+
+	ofstream surfacefile; /* Surface impact file */
 
 	/* Output type */
 	uint out_encoding;              /*ASCII or binary output*/
@@ -234,7 +244,8 @@ typedef struct SIM {
 	uint restart;					/* If starting from existing solution */
 	real scale;						/* Simulation scale */
 
-	/* Particle counts */
+	/* SPHPart counts */
+	size_t partID;                   /* Track the particle ID separately */
 	size_t totPts;					 /* Total count */
 	size_t simPts;					 /* Fluid count */
 	size_t bndPts;			 		 /* Boundary count */
@@ -274,6 +285,7 @@ typedef struct SIM {
 	uint frame;						/* Current frame number */
 	double t;                       /* Simulation time */
 	real dt, framet;			    /* Timestep, frame times */
+	real dt_max;					/* Maximum timestep */
 	real dt_min;					/* Minimum timestep */
 	real beta, gamma;				/* Newmark-Beta Parameters */
 	real maxmu;                     /* Maximum viscosity component (CFL) */
@@ -292,8 +304,11 @@ typedef struct SIM {
 	
 	/* Particle tracking settings */
 	int eqOrder;
-	real max_x;
+	real max_x_sph, max_x;
 	size_t nSuccess, nFailed;
+	real IPT_diam, IPT_area;
+	uint cellsout, streakout, partout; /* Whether to output for particle tracking */
+	ofstream cellfile, streakfile, partfile; /* File handles for particle tracking */
 
 	/*Post Processessing settings*/
 	uint afterSim;
@@ -333,7 +348,7 @@ typedef struct FLUID {
 	real rho0, rhoJ; 			/*Resting Fluid density*/
 	real pPress;		/*Starting pressure in pipe*/
 	
-	real simM, bndM;			/*Particle and boundary masses*/
+	real simM, bndM;			/*SPHPart and boundary masses*/
 	real correc;				/*Smoothing Kernel Correction*/
 	real alpha,Cs,mu,nu;		/*}*/
 	real sig;					/* Fluid properties*/
@@ -421,12 +436,15 @@ typedef struct MESH
 	size_t nPnts, nElem, nFace, nSurf;
 	real scale;
 
+	real maxlength;
+
 	/*Point based data*/
 	vector<StateVecD> verts;
 
 	/*Face based data*/
 	vector<vector<size_t>> faces;
 	vector<std::pair<int,int>> leftright;
+	vector<std::pair<size_t,int>> smarkers;
 
 	/*Cell based data*/
 	vector<vector<size_t>> elems;
@@ -454,6 +472,48 @@ typedef struct MESH
 	vector<StateVecD> vFnp1;
 
 }MESH;
+
+/* Structure to track impacts and data for a surface marker of the mesh */
+struct SURF
+{
+	SURF()
+	{ 
+		marker_count = 0;
+		marker = 0;
+		output = 0;
+	}
+
+	SURF(SURF const& in)
+	{
+		name = in.name;
+		marker = in.marker;
+		output = in.output;
+		marker_count = 0;
+
+		faceIDs = in.faceIDs;
+		face_count = vector<uint>(faceIDs.size(),0);
+	}
+
+	/* Marker data */
+	string name;
+	int marker;
+	int output;
+	
+	unsigned marker_count;
+	real marker_beta; /* Collision efficiency (same as collection eff) */
+	real marker_area;
+	vector<size_t> marker_pIDs; /* ID for particles that hit the surface */
+	vector<size_t> impacted_face; /* ID of the face the particle hit */
+	vector<StateVecD> end_pos;
+	vector<StateVecD> start_pos;
+
+	/* Face data */
+	vector<size_t> faceIDs;
+	vector<uint> face_count;
+	vector<real> face_beta;
+	vector<real> face_area;
+};
+
 
 /*Container for delta-plus SPH calculations*/
 typedef class DELTAP {
@@ -539,16 +599,16 @@ typedef class DELTAP {
 
 }DELTAP;
 
-/*Particle data class*/
-typedef struct Particle {
+/*SPHPart data class*/
+typedef struct SPHPart {
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-	Particle(StateVecD const& X, StateVecD const& Vi, real const Rhoi, real const Mi, 
+	SPHPart(StateVecD const& X, StateVecD const& Vi, real const Rhoi, real const Mi, 
 		real const press, int const bound, uint const pID)
 	{
 		partID = pID; cellID = 0; faceID = 0;
 		b = bound; surf = 0;
 
-		xi = X;	v = Vi; f = StateVecD::Zero(); Af = StateVecD::Zero();
+		xi = X;	v = Vi; acc = StateVecD::Zero(); Af = StateVecD::Zero();
 		Rrho = 0.0; rho = Rhoi; p = press; m = Mi; 
 		s = 0.0; woccl = 0.0; pDist = 0.0;
 					
@@ -560,12 +620,12 @@ typedef struct Particle {
 	}
 
 	/*To add particles dynamically for boundary layer*/
-	Particle(StateVecD const& X, Particle const& pj, int const bound, size_t const pID)
+	SPHPart(StateVecD const& X, SPHPart const& pj, int const bound, size_t const pID)
 	{
 		partID = pID; cellID = 0; faceID = 0;
 		b = bound; surf = 0;
 
-		xi = X;	v = pj.v; f = StateVecD::Zero(); Af = StateVecD::Zero();
+		xi = X;	v = pj.v; acc = StateVecD::Zero(); Af = StateVecD::Zero();
 		Rrho = 0.0; rho = pj.rho; p = pj.p; m = pj.m;
 		s = 0.0; woccl = 0.0; pDist = 0.0;
 
@@ -576,7 +636,7 @@ typedef struct Particle {
 		vPert = StateVecD::Zero();
 	}
 
-	Particle(){};
+	SPHPart(){};
 
 	int size() const
 	{	/*For neighbour search, return size of xi vector*/
@@ -591,7 +651,7 @@ typedef struct Particle {
 	size_t partID, cellID, faceID;
 	uint b; //What state is a particle. See PartState above for possible options
 	uint surf; /*Is a particle a surface? 1 = yes, 0 = no*/
-	StateVecD xi, v, f, Af;
+	StateVecD xi, v, acc, Af;
 	real Rrho, rho, p, m, s, woccl, pDist;
 	StateVecD cellV;
 	real cellP, cellRho;
@@ -602,7 +662,7 @@ typedef struct Particle {
 	real y;
 	
 	StateVecD vPert;		
-}Particle;
+}SPHPart;
 
 typedef struct IPTPart
 {
@@ -625,7 +685,7 @@ typedef struct IPTPart
 		cellV = StateVecD::Zero();
 		cellRho = 0.0; 
 			
-		acc = StateVecD::Zero();
+		acc = 0.0;
 		v = StateVecD::Zero();
 		xi = StateVecD::Zero();
 		
@@ -652,7 +712,7 @@ typedef struct IPTPart
 		cellV = StateVecD::Zero();
 		cellRho = 0.0; 
 			
-		acc = StateVecD::Zero();
+		acc = 0.0;
 		v = StateVecD::Zero();
 		xi = xi_;
 		
@@ -688,6 +748,35 @@ typedef struct IPTPart
 		A = pi_.A; 
 	}
 
+	IPTPart(SPHPart const& pi, real const& time, real const& diam, real const& area)
+	{
+		partID = pi.partID;
+		going = 1;
+		nIters = 0;
+		nNotFound = 0;
+		failed = 0;
+		t = time; dt = 0;
+
+		/* Set ininial IDs to a nonsense value, so that they don't interfere */
+		faceID = -1; 
+		faceV = StateVecD::Zero();
+		faceRho = 0.0;
+
+		/* Make the current values the same as those of the SPH particle */
+		cellID = pi.cellID;
+		cellV = pi.cellV; 
+		cellRho = pi.cellRho; 
+
+		acc = 0.0;
+		v = pi.v;
+		xi = pi.xi;
+		
+		mass = pi.m;
+		/* Derive diameter and area from the mass and resting density */
+		d = diam;
+		A = area;
+	}
+
 	size_t partID;
 	uint going; /* Is particle still being integrated */
 	uint nIters; /* How many integration steps it's gone through */
@@ -707,24 +796,26 @@ typedef struct IPTPart
 	StateVecD cellV;
 	real cellRho;
 
-	StateVecD acc, v, xi; /* State variables */
+	real acc; /* Implicit acceleration */
+	StateVecD v, xi; /* State variables */
 
-	real mass; /* Particle mass */
-	real d, A; /* Particle diameter and area */
+	real mass; /* SPHPart mass */
+	real d, A; /* SPHPart diameter and area */
 }IPTPart;
 
-typedef std::vector<Particle> State;
-typedef std::vector<IPTPart> IPTState;
 
+typedef std::vector<SPHPart> SPHState;
+typedef std::vector<IPTPart> IPTState;
+typedef std::vector<SURF> SURFS;
 /* Neighbour search tree containers */
-typedef std::vector<std::vector<std::pair<size_t,real>>> outl;
+typedef std::vector<std::vector<std::pair<size_t,real>>> OUTL;
 typedef std::vector<std::vector<size_t>> celll;
-typedef KDTreeVectorOfVectorsAdaptor<State,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Sim_Tree;
+typedef KDTreeVectorOfVectorsAdaptor<SPHState,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Sim_Tree;
 typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Vec_Tree;
 
 typedef struct KDTREE
 {
-	KDTREE(State const& pnp1, MESH const& cells): NP1(SIMDIM,pnp1,20), 
+	KDTREE(SPHState const& pnp1, MESH const& cells): NP1(SIMDIM,pnp1,20), 
 	CELL(SIMDIM,cells.cCentre,20)/* , BOUNDARY(SIMDIM,cells.bVerts,20) */ {}
 
 	Sim_Tree NP1;

@@ -375,38 +375,51 @@ void CheckContents(void* const& inputHandle, SIM& svar, int32_t& numZones, doubl
 	if( outputStream.str() == "X,Z")
 		dataType = 0;
 
-	else if (outputStream.str() == "X,Z,rho,Rrho,m,v,a")
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v,a,partID")
 		dataType = 1;
 
-	else if (outputStream.str() == "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b")
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID")
 		dataType = 2;	
 
-	else if (outputStream.str() == "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_Vx,Cell_Vz,Cell_P,Cell_ID" )
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,Cell_Vx,Cell_Vz,Cell_P,Cell_Rho,Cell_ID" )
 		dataType = 3;
 
-	else if (outputStream.str() == "X,Z,rho,Rrho,m,v,a,Neighbours,Aero")
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v,a,partID,Neighbours,Aero")
 		dataType = 4;
 
-	else if (outputStream.str() == "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_ID")
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,Cell_ID")
 		dataType = 5;
+
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,lambda,surface")
+		dataType = 6;
+
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z")
+		dataType = 7;
 
 #else
 	if( outputStream.str() == "X,Y,Z")
 		dataType = 0;
 
-	else if (outputStream.str() == "X,Y,Z,rho,Rrho,m,v,a")
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v,a,partID")
 		dataType = 1;
 
-	else if (outputStream.str() == "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b")
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID")
 		dataType = 2;	
-	else if (outputStream.str() == "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_ID")
+
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_Rho,Cell_ID")
 		dataType = 3;
 
-	else if (outputStream.str() == "X,Y,Z,rho,Rrho,m,v,a,Neighbours,Aero")
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v,a,partID,Neighbours,Aero")
 		dataType = 4;
 
-	else if (outputStream.str() == "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_ID")
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_ID")
 		dataType = 5;
+
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface")
+		dataType = 6;
+
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z")
+		dataType = 7;
 	
 #endif
 	cout << "Variables:  " << outputStream.str() << "  Data type: " << dataType << endl;
@@ -439,7 +452,7 @@ void CheckContents(void* const& inputHandle, SIM& svar, int32_t& numZones, doubl
     cout << "Latest zone time: " << time << endl << endl;
 }
 
-void Restart(SIM& svar, FLUID const& fvar, MESH const& cells, State& pn, State& pnp1)
+void Restart(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, SPHState& pn, SPHState& pnp1)
 {	
 	// Read the values from the solution folder, then check. 
 
@@ -469,7 +482,7 @@ void Restart(SIM& svar, FLUID const& fvar, MESH const& cells, State& pn, State& 
 	// Now get the data from the files. Start with the boundary
 	if(svar.out_encoding == 1)
 	{
-		State boundary, fuel, rest;	
+		SPHState boundary, fuel, rest;	
 
 		// Read the fuel
 		void* fuelHandle = NULL;
@@ -618,12 +631,13 @@ void Restart(SIM& svar, FLUID const& fvar, MESH const& cells, State& pn, State& 
 	}
 
 	// Go through the particles giving them the properties of the cell
+	size_t pID = 0;
 	vector<size_t> buffer;
 	#pragma omp parallel for 
 	for(size_t ii = 0; ii < svar.totPts; ++ii)
 	{
-		pn[ii].partID = ii;
-		pn[ii].p =  fvar.B*(pow(pn[ii].rho/fvar.rho0,fvar.gam)-1);
+		/* Set density based on pressure. More information this way */
+		pn[ii].rho = fvar.rho0*pow((pn[ii].p/fvar.B) + 1.0, 1.0/fvar.gam);
 
 		if(pn[ii].b == PartState.BACK_)
 		{
@@ -635,6 +649,11 @@ void Restart(SIM& svar, FLUID const& fvar, MESH const& cells, State& pn, State& 
 			#pragma omp critical
 			buffer.emplace_back(ii);
 		}
+
+		if(svar.Asource == 0)
+		{
+			pn[ii].cellRho = avar.rhog;
+		}
 		
 		// Initialise the rest of the values to 0
 		pn[ii].s = 0.0;
@@ -643,7 +662,15 @@ void Restart(SIM& svar, FLUID const& fvar, MESH const& cells, State& pn, State& 
 		pn[ii].internal = 0;
 
 		pn[ii].vPert = StateVecD::Zero();
+
+		#pragma omp critical
+		{
+			if(pn[ii].partID > pID)
+				pID = pn[ii].partID;
+		}
 	}	
+
+	svar.partID = pID+1;
 
 	/* Put the particles into the buffer vector */
 	svar.buffer = vector<vector<size_t>>(svar.back.size(),vector<size_t>(4));
@@ -690,6 +717,7 @@ void Restart(SIM& svar, FLUID const& fvar, MESH const& cells, State& pn, State& 
 	
 	pnp1 = pn;
 }
+
 
 void GetYcoef(AERO& avar, const FLUID& fvar, const real diam)
 {
