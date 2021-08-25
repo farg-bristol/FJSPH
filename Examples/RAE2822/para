@@ -1,1 +1,44 @@
 
+                           Primary grid face filename: mesh.grid.conf.edges
+                            Boundary mapping filename: mesh.grid.conf.bmap
+                                  Restart-data prefix: sol.pval.10000 
+                                           Grid scale: 1
+                   2D offset vector (0 / x=1,y=2,z=3): 2
+                   
+                                      Reynolds length: 6
+                                   Reference velocity: 39.89
+                                   Reference pressure: 101353
+                                Reference temperature: 288
+                                    Reference density: 1.2262
+
+                          Reference dispersed density: 810
+                         Referece dispersed viscosity: 0.00142
+                            Reference surface tension: 0.0256
+
+                                  Output files prefix: solution/soleq2
+
+#SPH parameters -------------------------------------: -
+                              SPH frame time interval: 0.00004
+                                      SPH frame count: 1200
+                 SPH output information (0/1/2/3/4/5): 3
+               SPH output encoding (0=ascii/1=binary): 1
+                               SPH ghost output (0/1): 0
+
+                                 SPH minimum timestep: 2.5e-9
+                                  SPH initial spacing: 0.002
+                          SPH boundary spacing factor: 0.7
+                                 SPH aerodynamic case: Gissler
+                        SPH use ghost particles (0/1): 0
+                                SPH start coordinates: 6,-0.026
+                       SPH boundary start coordinates: 6,-0.026
+                              SPH start geometry type: jet
+                           SPH boundary geometry type: (none)
+                                     SPH jet diameter: 0.05286
+                                        SPH jet depth: 0.06
+                                     SPH jet velocity: 1.395
+                            SPH rotation angles (deg): -102,0
+
+                                SPH starting pressure: 000
+                                   SPH speed of sound: 500
+                      SPH artificial viscosity factor: 0.1
+                    SPH surface tension contact angle: 150.0

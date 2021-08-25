@@ -1,0 +1,27 @@
+ ----------------------------------------------------- 
+ BOUNDARY MAPPING
+ -----------------------------------------------------
+  Boundary mapping filename: (thisfile)
+ -----------------------------------------------------
+                    Markers: 1
+                       Type: symmetry plane
+ block end
+ ---------------------------
+                    Markers: 2
+                       Type: symmetry plane
+ block end
+ ---------------------------
+
+                    Markers: 4
+                      Type : farfield                    
+       Angle alpha (degree): 12.0
+               block end
+ ---------------------------  
+ 
+                    Markers: 5
+                       Type: viscous wall
+                    Subtype: turbulent
+                       Name: airfoil
+  Write surface data (0/1) : 0
+ block end
+ ---------------------------
