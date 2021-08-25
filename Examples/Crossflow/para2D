@@ -1,0 +1,43 @@
+
+                                   Reference velocity: 128.5
+                                   Reference pressure: 98800
+                                Reference temperature: 298
+                                    Reference density: 1.2262
+#                                      Reynolds number: 3.231E+06
+                       Sutherland reference viscosity: 1.85e-05
+                     Sutherland reference temperature: 298
+
+                          Reference dispersed density: 997
+                        Reference dispersed viscosity: 0.000894
+                            Reference surface tension: 0.0256
+                   2D offset vector (0 / x=1,y=2,z=3): 2
+
+                                  Output files prefix: sol
+
+# SPH parameters ------------------------------------: -
+                              SPH frame time interval: 2.5e-6
+                                      SPH frame count: 5000
+                 SPH output information (0/1/2/3/4/5): 3
+               SPH output encoding (0=ascii/1=binary): 1
+                               SPH ghost output (0/1): 0
+
+                                 SPH maximum timestep: 5e-7
+                                 SPH minimum timestep: 1e-9
+                                  SPH initial spacing: 0.00005
+                          SPH boundary spacing factor: 0.7
+                                 SPH aerodynamic case: Gissler
+                        SPH use ghost particles (0/1): 0
+                                SPH start coordinates: 0,0
+                       SPH boundary start coordinates: 0,0
+                              SPH start geometry type: jet
+                           SPH boundary geometry type: (none)
+                                     SPH jet diameter: 0.0008
+                                        SPH jet depth: 0.0015
+                                     SPH jet velocity: 33.63
+                            SPH rotation angles (deg): 0,0
+
+                                SPH starting pressure: 0
+                                   SPH speed of sound: 300
+                      SPH artificial viscosity factor: 0.05
+                    SPH surface tension contact angle: 150.0
+                              SPH freestream velocity: 128.5,0
