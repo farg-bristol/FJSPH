@@ -6,7 +6,7 @@
 
 #include "Var.h"
 // #include "IOFunctions.h"
-#include "Crossing.h"
+#include "Containment.h"
 #include <random>
 #include <stdint.h>
 #include <time.h>
@@ -15,10 +15,9 @@ using std::cout;
 using std::endl;
 
 void Place_Point(FLUID const& fvar, StateVecD const& xi, StateVecD const& v, real const& rho, real const& press, size_t const& pState, 
-	size_t& pID, SIM& svar, State& pn, State& pnp1)
+	size_t& pID, SIM& svar, SPHState& pn)
 {
-	pn.emplace_back(Particle(xi, v, rho, fvar.simM, press, pState, pID));
-	pnp1.emplace_back(Particle(xi, v, rho, fvar.simM, press, pState, pID));
+	pn.emplace_back(SPHPart(xi, v, rho, fvar.simM, press, pState, pID));
 	++pID;
 	++svar.simPts;
 	++svar.nrefresh;
@@ -30,25 +29,25 @@ StateVecD getVelocity(StateVecD const& vavg, real const& zsq, real const& r)
 	return vavg;
 }
 
-void AddPoints(real const y, SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& pnp1, size_t const& pState)
+void AddPoints(real const y, SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, size_t const& pState)
 {	
 	// cout << "Adding points..." << endl;
 	size_t pID = svar.totPts;
 	
 	svar.nrefresh = 0;	
-	real jetR = 0.5*(svar.Jet(0));
+	real jetR = 0.5*(svar.jet_diam);
 	real r = jetR + 2*svar.dx;
 	real resR = 2*jetR;
 	
 	StateVecD vavg;
-	if(svar.Bcase == 2)
+	if(svar.Bcase == 3)
 	{
-		vavg = (avar.vJet*pow(jetR,2))/(0.6*pow(resR,2));
+		vavg = (avar.vStart*pow(jetR,2))/(0.6*pow(resR,2));
 		jetR *= 2;
 	}
 	else
 	{
-		vavg = avar.vJet;  /*Jet velocity*/
+		vavg = avar.vStart;  /*Jet velocity*/
 	}
 	
 
@@ -62,49 +61,40 @@ void AddPoints(real const y, SIM& svar, FLUID const& fvar, AERO const& avar, Sta
 		/*Create the simulation particles*/
 		StateVecD xi(0.0, y, 0.0);
 		perturb = StateVecD(random(interval), random(interval), random(interval));
-		xi = svar.Rotate * (xi + perturb);
-		xi += svar.Start;
+		xi += perturb;
 		StateVecD v = getVelocity(vavg, 0.0, r);
-		Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+		Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 		for (real z = svar.dx; z <= jetR; z += svar.dx)
 		{ /*Do the centerline of points*/
-			StateVecD xi(0.0, y, z);
 			perturb = StateVecD(random(interval), random(interval), random(interval));
-			xi = svar.Rotate * (xi + perturb);
-			xi += svar.Start;
-			StateVecD v = getVelocity(vavg, z * z, r);
-			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+			xi = StateVecD(0.0, y, z) + perturb;
+			v = getVelocity(vavg, z * z, r);
+			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 		}
 
 		for (real z = -svar.dx; z >= -jetR; z-= svar.dx)
 		{ /*Do the centerline of points*/
-			StateVecD xi(0.0,y,z);
 			perturb = StateVecD(random(interval), random(interval), random(interval));
-			xi = svar.Rotate * (xi + perturb);
-			xi += svar.Start;
-			StateVecD v = getVelocity(vavg,z*z,r);
-			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+			xi = StateVecD(0.0, y, z) + perturb;
+			v = getVelocity(vavg,z*z,r);
+			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 		}
 
 		for (real x = svar.dx; x <= jetR; x+= svar.dx)
 		{ /*Do the centerline of points*/
-			StateVecD xi(x,y,0.0);
 			perturb = StateVecD(random(interval), random(interval), random(interval));
-			xi = svar.Rotate*(xi+perturb);
-			xi += svar.Start;
-			StateVecD v = getVelocity(vavg,x*x,r);
-			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+			xi = StateVecD(x, y, 0.0) + perturb;
+			v = getVelocity(vavg,x*x,r);
+			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 		}
 
 		for (real x = -svar.dx; x >= -jetR; x-= svar.dx)
 		{ /*Do the centerline of points*/
-			StateVecD xi(x,y,0.0);
 			perturb = StateVecD(random(interval), random(interval), random(interval));
-			xi = svar.Rotate * (xi + perturb);
-			xi += svar.Start;
-			StateVecD v = getVelocity(vavg,x*x,r);
-			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+			xi = StateVecD(x, y, 0.0) + perturb;
+			v = getVelocity(vavg,x*x,r);
+			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 		}
 
 		for (real x = svar.dx; x <= jetR ; x+=svar.dx)
@@ -113,54 +103,46 @@ void AddPoints(real const y, SIM& svar, FLUID const& fvar, AERO const& avar, Sta
 			{
 				if( (x*x + z*z)/(jetR*jetR) <= 1.0 )
 	    		{   /*If the point is inside the hole diameter, add it*/
-					StateVecD temp(x,y,z);
 					perturb = StateVecD(random(interval), random(interval), random(interval));
-					xi = svar.Rotate * (temp + perturb);
-					xi+= svar.Start;
+					xi = StateVecD(x,y,z) + perturb;
 					StateVecD v = getVelocity(vavg,(z*z+x*x),r);
-					Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+					Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
-					temp(0) = -x;
 					perturb = StateVecD(random(interval), random(interval), random(interval));
-					xi = svar.Rotate * (temp + perturb);
-					xi+= svar.Start;
-					Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+					xi = StateVecD(-x,y,z) + perturb;
+					Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
-					temp(2) = -z;
 					perturb = StateVecD(random(interval), random(interval), random(interval));
-					xi = svar.Rotate * (temp + perturb);
-					xi+= svar.Start;
-					Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+					xi = StateVecD(-x,y,-z) + perturb;
+					Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
-					temp(0) = x;
 					perturb = StateVecD(random(interval), random(interval), random(interval));
-					xi = svar.Rotate * (temp + perturb);
-					xi+= svar.Start;
-					Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+					xi = StateVecD(x,y,-z) + perturb;
+					Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 				}
 			}
 		}
 
 	#else
 		perturb = StateVecD(random(interval), random(interval));
-		StateVecD xi1(0, y);
-		xi1 += perturb;
-		StateVecD v1 = getVelocity(vavg, 0.0, r);
-		Place_Point(fvar, xi1, v1, rho, press, pState, pID, svar, pn, pnp1);
+		StateVecD xi(0, y);
+		xi += perturb;
+		StateVecD v = getVelocity(vavg, 0.0, r);
+		Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 		/*Create the simulation particles*/
 		for (real x = svar.dx; x <= jetR; x += svar.dx)
 		{ /*Do the centerline of points*/
 			perturb = StateVecD(random(interval),random(interval));
-			StateVecD xi(x, y);
+			xi = StateVecD(x, y);
 			xi += perturb;
-			StateVecD v = getVelocity(vavg, x * x, r);
-			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+			v = getVelocity(vavg, x * x, r);
+			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
-			xi = StateVecD(-x, y);
 			perturb = StateVecD(random(interval), random(interval));
+			xi = StateVecD(-x, y);
 			xi += perturb;
-			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 		}
 	#endif
 
@@ -171,25 +153,25 @@ void AddPoints(real const y, SIM& svar, FLUID const& fvar, AERO const& avar, Sta
 }
 
 #if SIMDIM ==3
-void Add_Radial_Points(real const y, SIM& svar, FLUID const& fvar, AERO const& avar, State& pn, State& pnp1, size_t const& pState)
+void Add_Radial_Points(real const y, SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, size_t const& pState)
 {	
 	// cout << "Adding points..." << endl;
 	size_t pID = svar.totPts;
 	
 	svar.nrefresh = 0;	
-	real jetR = 0.5*(svar.Jet(0));
+	real jetR = 0.5*(svar.jet_diam);
 	real r = jetR + 2 * svar.dx;
 	real resR = 2 * jetR;
 
 	StateVecD vavg;
-	if (svar.Bcase == 2)
+	if (svar.Bcase == 3)
 	{
-		vavg = (avar.vJet * pow(jetR, 2)) / (0.6 * pow(resR, 2));
+		vavg = (avar.vStart * pow(jetR, 2)) / (0.6 * pow(resR, 2));
 		jetR *= 2;
 	}
 	else
 	{
-		vavg = avar.vJet; /*Jet velocity*/
+		vavg = avar.vStart; /*Jet velocity*/
 	}
 
 	/*Squeeze particles together to emulate increased pressure*/
@@ -214,7 +196,7 @@ void Add_Radial_Points(real const y, SIM& svar, FLUID const& fvar, AERO const& a
 			perturb = StateVecD(random(interval), random(interval),random(interval));
 			xi += perturb;
 			StateVecD v = getVelocity(vavg, (z * z + x * x), r);
-			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 		}
 	}
@@ -223,7 +205,7 @@ void Add_Radial_Points(real const y, SIM& svar, FLUID const& fvar, AERO const& a
 	StateVecD xi(0.0, y, 0.0);
 	perturb = StateVecD(random(interval), random(interval), random(interval));
 	xi += perturb;
-	Place_Point(fvar, xi, vavg, rho, press, pState, pID, svar, pn, pnp1);
+	Place_Point(fvar, xi, vavg, rho, press, pState, pID, svar, pn);
 	
 	svar.totPts += svar.nrefresh;
 	++svar.addcount;
@@ -231,12 +213,11 @@ void Add_Radial_Points(real const y, SIM& svar, FLUID const& fvar, AERO const& a
 }
 #endif
 
-void Add_Buffer(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
+void Add_Buffer(SIM& svar, FLUID const& fvar, SPHState& pn)
 {
 	for (size_t ii = svar.totPts - svar.nrefresh; ii < svar.totPts; ++ii)
 	{ /*Fill the vector of the last particles*/
 		pn[ii].b = PartState.BACK_;
-		pnp1[ii].b = PartState.BACK_;
 		svar.back.emplace_back(ii);
 	}
 
@@ -248,11 +229,10 @@ void Add_Buffer(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
 	{
 		for (size_t jj = 0; jj < svar.back.size(); ++jj)
 		{
-			Particle const& pi = pnp1[svar.back[jj]];
+			SPHPart const& pi = pn[svar.back[jj]];
 			StateVecD xi = pi.xi;
 			xi[1] -= real(level+1.0)*svar.dx;
-			pn.emplace_back(Particle(xi, pi, PartState.BUFFER_, pID));
-			pnp1.emplace_back(Particle(xi, pi, PartState.BUFFER_, pID));
+			pn.emplace_back(SPHPart(xi, pi, PartState.BUFFER_, pID));
 			svar.buffer[jj][level] = pID;
 			++pID;
 			++svar.simPts;
@@ -265,7 +245,7 @@ void Add_Buffer(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
 	// {
 	// 	StateVecD xi = pn[pi].xi;
 	// 	xi[1] -= itr*svar.dx;
-	// 	pn.emplace_back(Particle(xi, pn[pi], PartState.BACK, pID));
+	// 	pn.emplace_back(SPHPart(xi, pn[pi], PartState.BACK, pID));
 	// 	pi = pID;
 	// 	++pID;
 	// 	++svar.simPts;
@@ -274,7 +254,7 @@ void Add_Buffer(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
 	
 }
 
-void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
+void CreateDroplet(SIM &svar, const FLUID &fvar, SPHState &pn)
 {
 	size_t pID = svar.totPts;
 	size_t const& pState = PartState.FREE_;
@@ -284,7 +264,7 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 	real press = fvar.pPress;
 	// real press = 0.0;
 	svar.nrefresh = 0;	
-	real radius = 0.500001*svar.Jet(0);
+	real radius = 0.500001*svar.diam;
 
 	
 	int const interval = 1000;
@@ -298,19 +278,19 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 			StateVecD xi_y(0.0,y,0.0);
 			perturb = StateVecD(random(interval), random(interval), random(interval));
 			xi_y += perturb;
-			Place_Point(fvar, xi_y, v, rho, press, pState, pID, svar, pn, pnp1);
+			Place_Point(fvar, xi_y, v, rho, press, pState, pID, svar, pn);
 
 			for (real z = svar.dx; z <= xradius; z+= svar.dx)
 			{ /*Do the centerline of points*/
 				StateVecD xi(0.0,y,z);
 				perturb = StateVecD(random(interval), random(interval), random(interval));
 				xi += perturb;
-				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 				xi = StateVecD(0.0,y,-z);
 				perturb = StateVecD(random(interval), random(interval), random(interval));
 				xi += perturb;
-				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 			}
 
 			for (real x = svar.dx; x <= xradius ; x+=svar.dx)
@@ -319,12 +299,12 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 				StateVecD xi_z(x,y,0.0);
 				perturb = StateVecD(random(interval), random(interval), random(interval));
 				xi_z += perturb;
-				Place_Point(fvar, xi_z, v, rho, press, pState, pID, svar, pn, pnp1);
+				Place_Point(fvar, xi_z, v, rho, press, pState, pID, svar, pn);
 
 				xi_z = StateVecD(-x,y,0.0);
 				perturb = StateVecD(random(interval), random(interval), random(interval));
 				xi_z += perturb;
-				Place_Point(fvar, xi_z, v, rho, press, pState, pID, svar, pn, pnp1);
+				Place_Point(fvar, xi_z, v, rho, press, pState, pID, svar, pn);
 
 				for (real z = svar.dx; z <= xradius; z+= svar.dx)
 				{
@@ -333,22 +313,22 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 						StateVecD xi(x,y,z);
 						perturb = StateVecD(random(interval), random(interval), random(interval));
 						xi += perturb;
-						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 						xi = StateVecD(-x,y,z);
 						perturb = StateVecD(random(interval), random(interval), random(interval));
 						xi += perturb;
-						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 						xi = StateVecD(-x,y,-z);
 						perturb = StateVecD(random(interval), random(interval), random(interval));
 						xi += perturb;
-						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 						xi = StateVecD(x,y,-z);
 						perturb = StateVecD(random(interval), random(interval), random(interval));
 						xi += perturb;
-						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 					}
 				}	
 			}
@@ -361,20 +341,20 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 			StateVecD xi_y(0.0,y,0.0);
 			perturb = StateVecD(random(interval), random(interval), random(interval));
 			xi_y += perturb;
-			Place_Point(fvar, xi_y, v, rho, press, pState, pID, svar, pn, pnp1);
+			Place_Point(fvar, xi_y, v, rho, press, pState, pID, svar, pn);
 
 			for (real z = svar.dx; z <= xradius; z+= svar.dx)
 			{ /*Do the centerline of points*/
 				StateVecD xi(0.0,y,z);
 				perturb = StateVecD(random(interval), random(interval), random(interval));
 				xi += perturb;
-				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 				xi = StateVecD(0.0,y,-z);
 				perturb = StateVecD(random(interval), random(interval), random(interval));
 				xi = svar.Rotate * (xi + perturb);
-				xi += svar.Start;
-				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+				xi += svar.sim_start;
+				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 			}
 
 			for (real x = svar.dx; x <= xradius ; x+=svar.dx)
@@ -383,12 +363,12 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 				StateVecD xi_z(x,y,0.0);
 				perturb = StateVecD(random(interval), random(interval), random(interval));
 				xi_z += perturb;
-				Place_Point(fvar, xi_z, v, rho, press, pState, pID, svar, pn, pnp1);
+				Place_Point(fvar, xi_z, v, rho, press, pState, pID, svar, pn);
 
 				xi_z = StateVecD(-x,y,0.0);
 				perturb = StateVecD(random(interval), random(interval), random(interval));
 				xi_z += perturb;
-				Place_Point(fvar, xi_z, v, rho, press, pState, pID, svar, pn, pnp1);
+				Place_Point(fvar, xi_z, v, rho, press, pState, pID, svar, pn);
 
 				for (real z = svar.dx; z <= xradius; z+= svar.dx)
 				{
@@ -397,22 +377,22 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 						StateVecD xi(x,y,z);
 						perturb = StateVecD(random(interval), random(interval), random(interval));
 						xi += perturb;
-						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 						xi = StateVecD(-x,y,z);
 						perturb = StateVecD(random(interval), random(interval), random(interval));
 						xi += perturb;
-						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 						xi = StateVecD(-x,y,-z);
 						perturb = StateVecD(random(interval), random(interval), random(interval));
 						xi += perturb;
-						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 						xi = StateVecD(x,y,-z);
 						perturb = StateVecD(random(interval), random(interval), random(interval));
 						xi += perturb;
-						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+						Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 					}
 				}	
 			}
@@ -429,7 +409,7 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 			StateVecD xi(0.0, y);
 			xi += perturb;
 
-			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 			for (real x = svar.dx; x <= radius; x += svar.dx)
 			{ /*Do the either side of the centerline*/
@@ -440,12 +420,12 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 
 					StateVecD xi2(x, y);
 					xi2 += perturb;
-					Place_Point(fvar, xi2, v, rho, press, pState, pID, svar, pn, pnp1);
+					Place_Point(fvar, xi2, v, rho, press, pState, pID, svar, pn);
 
 					perturb = StateVecD(random(interval), random(interval));
 					xi2 = StateVecD(-x, y);
 					xi2 += perturb;
-					Place_Point(fvar, xi2, v, rho, press, pState, pID, svar, pn, pnp1);
+					Place_Point(fvar, xi2, v, rho, press, pState, pID, svar, pn);
 				}
 			}
 		}
@@ -457,7 +437,7 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 
 			StateVecD xi(0.0,y);
 			xi += perturb;
-			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 			for (real x = svar.dx; x <= radius ; x+=svar.dx)
 			{ /*Do the either side of the centerline*/
@@ -467,12 +447,12 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 
 					StateVecD xi2(x,y);
 					xi2 += perturb;
-					Place_Point(fvar, xi2, v, rho, press, pState, pID, svar, pn, pnp1);
+					Place_Point(fvar, xi2, v, rho, press, pState, pID, svar, pn);
 
 					perturb = StateVecD(random(interval), random(interval));
 					xi2 = StateVecD(-x,y);
 					xi2 += perturb;
-					Place_Point(fvar, xi2, v, rho, press, pState, pID, svar, pn, pnp1);
+					Place_Point(fvar, xi2, v, rho, press, pState, pID, svar, pn);
 				}	
 			}
 		}
@@ -481,7 +461,7 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, State &pn, State &pnp1)
 	svar.totPts += svar.nrefresh;
 }
 
-void CreateRDroplet(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
+void CreateRDroplet(SIM& svar, FLUID const& fvar, SPHState& pn)
 {
 	size_t const& pState = PartState.FREE_;
 	#if SIMDIM == 3
@@ -490,7 +470,7 @@ void CreateRDroplet(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
 		real rho = fvar.simM / pow(svar.dx, SIMDIM);
 		real press = fvar.pPress;
 		size_t pID = svar.totPts;
-		Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+		Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 		// /*Create particles in a circle*/
 		// for(real phi = 0.0; phi < 0.25*M_PI - 0.1*dthe_; phi += dthe_)
 		// {
@@ -505,7 +485,7 @@ void CreateRDroplet(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
 		// 		real y = radius*cos(theta);
 		// 		StateVecD xi(x,y);
 
-		// 		Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+		// 		Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 		// 		++kk;
 		// 	}
 
@@ -529,7 +509,7 @@ void CreateRDroplet(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
 		// 				real y = rad*cos(theta);
 		// 				StateVecD xi(x,y);
 
-		// 				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+		// 				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 		// 				++kk;
 		// 			}
 		// 			++ii;
@@ -554,14 +534,14 @@ void CreateRDroplet(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
 		// 			real y = rad*cos(theta);
 		// 			StateVecD xi(x,y);
 
-		// 			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+		// 			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 		// 		}
 		// 		++ii;
 
 		// 	}
 
-		// 	StateVecD xi = StateVecD::Zero();
-		// 	Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+		// 	StateVecD xi = StateVecD(0,0);
+		// 	Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 		// }
 	#else 
 		size_t pID = svar.totPts;
@@ -571,7 +551,7 @@ void CreateRDroplet(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
 		real press = fvar.pPress;
 		// real press = 0.0;
 		svar.nrefresh = 0;	
-		real radius = 0.5*svar.Jet(0);
+		real radius = 0.5*svar.diam;
 
 		real dthe_ = atan(svar.dx/radius);
 		uint ncirc = floor(abs(2.0*M_PI/dthe_));
@@ -589,7 +569,7 @@ void CreateRDroplet(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
 			real y = radius*cos(theta);
 			StateVecD xi(x,y);
 
-			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+			Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 			++kk;
 		}
 
@@ -613,21 +593,19 @@ void CreateRDroplet(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
 					real y = rad*cos(theta);
 					StateVecD xi(x,y);
 
-					Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+					Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 					++kk;
 				}
 				++ii;
 			}
 		}
 
-		
 		for(real rad = radius-dx_r*ii; rad > 0.99*dx_r; rad-= dx_r)
 		{
 			real dtheta = atan(svar.dx/rad);
 			real ncirc = floor(abs(2.0*M_PI/dtheta));
 			dtheta = 2.0*M_PI/(ncirc);
 			
-
 			real tstart = 0.0;
 			if(ii % 2 == 0)
 			{
@@ -640,14 +618,13 @@ void CreateRDroplet(SIM& svar, FLUID const& fvar, State& pn, State& pnp1)
 				real y = rad*cos(theta);
 				StateVecD xi(x,y);
 
-				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 			}
 			++ii;
-
 		}
 
-		StateVecD xi = StateVecD::Zero();
-		Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn, pnp1);
+		StateVecD xi = StateVecD(0,0);
+		Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 
 	#endif
 
@@ -853,14 +830,18 @@ namespace PoissonSample
 		Return a vector of generated points
 		sampleLimit - refer to bridson-siggraph07-poissondisk.pdf for details (the value 'k')
 	**/
-	State generatePoissonPoints(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
-	 uint const& host, State const& pnp1, outl const& outlist/* , StateVecD const& norm, StateVecD const& avgV */)
+	SPHState generatePoissonPoints(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
+	 uint const& host, SPHState const& pnp1, OUTL const& outlist/* , StateVecD const& norm, StateVecD const& avgV */)
 	{
 		/*Variables for the poisson disk sampling*/
 		real radius = 1.2*fvar.sr;
 		uint sampleLimit = 30;
 		PRNG generator;
-		uint numPoints = svar.nfull;
+		#if SIMDIM == 3
+			uint numPoints = 257;
+		#else
+			uint numPoints = 48;
+		#endif
 		uint pID = svar.totPts;
 
 		/*Properties for new particles*/
@@ -939,9 +920,9 @@ namespace PoissonSample
 		// << "  " << rho << "  " << mass << "  " << deltax << endl;
 
  		const real minDist = /*svar.Pstep*/ deltax;
-		State samplePoints;
+		SPHState samplePoints;
 		std::vector<StateVecD> processList;
-		State airP;
+		SPHState airP;
 
 		// create the grid
 		#if SIMDIM == 2
@@ -1004,8 +985,8 @@ namespace PoissonSample
 				{
 					processList.push_back(newPoint);
 					// StateVecD Point = newPoint+origin;
-					samplePoints.push_back(Particle(newPoint+origin,StateVecD::Zero(),0.0,0.0,0.0,PartState.GHOST_,0));
-					airP.emplace_back(Particle(newPoint+origin,vel,press,rho,mass,PartState.GHOST_,pID));
+					samplePoints.push_back(SPHPart(newPoint+origin,StateVecD::Zero(),0.0,0.0,0.0,PartState.GHOST_,0));
+					airP.emplace_back(SPHPart(newPoint+origin,vel,press,rho,mass,PartState.GHOST_,pID));
 					pID++;
 					grid.insert(newPoint);
 					// cout << "New Point: " << point(0) << " " << point(1) << endl;
@@ -1017,7 +998,7 @@ namespace PoissonSample
 	}
 }
 
-void PoissonGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, Sim_Tree& NP1_INDEX, outl& outlist, State& pn, State& pnp1)
+void PoissonGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, Sim_Tree& NP1_INDEX, OUTL& outlist, SPHState& pn, SPHState& pnp1)
 {
 	size_t const& start = svar.bndPts;
 	size_t const& end = svar.totPts;
@@ -1029,7 +1010,7 @@ void PoissonGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& ce
 		if(pnp1[ii].surf == 1)
 		{
 			/* Create a lattice grid (perturbed, so its not a perfect grid) around the point. */
-			State ghost_particles = PoissonSample::generatePoissonPoints(svar,fvar,avar,cells,ii,pnp1,outlist);		
+			SPHState ghost_particles = PoissonSample::generatePoissonPoints(svar,fvar,avar,cells,ii,pnp1,outlist);		
 
 			if(!ghost_particles.empty())
 			{
@@ -1051,7 +1032,8 @@ void PoissonGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& ce
 	// Write_Binary_Timestep(svar,pnp1,svar.bndPts+svar.simPts,svar.bndPts+svar.simPts+svar.gstPts,"Ghost",3,svar.ghostFile);	
 }
 
-inline void check_if_too_close(Sim_Tree const& NP1_INDEX, real const& sr, StateVecD const& xi, State const& pnp1, size_t const& pID, State& ghost_particles, size_t& nGhost)
+inline void check_if_too_close(Sim_Tree const& NP1_INDEX, real const& sr, SPHState const& pnp1, StateVecD const& xi, 
+		StateVecD const& vel, real const& dens, real const& mass, real const& press, size_t const& pID, SPHState& ghost_particles, size_t& nGhost)
 {
 	nanoflann::SearchParams const params(0,0,false);
 	/* Check if point is too close to an existing point... */
@@ -1066,14 +1048,12 @@ inline void check_if_too_close(Sim_Tree const& NP1_INDEX, real const& sr, StateV
 	if(out_dists_sqr[0] > sr)
 	{
 		/* it's far enough away, so point can be added to the array */
-		/* Give the particle the properties of the nearest particle */
-		/* Or to I smooth properties to it's value? */
-		ghost_particles.emplace_back(Particle(xi, pnp1[ret_indexes[0]], PartState.GHOST_, pID));
+		ghost_particles.emplace_back(SPHPart(xi, vel, dens, mass, press, PartState.GHOST_, pID));
 		nGhost++;
 	}
 }
 
-void LatticeGhost(SIM& svar, FLUID const& fvar, MESH const& cells, KDTREE& TREE, outl& outlist, State& pn, State& pnp1)
+void LatticeGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, KDTREE& TREE, OUTL& outlist, SPHState& pn, SPHState& pnp1)
 {
 	size_t const& start = svar.bndPts;
 	size_t const& end = svar.bndPts+svar.simPts;
@@ -1102,12 +1082,28 @@ void LatticeGhost(SIM& svar, FLUID const& fvar, MESH const& cells, KDTREE& TREE,
 
 			TREE.NP1.index->radiusSearch(&pnp1[ii].xi[0], search_radius, matches, params);
 
-			if(matches.size() >  50/* ? not sure yet */)
+			// cout << matches.size() << endl;
+
+			#if SIMDIM == 3
+			if(matches.size() >  250/* ? not sure yet */)
 				continue;
-
+			#else
+			if(matches.size() >  90/* ? not sure yet */)
+				continue;
+			#endif
 			/* Create a lattice grid (perturbed, so its not a perfect grid) around the point. */
-			State ghost_particles;
+			SPHState ghost_particles;
 
+			/* Velocity of the air particle */
+			StateVecD vel; 
+			if(svar.Asource == 0)
+				vel = (avar.gasM/ pnp1[ii].m) * avar.vInf;
+			else
+				vel = (avar.gasM/ pnp1[ii].m) * pnp1[ii].cellV;
+
+			real press = pnp1[ii].cellP;
+			real rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
+			real mass = fvar.simM;
 			/* How far away does it need to be? */
 			/* The fuel surface cannot interact with a 'surface' particle */
 			/* Origin */
@@ -1120,55 +1116,54 @@ void LatticeGhost(SIM& svar, FLUID const& fvar, MESH const& cells, KDTREE& TREE,
 					#if SIMDIM == 3
 					for(real z = 0.0; z < (2*fvar.H+svar.dx); z += svar.dx)
 					{
-
 						StateVecD perturb(random(interval), random(interval), random(interval));
-						StateVecD xi = svar.Rotate * StateVecD(x,y,z)+origin+perturb;	
-						check_if_too_close(TREE.NP1, sr, xi, pnp1, pID, ghost_particles, nGhost);	
+						StateVecD xi = svar.Rotate * StateVecD(x,y,z)+origin+perturb;
+						check_if_too_close(TREE.NP1,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);	
 
 						perturb = StateVecD(random(interval),random(interval), random(interval));
 						xi = svar.Rotate * StateVecD(-x,y,z)+origin+perturb;
-						check_if_too_close(TREE.NP1, sr, xi, pnp1, pID, ghost_particles, nGhost);
+						check_if_too_close(TREE.NP1,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
 						perturb = StateVecD(random(interval),random(interval), random(interval));
 						xi = svar.Rotate * StateVecD(x,-y,z)+origin+perturb;
-						check_if_too_close(TREE.NP1, sr, xi, pnp1, pID, ghost_particles, nGhost);
+						check_if_too_close(TREE.NP1,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
 						perturb = StateVecD(random(interval),random(interval), random(interval));
 						xi = svar.Rotate * StateVecD(x,y,-z)+origin+perturb;
-						check_if_too_close(TREE.NP1, sr, xi, pnp1, pID, ghost_particles, nGhost);
+						check_if_too_close(TREE.NP1,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
 						perturb = StateVecD(random(interval),random(interval), random(interval));
 						xi = svar.Rotate * StateVecD(-x,-y,z)+origin+perturb;
-						check_if_too_close(TREE.NP1, sr, xi, pnp1, pID, ghost_particles, nGhost);
+						check_if_too_close(TREE.NP1,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
 						perturb = StateVecD(random(interval),random(interval), random(interval));
 						xi = svar.Rotate * StateVecD(-x,y,-z)+origin+perturb;
-						check_if_too_close(TREE.NP1, sr, xi, pnp1, pID, ghost_particles, nGhost);
+						check_if_too_close(TREE.NP1,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
 						perturb = StateVecD(random(interval),random(interval), random(interval));
 						xi = svar.Rotate * StateVecD(x,-y,-z)+origin+perturb;
-						check_if_too_close(TREE.NP1, sr, xi, pnp1, pID, ghost_particles, nGhost);
+						check_if_too_close(TREE.NP1,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
 						perturb = StateVecD(random(interval),random(interval), random(interval));
 						xi = svar.Rotate * StateVecD(-x,-y,-z)+origin+perturb;
-						check_if_too_close(TREE.NP1, sr, xi, pnp1, pID, ghost_particles, nGhost);
+						check_if_too_close(TREE.NP1,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 						
 					#else
 						StateVecD perturb(random(interval), random(interval));
 						StateVecD xi = svar.Rotate * StateVecD(x,y)+origin+perturb;
-						check_if_too_close(TREE.NP1, sr, xi, pnp1, pID, ghost_particles, nGhost);	
+						check_if_too_close(TREE.NP1,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);	
 
 						perturb = StateVecD(random(interval),random(interval));
 						xi = svar.Rotate * StateVecD(-x,y)+origin+perturb;
-						check_if_too_close(TREE.NP1, sr, xi, pnp1, pID, ghost_particles, nGhost);
+						check_if_too_close(TREE.NP1,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
 						perturb = StateVecD(random(interval),random(interval));
 						xi = svar.Rotate * StateVecD(x,-y)+origin+perturb;
-						check_if_too_close(TREE.NP1, sr, xi, pnp1, pID, ghost_particles, nGhost);
+						check_if_too_close(TREE.NP1,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
 						perturb = StateVecD(random(interval),random(interval));
 						xi = svar.Rotate * StateVecD(-x,-y)+origin+perturb;
-						check_if_too_close(TREE.NP1, sr, xi, pnp1, pID, ghost_particles, nGhost);
+						check_if_too_close(TREE.NP1,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 					#endif
 					
 					#if SIMDIM == 3
@@ -1222,7 +1217,7 @@ void LatticeGhost(SIM& svar, FLUID const& fvar, MESH const& cells, KDTREE& TREE,
 
 /* Function to check if a ghost particle needs to be removed from the simulation, because */
 /* it's left the support of the fluid */
-void Check_If_Ghost_Needs_Removing(SIM& svar, FLUID const& fvar, Sim_Tree& NP1_INDEX, State& pn, State& pnp1)
+void Check_If_Ghost_Needs_Removing(SIM& svar, FLUID const& fvar, Sim_Tree& NP1_INDEX, SPHState& pn, SPHState& pnp1)
 {
 	size_t const& start = svar.bndPts + svar.simPts;
 	size_t const& end = svar.totPts;

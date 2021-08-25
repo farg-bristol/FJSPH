@@ -7,7 +7,7 @@
 #include "Var.h"
 
 ///**************** Update neighbour list **************
-void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, State const& pnp1, outl& outlist)
+void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, SPHState const& pnp1, OUTL& outlist)
 {
 	const nanoflann::SearchParams params(0,0,false);
 	const real search_radius = fvar.sr;
@@ -19,7 +19,7 @@ void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, State const& p
 
 	#pragma omp parallel
 	{	/*Find neighbour list*/
-		outl local; /*Local processor copy*/
+		OUTL local; /*Local processor copy*/
 		// vector<vector<std::pair<size_t,real>>> plocal;
 		local.reserve(pnp1.size());
 		// plocal.reserve(pnp1.size());

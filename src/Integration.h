@@ -1,4 +1,4 @@
-/*********   WCSPH (Weakly Compressible Smoothed Particle Hydrodynamics) Code   *************/
+/*********   WCSPH (Weakly Compressible Smoothed SPHPart Hydrodynamics) Code   *************/
 /*********        Created by Jamie MacLeod, University of Bristol               *************/
 
 #ifndef INTEGRATION_H
@@ -10,8 +10,9 @@
 #include "IO.h"
 #include "Neighbours.h"
 #include "Resid.h"
-#include "Crossing.h"
+#include "Containment.h"
 #include "Shifting.h"
+#include "IPT.h"
 #ifdef RK
 #include "Runge_Kutta.h"
 #else
@@ -22,7 +23,7 @@
 
 ///**************** Integration loop **************///
 real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar, 
-	MESH& cells, DELTAP& dp, State& pn, State& pnp1, State& airP, outl& outlist)
+	MESH& cells, SURFS& surf_marks, DELTAP& dp, SPHState& pn, SPHState& pnp1, SPHState& airP, OUTL& outlist)
 {
 	// cout << "Entered Newmark_Beta" << endl;
 	#ifndef RK
@@ -34,13 +35,13 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	
 
 	// Find maximum safe timestep
-	vector<Particle>::iterator maxfi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
-		[](Particle const& p1, Particle const& p2){return p1.f.norm()< p2.f.norm();});
+	vector<SPHPart>::iterator maxfi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
+		[](SPHPart const& p1, SPHPart const& p2){return p1.acc.norm()< p2.acc.norm();});
 
-	vector<Particle>::iterator maxUi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
-		[](Particle const& p1, Particle const& p2){return p1.v.norm()< p2.v.norm();});
+	vector<SPHPart>::iterator maxUi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
+		[](SPHPart const& p1, SPHPart const& p2){return p1.v.norm()< p2.v.norm();});
 
-	real maxf = maxfi->f.squaredNorm();
+	real maxf = maxfi->acc.norm();
 	real maxU = maxUi->v.norm();
 	real dtv = fvar.HSQ * fvar.rho0/fvar.mu;
 	real dtf = sqrt(fvar.H/maxf);
@@ -56,27 +57,25 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	/***********************************************************************************/
 	/***********************************************************************************/
 	/***********************************************************************************/
-	#ifdef RK
 		svar.dt = 0.125*std::min(dtf,std::min(dtc,dtv));
-	#else
-		svar.dt = 0.175*std::min(dtf,std::min(dtc,dtv));
-	#endif
 	/***********************************************************************************/
 	/***********************************************************************************/
 	/***********************************************************************************/
 
 	if(svar.dt < svar.dt_min)
 		svar.dt = svar.dt_min;
+	else if(svar.dt > svar.dt_max)
+		svar.dt = svar.dt_max;
 
 	if (svar.dt > (svar.frame+1)*svar.framet-svar.t)
-	{
 		svar.dt = (svar.frame+1)*svar.framet-svar.t + 1e-10;
-	}
 
-
-	// #ifdef DEBUG
-	cout << "time: " << svar.t << " dt: " << svar.dt << "  dtv: " << dtv <<  "  dtf: " << dtf << "  dtc: " << dtc << " Maxf: " << maxf << endl;
-	// #endif
+	#ifdef DEBUG
+	vector<SPHPart>::iterator maxAfi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
+	[](SPHPart const& p1, SPHPart const& p2){return p1.Af.norm()< p2.Af.norm();});
+	real maxAf = maxAfi->Af.norm();
+	cout << "time: " << svar.t << " dt: " << svar.dt <<  "  dtf: " << dtf << "  dtc: " << dtc << " Maxf: " << maxf << " MaxAf: " << maxAf << endl;
+	#endif
 
 	TREE.NP1.index->buildIndex();
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
@@ -110,7 +109,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	}
 	else if (svar.ghost == 2)
 	{	/* Lattice points */
-		LatticeGhost(svar,fvar,cells,TREE,outlist,pn,pnp1);
+		LatticeGhost(svar,fvar,avar,cells,TREE,outlist,pn,pnp1);
 		dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
 	}
 
@@ -120,6 +119,13 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	// const size_t piston = svar.psnPts;
 
 	// cout << "Cells found" << endl;
+
+	#ifdef ALE
+		if(svar.ghost > 0)
+			Particle_Shift_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
+		else
+			Particle_Shift_No_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
+	#endif
 
 	vector<size_t> cellsused; // Cells that contain a particle
 	if(svar.Asource == 2)
@@ -175,18 +181,17 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	
 	/*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
 	#ifdef RK
-	int errstate = (Get_First_RK(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused,
-								 neighb, outlist, dp, logbase, pn, pnp1, error1));
+		error1 = (Get_First_RK(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused,
+								 outlist, dp, logbase, pn, pnp1, error1));
 
-	if (errstate)
-		cout << "First step indicates instability. Caution..." << endl;
+
 	#else
-		Do_NB_Iter(TREE,svar,fvar,avar,start,end_ng,a,b,c,d,B,gam,
+		Do_NB_Iter(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,
 			cells,cellsused,outlist,dp,pn,pnp1,Force,dropVel);
 	
 		uint nUnstab = 0;
 
-		void(Check_Error(TREE,svar,fvar,start,end_ng,error1,error2,logbase,
+		void(Check_Error(TREE,svar,fvar,start,end,error1,error2,logbase,
 								cellsused,outlist,xih,pn,pnp1,k,nUnstab));
 		k++; //Update iteration count
 
@@ -222,7 +227,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 
 	// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
-	#ifndef NOALE
+	#ifdef ALE
 		if(svar.ghost > 0)
 			Particle_Shift_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
 		else
@@ -325,12 +330,12 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 	/*Do time integration*/
 	#ifdef RK
-		State st_2 = pnp1;
+		SPHState st_2 = pnp1;
 
-		error1 = Runge_Kutta4(TREE,svar,fvar,avar,start,end,B,gam,cells,cellsused,neighb,outlist,
+		error1 = Runge_Kutta4(TREE,svar,fvar,avar,start,end,B,gam,cells,cellsused,outlist,
 					dp,logbase,pn,st_2,pnp1,Force,dropVel);
 	#else 
-		Newmark_Beta(TREE,svar,fvar,avar,start,end_ng,a,b,c,d,B,gam,cells,cellsused,
+		Newmark_Beta(TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,cells,cellsused,
 			outlist,dp,logbase,k,error1,error2,xih,pn,pnp1,Force,dropVel);
 	#endif	
 
@@ -357,27 +362,29 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	// 	svar.gstPts = 0;
 	// }
 
+	Check_If_Ghost_Needs_Removing(svar,fvar,TREE.NP1,pn,pnp1);
+
 	/*Check if more particles need to be created*/
-	if(svar.Bcase == 2 || svar.Bcase == 3)
+	if(svar.Scase == 4)
 	{
 		uint nAdd = 0;
-		uint partID = end_ng;
+		size_t& partID = svar.partID;
 		/* Check if any buffer particles have become pipe particles */
 		for (size_t ii = 0; ii < svar.back.size(); ++ii)
 		{
 			size_t const& pID = svar.back[ii];
 			/*Check that the starting area is clear first...*/
-			StateVecD const vec = svar.Transp*(pnp1[pID].xi-svar.Start);
+			StateVecD const vec = svar.Transp*(pnp1[pID].xi-svar.sim_start);
 			real clear;
-			if(svar.Bcase == 2)
-				clear =  -(3.0 * svar.Jet(1)-svar.dx) ;
+			if(svar.Bcase == 3)
+				clear =  -(3.0 * svar.jet_depth-svar.dx) ;
 			else
-				clear = -(svar.Jet(1)-svar.dx);
+				clear = -(svar.jet_depth-svar.dx);
 			
 
 			if(vec[1] > clear)
 			{
-				/* Particle has cleared the back zone */
+				/* particle has cleared the back zone */
 				pnp1[pID].b = PartState.PIPE_;
 
 				/* Update the back vector */
@@ -392,14 +399,13 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				/* Create a new particle */
 				if(svar.totPts < svar.finPts)
 				{
-					StateVecD xi = svar.Transp*(pnp1[svar.buffer[ii][3]].xi-svar.Start);
+					StateVecD xi = svar.Transp*(pnp1[svar.buffer[ii][3]].xi-svar.sim_start);
 
 					xi[1] -= svar.dx;
-					xi = svar.Rotate*xi + svar.Start;
-
-					pnp1.insert(pnp1.begin() + partID,
-					Particle(xi,pnp1[svar.buffer[ii][3]],PartState.BUFFER_,partID));
-					svar.buffer[ii][3] = partID;
+					xi = svar.Rotate*xi + svar.sim_start;
+					pnp1.insert(pnp1.begin() + end_ng,
+					SPHPart(xi,pnp1[svar.buffer[ii][3]],PartState.BUFFER_,partID));
+					svar.buffer[ii][3] = end_ng;
 					if(svar.Asource == 0)
 					{
 						pnp1[partID].cellRho = pnp1[pID].cellRho;
@@ -407,6 +413,8 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 					svar.simPts++;
 					svar.totPts++;
+					end_ng++;
+					end++;
 					partID++;
 					nAdd++;
 				}
@@ -414,7 +422,50 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 
 		}
 
-		if(nAdd != 0)
+		/* Check if any particles need to be deleted, and turned to particle tracking */
+		
+		uint nDel = 0;
+		if(svar.Asource != 0)
+		{
+			vector<size_t> to_del;
+			vector<IPTPart> IPT_nm1, IPT_n, IPT_np1;
+			#pragma omp parallel for
+			for(size_t ii = 0; ii < end_ng; ii++)
+			{
+				if(pnp1[ii].xi[0] > svar.max_x_sph)
+				{
+					/* SPHPart is downstream enough to convert to IPT */
+					#pragma omp critical
+					{
+						to_del.emplace_back(ii);
+						IPT_nm1.emplace_back(IPTPart(pnp1[ii],svar.t,svar.IPT_diam,svar.IPT_area));
+					}
+				}
+			}
+
+			/* Delete the old particles */
+			std::sort(to_del.begin(), to_del.end());
+			for(vector<size_t>::reverse_iterator itr = to_del.rbegin(); itr!=to_del.rend(); ++itr)
+			{
+				pnp1.erase(pnp1.begin() + *itr);
+				svar.totPts--;
+				svar.simPts--;
+				end_ng--;
+				end--;
+				nDel++;
+			}
+
+			/* Do particle tracking on the particles converted */
+			IPT_n = IPT_nm1;
+			IPT_np1 = IPT_nm1;
+			#pragma omp parallel for
+			for(size_t ii = 0; ii < IPT_np1.size(); ++ii)
+			{
+				IPT::Integrate(svar, fvar,avar, cells,ii,IPT_nm1[ii],IPT_n[ii],IPT_np1[ii],surf_marks);
+			}
+		}
+
+		if(nAdd != 0 || nDel != 0)
 		{
 			TREE.NP1.index->buildIndex();
 			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
@@ -466,7 +517,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			
 		}
 
-		for(size_t jj = 0; jj < pnp1.size(); ++jj)
+		for(size_t jj = 0; jj < end_ng; ++jj)
 		{
 			fMom += pnp1[jj].m * pnp1[jj].v.norm();
 		}
@@ -553,7 +604,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 }
 
 void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	MESH& cells, outl& outlist, DELTAP& dp, State& pnp1, State& pn, State& airP)
+	MESH& cells, OUTL& outlist, DELTAP& dp, SPHState& pnp1, SPHState& pn, SPHState& airP)
 {
 	size_t const start = svar.bndPts;
 	size_t end = svar.totPts;
@@ -594,7 +645,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	}
 	else if (svar.ghost == 2)
 	{	/* Lattice points */
-		LatticeGhost(svar,fvar,cells,TREE,outlist,pn,pnp1);
+		LatticeGhost(svar,fvar,avar,cells,TREE,outlist,pn,pnp1);
 		dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
 		// Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 	}
@@ -632,19 +683,19 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	// #pragma omp parallel for shared(res,Rrho) schedule(static)
 	// for(size_t ii = 0; ii < end; ++ii)
 	// {
-	// 	pn[ii].f = res[ii];
+	// 	pn[ii].acc = res[ii];
 	// 	pn[ii].Rrho = Rrho[ii];
 	// }
 
-	// State st_2 = pn;
+	// SPHState st_2 = pn;
 	vector<size_t> cellsused;
 
 	// Find maximum safe timestep
-	// vector<Particle>::iterator maxfi = std::max_element(pnp1.begin() + svar.bndPts, pnp1.end(),
-	// 								[](Particle p1, Particle p2) { return p1.f.norm() < p2.f.norm(); });
+	// vector<SPHPart>::iterator maxfi = std::max_element(pnp1.begin() + svar.bndPts, pnp1.end(),
+	// 								[](SPHPart p1, SPHPart p2) { return p1.acc.norm() < p2.acc.norm(); });
 
-	// vector<Particle>::iterator maxUi = std::max_element(pnp1.begin() + svar.bndPts, pnp1.end(),
-	// 								[](Particle p1, Particle p2) { return p1.v.norm() < p2.v.norm(); });
+	// vector<SPHPart>::iterator maxUi = std::max_element(pnp1.begin() + svar.bndPts, pnp1.end(),
+	// 								[](SPHPart p1, SPHPart p2) { return p1.v.norm() < p2.v.norm(); });
 
 	// real maxf = maxfi->f.squaredNorm();
 	// real maxU = maxUi->v.norm();
@@ -667,7 +718,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 	// cout << "time: " << svar.t << " dt: " << svar.dt << "  dtv: " << dtv << "  dtf: " << dtf << "  dtc: " << dtc << " Maxf: " << maxf << endl;
 
-	// /*Previous State for error calc*/
+	// /*Previous SPHState for error calc*/
 	vector<StateVecD> xih(end-start);
 	// vector<StateVecD> xi(end); /*Keep original positions to reset after finding forces*/
 	#pragma omp parallel for shared(pnp1)
@@ -679,11 +730,8 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 	/*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
 	#ifdef RK
-		int errstate = (Get_First_RK(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused,
-									neighb, outlist, dp, logbase, pn, pnp1, error1));
-
-		if(errstate)
-			cout << "First step indicates instability. Caution..." << endl;
+		error1 = (Get_First_RK(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused,
+									 outlist, dp, logbase, pn, pnp1, error1));
 	#else
 
 		Do_NB_Iter(TREE, svar, fvar, avar, start, end_ng, a, b, c, d, B, gam,
@@ -699,14 +747,14 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 	/*Find maximum safe timestep*/
 	// maxUi = std::max_element(pnp1.begin(),pnp1.end(),
-	// 	[](Particle p1, Particle p2){return p1.v.norm()< p2.v.norm();});
+	// 	[](SPHPart p1, SPHPart p2){return p1.v.norm()< p2.v.norm();});
 
 	// maxU = maxUi->v.norm();
 	// dtc = fvar.H/(maxU);
 
-/***********************************************************************************/
-/***********************************************************************************/
-/***********************************************************************************/
+	/***********************************************************************************/
+	/***********************************************************************************/
+	/***********************************************************************************/
 	// svar.dt = 0.125*std::min(dtf,std::min(dtc,dtv));
 	
 	// if (svar.dt > (svar.frame + 1) * svar.framet - svar.t)
@@ -751,13 +799,12 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	
 	/*Do time integration*/
 	#ifdef RK
-		State st_2 = pnp1;
+		SPHState st_2 = pnp1;
 
-		error1 = Runge_Kutta4(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused, neighb, outlist,
+		error1 = Runge_Kutta4(TREE, svar, fvar, avar, start, end, B, gam, cells, cellsused, outlist,
 							  dp, logbase, pn, st_2, pnp1, Force, dropVel);
 	#else
-
-		Newmark_Beta(TREE, svar, fvar, avar, start, end_ng, a, b, c, d, B, gam, cells, cellsused,
+		Newmark_Beta(TREE, svar, fvar, avar, start, end, a, b, c, d, B, gam, cells, cellsused,
 				outlist, dp, logbase, k, error1, error2, xih, pn, pnp1, Force, dropVel);
 	#endif
 
@@ -780,22 +827,23 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	}
 
 	/* Remove the ghost particles */
-	if(svar.ghost != 0)
-	{
-		pnp1.erase(pnp1.begin()+svar.bndPts+svar.simPts, pnp1.begin()+svar.bndPts+svar.simPts+svar.gstPts);
-		pn.erase(pn.begin()+svar.bndPts+svar.simPts, pn.begin()+svar.bndPts+svar.simPts+svar.gstPts);
-		dp.erase(svar.bndPts+svar.simPts, svar.bndPts+svar.simPts+svar.gstPts);
-		outlist.erase(outlist.begin()+svar.bndPts+svar.simPts, outlist.begin()+svar.bndPts+svar.simPts+svar.gstPts);
-		svar.totPts = svar.bndPts + svar.simPts;
-		svar.gstPts = 0;
+	// if(svar.ghost != 0)
+	// {
+	// 	pnp1.erase(pnp1.begin()+svar.bndPts+svar.simPts, pnp1.begin()+svar.bndPts+svar.simPts+svar.gstPts);
+	// 	pn.erase(pn.begin()+svar.bndPts+svar.simPts, pn.begin()+svar.bndPts+svar.simPts+svar.gstPts);
+	// 	dp.erase(svar.bndPts+svar.simPts, svar.bndPts+svar.simPts+svar.gstPts);
+	// 	outlist.erase(outlist.begin()+svar.bndPts+svar.simPts, outlist.begin()+svar.bndPts+svar.simPts+svar.gstPts);
+	// 	svar.totPts = svar.bndPts + svar.simPts;
+	// 	svar.gstPts = 0;
+	// }
 
-	}
+	Check_If_Ghost_Needs_Removing(svar,fvar,TREE.NP1,pn,pnp1);
 
-#if DEBUG 	
+	#if DEBUG 	
 		dbout << "Exiting first step. Error: " << error1 << endl;
-#endif
+	#endif
 
-	if (svar.Bcase == 4)
+	if (svar.Scase == 3)
 	{
 		// Calculate the force expected for a droplet of the same size.
 		svar.Force = Force;
@@ -817,11 +865,11 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 		// else 
 		// 	Cds = 0.424;
 
-#if SIMDIM == 3
-		real Adrop_und = M_PI*radius*radius;
-#else
-		real Adrop_und = 2*radius;
-#endif
+		#if SIMDIM == 3
+			real Adrop_und = M_PI*radius*radius;
+		#else
+			real Adrop_und = 2*radius;
+		#endif
 		cout << endl << "Droplet calc parameters: " << endl;
 		cout << Re << "  " << Cds_undef << " " << Adrop_und << " " << Vdiff.norm() << "  " << svar.mass << endl;
 
@@ -832,7 +880,6 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 		AERO bigdrop;
 		bigdrop.rhog = avar.rhog;
 		bigdrop.mug = avar.mug;
-		bigdrop.nfull = avar.nfull;
 
 		// real temp = radius / std::cbrt(3.0/(4.0*M_PI));
 		GetYcoef(bigdrop,fvar,svar.diam);
@@ -861,9 +908,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 		#if SIMDIM == 3 
 			real Adrop = M_PI*pow((bigdrop.L + bigdrop.Cb*bigdrop.L*ymax),2);
-
-		#endif
-		#if SIMDIM == 2
+		#else
 			real Adrop = 2*(bigdrop.L + bigdrop.Cb*bigdrop.L*ymax);
 		#endif
 
@@ -873,14 +918,14 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 		// for(size_t ii = 0; ii < end; ++ii)
 		// {
-		// 	sumForce += pnp1[ii].m*pnp1[ii].f;	
+		// 	sumForce += pnp1[ii].m*pnp1[ii].acc;	
 		// }
 
 		Force = StateVecD::Zero();
 
 		for(size_t ii = 0; ii < end; ii++)
 		{
-			Force += pnp1[ii].Af;
+			Force += pnp1[ii].Af*pnp1[ii].m;
 		}
 
 		// real totMass = real(svar.totPts) * pnp1[0].m;

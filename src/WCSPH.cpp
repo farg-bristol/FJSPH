@@ -18,7 +18,7 @@
 #include "Init.h"
 #include "Add.h"
 #include "Resid.h"
-#include "Crossing.h"
+#include "Containment.h"
 #include "Integration.h"
 
 using namespace std::chrono;
@@ -43,23 +43,25 @@ int main(int argc, char *argv[])
 	SIM svar;
 	FLUID fvar;
 	AERO avar;
-	outl outlist;
+	OUTL outlist;
 	MESH cells;
+	SURFS surf_marks;
 
 	GetInput(argc,argv,svar,fvar,avar);
 	
-	if(MakeOutputDir(argc,argv,svar))
-	{
-		cout << "Couldn't make output directory. Please check permissions." << endl;
-		exit(-1);
-	}
+	// if(MakeOutputDir(argc,argv,svar))
+	// {
+	// 	cout << "Couldn't make output directory. Please check permissions." << endl;
+	// 	exit(-1);
+	// }
 
 	if(svar.Asource == 1 || svar.Asource == 2)
 	{
 		#if SIMDIM == 3
 			if(svar.CDForFOAM == 0)
 			{
-				Read_TAUMESH_FACE(svar,cells,fvar,avar);
+				TAU::Read_BMAP(svar);
+				TAU::Read_TAUMESH_FACE(svar,cells,fvar,avar);
 			}
 			else
 			{
@@ -68,7 +70,8 @@ int main(int argc, char *argv[])
 		#else
 			if (svar.CDForFOAM == 0)
 			{
-				Read_TAUMESH_EDGE(svar,cells,fvar,avar);
+				TAU::Read_BMAP(svar);
+				TAU::Read_TAUMESH_EDGE(svar,cells,fvar,avar);
 			}
 			else
 			{
@@ -76,31 +79,34 @@ int main(int argc, char *argv[])
 				exit(-1);
 			}
 		#endif
+
+		Init_Surface(svar,cells,surf_marks);
 	}
 	else if (svar.Asource == 4)
 	{
 		// Create single cell
 		Make_Cell(fvar,avar,cells);
+		Init_Surface(svar,cells,surf_marks);
 	}	
 
 	cout << std::setprecision(5);
 
 	
 	cout << "Adjusted Start Coordinates: " << endl;
-	cout << svar.Start(0) << "  " << svar.Start(1);
+	cout << svar.sim_start(0) << "  " << svar.sim_start(1);
 #if SIMDIM == 3
-	cout << "  " << svar.Start(2); 
+	cout << "  " << svar.sim_start(2);  
 #endif
 	cout << endl << endl;
 	/*Make a guess of how many there will be...*/
 	// int partCount = ParticleCount(svar);
     ///****** Initialise the particles memory *********/
-	State pn;	    /*Particles at n   */
-	State pnp1; 	/*Particles at n+1 */
-	State airP;
+	SPHState pn;	    /*Particles at n   */
+	SPHState pnp1; 	/*Particles at n+1 */
+	SPHState airP;
 	DELTAP dp;
 
-	if(svar.Bcase == 2 || svar.Bcase == 3)
+	if(svar.Scase == 4)
 	{
 		cout << "Final particle count:  " << svar.finPts << endl;
 	}
@@ -108,21 +114,13 @@ int main(int argc, char *argv[])
 	pn.reserve(svar.finPts);
   	pnp1.reserve(svar.finPts);
 
-	// if (svar.Bcase == 6){
-	// 	Write_Mesh_Data(svar,cells);
-	// }	
-
-  	if(svar.restart == 1)
-  	{
-  		Restart(svar,fvar,avar,pn,pnp1,cells);
-  	}
-  	else
-  	{
+	if(svar.restart == 0)
+	{
 	  	svar.t = 0.0;				/*Total simulation time*/
   		InitSPH(svar,fvar,avar,pn,pnp1);
 
   		// Redefine the mass and spacing to make sure the required mass is conserved
-  		// if(svar.Bcase == 4 || svar.Bcase == 3)
+  		// if(svar.Scase == 2 || svar.Scase == 3)
 	  	// 	Set_Mass(svar,fvar,avar,pn,pnp1);
 		if(svar.Asource == 0)
 		{
@@ -132,13 +130,31 @@ int main(int argc, char *argv[])
 				pnp1[ii].cellRho = avar.rhog;
 			}
 		}
-  	}
 
-	// Define svar.clear to state a particle is clear of the starting area
-	if (svar.Bcase == 2 || svar.Bcase == 3)
-		svar.clear = -svar.Jet[1] + 4 * svar.dx;
+		string file = svar.output_prefix;
+		file.append("_boundary.szplt.sz*");
+		string cmd = "exec rm -f ";
+		cmd.append(file);
+
+		if(system(cmd.c_str()))
+	    {
+	    	cout << "No prexisting boundary files deleted." << endl;
+	    }
+
+		file = svar.output_prefix;
+		file.append("_fuel.szplt.sz*");
+		cmd = "exec rm -f ";
+		cmd.append(file);
+		if(system(cmd.c_str()))
+	    {
+	    	cout << "No prexisting fuel files deleted." << endl;
+	    }
+  	}
 	else
-		svar.clear = 0.0;
+	{
+		/* Read the files */
+		Restart(svar,fvar,avar,cells,pn,pnp1);
+	}
 
 	// Check if cells have been initialsed before making a tree off it
 	if(cells.cCentre.size() == 0)
@@ -193,7 +209,7 @@ int main(int argc, char *argv[])
 		}
 		else if (svar.ghost == 2)
 		{	/* Lattice points */
-			LatticeGhost(svar,fvar,cells,TREE,outlist,pn,pnp1);
+			LatticeGhost(svar,fvar,avar,cells,TREE,outlist,pn,pnp1);
 		}
 
 		size_t const start = svar.bndPts;
@@ -224,18 +240,23 @@ int main(int argc, char *argv[])
 		Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 
 		// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
-		#ifndef NOALE
+		#ifdef ALE
 			if(svar.ghost > 0)
 				Particle_Shift_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
 			else
 				Particle_Shift_No_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
 		#endif
+
+		/* Update shifting velocity and surface data */
+		SPHState::const_iterator first = pnp1.begin();
+		SPHState::const_iterator last = pnp1.begin() + end_ng;
+		pn = SPHState(first,last);
 	}
 
 	///*************** Open simulation files ***************/
 	std::fstream f1,f2,f3,fb,fg;
-	string framef = svar.outfolder;
-	framef.append("frame.info");
+	string framef = svar.output_prefix;
+	framef.append("_frame.info");
 	if(svar.restart == 1)
 		f2.open(framef, std::ios::out | std::ios::app);
 	else
@@ -249,10 +270,10 @@ int main(int argc, char *argv[])
 	
 	if(svar.restart == 0)
 	{
-		if(svar.Bcase == 3 && (svar.Asource == 1 || svar.Asource == 2))
+		if((svar.Bcase == 4) && (svar.Asource == 1 || svar.Asource == 2))
 		{// Check if the pipe is inside the mesh
 			cout << "Checking Pipe..." << endl;
-			real holeD = svar.Jet(0)+8*svar.dx; /*Diameter of hole (or width)*/
+			real holeD = svar.jet_diam+8*svar.dx; /*Diameter of hole (or width)*/
 			real r = 0.5*holeD;
 			#if SIMDIM == 3
 			real stepb = (svar.Pstep*svar.Bstep);
@@ -262,7 +283,7 @@ int main(int argc, char *argv[])
 				StateVecD xi(r*sin(theta), 0.0, r*cos(theta));
 				/*Apply Rotation...*/
 				xi = svar.Rotate*xi;
-				xi += svar.Start;
+				xi += svar.sim_start;
 			    if(!Check_Pipe(svar,TREE.CELL, cells, xi))
 			    {
 
@@ -276,7 +297,7 @@ int main(int argc, char *argv[])
 	    	{
 	    		StateVecD xi(x,0.0);
 	    		xi = svar.Rotate*xi;
-				xi += svar.Start;
+				xi += svar.sim_start;
 
 				// cout << "Checking point: " << xi(0) << "  " << xi(1) << endl;
 			    if(!Check_Pipe(svar,TREE.CELL, cells, xi))
@@ -291,7 +312,7 @@ int main(int argc, char *argv[])
 
 		#if SIMDIM == 3
 			if(svar.Asource == 3)
-				svar.vortex.write_VLM_Panels(svar.outfolder);		
+				svar.vortex.write_VLM_Panels(svar.output_prefix);		
 		#endif
 	}
 
@@ -322,7 +343,7 @@ int main(int argc, char *argv[])
 		f2 << "Deleted particles: " << svar.delNum << " Internal collisions: " << svar.intNum <<  endl;
 
 		// Write a settings file in the solution folder.
-		Write_Input_TECIO(svar,fvar,avar);
+		// Write_Input_TECIO(svar,fvar,avar);
 	}
 
 	///************************* MAIN LOOP ********************/
@@ -347,10 +368,9 @@ int main(int argc, char *argv[])
 		
 		while (stept + MERROR < svar.framet)
 		{
-		    error = Integrate(TREE,svar,fvar,avar,cells,dp,pn,pnp1,airP,outlist);
+		    error = Integrate(TREE,svar,fvar,avar,cells,surf_marks,dp,pn,pnp1,airP,outlist);
 		    stept+=svar.dt;
 		    ++stepits;
-		    svar.iter++;
 		}
 		++svar.frame;
 
@@ -368,17 +388,11 @@ int main(int argc, char *argv[])
 	    << stepits << endl;
 	    f2 << "Deleted particles: " << svar.delNum << " Internal collisions: " << svar.intNum <<  endl;
 
-		if(svar.outframe !=0)
-		{
-			if (frame % svar.outframe == 0 )
-			{	/*Output to console every 20 or so steps*/
-			  	cout << "Frame: " << svar.frame << "  Sim Time: " << svar.t << "  Compute Time: "
-			  	<< duration <<"  Error: " << error << endl;
-			  	cout << "Boundary particles:  " << svar.bndPts << " Sim particles: " << svar.totPts-svar.bndPts
-			  	<< " Deleted particles: " << svar.delNum << " Internal collisions: " << svar.intNum <<  endl;
-			}
-		}
-
+		cout << "Frame: " << svar.frame << "  Sim Time: " << svar.t << "  Compute Time: "
+		<< duration <<"  Error: " << error << endl;
+		cout << "Boundary particles:  " << svar.bndPts << " Sim particles: " << svar.totPts-svar.bndPts
+		<< " Deleted particles: " << svar.delNum << " Internal collisions: " << svar.intNum <<  endl;
+			
 		if (svar.totPts-svar.bndPts == 0) 
 		{
 			cout << "No more points in the simulation space. Ending...." << endl;
@@ -414,25 +428,22 @@ int main(int argc, char *argv[])
 	// 			exit(-1);
 	// }
 
-	if(svar.outtype == 0)
+	if(svar.out_encoding == 0)
 	{
 		/*Combine the szplt files*/
 
-		string outfile = svar.outfolder;
-		outfile.append("Fuel.szplt");
+		string outfile = svar.output_prefix;
+		outfile.append("_fuel.szplt");
 		Combine_SZPLT(outfile);
 
-		if(svar.boutform == 1)
-		{
-			outfile = svar.outfolder;
-			outfile.append("Boundary.szplt");
-			Combine_SZPLT(outfile);
-		}
-
+		outfile = svar.output_prefix;
+		outfile.append("_boundary.szplt");
+		Combine_SZPLT(outfile);
+		
 		if(svar.gout == 1)
 		{
-			outfile = svar.outfolder;
-			outfile.append("Ghost.szplt");
+			outfile = svar.output_prefix;
+			outfile.append("_ghost.szplt");
 			Combine_SZPLT(outfile);
 		}
 	}

@@ -133,7 +133,7 @@ typedef class VLM
  			// }
  		}
 
-		StateVecD getVelocity(const StateVecD pos)
+		const StateVecD getVelocity(const StateVecD pos)
 		{	/*Find velocity for a particle at its position*/
 			StateVecD vel = StateVecD::Zero();
 
@@ -380,7 +380,7 @@ typedef class VLM
 			/*End initialisation*/
 		}
 
-		StateVecD FindInfluence(StateVecD A, StateVecD B, StateVecD C)
+		const StateVecD FindInfluence(StateVecD const& A, StateVecD const& B, StateVecD const& C)
  		{	
 			StateVecD r0, r1, r2, inf;
 

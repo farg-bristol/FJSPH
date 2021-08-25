@@ -18,6 +18,8 @@
     #define GetCurrentDir getcwd
 #endif
 
+const std::string WHITESPACE = " \n\r\t\f\v";
+
 void write_header() 
 {
 	cout << "******************************************************************" << endl << endl;
@@ -93,342 +95,241 @@ int Combine_SZPLT(string& file)
 }
 
 /*Open an output directory in the name of the input file, under Outputs*/
-int MakeOutputDir(int argc, char *argv[], SIM& svar)
+void Check_If_Restart_Possible(SIM const& svar)
 {
   	/*Check output folder for any prexisting files*/
-  	if(svar.outtype == 0)
+  	if(svar.out_encoding == 1)
   	{
-  		string file = svar.outfolder;
-  		file.append("Fuel.szplt.szdat");
-#ifdef DEBUG
-  		dbout << "Checking for existence of previous szplt files." << endl;
-  		dbout << "Path: " << file << endl;
-#endif
+  		string file = svar.restart_prefix;
+  		file.append("_fuel.szplt.szdat");
+		#ifdef DEBUG
+			dbout << "Checking for existence of previous szplt files." << endl;
+			dbout << "Path: " << file << endl;
+		#endif
   		struct stat info;
   		if(stat( file.c_str(), &info ) == 0)
   		{
   			// cout << "Split files exist..." << endl;
 
-			if(svar.restart == 0)
-			{	// Delete if not restarting
-		  		string cmd = "exec rm -r \"";
-		  		cmd.append(svar.outfolder);
-		  		cmd.append("\"*.szplt.sz*");
-
-		  		// cout << cmd << endl;
-#ifdef DEBUG
-		  		dbout << "Files found. Attempting to remove." << endl;
-		  		dbout << "Command: " << cmd << endl;
-#endif
-		  		if(system(cmd.c_str()))
-		  		{
-			    	cout << "System command failed to execute." << endl;
-			    	cout << "Command: " << cmd << endl;
-			    	exit(-1);
-			    }
+			// Check if there is the constructed szplt
+			file = svar.restart_prefix;				
+			file.append("_fuel.szplt");
+			if(stat( file.c_str(), &info ) != 0)
+			{	/*Fuel.szplt does not exist - needs creating*/
+				if(Combine_SZPLT(file) == -1)
+					exit(-1);
 			}
 			else
-			{
-				// Check if there is the constructed szplt
-				file = svar.outfolder;				
-				file.append("Fuel.szplt");
-				if(stat( file.c_str(), &info ) != 0)
-		  		{	/*Fuel.szplt does not exist - needs creating*/
-					if(Combine_SZPLT(file) == -1)
-						exit(-1);
-					
-					if(svar.Bcase != 0 && svar.Bcase != 3 && svar.Bcase !=4)
-					{
-			  			file = svar.outfolder;
-						file.append("Boundary.szplt");
-						if(stat( file.c_str(), &info ) != 0)
-				  		{ /*Boundary.szplt also doesn't exist - needs creating*/
-							
-					  			string szplt = file;
-								szplt.append(".szdat");
-								if(stat( szplt.c_str(), &info ) == 0)
-								{
-									if(Combine_SZPLT(file) == -1)
-										exit(-1);
-								}
-								else
-								{	//Boundaries should exist but don't.
-									cout << "Boundary files cannot be found. Stopping" << endl;
-									exit(-1);
-								}
-						}
-			  		}
-		  		}
-		  		else
-		  		{	// Both the combined and split szplt exist - check which is more recent.
-		  			// cout << "Both file types exist" << endl << endl;
-		  			auto sztime = info.st_mtime;
-		  			file.append(".szdat");
-					if(stat(file.c_str(), &info) == 0)
-					{
-						auto szdattime = info.st_mtime;
-
-						cout << sztime << "   " << szdattime << endl;
- 
-						if (szdattime > (sztime+10))
-						{
-							// combine the files
-							file = svar.outfolder;
-							file.append("Fuel.szplt");
-							if(Combine_SZPLT(file) == -1)
-								exit(-1);
-
-							if(svar.Bcase != 0 && svar.Bcase != 3 && svar.Bcase !=4)
-							{	//Check if files exist
-								file = svar.outfolder;
-								file.append("Boundary.szplt.szdat");
-								if(stat( file.c_str(), &info ) == 0)
-						  		{
-									file = svar.outfolder;
-									file.append("Boundary.szplt");
-									if(Combine_SZPLT(file) == -1)
-										exit(-1);
-								}
-								else
-								{
-									cout << "Boundary files cannot be found. Stopping" << endl;
-									exit(-1);
-								}
-							}
-
-						}
+			{	// Both the combined and split szplt exist - check which is more recent.
+				// cout << "Both file types exist" << endl << endl;
+				auto sztime = info.st_mtime;
+				file.append(".szdat");
+				if(stat(file.c_str(), &info) == 0)
+				{
+					auto szdattime = info.st_mtime;
+					if (szdattime > (sztime+10))
+					{	// combine the files
+						file = svar.output_prefix;
+						file.append("_fuel.szplt");
+						if(Combine_SZPLT(file) == -1)
+							exit(-1);
 					}
-
-					// Do the same check for the boundary file
-					file = svar.outfolder;
-					file.append("Boundary.szplt");
-					if(stat(file.c_str(),&info) == 0)
-					{   //File exists, so get the modify time
-						auto bsztime = info.st_mtime;
-
-						file.append(".szdat");
-
-						if(stat( file.c_str(), &info ) == 0)
-				  		{   // data file also exists, so see which is more recent.
-				  			auto bszdattime = info.st_mtime;
-
-				  			if( bszdattime > bsztime)
-				  			{
-								file = svar.outfolder;
-								file.append("Boundary.szplt");
-								if(Combine_SZPLT(file) == -1)
-									exit(-1);
-							}
-						}
-					}
-					else
-					{
-						file.append(".szdat");
-						if(stat( file.c_str(), &info ) == 0)
-				  		{   // data file exists
-				  			file = svar.outfolder;
-							file.append("Boundary.szplt");
-							if(Combine_SZPLT(file) == -1)
-								exit(-1);
-				  		}
-					}
-		  		}	  		
-
-			}
-		}
-		else if(svar.restart == 1)
-		{
-			string file = svar.outfolder;
-	  		file.append("Fuel.szplt");
-
-	  		struct stat info;
-	  		if(stat( file.c_str(), &info ) == 0)
-	  		{
-	  			cout << "Fuel solution file exist..." << endl;
-	  		}
-	  		else
-	  		{
-				cout << "No previous fuel simulation file. Cannot restart." << endl;
-				exit(-1);
-			}
-
-			file = svar.outfolder;
-	  		file.append("Boundary.szplt");
-
-	  		if(svar.Bcase != 0 && svar.Bcase != 3 && svar.Bcase != 4)
-	  		{
-		  		if(stat( file.c_str(), &info ) == 0)
-		  		{
-		  			cout << "Boundanry solution files exist..." << endl;
-		  		}
-		  		else
-		  		{
-					cout << "No previous boundary simulation file. Cannot restart." << endl;
-					exit(-1);
 				}
 			}
 		}
-  	}
-
-	return 0;
-}
-
-int getInt(ifstream& In, uint& lineno, string const& name)
-{
-	string line;
-	getline(In,line);
-	lineno++;
-	std::stringstream sstr;
-	sstr << line;
-	int i;
-	if(sstr >> i)
-	{
-#ifdef DEBUG
-		dbout << name << ": " << i << endl;
-#endif	
-		return i; 
-	}
-	else
-	{
-		cout << "Line does not contain a value. Please check your input." << endl;
-		cout << "Expecting: " << name << endl;
-	}
-		
-	return 0;
-}
-
-real getDouble(ifstream& In, uint& lineno, string const& name)
-{
-	string line;
-	getline(In,line);
-	lineno++;
-	std::stringstream sstr;
-	sstr << line;
-	real d;
-	if(sstr >> d)
-	{
-#ifdef DEBUG
-		dbout << name << ": " << d << endl;
-#endif	
-		return d; 
-	}
-	else
-	{
-		cout << "Line does not contain a value. Please check your input." << endl;
-		cout << "Expecting: " << name << endl;
-	}
-		
-	return 0;
-}
-
-std::string getString(ifstream& In, uint& lineno, string const& name)
-{
-	string line;
-	getline(In,line);
-	lineno++;
-	size_t ptr = line.find_first_of(' ');
-	string result = line.substr(0,ptr);
-#ifdef DEBUG
-	dbout << name << ": " << result << endl;
-#endif	
-	return result; 
-}
-
-StateVecI getIVector(ifstream& In, uint& lineno, string const& name)
-{
-	string line;
-	getline(In,line);
-
-	lineno++;
-	std::istringstream sline(line);
-	// cout << sline.str() << endl;
-	StateVecI x;
-	sline >> x(0); sline >> x(1); 
-
-	#if SIMDIM == 2
-		int temp;
-		if(sline >> temp)
+		else
 		{
-			cout << "\tWARNING: 3D Input provided for a 2D Simulation." << endl;
-			cout << "\t         The third dimension shall be ignored." << endl;
-			cout << "\tLine " << lineno << ": " << endl;
-			cout << "\t" << sline.str() << endl << endl;
+			cout << "The fuel szplt files needed to restart could not be found. Stopping." << endl;
+			exit(-1);
 		}
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1) << endl;
-#endif	
-#endif
-#if SIMDIM == 3
-	sline >> x(2);
-	if (!sline)
-	{	
-		cout << "2D input provided. Please provide a 3D file." << endl;
-		cout << "Incorrect line " << lineno << ": " << endl;
-		cout << sline.str() << endl << endl;
-		exit(-1);
-	}
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1) << "  " << x(2) << endl;
-#endif	
-#endif
 
-	return x;
+		if(svar.Bcase != 0)
+		{
+			file = svar.restart_prefix;
+			file.append("_boundary.szplt.szdat");
+
+			if(stat( file.c_str(), &info ) == 0)
+			{
+				// cout << "Split files exist..." << endl;
+				// Check if there is the constructed szplt
+				file = svar.restart_prefix;				
+				file.append("_boundary.szplt");
+				if(stat( file.c_str(), &info ) != 0)
+				{	/*Fuel.szplt does not exist - needs creating*/
+					if(Combine_SZPLT(file) == -1)
+						exit(-1);
+				}
+				else
+				{	// Both the combined and split szplt exist - check which is more recent.
+					// cout << "Both file types exist" << endl << endl;
+					auto sztime = info.st_mtime;
+					file.append(".szdat");
+					if(stat(file.c_str(), &info) == 0)
+					{
+						auto szdattime = info.st_mtime;
+						if (szdattime > (sztime+10))
+						{	// combine the files
+							file = svar.restart_prefix;
+							file.append("_boundary.szplt");
+							if(Combine_SZPLT(file) == -1)
+								exit(-1);
+						}
+					}
+				}
+			}
+			else
+			{
+				cout << "The boundary szplt files needed to restart could not be found. Stopping." << endl;
+				exit(-1);
+			}			
+		}
+  	}
 }
 
-StateVecD getDVector(ifstream& In, uint& lineno, string const& name)
+std::string ltrim(const std::string &s)
 {
-	string line;
-	getline(In,line);
-	lineno++;
-	std::istringstream sline(line);
-	
-	StateVecD x;
-	sline >> x(0); sline >> x(1);
-
-#if SIMDIM == 2
-	real temp;
-	if(sline >> temp)
-	{
-		cout << "\tWARNING: 3D Input provided for a 2D Simulation." << endl;
-		cout << "\t         The third dimension shall be ignored." << endl;
-		cout << "\tLine " << lineno << ": " << endl;
-		cout << "\t" << sline.str() << endl;
-	}
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1) << endl;
-#endif	
-#endif
-#if (SIMDIM == 3)
-	sline >> x(2);
-	if (!sline)
-	{	
-		cout << "2D input provided. Please provide a 3D file." << endl;
-		cout << "Incorrect line " << lineno << ": " << endl;
-		cout << sline.str() << endl;
-		exit(-1);
-	}
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1) << "  " << x(2) << endl;
-#endif	
-#endif	
-
-	return x;
+    size_t start = s.find_first_not_of(WHITESPACE);
+    return (start == std::string::npos) ? "" : s.substr(start);
+}
+ 
+std::string rtrim(const std::string &s)
+{
+    size_t end = s.find_last_not_of(WHITESPACE);
+    return (end == std::string::npos) ? "" : s.substr(0, end + 1);
 }
 
-/*Function for a 2D Vector (e.g. Newmark Beta parameters)*/
-Eigen::Vector2d getvector(ifstream& In, uint& lineno, string const& name)
+string Get_Parameter_Value(string const& line)
 {
-	string line;
-	getline(In,line);
-	lineno++;
-	std::istringstream sline(line);
-	
-	Eigen::Vector2d x;
-	sline >> x[0]; sline >> x[1]; 
-#ifdef DEBUG
-	dbout << name << ": " << x(0) << "  " << x(1) << endl;
-#endif	
-	return x;
+    size_t pos = line.find(":");
+    size_t end = line.find("#",pos+1); /* Check if a comment exists on the line */
+
+    if (end != string::npos)
+    {
+        string value = line.substr(pos + 1, (end-pos+2) );
+        return ltrim(rtrim(value));
+    }
+
+    string value = line.substr(pos + 1);
+    return ltrim(rtrim(value));
+}
+
+void Get_String(string const& line, string const& param, string &value)
+{
+    if(line.find(param) != string::npos)
+    {
+        value = Get_Parameter_Value(line);
+    }
+}
+
+template<typename T>
+void Get_Number(string const& line, string const& param, T &value)
+{
+    if(line.find(param) != string::npos)
+    {
+        string temp = Get_Parameter_Value(line);
+        std::istringstream iss(temp);
+        iss >> value;
+    }
+}
+
+void Get_Vector(string const& line, string const& param, 
+			Eigen::Matrix<real,3,1>/* vec<real,3> */ &value)
+{
+    if(line.find(param) != string::npos)
+    {
+        string temp = Get_Parameter_Value(line);
+        std::istringstream iss(temp);
+        
+        real a, b, c;
+        string temp2;
+        
+        std::getline(iss,temp2,',');
+        std::istringstream iss2(temp2);
+        iss2 >> a;
+
+        std::getline(iss,temp2,',');
+        iss2 = std::istringstream(temp2);
+        iss2 >> b;
+
+        std::getline(iss,temp2,',');
+        iss2 = std::istringstream(temp2);
+        iss2 >> c;
+        
+        value = /* vec<real,3> */ Eigen::Matrix<real,3,1>(a,b,c);
+    }
+}
+
+void Get_Vector(string const& line, string const& param, 
+			Eigen::Matrix<real,2,1>/* vec<real,2> */ &value)
+{
+    if(line.find(param) != string::npos)
+    {
+        string temp = Get_Parameter_Value(line);
+        std::istringstream iss(temp);
+        
+        real a, b;
+        string temp2;
+        
+        std::getline(iss,temp2,',');
+        std::istringstream iss2(temp2);
+        iss2 >> a;
+
+        std::getline(iss,temp2,',');
+        iss2 = std::istringstream(temp2);
+        iss2 >> b;
+        
+        value = /* vec<real,2> */ Eigen::Matrix<real,2,1>(a,b);
+    }
+}
+
+void Get_Vector(string const& line, string const& param, 
+			Eigen::Matrix<int,3,1>/* vec<int,3> */ &value)
+{
+    if(line.find(param) != string::npos)
+    {
+        string temp = Get_Parameter_Value(line);
+        std::istringstream iss(temp);
+        
+        int a, b, c;
+        string temp2;
+        
+        std::getline(iss,temp2,',');
+        std::istringstream iss2(temp2);
+        iss2 >> a;
+
+        std::getline(iss,temp2,',');
+        iss2 = std::istringstream(temp2);
+        iss2 >> b;
+
+        std::getline(iss,temp2,',');
+        iss2 = std::istringstream(temp2);
+        iss2 >> c;
+        
+        value = /* vec<int,3> */ Eigen::Matrix<int,3,1>(a,b,c);
+    }
+}
+
+void Get_Vector(string const& line, string const& param, 
+				Eigen::Matrix<int,2,1>/* vec<int,2> */ &value)
+{
+    if(line.find(param) != string::npos)
+    {
+        string temp = Get_Parameter_Value(line);
+        std::istringstream iss(temp);
+        
+        int a, b;
+        string temp2;
+        
+        std::getline(iss,temp2,',');
+        std::istringstream iss2(temp2);
+        iss2 >> a;
+
+        std::getline(iss,temp2,',');
+        iss2 = std::istringstream(temp2);
+        iss2 >> b;
+        
+        value = Eigen::Matrix<int,2,1>(a,b) /* vec<int,2>(a,b) */;
+    }
 }
 
 uint index(uint ii, uint jj, uint nPts)
@@ -474,38 +375,51 @@ void CheckContents(void* const& inputHandle, SIM& svar, int32_t& numZones, doubl
 	if( outputStream.str() == "X,Z")
 		dataType = 0;
 
-	else if (outputStream.str() == "X,Z,rho,Rrho,m,v,a")
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v,a,partID")
 		dataType = 1;
 
-	else if (outputStream.str() == "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b")
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID")
 		dataType = 2;	
 
-	else if (outputStream.str() == "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_Vx,Cell_Vz,Cell_P,Cell_ID" )
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,Cell_Vx,Cell_Vz,Cell_P,Cell_Rho,Cell_ID" )
 		dataType = 3;
 
-	else if (outputStream.str() == "X,Z,rho,Rrho,m,v,a,Neighbours,Aero")
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v,a,partID,Neighbours,Aero")
 		dataType = 4;
 
-	else if (outputStream.str() == "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_ID")
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,Cell_ID")
 		dataType = 5;
+
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,lambda,surface")
+		dataType = 6;
+
+	else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z")
+		dataType = 7;
 
 #else
 	if( outputStream.str() == "X,Y,Z")
 		dataType = 0;
 
-	else if (outputStream.str() == "X,Y,Z,rho,Rrho,m,v,a")
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v,a,partID")
 		dataType = 1;
 
-	else if (outputStream.str() == "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b")
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID")
 		dataType = 2;	
-	else if (outputStream.str() == "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_ID")
+
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_Rho,Cell_ID")
 		dataType = 3;
 
-	else if (outputStream.str() == "X,Y,Z,rho,Rrho,m,v,a,Neighbours,Aero")
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v,a,partID,Neighbours,Aero")
 		dataType = 4;
 
-	else if (outputStream.str() == "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_ID")
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_ID")
 		dataType = 5;
+
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface")
+		dataType = 6;
+
+	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z")
+		dataType = 7;
 	
 #endif
 	cout << "Variables:  " << outputStream.str() << "  Data type: " << dataType << endl;
@@ -537,6 +451,273 @@ void CheckContents(void* const& inputHandle, SIM& svar, int32_t& numZones, doubl
     I = tecZoneGetSolutionTime(inputHandle, numZones, &time);
     cout << "Latest zone time: " << time << endl << endl;
 }
+
+void Restart(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, SPHState& pn, SPHState& pnp1)
+{	
+	// Read the values from the solution folder, then check. 
+
+	// Check that a restart can be performed. 
+	if(svar.outform == 0 || svar.outform == 1 || svar.outform == 4)
+	{
+		cout << "Output type cannot be restarted from. Make sure that you have the correct output selected." << endl;
+		exit(-1);
+	}
+
+	if(svar.Asource != 0)
+	{
+		if(svar.outform != 3 || svar.outform != 5)
+		{
+			cout << "No cell information. Cannot restart" << endl;
+			exit(-1);
+		}
+	}
+
+	#ifdef DEBUG
+		dbout << "Reading frame info file for restart information." << endl;
+	#endif
+
+	// Re-read the settings and fluid file
+	// cout << svar.outfolder << endl;
+
+	// Now get the data from the files. Start with the boundary
+	if(svar.out_encoding == 1)
+	{
+		SPHState boundary, fuel, rest;	
+
+		// Read the fuel
+		void* fuelHandle = NULL;
+		void* boundHandle = NULL;
+
+		int32_t fuelFrames, boundFrames;
+		double fuelTime, boundTime;
+
+		string fuelf = svar.output_prefix;
+		fuelf.append("_fuel.szplt");
+
+		if(tecFileReaderOpen(fuelf.c_str(),&fuelHandle))
+		{
+			cout << "Error opening szplt file. Path:" << endl;
+			cout << fuelf << endl;
+			exit(-1);
+		}
+
+		// Check how many frames are in the fuel file.
+		cout << "Checking Fuel file..." << endl;
+		CheckContents(fuelHandle,svar,fuelFrames,fuelTime);
+
+		if (svar.Bcase !=0)
+		{
+			string boundf = svar.output_prefix;
+			boundf.append("_boundary.szplt");
+
+			if(tecFileReaderOpen(boundf.c_str(),&boundHandle))
+			{
+				cout << "Error opening szplt file. Path:" << endl;
+				cout << boundf << endl;
+				exit(-1);
+			}
+
+			cout << "Checking Boundary file..." << endl;
+			CheckContents(boundHandle,svar,boundFrames,boundTime);
+
+			if(fuelFrames!= boundFrames)
+			{
+				cout << "Caution! Number of frames is not consistent between fuel and boundary files." << endl;
+			}
+
+			if(fuelTime != boundTime)
+			{
+				cout << "Caution! Frame times are not consistent between fuel and boundary files." << endl;
+
+				if(fuelTime > boundTime)
+				{
+					double time = 0.0;
+					for(int32_t frame = fuelFrames-1; frame > 1; frame--)
+					{
+						if(tecZoneGetSolutionTime(fuelHandle, frame, &time))
+						{
+							cout << "Failed to get time data for frame : " << frame << " from fuel file." << endl;
+							continue;
+						}
+						
+						if(time == boundTime)
+						{
+							cout << "Found the correct frame" << endl;
+							fuelFrames = frame;
+							fuelTime = time;
+							break;
+						}
+					}
+				}
+				else
+				{
+					double time = 0.0;
+					for(int32_t frame = boundFrames-1; frame >= 1; frame--)
+					{
+						if(tecZoneGetSolutionTime(boundHandle, frame, &time))
+						{
+							cout << "Failed to get time data for frame : " << frame << " from boundary file." << endl;
+							continue;
+						}
+						
+
+						if(time == fuelTime)
+						{
+							cout << "Found the correct frame" << endl;
+							boundFrames = frame;
+							boundTime = time;
+							break;
+						}
+					}
+				}
+
+				if(fuelTime != boundTime)
+				{
+					cout << "Could not find a consistent time in each file. Stopping." << endl;
+					exit(-1);
+				}
+			}
+
+			cout << "Attempting to read the boundary..." << endl;
+			Read_Binary_Timestep(boundHandle,svar,boundFrames,boundary);
+		}
+
+	    svar.frame = fuelFrames-1;
+
+	    // Read the actual data.
+		cout  << "Attempting to read the fuel..." << endl;
+		Read_Binary_Timestep(fuelHandle,svar,fuelFrames,fuel);
+
+
+		pn = boundary;
+		svar.bndPts = boundary.size();
+		svar.simPts = fuel.size();
+		pn.insert(pn.end(),fuel.begin(),fuel.end());	
+		svar.totPts = pn.size();
+		
+		if(svar.simPts + svar.bndPts != svar.totPts)
+		{
+			cout << "Mismatch of array sizes. Total array is not the sum of sim and boundary arrays" << endl;
+			exit(-1);
+		}
+
+		// Check the frame timings to ensure dt does not go negative.
+		double frametime = svar.framet * real(fuelFrames-1);
+
+		if(svar.t > frametime)
+		{
+			// There's a problem with the frame times.
+			cout << "Time is further ahead than what is supposed by the frame timings." << endl;
+			cout << "Need to adjust frame time to match the current time" << endl;
+
+			real framet = svar.t/real(fuelFrames-1.0);
+			cout << "Old frame time: " << svar.framet << "  New frame time: " << framet << endl << endl;
+			svar.framet = framet;			
+		}
+
+		// if(svar.totPts != totPts || svar.bndPts != bndPts || svar.simPts != simPts)
+		// {
+		// 	cout << "Mismatch of the particle numbers in the frame file and data file." << endl;
+		// }
+	}
+	else
+	{
+		// TODO: ASCII Restart.
+		// Particle numbers can be found from frame file.
+		// Find EOF, then walk back from there how many particles.
+
+		cout << "ASCII file restart not yet implemented." << endl;
+		exit(-1);
+	}
+
+	// Go through the particles giving them the properties of the cell
+	size_t pID = 0;
+	vector<size_t> buffer;
+	#pragma omp parallel for 
+	for(size_t ii = 0; ii < svar.totPts; ++ii)
+	{
+		/* Set density based on pressure. More information this way */
+		pn[ii].rho = fvar.rho0*pow((pn[ii].p/fvar.B) + 1.0, 1.0/fvar.gam);
+
+		if(pn[ii].b == PartState.BACK_)
+		{
+			#pragma omp critical
+			svar.back.emplace_back(ii);
+		}
+		else if(pn[ii].b == PartState.BUFFER_)
+		{
+			#pragma omp critical
+			buffer.emplace_back(ii);
+		}
+
+		if(svar.Asource == 0)
+		{
+			pn[ii].cellRho = avar.rhog;
+		}
+		
+		// Initialise the rest of the values to 0
+		pn[ii].s = 0.0;
+		pn[ii].woccl = 0.0;
+		pn[ii].pDist = 0.0;
+		pn[ii].internal = 0;
+
+		pn[ii].vPert = StateVecD::Zero();
+
+		#pragma omp critical
+		{
+			if(pn[ii].partID > pID)
+				pID = pn[ii].partID;
+		}
+	}	
+
+	svar.partID = pID+1;
+
+	/* Put the particles into the buffer vector */
+	svar.buffer = vector<vector<size_t>>(svar.back.size(),vector<size_t>(4));
+	real eps = 0.01*svar.dx; /* Tolerance value */
+	for(size_t ii = 0; ii < svar.back.size(); ++ii)
+	{
+		StateVecD const test = svar.Transp*(pn[svar.back[ii]].xi-svar.sim_start);
+		
+		for(size_t index = 0; index < buffer.size(); ++index)
+		{
+			/* Check which particle in the back vector it corresponds to by checking which  */
+			/* particle it lies behind */
+			StateVecD const xi = svar.Transp*(pn[buffer[index]].xi-svar.sim_start);
+			// cout << test[0] << "  " << test[1] << "  " << xi[0] << "  " << xi[1] << endl;
+
+			if(xi[0] < test[0] + eps && xi[0] > test[0] - eps)
+			{	/* X coordinate is within bounds, so should lie behind this point */
+
+				/* Start wit the furthest away, and go closer */
+				if (xi[1] < test[1] - 4.0*svar.dx + eps)
+				{
+					svar.buffer[ii][3] = buffer[index];
+				}
+				else if (xi[1] < test[1] - 3.0*svar.dx + eps)
+				{
+					svar.buffer[ii][2] = buffer[index];
+				}
+				else if (xi[1] < test[1] - 2.0*svar.dx + eps)
+				{
+					svar.buffer[ii][1] = buffer[index];
+				}
+				else if (xi[1] < test[1] - svar.dx + eps)
+				{
+					svar.buffer[ii][0] = buffer[index];
+				}
+				else
+				{
+					cout << "Couldn't identify where to place the buffer particle" << endl;
+					exit(-1);
+				}
+			}
+		}
+	}	
+	
+	pnp1 = pn;
+}
+
 
 void GetYcoef(AERO& avar, const FLUID& fvar, const real diam)
 {

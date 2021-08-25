@@ -170,7 +170,7 @@ vector<StateVecD> Read_Binary_Vector(void* inputHandle, INTEGER4& frame,
 	return vec;
 }
 
-void Read_Binary_Timestep(void* inputHandle, SIM& svar, int32_t frame, State& pn)
+void Read_Binary_Timestep(void* inputHandle, SIM& svar, int32_t frame, SPHState& pn)
 {
 // variables = "x y z rho P m v_x v_y v_z a_x a_y a_z Cell_ID Cell_Vx Cell_Vy Cell_Vz Cell_P Cell_Rho";
 	
@@ -193,12 +193,14 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, int32_t frame, State& pn
 	}
 
 	vector<StateVecD> xi(iMax);
-	vector<real> rho(iMax,0.0);
 	vector<real> Rrho(iMax,0.0);
+	vector<real> rho(iMax,0.0);
+	vector<real> press(iMax,0.0);
 	vector<real> m(iMax,0.0);
 	vector<StateVecD> vel(iMax);
 	vector<StateVecD> acc(iMax);
 	vector<uint> b(iMax,0);
+	vector<int> partID(iMax);
 	vector<StateVecD> cellV;
 	vector<real> cellP;
 	vector<real> cellRho;
@@ -209,21 +211,14 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, int32_t frame, State& pn
 	xi = Read_Binary_Vector(inputHandle, frame, varCount, iMax, "position");
 
 	/*Get density and mass*/
-	// cout << "Trying to get variable: " << varCount << endl;
-	Read_Real_Vector(inputHandle, frame, varCount, iMax, rho, "density");
-
-	// cout << "Trying to get variable: " << varCount << endl;
 	Read_Real_Vector(inputHandle, frame, varCount, iMax, Rrho, "density gradient");
-
-	// cout << "Trying to get variable: " << varCount << endl;
+	Read_Real_Vector(inputHandle, frame, varCount, iMax, rho, "density");
+	Read_Real_Vector(inputHandle, frame, varCount, iMax, press, "pressure");
 	Read_Real_Vector(inputHandle, frame, varCount, iMax, m, "mass");
-
 	vel = Read_Binary_Vector(inputHandle, frame, varCount, iMax, "velocity"); 
-
 	acc = Read_Binary_Vector(inputHandle, frame, varCount, iMax, "acceleration");
-
 	Read_UInt_Vector(inputHandle, frame, varCount, iMax, b, "particle type");
-
+	Read_Int_Vector(inputHandle, frame, varCount, iMax, partID, "particle ID");
 
 	if(svar.outform == 3)
 	{	/*Get the cell information for the points*/
@@ -234,32 +229,29 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, int32_t frame, State& pn
 		cellV = Read_Binary_Vector(inputHandle, frame, varCount, iMax, "cell velocity");
 		
 		/*Get pressure*/
-		// cout << "Trying to get variable: " << varCount << endl;
 		Read_Real_Vector(inputHandle, frame, varCount, iMax, cellP, "cell pressure");
-
 		Read_Real_Vector(inputHandle, frame, varCount, iMax, cellRho, "cell density");
-
-		// cout << "Trying to get variable: " << varCount << endl;
 		Read_Int_Vector(inputHandle, frame, varCount, iMax, cellID, "cell ID");
 	}
 	else if (svar.outform == 5)
 	{
-		// cout << "Trying to get variable: " << varCount << endl;
 		cellID = vector<int>(iMax,0);
 		Read_Int_Vector(inputHandle, frame, varCount, iMax, cellID, "cell ID");
 	}
 	
-	pn = vector<Particle>(iMax);
+	pn = vector<SPHPart>(iMax);
 	/*Now put it into the state vector*/
 	for(int64_t ii= 0; ii < iMax; ++ii)
 	{
 		pn[ii].xi = xi[ii];
-		pn[ii].rho = rho[ii];
 		pn[ii].Rrho = Rrho[ii];
+		pn[ii].rho = rho[ii];
+		pn[ii].p = press[ii];
 		pn[ii].m = m[ii];
 		pn[ii].v = vel[ii];
-		pn[ii].f = acc[ii];
+		pn[ii].acc = acc[ii];
 		pn[ii].b = b[ii]; // static_cast<uint>(b[ii]);
+		pn[ii].partID = partID[ii];
 
 		if(svar.outform == 5 || svar.outform == 3)
 		{
@@ -378,7 +370,7 @@ void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone, int32_
 	varCount++;
 }
 
-void Write_Binary_Timestep(SIM const& svar, State const& pnp1, 
+void Write_Binary_Timestep(SIM const& svar, SPHState const& pnp1, 
 	uint const start, uint const end, char const* group, int32_t const& strandID, void* const& fileHandle)
 {
 	int64_t const size = end - start;
@@ -423,24 +415,24 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 
 	if(svar.outform != 0)
 	{
-		vector<real> rho(size);
 		vector<real> Rrho(size);
+		vector<real> rho(size);
+		vector<real> press(size);
 		vector<real> m(size);
 
 		#pragma omp parallel for
 	  	for(uint ii = start; ii < end; ++ii)
-		{
-			rho[ii-start] = pnp1[ii].rho;
+		{			
 			Rrho[ii-start] = pnp1[ii].Rrho;
-
+			rho[ii-start] = pnp1[ii].rho;
+			press[ii-start] = pnp1[ii].p;
 			// cout << Rrho[ii-start] << "  ";
 			m[ii-start] = pnp1[ii].m;
 		}
 
-		Write_Real_Vector(fileHandle, outputZone, var, size, rho, "density");
-
 		Write_Real_Vector(fileHandle, outputZone, var, size, Rrho, "density gradient");
-
+		Write_Real_Vector(fileHandle, outputZone, var, size, rho, "density");
+		Write_Real_Vector(fileHandle, outputZone, var, size, press, "pressure");
 		Write_Real_Vector(fileHandle, outputZone, var, size, m, "mass");
 
 	}
@@ -449,17 +441,19 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 	{
 		vector<real> v(size);
 		vector<real> a(size);
+		vector<int> pID(size);
 		
 		#pragma omp parallel for
 		for(uint ii = start; ii < end; ++ii)
 		{
 			v[ii-start] = pnp1[ii].v.norm();
-			a[ii-start] = pnp1[ii].f.norm();
+			a[ii-start] = pnp1[ii].acc.norm();
+			pID[ii-start] = pnp1[ii].partID;
 		}
 
 		Write_Real_Vector(fileHandle, outputZone, var, size, v, "velocity magnitude");
-
 		Write_Real_Vector(fileHandle, outputZone, var, size, a, "acceleration magnitude");
+		Write_Int_Vector(fileHandle, outputZone, var, size, pID, "particle ID");
 
 		if(svar.outform == 4)
 		{
@@ -486,29 +480,30 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 		vector<real> vy(size);
 		vector<real> ax(size);
 		vector<real> ay(size);
-#if SIMDIM == 3
-		vector<real> vz(size);
-		vector<real> az(size);
-#endif
+		#if SIMDIM == 3
+			vector<real> vz(size);
+			vector<real> az(size);
+		#endif
 		vector<uint8_t> b(size);
+		vector<int> pID(size);
 
 		#pragma omp parallel for
 		for(uint ii = start; ii < end; ++ii)
 		{
 			vx[ii-start] = pnp1[ii].v(0);
 			vy[ii-start] = pnp1[ii].v(1);
-			ax[ii-start] = pnp1[ii].f(0);
-			ay[ii-start] = pnp1[ii].f(1);
+			ax[ii-start] = pnp1[ii].acc(0);
+			ay[ii-start] = pnp1[ii].acc(1);
 			
 			#if SIMDIM == 3
 				vz[ii-start] = pnp1[ii].v(2);
-				az[ii-start] = pnp1[ii].f(2);
+				az[ii-start] = pnp1[ii].acc(2);
 			#endif
   			b[ii-start] = static_cast<uint8_t>(pnp1[ii].b);
-  	}
+			pID[ii-start] = pnp1[ii].partID;
+		}
 
   		Write_Real_Vector(fileHandle, outputZone, var, size, vx, "velocity x-component");
-
 		Write_Real_Vector(fileHandle, outputZone, var, size, vy, "velocity y-component");
 
 		#if SIMDIM == 3
@@ -516,7 +511,6 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 		#endif
 
   		Write_Real_Vector(fileHandle, outputZone, var, size, ax, "acceleration x-component");
-
 		Write_Real_Vector(fileHandle, outputZone, var, size, ay, "acceleration y-component");
 
 		#if SIMDIM == 3
@@ -524,7 +518,7 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 		#endif
 
 		Write_UInt_Vector(fileHandle, outputZone, var, size, b, "particle type");
-
+		Write_Int_Vector(fileHandle, outputZone, var, size, pID, "particle ID");
 
 		if (svar.outform == 3)
 		{
@@ -552,7 +546,6 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 
 
 			Write_Real_Vector(fileHandle, outputZone, var, size, cVx, "cell velocity x-component");
-
 			Write_Real_Vector(fileHandle, outputZone, var, size, cVy, "cell velocity y-component");
 
 			#if SIMDIM == 3
@@ -560,9 +553,7 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 			#endif
 
 			Write_Real_Vector(fileHandle, outputZone, var, size, cP, "cell pressure");
-
 			Write_Real_Vector(fileHandle, outputZone, var, size, cRho, "cell density");
-
 			Write_Int_Vector(fileHandle, outputZone, var, size, cID, "cell ID");
 		}
 		else if (svar.outform == 5)
@@ -589,7 +580,6 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 	  		}
 
 			Write_Real_Vector(fileHandle, outputZone, var, size, nNb, "real value");
-			
 			Write_Real_Vector(fileHandle, outputZone, var, size, aF, "aero force");
 
 			if(svar.outform == 7)
@@ -611,7 +601,6 @@ void Write_Binary_Timestep(SIM const& svar, State const& pnp1,
 				}
 
 				Write_Real_Vector(fileHandle, outputZone, var, size, aFx, "aero force x-component");
-
 				Write_Real_Vector(fileHandle, outputZone, var, size, aFy, "aero force y-component");
 
 				#if SIMDIM == 3
@@ -644,7 +633,7 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
     int32_t FileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/
     int32_t fileFormat = 1; // 0 == PLT, 1 == SZPLT
 
-    string file = svar.outfolder;
+    string file = svar.output_prefix;
     file.append(filename);
 
     // cout << file << endl;
@@ -654,31 +643,31 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
     	std::string variables = "X,Z";	
 		if (svar.outform == 1)
 		{
-			variables = "X,Z,rho,Rrho,m,v,a";
+			variables = "X,Z,Rrho,rho,press,m,v,a,partID";
 		}
 		else if (svar.outform == 2)
 		{
-			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b";
+			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID";
 		}
 		else if (svar.outform == 3)
 		{
-			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_Vx,Cell_Vz,Cell_P,Cell_Rho,Cell_ID";
+			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,Cell_Vx,Cell_Vz,Cell_P,Cell_Rho,Cell_ID";
 		}
 		else if (svar.outform == 4)
 		{
-			variables = "X,Z,rho,Rrho,m,v,a,Neighbours,Aero";
+			variables = "X,Z,Rrho,rho,press,m,v,a,partID,Neighbours,Aero";
 		}
 		else if (svar.outform == 5)
 		{
-			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,Cell_ID";
+			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,Cell_ID";
 		}
 		else if (svar.outform == 6)
 		{
-			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,lambda,surface";
+			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,lambda,surface";
 		}
 		else if (svar.outform == 7)
 		{
-			variables = "X,Z,rho,Rrho,m,v_x,v_z,a_x,a_z,b,lambda,surface,a_aero_x,a_aero_z";
+			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z";
 		}
 #endif
 
@@ -686,32 +675,32 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 		std::string variables = "X,Y,Z";  
 		if (svar.outform == 1)
 		{
-			variables = "X,Y,Z,rho,Rrho,m,v,a";
+			variables = "X,Y,Z,Rrho,rho,press,m,v,a,partID";
 		}
 		else if (svar.outform == 2)
 		{
-			variables = "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b";
+			variables = "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID";
 		}
 		else if (svar.outform == 3)
 		{
 			variables = 
-		"X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_Rho,Cell_ID";
+		"X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_Rho,Cell_ID";
 		}
 		else if (svar.outform == 4)
 		{
-			variables = "X,Y,Z,rho,Rrho,m,v,a,Neighbours,Aero";
+			variables = "X,Y,Z,Rrho,rho,press,m,v,a,partID,Neighbours,Aero";
 		}
 		else if (svar.outform == 5)
 		{
-			variables = "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,Cell_ID";
+			variables = "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_ID";
 		}
 		else if (svar.outform == 6)
 		{
-			variables = "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,lambda,surface";
+			variables = "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface";
 		}
 		else if (svar.outform == 7)
 		{
-			variables = "X,Y,Z,rho,Rrho,m,v_x,v_y,v_z,a_x,a_y,a_z,b,lambda,surface,a_aero_x,a_aero_z";
+			variables = "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z";
 		}
 #endif
 
@@ -729,15 +718,16 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 #endif
 	if(svar.outform != 0)
 	{
-		varTypes.emplace_back(realType);  //rho
 		varTypes.emplace_back(realType);  //Rrho
+		varTypes.emplace_back(realType);  //rho
+		varTypes.emplace_back(realType);  //pressure
 		varTypes.emplace_back(realType);  //m
 
 		if(svar.outform == 1 || svar.outform == 4)
 		{
 			varTypes.emplace_back(realType);  //vmag
 			varTypes.emplace_back(realType);  //amag
-
+			varTypes.emplace_back(3);  //part_ID
 			if(svar.outform == 4)
 			{
 				varTypes.emplace_back(realType);  //Nneighb
@@ -756,6 +746,7 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 			varTypes.emplace_back(realType);  //az
 #endif
 			varTypes.emplace_back(5);  //b
+			varTypes.emplace_back(3);  //part_ID
 
 			if(svar.outform == 3)
 			{
@@ -780,8 +771,8 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 				varTypes.emplace_back(realType);	/* surface */
 				if(svar.outform == 7)
 				{
-					varTypes.emplace_back(realType);
-					varTypes.emplace_back(realType);
+					varTypes.emplace_back(realType);  //cell_Vx
+					varTypes.emplace_back(realType);  //cell_Vy
 					#if SIMDIM == 3
 					varTypes.emplace_back(realType);  //cell_Vz
 					#endif
@@ -828,7 +819,7 @@ void Write_Cell_Data(MESH const& cdata)
 	fout << "TITLE = \"3D Mesh Solution\"\n";
 	fout << "VARIABLES = \"x (m)\" \"y (m)\" \"z (m)\"\n";
 	fout << "ZONE T=\"Cell Data\"" << endl;
-	fout << "N=" << cdata.numPoint << ", E=" << cdata.numElem << ", F=FEBLOCK, ET=BRICK" << endl
+	fout << "N=" << cdata.nPnts << ", E=" << cdata.nElem << ", F=FEBLOCK, ET=BRICK" << endl
 		 << endl;
 
 	/*Write vertices*/
@@ -883,8 +874,8 @@ void Write_Face_Data(MESH const& cells)
 	/*Write zone header information*/
 	f1 << "ZONE T=\"OpenFOAM MESH\"" << endl;
 	f1 << "ZONETYPE=FEPOLYHEDRON" << endl;
-	f1 << "NODES=" << cells.numPoint << " ELEMENTS=" << cells.numElem << " FACES=" << cells.numFace << endl;
-	size_t TotalNumFaceNodes = cells.numFace * 3;
+	f1 << "NODES=" << cells.nPnts << " ELEMENTS=" << cells.nElem << " FACES=" << cells.nFace << endl;
+	size_t TotalNumFaceNodes = cells.nFace * 3;
 	f1 << "TotalNumFaceNodes=" << TotalNumFaceNodes << endl;
 	f1 << "NumConnectedBoundaryFaces=0 TotalNumBoundaryConnections=0" << endl;
 
@@ -910,7 +901,7 @@ void Write_Face_Data(MESH const& cells)
 
 	/*Write how many vertices per face*/
 	n = 0;
-	for (size_t ii = 0; ii < cells.numFace; ++ii)
+	for (size_t ii = 0; ii < cells.nFace; ++ii)
 	{
 		f1 << std::setw(5) << 3;
 		n++;
