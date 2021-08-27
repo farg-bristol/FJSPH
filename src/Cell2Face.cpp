@@ -1,8 +1,11 @@
 /*Cell based to Face based data converter*/
 
+#include <algorithm>
+#include <omp.h>
 #include "Convert.h"
-#include "Third_Party/Eigen/Core"
-#include "Third_Party/Eigen/StdVector"
+
+// #include "Third_Party/Eigen/Core"
+// #include "Third_Party/Eigen/StdVector"
 
 #ifdef DEBUG
 	/*Open debug file to write to*/
@@ -22,21 +25,22 @@
 typedef Eigen::Matrix<real,SIMDIM,1> StateVecD;
 typedef Eigen::Matrix<int,SIMDIM,1> StateVecI;
 
+const std::string WHITESPACE = " \n\r\t\f\v";
+
 typedef struct CELL
 {
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
 	/*Standard contructor*/
-	CELL(const size_t nElem, const size_t nPts)
+	CELL(const size_t nElem_, const size_t nPts_)
 	{
-		numElem = nElem; 
-		numPoint = nPts;
-		verts.reserve(numPoint);
-		elems.reserve(numElem);
+		nElem = nElem_; 
+		nPnts = nPts_;
+		verts.reserve(nPts_);
+		elems.reserve(nElem_);
 	}
 	
 	/*Zone info*/
-	size_t numElem, numPoint;
+	size_t nElem, nPnts;
 
 	/*Point based data*/
 	vector<StateVecD> verts;
@@ -45,48 +49,99 @@ typedef struct CELL
 	vector<vector<size_t>> elems;
 
 	/*Surface faces*/
-	vector<vector<size_t>> sfaces;
+	size_t nSurf, nSurfQ, nSurfT;
+	vector<vector<size_t>> stfaces, sqfaces;
+	vector<int> smarkers;
 }CELL;
 
 typedef struct FACE
 {
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+	// EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-	FACE(const CELL &cdata) : numElem(cdata.numElem), numPoint(cdata.numPoint)
+	FACE(const CELL &cdata) : nElem(cdata.nElem), nPnts(cdata.nPnts)
 	{
 		verts = cdata.verts;
 		// numElem = cdata.numElem;
 		// numPoint = cdata.numPoint;
-		numFaces = 0;
-		nFar = 0;
-		nWall = 0;
+		nFaces = 0;
+		ntFaces = 0;
+		nqFaces = 0;
+		nSurf = 0;
 		// nFacesPElem = new int[cdata.numElem];
 	}	
 
-	FACE() : numElem(0), numPoint(0)
+	FACE() : nElem(0), nPnts(0)
 	{
-		numFaces = 0; nFar = 0; nWall = 0;
+		nSurf = 0;
+		nFaces = 0;
+		ntFaces = 0;
+		nqFaces = 0;
 	};
 
 	void insert(const FACE& flocal)
 	{
-		faces.insert(faces.end(),flocal.faces.begin(),flocal.faces.end());
-		celllr.insert(celllr.end(),flocal.celllr.begin(),flocal.celllr.end());
-		numFaces += flocal.numFaces;
-		nFar += flocal.nFar;
-		nWall += flocal.nWall;
+		trig_faces.insert(trig_faces.end(),flocal.trig_faces.begin(),flocal.trig_faces.end());
+		quad_faces.insert(quad_faces.end(),flocal.quad_faces.begin(),flocal.quad_faces.end());
+		qcelllr.insert(qcelllr.end(),flocal.qcelllr.begin(),flocal.qcelllr.end());
+		tcelllr.insert(tcelllr.end(),flocal.tcelllr.begin(),flocal.tcelllr.end());
+		
+		surf_trigs.insert(surf_trigs.end(),flocal.surf_trigs.begin(),flocal.surf_trigs.end());
+		surf_quads.insert(surf_quads.end(),flocal.surf_quads.begin(),flocal.surf_quads.end());
+		strigslr.insert(strigslr.end(),flocal.strigslr.begin(),flocal.strigslr.end());
+		squadslr.insert(squadslr.end(),flocal.squadslr.begin(),flocal.squadslr.end());
+
+		tsmarkers.insert(tsmarkers.end(),flocal.tsmarkers.begin(),flocal.tsmarkers.end());
+		qsmarkers.insert(qsmarkers.end(),flocal.qsmarkers.begin(),flocal.qsmarkers.end());
+
+		nFaces += flocal.nFaces;
+		ntFaces += flocal.ntFaces;
+		nqFaces += flocal.nqFaces;
+		nSurf += flocal.nSurf;
 	}
 
-	size_t numFaces, nFar, nWall;
+	size_t nFaces, ntFaces, nqFaces;
+	size_t nSurf;
 	vector<StateVecD> verts;
-	vector<vector<size_t>> faces; /*Face indexes*/
-	vector<std::pair<int,int>> celllr; /*Cell left and right of the face*/
+	vector<vector<size_t>> trig_faces; /*Face indexes*/
+	vector<vector<size_t>> quad_faces; /*Face indexes*/
+	vector<std::pair<int,int>> qcelllr, tcelllr; /*Cell left and right of the face*/
 
-	// int* nFacesPElem;
 
-	const size_t numElem, numPoint;
+	/* Surface data */
+	vector<vector<size_t>> surf_trigs, surf_quads;
+	vector<std::pair<int,int>> strigslr, squadslr;
+	vector<int> tsmarkers, qsmarkers;
+
+
+	const size_t nElem, nPnts;
 }FACE;
 
+std::string ltrim(const std::string &s)
+{
+    size_t start = s.find_first_not_of(WHITESPACE);
+    return (start == std::string::npos) ? "" : s.substr(start);
+}
+ 
+std::string rtrim(const std::string &s)
+{
+    size_t end = s.find_last_not_of(WHITESPACE);
+    return (end == std::string::npos) ? "" : s.substr(0, end + 1);
+}
+
+string Get_Parameter_Value(string const& line)
+{
+    size_t pos = line.find(":");
+    size_t end = line.find("#",pos+1); /* Check if a comment exists on the line */
+
+    if (end != string::npos)
+    {
+        string value = line.substr(pos + 1, (end-pos+2) );
+        return ltrim(rtrim(value));
+    }
+
+    string value = line.substr(pos + 1);
+    return ltrim(rtrim(value));
+}
 
 vector<int> Find_Bmap_Markers(string const& bmapIn)
 {
@@ -103,75 +158,37 @@ vector<int> Find_Bmap_Markers(string const& bmapIn)
 		exit(-1);
 	}
 
-	vector<int> markers;
-	/*Search for the markers that have either farfield or symmetry plane*/
-	size_t lineno = 0;
+	/* Find out how many blocks, i.e. how many boundaries to expect. */
+	uint nBlocks = 0;
 	string line;
+	while (getline(fin, line))
+	{
+		if (line.find("block end") != string::npos)
+		{ /*We're on a new block*/
+			nBlocks++;
+		}
+	}
+	fin.seekg(0,fin.beg);
+
+	vector<int> markers(nBlocks);
 
 	size_t blockno = 0;
-	size_t blockstart = 1; /*A store of when this block starts to search through*/
 
 	while(getline(fin,line))
 	{
 
-		// cout << line << endl;
-		if(line.find("Type: laminar wall")!=string::npos ||
-			line.find("Type: euler wall")!=string::npos || 
-			line.find("Type: viscous wall")!=string::npos ||
-			line.find("Type: sharp edge")!=string::npos)
+		if (line.find("Markers") != string::npos)
 		{
-			
-			/*This marker is a far field, so store it.*/
-			/*Go to the start of the block, and search for the marker ID*/
-			GotoLine(fin,blockstart);
-			while(getline(fin,line))
-			{	
-				// cout << "inner:\t" << line << endl;
-				if(line.find("Markers:")!=string::npos)
-				{
-					// cout << "Found a boundary marker" << endl;
-					std::stringstream sstr;
-
-					sstr << line;
-
-					string temp;
-					int found;
-
-					while(!sstr.eof())
-					{
-						sstr >> temp;
-						if(std::stringstream(temp) >> found)
-						{
-							markers.emplace_back(found);
-						}
-
-						temp = "";
-					}
-
-					/*Go back to where we were*/
-					blockstart = lineno+2;
-					GotoLine(fin,lineno+2);
-					break;
-				}
-			}
+			string value = Get_Parameter_Value(line);
+			std::istringstream sstr(value);
+			sstr >> markers[blockno];
 		}
 
 		if(line.find("block end")!= string::npos)
 		{	/*We're on a new block*/
 			blockno++;
-			blockstart = lineno+1;
 		}
-
-		lineno++;
 	}
-
-	cout << "Wall markers:" << endl;
-
-	for(auto mark:markers)
-	{
-		cout << mark << "  " ;
-	}
-	cout << endl;
 
 	#ifdef DEBUG
 	dbout << "Exiting Find_Bmap_Markers..." << endl;
@@ -181,14 +198,12 @@ vector<int> Find_Bmap_Markers(string const& bmapIn)
 }
 
 
-vector<vector<size_t>> Get_Surface(int& fin, vector<int> const& markers)
+void Get_Surface(int& fin, CELL& cdata)
 {
 	#ifdef DEBUG
 	dbout << "Entering Get_Surface..." << endl;
 	#endif
 	int retval;
-
-	vector<vector<size_t>> faceVec;
 
 	int surfTDim, surfQDim, pPSTDim, pPSQDim;
 	size_t nsurfT, nsurfQ, nPpST, nPpSQ;
@@ -197,6 +212,7 @@ vector<vector<size_t>> Get_Surface(int& fin, vector<int> const& markers)
 	if ((retval = nc_inq_dimid(fin, "no_of_surfacetriangles", &surfTDim)))
 	{
 		cout << "No surfacetriangle data" << endl;
+		cdata.nSurfT = 0;
 	}
 	else
 	{
@@ -209,13 +225,15 @@ vector<vector<size_t>> Get_Surface(int& fin, vector<int> const& markers)
 
 		vector<vector<size_t>> localVec = Get_Element(fin, "points_of_surfacetriangles", nsurfT, nPpST);
 
-		faceVec.insert(faceVec.end(), localVec.begin(), localVec.end());
+		cdata.stfaces.insert(cdata.stfaces.end(), localVec.begin(), localVec.end());
+		cdata.nSurfT = nsurfT;
 	}
 
 
 	if ((retval = nc_inq_dimid(fin, "no_of_surfacequadrilaterals", &surfTDim)))
 	{
 		cout << "No surfacequadrilateral data" << endl;
+		cdata.nSurfQ = 0;
 	}
 	else
 	{
@@ -228,7 +246,8 @@ vector<vector<size_t>> Get_Surface(int& fin, vector<int> const& markers)
 
 		vector<vector<size_t>> localVec = Get_Element(fin, "points_of_surfacequadrilaterals", nsurfQ, nPpSQ);
 
-		faceVec.insert(faceVec.end(),localVec.begin(),localVec.end());
+		cdata.sqfaces.insert(cdata.sqfaces.end(),localVec.begin(),localVec.end());
+		cdata.nSurfQ = nsurfQ;
 	}
 
 	/*Get the boundarymarkers*/
@@ -236,38 +255,45 @@ vector<vector<size_t>> Get_Surface(int& fin, vector<int> const& markers)
 	size_t nMarkers;
 	Get_Dimension(fin, "no_of_surfaceelements", boundMDim, nMarkers);
 
-	if(faceVec.size() != nMarkers)
+	cdata.nSurf = cdata.nSurfT + cdata.nSurfQ;
+
+	if(cdata.nSurf != nMarkers)
 	{
 		cout << "Mismatch of number of surface elements defined and number ingested." << endl;
 		cout << "Number of surface elements: " << nMarkers << 
-		"  Number in vector: " << faceVec.size() << endl;
+		"  Number in vectors: " << cdata.nSurf << endl;
 	}
 
 	int* faceMarkers = new int[nMarkers];
 
 	faceMarkers = Get_Int_Scalar(fin, "boundarymarker_of_surfaces", nMarkers);
 
-	vector<vector<size_t>> farVec;
-
-	/*Want to find which surfaces are the ones I want to look for*/
+	cdata.smarkers = vector<int>(nMarkers);
 	for(size_t ii = 0; ii < nMarkers; ++ii)
 	{
-		if(std::find(markers.begin(),markers.end(),faceMarkers[ii])!= markers.end())
-		{	/*The face is an inner boundary*/
-			/*Pre sort to save time in the loop*/
-			vector<size_t> v = faceVec[ii];
-			std::sort(v.begin(),v.end());
-			farVec.emplace_back(v);
-		}
+		cdata.smarkers[ii] = faceMarkers[ii];
 	}
+	
+	// vector<vector<size_t>> farVec;
+
+	// /*Want to find which surfaces are the ones I want to look for*/
+	// for(size_t ii = 0; ii < nMarkers; ++ii)
+	// {
+	// 	if(std::find(markers.begin(),markers.end(),faceMarkers[ii])!= markers.end())
+	// 	{	/*The face is an inner boundary*/
+	// 		/*Pre sort to save time in the loop*/
+	// 		vector<size_t> v = faceVec[ii];
+	// 		std::sort(v.begin(),v.end());
+	// 		farVec.emplace_back(v);
+	// 	}
+	// }
 
 	#ifdef DEBUG
 	dbout << "Exiting Get_Surface..." << endl;
 	#endif
 
-	return farVec;
+	// return farVec;
 }
-
 
 void Add_Face(vector<size_t> const& face, std::pair<int,int> const& leftright,
 	FACE& fdata)
@@ -275,20 +301,54 @@ void Add_Face(vector<size_t> const& face, std::pair<int,int> const& leftright,
 	/*Break the face down into two triangles*/
 	if(face.size() == 4)
 	{	/*Break the face down into two triangles*/
-		fdata.celllr.emplace_back(leftright);
-		fdata.celllr.emplace_back(leftright);
-		vector<size_t> face1 = {face[0],face[1],face[2]};
-		vector<size_t> face2 = {face[0],face[2],face[3]};
-		fdata.faces.emplace_back(face1);
-		fdata.faces.emplace_back(face2);
-		fdata.numFaces+=2;
+		// 	fdata.celllr.emplace_back(leftright);
+		// 	fdata.celllr.emplace_back(leftright);
+		// 	vector<size_t> face1 = {face[0],face[1],face[2]};
+		// 	vector<size_t> face2 = {face[0],face[2],face[3]};
+		// 	fdata.faces.emplace_back(face1);
+		// 	fdata.faces.emplace_back(face2);
+		// 	fdata.numFaces+=2;
+	
+		fdata.qcelllr.emplace_back(leftright);
+		fdata.quad_faces.emplace_back(face);
+		fdata.nqFaces++;
 	}
 	else
 	{	/*Face is already a triangle. No work to be done*/
-		fdata.celllr.emplace_back(leftright);
-		fdata.faces.emplace_back(face);
-		fdata.numFaces++;
+		fdata.tcelllr.emplace_back(leftright);
+		fdata.trig_faces.emplace_back(face);
+		fdata.ntFaces++;
 	}
+
+	fdata.nFaces++;
+}
+
+void Add_Surface_Face(vector<size_t> const& face, std::pair<int,int> const& leftright,
+	FACE& fdata)
+{
+	/*Break the face down into two triangles*/
+	if(face.size() == 4)
+	{	/*Break the face down into two triangles*/
+		// 	fdata.celllr.emplace_back(leftright);
+		// 	fdata.celllr.emplace_back(leftright);
+		// 	vector<size_t> face1 = {face[0],face[1],face[2]};
+		// 	vector<size_t> face2 = {face[0],face[2],face[3]};
+		// 	fdata.faces.emplace_back(face1);
+		// 	fdata.faces.emplace_back(face2);
+		// 	fdata.numFaces+=2;
+	
+		fdata.squadslr.emplace_back(leftright);
+		fdata.surf_quads.emplace_back(face);
+		fdata.nqFaces++;
+	}
+	else
+	{	/*Face is already a triangle. No work to be done*/
+		fdata.strigslr.emplace_back(leftright);
+		fdata.surf_trigs.emplace_back(face);
+		fdata.ntFaces++;
+	}
+
+	fdata.nFaces++;
 }
 
 
@@ -384,34 +444,43 @@ void CheckFaces(const vector<vector<size_t>>& vertincells,
 		
 		/*If a match has not been found, the face must be a boundary face*/	
 		if(colour[lindex][lfaceindex] == 0)
-		{			
-			for (auto sface:cdata.sfaces)
-			{	/*Search through the surface faces to identify */
-				/*if the face is an internal face or not*/
-				if(sface == lface)
-				{	/*Face is an internal face*/
-					if (lface.size() == 4)
-						fdata.nFar+=2;
-					else
-						fdata.nFar++;
-					
-					leftright = std::pair<int,int>(lindex,-1);
-					colour[lindex][lfaceindex] = 1;
-					Add_Face(face,leftright,fdata);
-					goto matchfound;
+		{	
+			if(lface.size() == 3)
+			{		
+				for (size_t ii = 0; ii < cdata.nSurfT; ++ii)
+				{	/*Search through the surface faces to identify */
+					/*if the face is an internal face or not*/
+					vector<size_t> sface = cdata.stfaces[ii];
+					std::sort(sface.begin(),sface.end());
+					if(sface == lface)
+					{	/*Face is an internal face*/
+						leftright = std::pair<int,int>(lindex,-1);
+						fdata.tsmarkers.emplace_back(cdata.smarkers[ii]);
+						colour[lindex][lfaceindex] = 1;
+						Add_Surface_Face(face,leftright,fdata);
+						fdata.nSurf++;
+						goto matchfound;
+					}
 				}
 			}
-
-			/*If still uncoloured, then face is an external boundary*/
-			if (lface.size() == 4)
-				fdata.nWall += 2;
 			else
-				fdata.nWall++;
-
-			leftright = std::pair<int,int>(lindex,-2);
-			colour[lindex][lfaceindex] = 1;
-			Add_Face(face,leftright,fdata);
-			
+			{		
+				for (size_t ii = 0; ii < cdata.nSurfQ; ++ii)
+				{	/*Search through the surface faces to identify */
+					/*if the face is an internal face or not*/
+					vector<size_t> sface = cdata.sqfaces[ii];
+					std::sort(sface.begin(),sface.end());
+					if(sface == lface)
+					{	
+						leftright = std::pair<int,int>(lindex,-1);
+						fdata.qsmarkers.emplace_back(cdata.smarkers[ii+cdata.nSurfT]);
+						colour[lindex][lfaceindex] = 1;
+						Add_Surface_Face(face,leftright,fdata);
+						fdata.nSurf++;
+						goto matchfound;
+					}
+				}
+			}
 		}
 
 matchfound:			
@@ -425,8 +494,8 @@ void BuildFaces(const CELL& cdata, FACE& fdata)
 	#ifdef DEBUG
 	dbout << "Entering BuildFaces..." << endl;
 	#endif
-	size_t nElem = cdata.numElem;
-	size_t nPts = cdata.numPoint;
+	size_t nElem = cdata.nElem;
+	size_t nPts = cdata.nPnts;
 	size_t unmfaces=0;
 
 	// for(auto const& vert:cdata.elems[33])
@@ -595,28 +664,47 @@ void BuildFaces(const CELL& cdata, FACE& fdata)
 	if(unmfaces != 0)
 	cout << "There are " << unmfaces << " unmatched faces." << endl;
 
-	if (fdata.faces.size() != fdata.numFaces)
+	/* Put the surface faces into the main structures */
+	fdata.trig_faces.insert(fdata.trig_faces.end(),fdata.surf_trigs.begin(),fdata.surf_trigs.end());
+	fdata.quad_faces.insert(fdata.quad_faces.end(),fdata.surf_quads.begin(),fdata.surf_quads.end());
+	fdata.tcelllr.insert(fdata.tcelllr.end(),fdata.strigslr.begin(),fdata.strigslr.end());
+	fdata.qcelllr.insert(fdata.qcelllr.end(),fdata.squadslr.begin(),fdata.squadslr.end());
+
+	if (fdata.trig_faces.size() != fdata.ntFaces)
 	{
 		cout << "numFaces is not being measured correctly." << endl;
-		cout << "faces vector size: "<< fdata.faces.size() << "  numFaces: " << fdata.numFaces << endl;
+		cout << "faces vector size: "<< fdata.trig_faces.size() << "  numFaces: " << fdata.ntFaces << endl;
 	}
 
-	if(fdata.celllr.size() != fdata.numFaces)
+	if (fdata.quad_faces.size() != fdata.nqFaces)
 	{
-		cout << "Not all faces have left and right cells identified." << endl;
-		cout << "Celllr size: " << fdata.celllr.size();
-		cout << "  N_Faces: " << fdata.numFaces << endl;
+		cout << "number of quad faces is not being measured correctly." << endl;
+		cout << "faces vector size: "<< fdata.quad_faces.size() << "  numFaces: " << fdata.nqFaces << endl;
+	}
+
+	if(fdata.tcelllr.size() != fdata.ntFaces)
+	{
+		cout << "Not all triangle faces have left and right cells identified." << endl;
+		cout << "Celllr size: " << fdata.tcelllr.size();
+		cout << "  N_Faces: " << fdata.ntFaces << endl;
+	}
+
+	if(fdata.qcelllr.size() != fdata.nqFaces)
+	{
+		cout << "Not all quadrilateral faces have left and right cells identified." << endl;
+		cout << "Celllr size: " << fdata.qcelllr.size();
+		cout << "  N_Faces: " << fdata.nqFaces << endl;
 	}
 
 	#ifdef DEBUG
-	dbout << "Building faces complete. Number of faces: " << fdata.numFaces << endl;
-	dbout << "Average number of faces per element: " << float(fdata.numFaces)/float(fdata.numElem) << endl;
+	dbout << "Building faces complete. Number of faces: " << fdata.nFaces << endl;
+	dbout << "Average number of faces per element: " << float(fdata.nFaces)/float(fdata.nElem) << endl;
 	dbout << "Exiting BuildFaces..." << endl;
 	#endif
 
-	cout << "Building faces complete. Number of faces: " << fdata.numFaces << endl;
-	cout << "Average number of faces per element: " << float(fdata.numFaces)/float(fdata.numElem) << endl;
-	cout << "Number of wall faces: " << fdata.nWall << " Far field faces: " << fdata.nFar << endl;
+	cout << "Building faces complete. Number of faces: " << fdata.nFaces << endl;
+	cout << "Average number of faces per element: " << float(fdata.nFaces)/float(fdata.nElem) << endl;
+	cout << "Number of surface faces: " << fdata.nSurf << endl;
 }
 
 
@@ -651,44 +739,78 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 	}
 
 	/* Define the dimensions. */
-	int nElemID, nFaceID, nPpFcID, nWallID, nFarID, nPntsID;
+	int nElemID, nFaceID, nTFaceID, nPpTFcID, nQFaceID, nPpQFcID, nMarkID, nPntsID;
 
-	if ((retval = nc_def_dim(meshID, "no_of_elements", fdata.numElem, &nElemID)))
+	if ((retval = nc_def_dim(meshID, "no_of_elements", fdata.nElem, &nElemID)))
 	{
 		cout << "Error: Failed to define \"no_of_elements\"" << endl;
 		ERR(retval);
 		exit(-1);
 	}
 
-	if ((retval = nc_def_dim(meshID, "no_of_faces", fdata.numFaces, &nFaceID)))
+	if ((retval = nc_def_dim(meshID, "no_of_faces", fdata.nFaces, &nFaceID)))
 	{
 		cout << "Error: Failed to define \"no_of_faces\"" << endl;
 		ERR(retval);
 		exit(-1);
 	}
 
-	if ((retval = nc_def_dim(meshID, "points_per_face", 3, &nPpFcID)))
+	if(fdata.ntFaces != 0)
 	{
-		cout << "Error: Failed to define \"points_per_face\"" << endl;
+		if ((retval = nc_def_dim(meshID, "no_of_triangles", fdata.ntFaces, &nTFaceID)))
+		{
+			cout << "Error: Failed to define \"no_of_triangles\"" << endl;
+			ERR(retval);
+			exit(-1);
+		}
+
+		if ((retval = nc_def_dim(meshID, "points_per_triangle", 3, &nPpTFcID)))
+		{
+			cout << "Error: Failed to define \"points_per_triangle\"" << endl;
+			ERR(retval);
+			exit(-1);
+		}	
+	}
+
+	if(fdata.nqFaces != 0)
+	{
+		if ((retval = nc_def_dim(meshID, "no_of_quadrilaterals", fdata.nqFaces, &nQFaceID)))
+		{
+			cout << "Error: Failed to define \"no_of_quadrilaterals\"" << endl;
+			ERR(retval);
+			exit(-1);
+		}
+
+		if ((retval = nc_def_dim(meshID, "points_per_quadrilateral", 4, &nPpQFcID)))
+		{
+			cout << "Error: Failed to define \"points_per_quadrilateral\"" << endl;
+			ERR(retval);
+			exit(-1);
+		}	
+	}
+
+	// if ((retval = nc_def_dim(meshID, "no_of_surfacequadrilaterals", fdata.nWall, &nWallID)))
+	// {
+	// 	cout << "Error: Failed to define \"no_of_surfacequadrilaterals\"" << endl;
+	// 	ERR(retval);
+	// 	exit(-1);
+	// }
+
+	// if ((retval = nc_def_dim(meshID, "no_of_surfacetriangles", fdata.nWall, &nWallID)))
+	// {
+	// 	cout << "Error: Failed to define \"no_of_surfacetriangles\"" << endl;
+	// 	ERR(retval);
+	// 	exit(-1);
+	// }
+	
+	if ((retval = nc_def_dim(meshID, "no_of_surfaceelements", fdata.nSurf, &nMarkID)))
+	{
+		cout << "Error: Failed to define \"no_of_surfaceelements\"" << endl;
 		ERR(retval);
 		exit(-1);
 	}
 
-	if ((retval = nc_def_dim(meshID, "no_of_wall_faces", fdata.nWall, &nWallID)))
-	{
-		cout << "Error: Failed to define \"no_of_wall_faces\"" << endl;
-		ERR(retval);
-		exit(-1);
-	}
-
-	if ((retval = nc_def_dim(meshID, "no_of_farfield_faces", fdata.nFar, &nFarID)))
-	{
-		cout << "Error: Failed to define \"no_of_farfield_faces\"" << endl;
-		ERR(retval);
-		exit(-1);
-	}
-
-	if ((retval = nc_def_dim(meshID, "no_of_points", fdata.numPoint, &nPntsID)))
+	if ((retval = nc_def_dim(meshID, "no_of_points", fdata.nPnts, &nPntsID)))
 	{
 		cout << "Error: Failed to define \"no_of_points\"" << endl;
 		ERR(retval);
@@ -696,16 +818,33 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 	}
 
 	/* Define the variables */
-	int faceVarID, leftVarID, rightVarID, ptsxID, ptsyID, ptszID;
+	int faceTVarID, faceQVarID, leftVarID, rightVarID, markID, ptsxID, ptsyID, ptszID;
 	
 	/*Define the faces*/
-	int dimIDs[] = {nFaceID,nPpFcID};
-	if ((retval = nc_def_var(meshID, "points_of_element_faces", NC_INT, 2,
-							 dimIDs, &faceVarID)))
+	int dimIDs[] = {nTFaceID,nPpTFcID};
+
+	if(fdata.ntFaces != 0)
 	{
-		cout << "Error: Failed to define \"points_of_element_faces\"" << endl;
-		ERR(retval);
-		exit(-1);
+		if ((retval = nc_def_var(meshID, "points_of_triangles", NC_INT, 2,
+								dimIDs, &faceTVarID)))
+		{
+			cout << "Error: Failed to define \"points_of_triangles\"" << endl;
+			ERR(retval);
+			exit(-1);
+		}
+	}
+
+	if(fdata.nqFaces != 0)
+	{
+		dimIDs[0] = nQFaceID;
+		dimIDs[1] = nPpQFcID;
+		if ((retval = nc_def_var(meshID, "points_of_quadrilaterals", NC_INT, 2,
+								dimIDs, &faceQVarID)))
+		{
+			cout << "Error: Failed to define \"points_of_quadrilaterals\"" << endl;
+			ERR(retval);
+			exit(-1);
+		}	
 	}
 
 	if ((retval = nc_def_var(meshID, "left_element_of_faces", NC_INT, 1,
@@ -720,6 +859,14 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 							 &nFaceID, &rightVarID)))
 	{
 		cout << "Error: Failed to define \"right_element_of_faces\"" << endl;
+		ERR(retval);
+		exit(-1);
+	}
+
+	if ((retval = nc_def_var(meshID, "boundarymarker_of_surfaces", NC_INT, 1,
+							 &nMarkID, &markID)))
+	{
+		cout << "Error: Failed to define \"boundarymarker_of_surfaces\"" << endl;
 		ERR(retval);
 		exit(-1);
 	}
@@ -752,22 +899,50 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 		ERR(retval);
 
 	/*Create the C array for the faces*/
-	int* faces = new int[fdata.numFaces*3];
-	for(size_t ii = 0; ii < fdata.numFaces; ++ii)
-		for(size_t jj = 0; jj < 3; ++jj)
-		{
-			faces[index(ii,jj,3)] = static_cast<int>(fdata.faces[ii][jj]);
-		}
-
-	/*Put faces into the file*/
+	int* faces = new int[fdata.ntFaces*3];
 	size_t start[] = {0,0};
-	size_t end[] = {fdata.numFaces,3};
-	if ((retval = nc_put_vara_int(meshID, faceVarID, start, end, &faces[0])))
+	size_t end[] = {fdata.ntFaces,3};
+
+	if(fdata.ntFaces != 0)
 	{
-		cout << "Failed to write face data" << endl;
-		ERR(retval);
-		exit(-1);
+		for(size_t ii = 0; ii < fdata.ntFaces; ++ii)
+			for(size_t jj = 0; jj < 3; ++jj)
+			{
+				faces[index(ii,jj,3)] = static_cast<int>(fdata.trig_faces[ii][jj]);
+			}
+
+		/*Put faces into the file*/
+		
+		if ((retval = nc_put_vara_int(meshID, faceTVarID, start, end, &faces[0])))
+		{
+			cout << "Failed to write triangle face data" << endl;
+			ERR(retval);
+			exit(-1);
+		}	
+
 	}
+
+	if(fdata.nqFaces != 0)
+	{
+		/*Create the C array for the faces*/
+		faces = new int[fdata.nqFaces*4];
+		for(size_t ii = 0; ii < fdata.nqFaces; ++ii)
+			for(size_t jj = 0; jj < 4; ++jj)
+			{
+				faces[index(ii,jj,4)] = static_cast<int>(fdata.quad_faces[ii][jj]);
+			}
+
+		/*Put faces into the file*/
+		end[0] = fdata.nqFaces;
+		end[1] = 4;
+		if ((retval = nc_put_vara_int(meshID, faceQVarID, start, end, &faces[0])))
+		{
+			cout << "Failed to write quadrilateral face data" << endl;
+			ERR(retval);
+			exit(-1);
+		}
+	}
+
 	// elemFaces.putVar(faces);
 
 	// /*State how many faces there are per element*/
@@ -783,13 +958,19 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 	// nElemFaces.putVar(fdata.nFacesPElem);
 
 	/*Put face left and right into the file*/
-	int* left = new int[fdata.numFaces];
-	int* right = new int[fdata.numFaces];
+	int* left = new int[fdata.nFaces];
+	int* right = new int[fdata.nFaces];
 
-	for(size_t ii = 0; ii < fdata.numFaces; ++ii)
+	for(size_t ii = 0; ii < fdata.ntFaces; ++ii)
 	{
-		left[ii] = fdata.celllr[ii].first;
-		right[ii] = fdata.celllr[ii].second;
+		left[ii] = fdata.tcelllr[ii].first;
+		right[ii] = fdata.tcelllr[ii].second;
+	}
+
+	for(size_t ii = 0; ii < fdata.nqFaces; ++ii)
+	{
+		left[ii+fdata.ntFaces] = fdata.qcelllr[ii].first;
+		right[ii+fdata.ntFaces] = fdata.qcelllr[ii].second;
 	}
 
 
@@ -807,16 +988,37 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 		exit(-1);
 	}
 
-	/*Create the C arrays for the vertices*/
-	double* x = new double[fdata.numPoint];
-	double* y = new double[fdata.numPoint];
-	double* z = new double[fdata.numPoint];
-
-	for(size_t ii = 0; ii < fdata.numPoint; ++ii)
+	/* Write the boundary markers */
+	int* markers = new int[fdata.nSurf];
+	size_t ntSurf = fdata.tsmarkers.size();
+	for(size_t ii = 0; ii< ntSurf; ++ii )
 	{
-		x[ii] = fdata.verts[ii](0);
-		y[ii] = fdata.verts[ii](1);
-		z[ii] = fdata.verts[ii](2);
+		markers[ii] = fdata.tsmarkers[ii];
+	}
+
+	size_t nqSurf = fdata.qsmarkers.size();
+	for(size_t ii = 0; ii< nqSurf; ++ii )
+	{
+		markers[ii+ntSurf] = fdata.qsmarkers[ii];
+	}
+
+	if ((retval = nc_put_var_int(meshID, markID, &markers[0])))
+	{
+		cout << "Failed to write surface marker data" << endl;
+		ERR(retval);
+		exit(-1);
+	}
+
+	/*Create the C arrays for the vertices*/
+	double* x = new double[fdata.nPnts];
+	double* y = new double[fdata.nPnts];
+	double* z = new double[fdata.nPnts];
+
+	for(size_t ii = 0; ii < fdata.nPnts; ++ii)
+	{
+		x[ii] = fdata.verts[ii][0];
+		y[ii] = fdata.verts[ii][1];
+		z[ii] = fdata.verts[ii][2];
 	}
 
 	/*Put them in the file*/
@@ -864,15 +1066,20 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 	}
 
 	size_t TotalNumFaceNodes = 0;
-	for(size_t ii = 0; ii < fdata.faces.size(); ++ii)
+	for(size_t ii = 0; ii < fdata.trig_faces.size(); ++ii)
 	{
-		TotalNumFaceNodes += fdata.faces[ii].size();
+		TotalNumFaceNodes += fdata.trig_faces[ii].size();
+	}
+
+	for(size_t ii = 0; ii < fdata.quad_faces.size(); ++ii)
+	{
+		TotalNumFaceNodes += fdata.quad_faces[ii].size();
 	}
 
 	fout << "VARIABLES= \"X\" \"Y\" \"Z\" " << endl;
 	fout << "ZONE T=\"FEPOLYHEDRON Test\"" << endl;
 	fout << "ZONETYPE=FEPOLYHEDRON" << endl;
-	fout << "NODES=" << fdata.numPoint << " ELEMENTS=" << fdata.numElem << " FACES=" << fdata.numFaces << endl;
+	fout << "NODES=" << fdata.nPnts << " ELEMENTS=" << fdata.nElem << " FACES=" << fdata.nFaces << endl;
 	fout << "TotalNumFaceNodes=" << TotalNumFaceNodes << endl;
 	fout << "NumConnectedBoundaryFaces=0 TotalNumBoundaryConnections=0" << endl;
 
@@ -888,7 +1095,7 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 	{
 		for(size_t ii = 0; ii < fdata.verts.size(); ++ii)
 		{
-			fout << std::setw(w) << fdata.verts[ii](DIM);
+			fout << std::setw(w) << fdata.verts[ii][DIM];
 			newl++;
 
 			if(newl>4)
@@ -907,9 +1114,21 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 	/*Inform of how many vertices in each face*/
 	fout << "#node count per face" << endl;
 	newl = 0;
-	for (size_t ii = 0; ii < fdata.faces.size(); ++ii)
+	for (size_t ii = 0; ii < fdata.trig_faces.size(); ++ii)
 	{
-		fout << std::setw(w) << fdata.faces[ii].size();
+		fout << std::setw(w) << fdata.trig_faces[ii].size();
+		newl++;
+
+		if(newl>4)
+		{
+			fout << endl;
+			newl=0;
+		}
+	}
+
+	for (size_t ii = 0; ii < fdata.quad_faces.size(); ++ii)
+	{
+		fout << std::setw(w) << fdata.quad_faces[ii].size();
 		newl++;
 
 		if(newl>4)
@@ -919,17 +1138,31 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 		}
 	}
 	fout << endl;
+
 	/*Write the face data*/
 	fout << "#face nodes" << endl;
-	for (size_t ii = 0; ii < fdata.faces.size(); ++ii)
+	for (size_t ii = 0; ii < fdata.trig_faces.size(); ++ii)
 	{
-		for(auto const& vertex:fdata.faces[ii])
+		for(auto const& vertex:fdata.trig_faces[ii])
 		{	/*Write face vertex indexes*/
 			fout << std::setw(w) << vertex+1;
-			if (vertex > fdata.numPoint)
-			{
-				cout << "Trying to write a vertex outside of the number of points." << endl;
-			}
+			// if (vertex > fdata.nPnts)
+			// {
+			// 	cout << "Trying to write a vertex outside of the number of points." << endl;
+			// }
+		}
+		fout << endl;
+	}
+
+	for (size_t ii = 0; ii < fdata.quad_faces.size(); ++ii)
+	{
+		for(auto const& vertex:fdata.quad_faces[ii])
+		{	/*Write face vertex indexes*/
+			fout << std::setw(w) << vertex+1;
+			// if (vertex > fdata.nPnts)
+			// {
+			// 	cout << "Trying to write a vertex outside of the number of points." << endl;
+			// }
 		}
 		fout << endl;
 	}
@@ -937,9 +1170,21 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 	/*Write face left and right*/
 	newl = 0;
 	fout << "#left elements" << endl;
-	for (size_t ii = 0; ii < fdata.celllr.size(); ++ii)
+	for (size_t ii = 0; ii < fdata.tcelllr.size(); ++ii)
 	{
-		fout << std::setw(w) << fdata.celllr[ii].first+1 ;
+		fout << std::setw(w) << fdata.tcelllr[ii].first+1 ;
+		newl++;
+
+		if(newl>4)
+		{
+			fout << endl;
+			newl=0;
+		}
+	}
+
+	for (size_t ii = 0; ii < fdata.qcelllr.size(); ++ii)
+	{
+		fout << std::setw(w) << fdata.qcelllr[ii].first+1 ;
 		newl++;
 
 		if(newl>4)
@@ -952,12 +1197,29 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 
 	fout << "#right elements" << endl;
 	newl = 0;
-	for (size_t ii = 0; ii < fdata.celllr.size(); ++ii)
+	for (size_t ii = 0; ii < fdata.tcelllr.size(); ++ii)
 	{
-		if(fdata.celllr[ii].second < 0)
+		if(fdata.tcelllr[ii].second < 0)
 			fout<< std::setw(w) << 0 ;
 		else
-			fout << std::setw(w) << fdata.celllr[ii].second+1;
+			fout << std::setw(w) << fdata.tcelllr[ii].second+1;
+
+
+		newl++;
+
+		if(newl>4)
+		{
+			fout << endl;
+			newl=0;
+		}
+	}
+
+	for (size_t ii = 0; ii < fdata.qcelllr.size(); ++ii)
+	{
+		if(fdata.qcelllr[ii].second < 0)
+			fout<< std::setw(w) << 0 ;
+		else
+			fout << std::setw(w) << fdata.qcelllr[ii].second+1;
 
 
 		newl++;
@@ -995,7 +1257,7 @@ void Write_Cell_Data(const CELL& cdata)
 	fout << "TITLE = \"3D TAU Solution\"\n";
 	fout << "VARIABLES = \"x (m)\" \"y (m)\" \"z (m)\"\n";
 	fout << "ZONE T=\"Cell Data\"" << endl;
-	fout << "N=" << cdata.numPoint << ", E=" << cdata.numElem << 
+	fout << "N=" << cdata.nPnts << ", E=" << cdata.nElem << 
 	", F=FEBLOCK, ET=BRICK"  << endl << endl;
 
 	/*Write vertices*/
@@ -1053,25 +1315,33 @@ void Write_Griduns(const FACE& fdata)
 
 	size_t w = 12;
 	fout << std::left << std::fixed;
-	fout << setw(w) << fdata.numElem << setw(w) << 
-		fdata.numFaces << setw(w) << fdata.numPoint << endl;
+	fout << setw(w) << fdata.nElem << setw(w) << 
+		fdata.nFaces << setw(w) << fdata.nPnts << endl;
 
-	for(size_t ii = 0; ii < fdata.numFaces; ++ii)
+	for(size_t ii = 0; ii < fdata.ntFaces; ++ii)
 	{
-		for(auto const& vert:fdata.faces[ii])
+		for(auto const& vert:fdata.trig_faces[ii])
 			fout << setw(w) << vert;
 
-		fout << setw(w) << fdata.celllr[ii].first << setw(w) << fdata.celllr[ii].second << endl;
+		fout << setw(w) << fdata.tcelllr[ii].first << setw(w) << fdata.tcelllr[ii].second << endl;
+	}
+
+	for(size_t ii = 0; ii < fdata.nqFaces; ++ii)
+	{
+		for(auto const& vert:fdata.quad_faces[ii])
+			fout << setw(w) << vert;
+
+		fout << setw(w) << fdata.qcelllr[ii].first << setw(w) << fdata.qcelllr[ii].second << endl;
 	}
 
 	fout << std::scientific << std::setprecision(6);
 	w = 15;
-	for(size_t ii = 0; ii < fdata.numPoint; ++ii)
+	for(size_t ii = 0; ii < fdata.nPnts; ++ii)
 	{
 		fout << setw(w) << ii;
 		for(size_t jj = 0; jj < SIMDIM; ++jj)
 		{
-			fout << setw(w) << fdata.verts[ii](jj);
+			fout << setw(w) << fdata.verts[ii][jj];
 		}
 		fout << endl;
 	}
@@ -1186,8 +1456,8 @@ int main (int argc, char** argv)
 	}
 
 	/*Get surface faces*/
-	vector<int> markers = Find_Bmap_Markers(bmapIn);
-	cdata.sfaces = Get_Surface(meshID, markers);	
+	// vector<int> markers = Find_Bmap_Markers(bmapIn);
+	Get_Surface(meshID, cdata);	
 
 	/*Put data into cell structure, and generate face based data*/
 	if(tets.size()!=0)
@@ -1218,6 +1488,7 @@ int main (int argc, char** argv)
 	BuildFaces(cdata,fdata);
 
 	Write_Face_Data(meshIn, fdata);
+	// Write_ASCII_Face_Data(fdata);
 	// Write_Griduns(fdata);
 	return 0;
 }

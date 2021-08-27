@@ -190,6 +190,36 @@ void Average_Point_to_Cell(vector<real> const &pData, vector<real> &cData,
 /*****************************************************************************/
 namespace TAU
 {
+	void Get_Dim_ID(int& meshID, string const& dim, int& dimID)
+	{
+		int retval = 0;
+		if ((retval = nc_inq_dimid(meshID, dim.c_str(), &dimID)))
+		{
+			ERR(retval);
+			exit(-1);
+		}
+	}
+
+	void Get_Dim_Length(int& meshID, int const& dimID, size_t& dimLen)
+	{
+		int retval = 0;
+		if ((retval = nc_inq_dimlen(meshID, dimID, &dimLen)))
+		{
+			ERR(retval);
+			exit(-1);
+		}
+	}
+
+	void Get_Var_ID(int &meshID, string const &var, int &varID)
+	{
+		int retval = 0;
+		if ((retval = nc_inq_varid(meshID, var.c_str(), &varID)))
+		{
+			cout << "Failed to get the variable ID of \"" << var << "\"" << endl;
+			ERR(retval);
+		}
+	}
+
 	void Find_Angle_Alpha(SIM& svar)
 	{
 	#ifdef DEBUG
@@ -315,11 +345,7 @@ namespace TAU
 		int retval;
 		int varID;
 
-		if ((retval = nc_inq_varid(fin, variable.c_str(), &varID)))
-		{
-			cout << "Failed to get variable id for: " << variable << endl;
-			ERR(retval);
-		}
+		Get_Var_ID(fin, variable.c_str(), varID);
 
 		#ifdef DEBUG
 			dbout << "Allocating array of: " << nPts << endl;
@@ -355,12 +381,8 @@ namespace TAU
 		#endif
 		int retval;
 		int varID;
-
-		if ((retval = nc_inq_varid(fin, variable.c_str(), &varID)))
-		{
-			cout << "Failed to get variable id for: " << variable << endl;
-			ERR(retval);
-		}
+	
+		Get_Var_ID(fin, variable.c_str(), varID);
 
 		#ifdef DEBUG
 			dbout << "Allocating array of: " << nPts << endl;
@@ -654,17 +676,8 @@ namespace TAU
 		int ptDimID;
 		size_t solPts;
 
-		if ((retval = nc_inq_dimid(solID, "no_of_points", &ptDimID)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
-
-		if ((retval = nc_inq_dimlen(solID, ptDimID, &solPts)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
+		Get_Dim_ID(solID, "no_of_points", ptDimID);
+		Get_Dim_Length(solID, ptDimID, solPts);
 
 		#ifdef DEBUG
 			dbout << "Solution points: " << solPts << endl;
@@ -938,58 +951,22 @@ namespace TAU
 		int ptDimID, elemDimID, edgeDimID, nPpEDimID;
 		size_t nPnts, nElem, nEdge, nPpEd;
 
-		
-
 		// Retrieve how many elements there are.
-		if ((retval = nc_inq_dimid(meshID, "no_of_elements", &elemDimID)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
-
-		if ((retval = nc_inq_dimlen(meshID, elemDimID, &nElem)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
+		Get_Dim_ID(meshID,"no_of_elements",elemDimID);
+		Get_Dim_Length(meshID, elemDimID, nElem);
 
 		// Retrieve edge number
-		if ((retval = nc_inq_dimid(meshID, "no_of_edges", &edgeDimID)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
+		Get_Dim_ID(meshID,"no_of_edges",edgeDimID);
+		Get_Dim_Length(meshID, edgeDimID, nEdge);
 
-		if ((retval = nc_inq_dimlen(meshID, edgeDimID, &nEdge)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
 
 		// Retrieve points per edge
-		if ((retval = nc_inq_dimid(meshID, "points_per_edge", &nPpEDimID)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
+		Get_Dim_ID(meshID,"points_per_edge",nPpEDimID);
+		Get_Dim_Length(meshID, nPpEDimID, nPpEd);
 
-		if ((retval = nc_inq_dimlen(meshID, nPpEDimID, &nPpEd)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
+		Get_Dim_ID(meshID, "no_of_points", ptDimID);
+		Get_Dim_Length(meshID, ptDimID, nPnts);
 
-		if ((retval = nc_inq_dimid(meshID, "no_of_points", &ptDimID)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
-
-		if ((retval = nc_inq_dimlen(meshID, ptDimID, &nPnts)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
 
 		#ifdef DEBUG
 			dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << endl;
@@ -1083,7 +1060,8 @@ namespace TAU
 				#pragma omp critical
 				{
 					cells.cFaces[lindex].emplace_back(ii);
-					cells.cFaces[rindex].emplace_back(ii);
+					if (rindex >= 0)
+						cells.cFaces[rindex].emplace_back(ii);
 				}
 			}
 		}
@@ -1133,7 +1111,7 @@ namespace TAU
 				cout << "Finding cell volumes..." << endl;
 			}
 
-			// Find cell volumes
+			// Find cell volumes 
 			#pragma omp for schedule(static) nowait
 			for (size_t ii = 0; ii < cells.elems.size(); ++ii)
 			{
@@ -1179,55 +1157,20 @@ namespace TAU
 		size_t nPnts, nElem, nFace, nSurf, nTFace, nQFace, nPpTFc, nPpQFc;
 
 		// Retrieve how many elements there are.
-		if ((retval = nc_inq_dimid(meshID, "no_of_elements", &elemDimID)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
-
-		if ((retval = nc_inq_dimlen(meshID, elemDimID, &nElem)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
+		Get_Dim_ID(meshID,"no_of_elements",elemDimID);
+		Get_Dim_Length(meshID, elemDimID, nElem);
 
 		// Retrieve face number
-		if ((retval = nc_inq_dimid(meshID, "no_of_faces", &faceDimID)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
-
-		if ((retval = nc_inq_dimlen(meshID, faceDimID, &nFace)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
+		Get_Dim_ID(meshID,"no_of_faces",faceDimID);
+		Get_Dim_Length(meshID, faceDimID, nFace);
 
 		/* Retrieve how many points there are */
-		if ((retval = nc_inq_dimid(meshID, "no_of_points", &ptDimID)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
+		Get_Dim_ID(meshID, "no_of_points", ptDimID);
+		Get_Dim_Length(meshID, ptDimID, nPnts);
 
-		if ((retval = nc_inq_dimlen(meshID, ptDimID, &nPnts)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
+		Get_Dim_ID(meshID,"no_of_surfaceelements", surfDimID);
+		Get_Dim_Length(meshID, surfDimID, nSurf);
 
-		if ((retval = nc_inq_dimid(meshID, "no_of_surfaceelements", &surfDimID)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
-
-		if ((retval = nc_inq_dimlen(meshID, surfDimID, &nSurf)))
-		{
-			ERR(retval);
-			exit(-1);
-		}
 
 		// Retrieve triangle face dimensions
 		if ((retval = nc_inq_dimid(meshID, "no_of_triangles", &faceTDimID)))
@@ -1237,23 +1180,9 @@ namespace TAU
 		}
 		else
 		{
-			if ((retval = nc_inq_dimlen(meshID, faceTDimID, &nTFace)))
-			{
-				ERR(retval);
-				exit(-1);
-			}
-
-			if ((retval = nc_inq_dimid(meshID, "points_per_triangle", &nPpTFDimID)))
-			{
-				ERR(retval);
-				exit(-1);
-			}
-
-			if ((retval = nc_inq_dimlen(meshID, nPpTFDimID, &nPpTFc)))
-			{
-				ERR(retval);
-				exit(-1);
-			}
+			Get_Dim_Length(meshID, faceTDimID, nTFace);
+			Get_Dim_ID(meshID,"points_per_triangle", nPpTFDimID);
+			Get_Dim_Length(meshID, nPpTFDimID, nPpTFc);
 
 			hasTrig = 1;
 		}
@@ -1266,23 +1195,9 @@ namespace TAU
 		}
 		else
 		{
-			if ((retval = nc_inq_dimlen(meshID, faceQDimID, &nQFace)))
-			{
-				ERR(retval);
-				exit(-1);
-			}
-
-			if ((retval = nc_inq_dimid(meshID, "points_per_quadrilateral", &nPpQFDimID)))
-			{
-				ERR(retval);
-				exit(-1);
-			}
-
-			if ((retval = nc_inq_dimlen(meshID, nPpQFDimID, &nPpQFc)))
-			{
-				ERR(retval);
-				exit(-1);
-			}
+			Get_Dim_Length(meshID, faceQDimID, nQFace);
+			Get_Dim_ID(meshID,"points_per_quadrilateral", nPpQFDimID);
+			Get_Dim_Length(meshID, nPpQFDimID, nPpQFc);
 
 			hasQuad = 1;
 		}
@@ -1300,7 +1215,7 @@ namespace TAU
 
 		cells.elems = vector<vector<size_t>>(nElem);
 		cells.cFaces = vector<vector<size_t>>(nElem);
-		// cells.cVol = vector<real>(nElem);
+		cells.cVol = vector<real>(nElem);
 
 		cells.verts = vector<StateVecD>(nPnts);
 		// cells.leftright = vector<std::pair<int,int>>(nFace);

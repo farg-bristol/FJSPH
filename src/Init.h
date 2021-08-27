@@ -511,8 +511,11 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		svar.simPts = 0;
 		svar.totPts = pn.size();
 
-		// CreateRDroplet(svar,fvar,pn);
+		#if SIMDIM == 2
+		CreateRDroplet(svar,fvar,pn);
+		#else
 		CreateDroplet(svar,fvar,pn);
+		#endif
 	}
 	else if (svar.Scase == 4)
 	{

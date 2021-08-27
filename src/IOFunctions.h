@@ -404,7 +404,7 @@ void CheckContents(void* const& inputHandle, SIM& svar, int32_t& numZones, doubl
 		dataType = 1;
 
 	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID")
-		dataType = 2;	
+		dataType = 2;
 
 	else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_Rho,Cell_ID")
 		dataType = 3;
@@ -434,15 +434,6 @@ void CheckContents(void* const& inputHandle, SIM& svar, int32_t& numZones, doubl
     {
     	cout << "Data is different from that in the restfings file." << endl;
     	cout << "Changing to the file data type: " << dataType << endl;
-    	svar.outform = dataType;
-    	if(svar.outform == 2)
-		{
-			if(svar.Asource == 1 || svar.Asource == 2)
-			{
-				cout << "No cell information. Cannot restart" << endl;
-				exit(-1);
-			}
-		}
     }
 
     I = tecDataSetGetNumZones(inputHandle, &numZones);
