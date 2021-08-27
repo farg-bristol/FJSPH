@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
     cout << std::scientific << std::left << std::setprecision(4);
 	
 	write_header();
-    
+
     /******* Define the global simulation parameters ******/
 	SIM svar;
 	FLUID fvar;

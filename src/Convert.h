@@ -14,11 +14,11 @@
 #include "Third_Party/Eigen/StdVector"
 
 #define NC_ERR 2
-#define ERR(e)                                 \
-	{                                          \
-		printf("Error: %s\n", nc_strerror(e)); \
-		exit(-1);                              \
-	}
+#define ERR(e)                             \
+{                                          \
+    printf("Error: %s\n", nc_strerror(e)); \
+    exit(-1);                              \
+}
 
 using std::cout;
 using std::endl;
@@ -109,9 +109,9 @@ int* Get_Int_Scalar(int &fin, string variable, size_t const &nPnts)
 /*To run on the mesh file*/
 vector<vector<size_t>> Get_Element(int &fin, string variable, size_t &nElem, size_t &nPnts)
 {
-#ifdef DEBUG
-    dbout << "Reading Element: " << variable << endl;
-#endif
+    #ifdef DEBUG
+        dbout << "Reading Element: " << variable << endl;
+    #endif
     int retval, varID;
 
     if ((retval = nc_inq_varid(fin, variable.c_str(), &varID)))
@@ -121,10 +121,10 @@ vector<vector<size_t>> Get_Element(int &fin, string variable, size_t &nElem, siz
         exit(-1);
     }
 
-// cout << nElem << "  " << nPoints << endl;
-#ifdef DEBUG
-    dbout << "Allocating array of: " << nElem << " by " << nPnts << endl;
-#endif
+    // cout << nElem << "  " << nPoints << endl;
+    #ifdef DEBUG
+        dbout << "Allocating array of: " << nElem << " by " << nPnts << endl;
+    #endif
 
     /*Allocate on the heap (can be big datasets)*/
     int *elemArray = new int[nElem * nPnts];
@@ -133,9 +133,9 @@ vector<vector<size_t>> Get_Element(int &fin, string variable, size_t &nElem, siz
     size_t startp[] = {0, 0};
     size_t countp[] = {nElem, nPnts};
 
-#ifdef DEBUG
-    dbout << "Attempting to read NetCDF elements." << endl;
-#endif
+    #ifdef DEBUG
+        dbout << "Attempting to read NetCDF elements." << endl;
+    #endif
 
     if ((retval = nc_get_vara_int(fin, varID, startp, countp, &elemArray[0])))
     {
@@ -147,9 +147,9 @@ vector<vector<size_t>> Get_Element(int &fin, string variable, size_t &nElem, siz
     cout << "Successfully read: " << variable << endl;
     cout << "Number of elements: " << nElem << endl;
 
-#ifdef DEBUG
-    dbout << "Successfully read elements" << endl;
-#endif
+    #ifdef DEBUG
+        dbout << "Successfully read elements" << endl;
+    #endif
 
     /*Convert it to a vector to store*/
     size_t ii, jj;
@@ -160,18 +160,18 @@ vector<vector<size_t>> Get_Element(int &fin, string variable, size_t &nElem, siz
             elemVec[ii][jj] = static_cast<size_t>(elemArray[index(ii, jj, nPnts)]);
     }
 
-#ifdef DEBUG
-    dbout << "Returning vector" << endl;
-#endif
+    #ifdef DEBUG
+        dbout << "Returning vector" << endl;
+    #endif
     return elemVec;
 }
 
 /*To run on the mesh file*/
 vector<Eigen::Matrix<real,3,1>> Get_Coordinate_Vector(int &fin, size_t const &nPnts)
 {
-#ifdef DEBUG
-    dbout << "Reading coordinates." << endl;
-#endif
+    #ifdef DEBUG
+        dbout << "Reading coordinates." << endl;
+    #endif
 
     /*Get the coordinate data*/
     double *coordX = Get_Real_Scalar(fin, "points_xc", nPnts);
