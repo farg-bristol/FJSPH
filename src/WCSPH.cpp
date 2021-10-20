@@ -11,15 +11,17 @@
 #include <chrono>
 
 #include "Var.h"
-#include "IO.h"
-#include "FOAMIO.h"
-#include "Neighbours.h"
-#include "Kernel.h"
-#include "Init.h"
 #include "Add.h"
-#include "Resid.h"
+#include "CDFIO.h"
 #include "Containment.h"
+#include "FOAMIO.h"
+#include "Geometry.h"
+#include "Init.h"
 #include "Integration.h"
+#include "IO.h"
+#include "IOFunctions.h"
+#include "Neighbours.h"
+#include "Shifting.h"
 
 using namespace std::chrono;
 using namespace nanoflann;
@@ -47,6 +49,13 @@ int main(int argc, char *argv[])
 	MESH cells;
 	SURFS surf_marks;
 
+	///****** Initialise the particles memory *********/
+	SPHState pn;	    /*Particles at n   */
+	SPHState pnp1; 	/*Particles at n+1 */
+	vector<IPTState> iptdata; /* Particle tracking data */
+	// SPHState airP;
+	DELTAP dp;
+
 	GetInput(argc,argv,svar,fvar,avar);
 	
 	// if(MakeOutputDir(argc,argv,svar))
@@ -60,8 +69,10 @@ int main(int argc, char *argv[])
 		#if SIMDIM == 3
 			if(svar.CDForFOAM == 0)
 			{
+				vector<uint> empty;
 				TAU::Read_BMAP(svar);
 				TAU::Read_TAUMESH_FACE(svar,cells,fvar,avar);
+				TAU::Read_SOLUTION(svar.tausol, fvar, avar, svar.offset_axis, cells, empty);
 			}
 			else
 			{
@@ -70,8 +81,10 @@ int main(int argc, char *argv[])
 		#else
 			if (svar.CDForFOAM == 0)
 			{
+				vector<uint> used_verts;
 				TAU::Read_BMAP(svar);
-				TAU::Read_TAUMESH_EDGE(svar,cells,fvar,avar);
+				TAU::Read_TAUMESH_EDGE(svar,cells,fvar,avar,used_verts);
+				TAU::Read_SOLUTION(svar.tausol, fvar, avar, svar.offset_axis, cells, used_verts);
 			}
 			else
 			{
@@ -92,23 +105,19 @@ int main(int argc, char *argv[])
 	cout << std::setprecision(5);
 
 	
-	cout << "Adjusted Start Coordinates: " << endl;
+	cout << "Start Coordinates: " << endl;
 	cout << svar.sim_start(0) << "  " << svar.sim_start(1);
-#if SIMDIM == 3
-	cout << "  " << svar.sim_start(2);  
-#endif
+	#if SIMDIM == 3
+		cout << "  " << svar.sim_start(2);  
+	#endif
 	cout << endl << endl;
 	/*Make a guess of how many there will be...*/
 	// int partCount = ParticleCount(svar);
-    ///****** Initialise the particles memory *********/
-	SPHState pn;	    /*Particles at n   */
-	SPHState pnp1; 	/*Particles at n+1 */
-	SPHState airP;
-	DELTAP dp;
+    
 
 	if(svar.Scase == 4)
 	{
-		cout << "Final particle count:  " << svar.finPts << endl;
+		cout << "Maximuim particle count:  " << svar.finPts << endl;
 	}
 
 	pn.reserve(svar.finPts);
@@ -122,12 +131,16 @@ int main(int argc, char *argv[])
   		// Redefine the mass and spacing to make sure the required mass is conserved
   		// if(svar.Scase == 2 || svar.Scase == 3)
 	  	// 	Set_Mass(svar,fvar,avar,pn,pnp1);
-		if(svar.Asource == 0)
+		if(svar.Asource == 0 || svar.Asource == 3)
 		{
 			for(size_t ii = 0; ii < pnp1.size(); ++ii)
 			{
 				pn[ii].cellRho = avar.rhog;
+				pn[ii].cellP = avar.pRef;
 				pnp1[ii].cellRho = avar.rhog;
+				pnp1[ii].cellP = avar.pRef;
+				pn[ii].cellV = avar.vInf;
+				pnp1[ii].cellV = avar.vInf;
 			}
 		}
 
@@ -153,7 +166,7 @@ int main(int argc, char *argv[])
 	else
 	{
 		/* Read the files */
-		Restart(svar,fvar,avar,cells,pn,pnp1);
+		Restart_Binary(svar,fvar,avar,cells,pn,pnp1);
 	}
 
 	// Check if cells have been initialsed before making a tree off it
@@ -199,7 +212,7 @@ int main(int argc, char *argv[])
 	///*** Perform an iteration to populate the vectors *****/
 	if(svar.restart == 0)
 	{
-		First_Step(TREE,svar,fvar,avar,cells,outlist,dp,pnp1,pn,airP);
+		First_Step(TREE,svar,fvar,avar,cells,outlist,dp,pnp1,pn,iptdata);
 	}
 	else
 	{
@@ -216,41 +229,41 @@ int main(int argc, char *argv[])
 		size_t end = svar.totPts;
 		size_t end_ng = svar.bndPts + svar.simPts;
 
-		dSPH_PreStep(svar,fvar,end,pnp1,outlist,dp);
+		dSPH_PreStep(fvar,end,pnp1,outlist,dp);
 
 		if (svar.Asource == 1 || svar.Asource == 2)
 		{
 			// cout << "Finding cells" << endl;
 			FindCell(svar,fvar.sr,TREE,cells,dp,pn,pnp1);
-			if (svar.totPts != pnp1.size())
-			{	//Rebuild the neighbour list
-				// cout << "Updating neighbour list" << endl;
-				// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
-				svar.delNum += svar.totPts-pnp1.size();
-				svar.simPts -= svar.totPts-pnp1.size();
-				svar.totPts = pnp1.size();
-				end = svar.totPts;
-				end_ng = svar.bndPts + svar.simPts;
-				TREE.NP1.index->buildIndex();
-				FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-				dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
-			}	
+			// if (svar.totPts != pnp1.size())
+			// {	//Rebuild the neighbour list
+			// 	// cout << "Updating neighbour list" << endl;
+			// 	// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
+			// 	svar.delNum += svar.totPts-pnp1.size();
+			// 	svar.simPts -= svar.totPts-pnp1.size();
+			// 	svar.totPts = pnp1.size();
+			// 	end = svar.totPts;
+			// 	end_ng = svar.bndPts + svar.simPts;
+			// 	TREE.NP1.index->buildIndex();
+			// 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
+			// 	dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+			// }	
 		}
 
-		Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
+		Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pn);
 
 		// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
 		#ifdef ALE
 			if(svar.ghost > 0)
-				Particle_Shift_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
+				Particle_Shift_Ghost(svar,fvar,start,end_ng,outlist,dp,pn);
 			else
-				Particle_Shift_No_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
+				Particle_Shift_No_Ghost(svar,fvar,start,end_ng,outlist,dp,pn);
 		#endif
 
 		/* Update shifting velocity and surface data */
-		SPHState::const_iterator first = pnp1.begin();
-		SPHState::const_iterator last = pnp1.begin() + end_ng;
-		pn = SPHState(first,last);
+		// SPHState::const_iterator first = pnp1.begin();
+		// SPHState::const_iterator last = pnp1.begin() + end_ng;
+		// pn = SPHState(first,last);
 	}
 
 	///*************** Open simulation files ***************/
@@ -266,8 +279,14 @@ int main(int argc, char *argv[])
 	f3 << std::scientific << std::setw(10);
 
 	// pertLog << std::scientific << std::setprecision(8);
-	Write_First_Step(f1,fb,fg,svar,pnp1,airP);
-	
+	Write_First_Step(f1,fb,fg,svar,pnp1);
+
+	if(svar.using_ipt)
+	{
+		IPT::Init_IPT_Files(svar);
+		IPT::Write_Data(svar,cells,iptdata);
+	}
+
 	if(svar.restart == 0)
 	{
 		if((svar.Bcase == 4) && (svar.Asource == 1 || svar.Asource == 2))
@@ -366,9 +385,9 @@ int main(int argc, char *argv[])
 		int stepits=0;
 		real stept=0.0;
 		
-		while (stept + MERROR < svar.framet)
+		while (stept + 0.1*svar.dt_min < svar.framet)
 		{
-		    error = Integrate(TREE,svar,fvar,avar,cells,surf_marks,dp,pn,pnp1,airP,outlist);
+		    error = Integrate(TREE,svar,fvar,avar,cells,surf_marks,dp,pn,pnp1,iptdata,outlist);
 		    stept+=svar.dt;
 		    ++stepits;
 		}
@@ -399,7 +418,9 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		Write_Timestep(f1,fb,fg,svar,pnp1,airP);
+		Write_Timestep(f1,fb,fg,svar,pnp1);
+		if(svar.using_ipt)
+			IPT::Write_Data(svar,cells,iptdata);
 	}
 
 	/*Wrap up simulation files and close them*/

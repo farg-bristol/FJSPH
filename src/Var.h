@@ -4,14 +4,6 @@
 #ifndef VAR_H
 #define VAR_H
 
-/*Define Simulation Dimension*/
-#ifndef SIMDIM
-#define SIMDIM 2
-#endif
-
-// #ifndef NTHREADS
-// #define NTHREADS 4
-// #endif
 
 #include <limits>
 #include <vector>
@@ -29,18 +21,6 @@
 #include "Third_Party/NanoFLANN/utils.h"
 #include "Third_Party/NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 
-#ifdef DEBUG
-	/*Open debug file to write to*/	
-	std::ofstream dbout("WCSPH.log",std::ios::out);
-#endif
-
-// std::ofstream pertLog("cellPert.log",std::ios::out);
-
-// Define pi
-#ifndef M_PI
-#define M_PI (4.0*atan(1.0))
-#endif
-
 using std::vector;
 using std::cout;
 using std::cerr;
@@ -49,6 +29,25 @@ using std::ofstream;
 using std::endl;
 using std::string; 
 using std::setw;
+
+#ifdef DEBUG
+	/*Open debug file to write to*/	
+	std::ofstream dbout("WCSPH.log",std::ios::out);
+#endif
+
+std::ofstream dambreak("Dam_Data.log",std::ios::out);
+
+// std::ofstream pertLog("cellPert.log",std::ios::out);
+
+/*Define Simulation Dimension*/
+#ifndef SIMDIM
+#define SIMDIM 2
+#endif
+
+// Define pi
+#ifndef M_PI
+#define M_PI (4.0*atan(1.0))
+#endif
 
 /* Define data type. */
 #ifndef FOD
@@ -81,6 +80,8 @@ typedef Eigen::Matrix<real,SIMDIM,SIMDIM> StateMatD;
 typedef Eigen::Matrix<real, SIMDIM+1,1> StateP1VecD;
 typedef Eigen::Matrix<real, SIMDIM+1, SIMDIM+1> StateP1MatD;
 
+const std::string WHITESPACE = " \n\r\t\f\v";
+
 #if SIMDIM == 3
 	#include "VLM.h"
 #endif
@@ -99,35 +100,37 @@ typedef Eigen::Matrix<real, SIMDIM+1, SIMDIM+1> StateP1MatD;
                     initializer(omp_priv = omp_orig) 
 
 /*Define particle type indexes*/
-typedef struct PState{
-	PState()
-	{
-		BOUND_ = 0;
-	    PISTON_ = 1;
-		BUFFER_ = 2;
-		BACK_ = 3; 
-		PIPE_ = 4;
-		FREE_ = 5;
-		GHOST_ = 6;
-	}
+// typedef struct PState{
+// 	PState()
+// 	{
+// 		BOUND_ = 0;
+// 	    PISTON_ = 1;
+// 		BUFFER_ = 2;
+// 		BACK_ = 3; 
+// 		PIPE_ = 4;
+// 		FREE_ = 5;
+// 		GHOST_ = 6;
+// 	}
 
-	size_t BOUND_ ,
-    PISTON_,
-	BUFFER_, 
-	BACK_,
-	PIPE_,
-	FREE_,
-	GHOST_;
-} PState;
+// 	size_t BOUND_ ,
+//     PISTON_,
+// 	BUFFER_, 
+// 	BACK_,
+// 	PIPE_,
+// 	FREE_,
+// 	GHOST_;
+// } PState;
+
+enum partType{BOUND=0,PISTON,BUFFER,BACK,PIPE,FREE,GHOST};
 
 #ifndef TRUE
 #define TRUE  1
 #define FALSE 0
 #endif
 
-PState PartState;
+// PState PartState;
 
-real random(int const& interval)
+inline real random(int const& interval)
 {
 	return real(rand() % interval - interval / 2) * MERROR;
 }
@@ -204,6 +207,7 @@ typedef struct SIM {
 		tMom = 0; aMom = 0;
 	
 		/* SPHPart tracking settings */
+		using_ipt = 0;
 		eqOrder = 2;
 		max_x_sph = 9999999;
 		max_x = 9999999;
@@ -236,6 +240,7 @@ typedef struct SIM {
 	vector<int32_t> varTypes;
 
 	ofstream surfacefile; /* Surface impact file */
+	void* surfaceHandle;
 
 	/* Output type */
 	uint out_encoding;              /*ASCII or binary output*/
@@ -296,6 +301,7 @@ typedef struct SIM {
 	vector<vector<size_t>> buffer;  /* ID of particles inside the buffer zone */
 
 	#if SIMDIM == 3
+		string vlm_file;
 		VLM vortex;
 	#endif
 	StateVecD Force, AForce;					/*Total Force*/
@@ -303,12 +309,16 @@ typedef struct SIM {
 	real tMom, aMom;
 	
 	/* Particle tracking settings */
+	int using_ipt;
 	int eqOrder;
-	real max_x_sph, max_x;
+	real max_x_sph, max_x; /* Transition distance for sph (naive assumption) and termination for IPT */
 	size_t nSuccess, nFailed;
 	real IPT_diam, IPT_area;
 	uint cellsout, streakout, partout; /* Whether to output for particle tracking */
 	ofstream cellfile, streakfile, partfile; /* File handles for particle tracking */
+	void* cellHandle; /*TECIO file handles*/
+	void* streakHandle;
+	void* partHandle;
 
 	/*Post Processessing settings*/
 	uint afterSim;
@@ -328,6 +338,7 @@ typedef struct FLUID {
 		H = -1;
 		HSQ = -1;
 		sr = -1;
+		Hfac = 1.5;
 		Wdx = -1;
 
 		rho0 = 1000;
@@ -344,6 +355,7 @@ typedef struct FLUID {
 		delta = 0.1;
 	}
 	real H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
+	real Hfac;
 	real Wdx;                   /*Kernel value at the initial particle spacing distance.*/
 	real rho0, rhoJ; 			/*Resting Fluid density*/
 	real pPress;		/*Starting pressure in pipe*/
@@ -372,24 +384,53 @@ typedef struct AERO
 	AERO()
 	{
 		Cf = 1.0/3.0;
-		Ck = 8;
-		Cd = 5;
+		Ck = 8.0;
+		Cd = 5.0;
 		Cb = 0.5;
 
-		qInf = 0;
-		vRef = 0;
-		pRef = 101353;
+		qInf = 0.0;
+		vRef = 0.0;
+		pRef = 101353.0;
 		rhog = 1.29251;
 		mug = 1.716e-5;
-		T = 298;
-		Rgas = 287;
+		T = 298.0;
+		Rgas = 287.0;
+		gamma = 1.403;
+		sos = sqrt(T*Rgas*gamma);
+		MRef = -1.0;
 
 		acase = 0;
 		vStart = StateVecD::Zero();
 		vInf = StateVecD::Zero();
-		vJetMag = -1;
+		vJetMag = -1.0;
 	}
 
+	void GetYcoef(const FLUID& fvar, const real diam)
+	{
+		#if SIMDIM == 3
+			L = diam * std::cbrt(3.0/(4.0*M_PI));
+		#endif
+		#if SIMDIM == 2
+			L = diam/sqrt(M_PI);
+		#endif
+
+		// L = diam / 2.0; pow(diam,1.25)/2.0;
+
+		
+		td = (2.0*fvar.rho0*pow(L,SIMDIM-1))/(Cd*fvar.mu);
+
+		omega = sqrt((Ck*fvar.sig)/(fvar.rho0*pow(L,SIMDIM))-1.0/pow(td,2.0));
+
+		tmax = -2.0 *(atan(sqrt(pow(td*omega,2.0)+1)
+						+td*omega) - M_PI)/omega;
+
+		Cdef = 1.0 - exp(-tmax/td)*(cos(omega*tmax)+
+			1/(omega*td)*sin(omega*tmax));
+		ycoef = 0.5*Cdef*(Cf/(Ck*Cb))*(rhog*L)/fvar.sig;
+
+		//cout << ycoef << "  " << Cdef << "  " << tmax << "  " << endl;
+	}
+	
 	/*Gissler Parameters*/
 	real L;
 	real td;
@@ -403,12 +444,15 @@ typedef struct AERO
 
 	/* Gas Properties*/
 	real qInf, vRef, pRef;         /*Reference gas values*/
-	real MRef;
+	
 	real rhog, mug;
 	real gasM;					   /*A gas particle mass*/
 	real T;						   /*Temperature*/
 	real Rgas;                     /*Specific gas constant*/
-
+	real gamma;                    /* Ratio of specific heats */
+	real sos;                      /* Speed of sound */
+	real MRef;    
+	
 	string aero_case;
 	int acase;	                   /*Aerodynamic force case*/
 	StateVecD vStart, vInf;          /*Jet & Freestream velocity*/
@@ -424,9 +468,9 @@ typedef struct MESH
 {
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	/*Standard contructor*/
-	MESH(){}
+	MESH():scale(1.0),maxlength(9999999){}
 
-	size_t size()
+	inline size_t size()
 	{
 		return elems.size();
 	}
@@ -521,6 +565,7 @@ typedef class DELTAP {
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 		DELTAP(size_t const& size)
 		{
+			npd = 0.0;
 			L = vector<StateMatD>(size,StateMatD::Zero());
 			gradRho = vector<StateVecD>(size,StateVecD::Zero());
 			norm = vector<StateVecD>(size,StateVecD::Zero());
@@ -530,11 +575,12 @@ typedef class DELTAP {
 			lam_nb = vector<real>(size,0.0);
 			lam_ng = vector<real>(size,0.0);
 			kernsum = vector<real>(size,0.0);
+			colour = vector<real>(size,0.0);
 		}
 
 		DELTAP(){}
 
-		void realloc(size_t const& size)
+		inline void realloc(size_t const& size)
 		{
 			if(L.size() != 0)
 				clear();
@@ -542,25 +588,25 @@ typedef class DELTAP {
 			alloc(size);
 		}
 
-		void update(vector<StateMatD> const& L_, vector<StateVecD> const& gradRho_, 
+		inline void update(vector<StateMatD> const& L_, vector<StateVecD> const& gradRho_, 
 			vector<StateVecD> const& norm_, vector<StateVecD> const& avgV_,
 			vector<real> const& lam_, vector<real> const& lam_nb_, vector<real> const& lam_ng_,
-			vector<real> const& kernsum_)
+			vector<real> const& kernsum_, vector<real> const& colour_)
 		{
 			L = L_; gradRho = gradRho_; norm = norm_; 
 			avgV = avgV_; lam = lam_; lam_nb = lam_nb_; lam_ng = lam_ng_;
-			kernsum = kernsum_;
+			kernsum = kernsum_; colour = colour_;
 		}
 
-		void clear()
+		inline void clear()
 		{
 			L.clear(); gradRho.clear(); norm.clear(); 
 			avgV.clear(); lam.clear(); lam_nb.clear(); lam_ng.clear();
-			kernsum.clear();
+			kernsum.clear(); colour.clear();
 
 		}
 
-		void erase(size_t const& start, size_t const& end)
+		inline void erase(size_t const& start, size_t const& end)
 		{
 			L.erase(L.begin()+start, L.begin()+end);
 			gradRho.erase(gradRho.begin()+start, gradRho.begin()+end);
@@ -570,7 +616,10 @@ typedef class DELTAP {
 			lam_nb.erase(lam_nb.begin()+start, lam_nb.begin()+end);
 			lam_ng.erase(lam_ng.begin()+start, lam_ng.begin()+end);
 			kernsum.erase(kernsum.begin()+start, kernsum.begin()+end);
+			colour.erase(colour.begin()+start, colour.begin()+end);
 		}
+
+		real npd;
 
 		vector<StateMatD> L;
 		vector<StateVecD> gradRho;
@@ -580,12 +629,13 @@ typedef class DELTAP {
 		vector<real> lam;		/* Eigenvalues with all particles considered */
 		vector<real> lam_nb; 	/* Eigenvalues without boundary particles (and ghost particles) */
 		vector<real> lam_ng; 	/* Eigenvalues without ghost particles */
-		vector<real> kernsum;
+		vector<real> kernsum;	/* Summation of the kernel */
+		vector<real> colour;    /* Kernel sum with volume considered. */
 
 
 	private:
 
-		void alloc(size_t const& size)
+		inline void alloc(size_t const& size)
 		{
 			L = vector<StateMatD>(size);
 			gradRho = vector<StateVecD>(size);
@@ -593,7 +643,9 @@ typedef class DELTAP {
 			avgV = vector<StateVecD>(size);
 			lam = vector<real>(size);
 			lam_nb = vector<real>(size);
+			lam_ng = vector<real>(size);
 			kernsum = vector<real>(size);
+			colour = vector<real>(size);
 		}
 
 
@@ -606,11 +658,12 @@ typedef struct SPHPart {
 		real const press, int const bound, uint const pID)
 	{
 		partID = pID; cellID = 0; faceID = 0;
-		b = bound; surf = 0;
+		b = bound; surf = 0; nFailed = 0;
 
 		xi = X;	v = Vi; acc = StateVecD::Zero(); Af = StateVecD::Zero();
+		aVisc = StateVecD::Zero(); norm = StateVecD::Zero();
 		Rrho = 0.0; rho = Rhoi; p = press; m = Mi; 
-		s = 0.0; woccl = 0.0; pDist = 0.0;
+		curve = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0; deltaD = 0.0;
 					
 		cellV = StateVecD::Zero();
 		cellP = 0.0; cellRho = 0.0;
@@ -619,15 +672,16 @@ typedef struct SPHPart {
 		vPert = StateVecD::Zero(); 
 	}
 
-	/*To add particles dynamically for boundary layer*/
+	/*To add particles dynamically for fictitious particles*/
 	SPHPart(StateVecD const& X, SPHPart const& pj, int const bound, size_t const pID)
 	{
 		partID = pID; cellID = 0; faceID = 0;
-		b = bound; surf = 0;
+		b = bound; surf = 0; nFailed = 0;
 
 		xi = X;	v = pj.v; acc = StateVecD::Zero(); Af = StateVecD::Zero();
+		aVisc = StateVecD::Zero(); norm = StateVecD::Zero();
 		Rrho = 0.0; rho = pj.rho; p = pj.p; m = pj.m;
-		s = 0.0; woccl = 0.0; pDist = 0.0;
+		curve = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0; deltaD = 0.0;
 
 		cellV = StateVecD::Zero();
 		cellP = 0.0; cellRho = 0.0;
@@ -638,12 +692,12 @@ typedef struct SPHPart {
 
 	SPHPart(){};
 
-	int size() const
+	inline int size() const
 	{	/*For neighbour search, return size of xi vector*/
 		return(xi.size());
 	}
 
-	real operator[](int a) const
+	inline real operator[](int a) const
 	{	/*For neighbour search, return index of xi vector*/
 		return(xi[a]);
 	}
@@ -651,8 +705,10 @@ typedef struct SPHPart {
 	size_t partID, cellID, faceID;
 	uint b; //What state is a particle. See PartState above for possible options
 	uint surf; /*Is a particle a surface? 1 = yes, 0 = no*/
-	StateVecD xi, v, acc, Af;
-	real Rrho, rho, p, m, s, woccl, pDist;
+	uint nFailed; /* How many times has the containment query failed */
+	StateVecD xi, v, acc, Af, aVisc;
+	real Rrho, rho, p, m, curve, s, woccl, pDist, deltaD;
+	StateVecD norm;
 	StateVecD cellV;
 	real cellP, cellRho;
 	uint internal; 
@@ -672,11 +728,10 @@ typedef struct IPTPart
 		partID = 0;
 		going = 1;
 		nIters = 0;
-		nNotFound = 0;
 		failed = 0;
 		t = 0; dt = 0;
 
-		/* Set ininial IDs to a nonsense value, so that they don't interfere */
+		/* Set initial IDs to a nonsense value, so that they don't interfere */
 		faceID = -1; 
 		faceV = StateVecD::Zero();
 		faceRho = 0.0;
@@ -699,11 +754,10 @@ typedef struct IPTPart
 		partID = 0;
 		going = 1;
 		nIters = 0;
-		nNotFound = 0;
 		failed = 0;
 		t = 0; dt = 0;
 
-		/* Set ininial IDs to a nonsense value, so that they don't interfere */
+		/* Set initial IDs to a nonsense value, so that they don't interfere */
 		faceID = -1; 
 		faceV = StateVecD::Zero();
 		faceRho = 0.0;
@@ -726,11 +780,10 @@ typedef struct IPTPart
 		partID = pID_;
 		going = 1;
 		nIters = 0;
-		nNotFound = 0;
 		failed = 0;
 		t = 0; dt = 0;
 
-		/* Set ininial IDs to a nonsense value, so that they don't interfere */
+		/* Set initial IDs to a nonsense value, so that they don't interfere */
 		faceID = -1; 
 		faceV = StateVecD::Zero();
 		faceRho = 0.0;
@@ -753,11 +806,10 @@ typedef struct IPTPart
 		partID = pi.partID;
 		going = 1;
 		nIters = 0;
-		nNotFound = 0;
 		failed = 0;
 		t = time; dt = 0;
 
-		/* Set ininial IDs to a nonsense value, so that they don't interfere */
+		/* Set initial IDs to a nonsense value, so that they don't interfere */
 		faceID = -1; 
 		faceV = StateVecD::Zero();
 		faceRho = 0.0;
@@ -780,7 +832,6 @@ typedef struct IPTPart
 	size_t partID;
 	uint going; /* Is particle still being integrated */
 	uint nIters; /* How many integration steps it's gone through */
-	size_t nNotFound;
 	size_t failed;
 
 	/* Timestep properties */

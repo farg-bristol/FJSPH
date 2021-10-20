@@ -150,7 +150,7 @@ void Average_Point_to_Cell(vector<StateVecD> const &pData, vector<StateVecD> &cD
 {
 	vector<StateVecD> sum(elems.size(), StateVecD::Zero());
 
-	#pragma omp parallel for reduction(+ : sum)
+	#pragma omp parallel for reduction(+ : sum) default(shared)
 	for (uint ii = 0; ii < elems.size(); ++ii)
 	{
 
@@ -170,7 +170,7 @@ void Average_Point_to_Cell(vector<real> const &pData, vector<real> &cData,
 {
 	vector<real> sum(elems.size(), 0.0);
 
-	#pragma omp parallel for reduction(+ : sum)
+	#pragma omp parallel for reduction(+ : sum) default(shared)
 	for (uint ii = 0; ii < elems.size(); ++ii)
 	{
 
@@ -193,31 +193,37 @@ namespace TAU
 	void Get_Dim_ID(int& meshID, string const& dim, int& dimID)
 	{
 		int retval = 0;
-		if ((retval = nc_inq_dimid(meshID, dim.c_str(), &dimID)))
+		int dimID_;
+		if ((retval = nc_inq_dimid(meshID, dim.c_str(), &dimID_)))
 		{
 			ERR(retval);
 			exit(-1);
 		}
+		dimID = dimID_;
 	}
 
 	void Get_Dim_Length(int& meshID, int const& dimID, size_t& dimLen)
 	{
 		int retval = 0;
-		if ((retval = nc_inq_dimlen(meshID, dimID, &dimLen)))
+		size_t dimLen_;
+		if ((retval = nc_inq_dimlen(meshID, dimID, &dimLen_)))
 		{
 			ERR(retval);
 			exit(-1);
 		}
+		dimLen = dimLen_;
 	}
 
 	void Get_Var_ID(int &meshID, string const &var, int &varID)
 	{
 		int retval = 0;
-		if ((retval = nc_inq_varid(meshID, var.c_str(), &varID)))
+		int varID_;
+		if ((retval = nc_inq_varid(meshID, var.c_str(), &varID_)))
 		{
 			cout << "Failed to get the variable ID of \"" << var << "\"" << endl;
 			ERR(retval);
 		}
+		varID = varID_;
 	}
 
 	void Find_Angle_Alpha(SIM& svar)
@@ -659,6 +665,10 @@ namespace TAU
 	{
 		cout << "Reading solution file..." << endl;
 
+		#ifdef DEBUG
+			dbout << "Opening solultion file." << endl;
+		#endif 
+
 		int retval;
 		int solID;
 
@@ -727,7 +737,7 @@ namespace TAU
 		/*Test for size*/
 		if (xvel.size() == solPts)
 		{ /*Turn the arrays into a state vector*/
-			#pragma omp parallel for
+			#pragma omp parallel for default(shared)
 			for (uint ii = 0; ii < solPts; ++ii)
 			{
 				#if SIMDIM == 3
@@ -770,12 +780,12 @@ namespace TAU
 
 		// vector<real> dens(solPts);
 
-		#pragma omp parallel for
-		for (uint ii = 0; ii < press.size(); ++ii)
-		{
-			press[ii] -= avar.pRef; /* Want value to be gauge pressure */
-			// dens[ii] = fvar.rho0 * pow((press[ii] / fvar.B + 1), 1 / fvar.gam);
-		}
+		// #pragma omp parallel for
+		// for (uint ii = 0; ii < press.size(); ++ii)
+		// {
+		// 	press[ii] -= avar.pRef; /* Want value to be gauge pressure */
+		// 	// dens[ii] = fvar.rho0 * pow((press[ii] / fvar.B + 1), 1 / fvar.gam);
+		// }
 
 		if (press.size() == 0)
 		{
@@ -842,12 +852,38 @@ namespace TAU
 		vector<int> left = Get_Scalar_Property_int(fin,"left_element_of_edges",nEdge);
 		vector<int> right = Get_Scalar_Property_int(fin,"right_element_of_edges",nEdge);
 
+		// vector<std::pair<int, int>> leftright(nEdge);
+
+		// #pragma omp parallel default(shared) //shared(leftright) 
+		// {
+		// 	/*Create local of */
+
+		// 	#pragma omp for schedule(static) nowait
+		// 	for (size_t ii = 0; ii < nEdge; ++ii)
+		// 	{
+		// 		int lindex = left[ii];
+		// 		int rindex = right[ii];
+		// 		leftright[ii] = std::pair<int, int>(lindex, rindex);
+		// 		#pragma omp critical
+		// 		{
+		// 			cells.cFaces[lindex].emplace_back(ii);
+		// 			if (rindex >= 0)
+		// 				cells.cFaces[rindex].emplace_back(ii);
+		// 		}
+		// 	}
+		// }
+
+		
+		vector<int> markers = Get_Scalar_Property_int(fin,"boundarymarker_of_surfaces",cells.nSurf);
+
 		vector<std::pair<int, int>> leftright(nEdge);
-
-		#pragma omp parallel shared(leftright)
+		cells.smarkers = vector<std::pair<size_t,int>>(cells.nSurf);
+	
+		vector<size_t> surf_IDs;
+		#pragma omp parallel default(shared)/* shared(leftright) */
 		{
-			/*Create local of */
-
+			real maxedge = 0.0;
+			vector<size_t> local;
 			#pragma omp for schedule(static) nowait
 			for (size_t ii = 0; ii < nEdge; ++ii)
 			{
@@ -857,9 +893,50 @@ namespace TAU
 				#pragma omp critical
 				{
 					cells.cFaces[lindex].emplace_back(ii);
-					if (rindex >= 0)
+					if(rindex >= 0)
 						cells.cFaces[rindex].emplace_back(ii);
+					else
+					{
+						local.emplace_back(ii);
+					}
 				}
+
+				/* Find the longest edge */
+				real max_e = 0.0;
+				
+				vector<size_t> const& face = cells.faces[ii];
+				max_e = (cells.verts[face[0]] - cells.verts[face[1]]).norm();
+				
+				if(max_e > maxedge)
+					maxedge = max_e;
+			}
+
+			#pragma omp for schedule(static) ordered
+			for(int ii = 0; ii < omp_get_num_threads(); ++ii)
+			{
+				#pragma omp ordered
+				{
+					surf_IDs.insert(surf_IDs.end(),local.begin(),local.end());
+					// if(maxedge > cells.maxlength)
+						cells.maxlength = 2*maxedge; // Provides a sanity reference for particle tracking
+				}
+			}
+
+			#pragma omp single
+			{
+				if(surf_IDs.size() != cells.nSurf)
+				{
+					cout << "Mismatch of number of surface faces identified, and the number given" << endl;
+					cout << "Identified: " << surf_IDs.size() << "  Given: " << cells.nSurf << endl;
+					exit(-1);
+				}
+			}
+
+			#pragma omp for schedule(static) nowait
+			for(size_t ii = 0; ii < cells.nSurf; ++ii)
+			{
+				cells.smarkers[ii].first = surf_IDs[ii];
+				cells.smarkers[ii].second = markers[ii];
 			}
 		}
 
@@ -871,7 +948,7 @@ namespace TAU
 
 		/*Now go through the faces and see which vertices are unique, to get element data*/
 		cout << "Building elements..." << endl;
-		#pragma omp parallel
+		#pragma omp parallel default(shared)
 		{
 			// vector<vector<uint>> local;
 			#pragma omp for schedule(static) nowait
@@ -922,7 +999,7 @@ namespace TAU
 		#endif
 	}
 
-	void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &avar)
+	void Read_TAUMESH_EDGE(SIM &svar, MESH &cells, FLUID const &fvar, AERO const &avar, vector<uint>& uVerts)
 	{
 		string meshIn = svar.taumesh;
 		string solIn = svar.tausol;
@@ -946,10 +1023,10 @@ namespace TAU
 			exit(-1);
 		}
 
-		cout << "Mesh file open. Reading face data..." << endl;
+		cout << "Mesh file open. Reading edge data..." << endl;
 
-		int ptDimID, elemDimID, edgeDimID, nPpEDimID;
-		size_t nPnts, nElem, nEdge, nPpEd;
+		int ptDimID, elemDimID, edgeDimID, nPpEDimID, surfDimID;
+		size_t nPnts, nElem, nEdge, nPpEd, nSurf;
 
 		// Retrieve how many elements there are.
 		Get_Dim_ID(meshID,"no_of_elements",elemDimID);
@@ -964,19 +1041,23 @@ namespace TAU
 		Get_Dim_ID(meshID,"points_per_edge",nPpEDimID);
 		Get_Dim_Length(meshID, nPpEDimID, nPpEd);
 
+		Get_Dim_ID(meshID,"no_of_surfaceelements", surfDimID);
+		Get_Dim_Length(meshID, surfDimID, nSurf);
+
 		Get_Dim_ID(meshID, "no_of_points", ptDimID);
 		Get_Dim_Length(meshID, ptDimID, nPnts);
 
 
 		#ifdef DEBUG
-			dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << endl;
+			dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << " nSurf: " << nSurf << endl;
 		#endif
 
-		cout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << endl;
+		cout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << " nSurf: " << nSurf << endl;
 
 		cells.nPnts = nPnts;
 		cells.nElem = nElem;
 		cells.nFace = nEdge;
+		cells.nSurf = nSurf;
 
 		cells.elems = vector<vector<size_t>>(nElem);
 		cells.cFaces = vector<vector<size_t>>(nElem);
@@ -995,12 +1076,12 @@ namespace TAU
 			dbout << "Successfully read vertices_in_use data." << endl;
 		#endif
 
-		vector<uint> uVerts(nPnts);
+		uVerts.resize(nPnts);
 		for (size_t ii = 0; ii < nPnts; ++ii)
 			uVerts[ii] = static_cast<uint>(usedVerts[ii]);
 
 		/*Get the coordinates of the mesh*/
-		uint ignored = Get_Coordinates(meshID, nPnts, cells.verts);
+		(void)Get_Coordinates(meshID, nPnts, cells.verts);
 		if (cells.verts.size() != nPnts)
 		{
 			cout << "Some data has been missed.\nPlease check how many points." << endl;
@@ -1022,10 +1103,8 @@ namespace TAU
 		#ifdef DEBUG
 			dbout << "End of interaction with mesh file and ingested data." << endl
 				<< endl;
-			dbout << "Opening solultion file." << endl;
+			
 		#endif
-
-		Read_SOLUTION(solIn, fvar, avar, ignored, cells, uVerts);
 
 		for (size_t ii = 0; ii < cells.cMass.size(); ii++)
 		{
@@ -1048,9 +1127,34 @@ namespace TAU
 		vector<int> left = Get_Scalar_Property_int(fin,"left_element_of_faces",nFace);
 		vector<int> right = Get_Scalar_Property_int(fin,"right_element_of_faces",nFace);
 
+		// vector<std::pair<int, int>> leftright(nFace);
+		// #pragma omp parallel default(shared) // shared(leftright)
+		// {
+		// 	#pragma omp for schedule(static) nowait
+		// 	for (size_t ii = 0; ii < nFace; ++ii)
+		// 	{
+		// 		int lindex = left[ii];
+		// 		int rindex = right[ii];
+		// 		leftright[ii] = std::pair<int, int>(lindex, rindex);
+		// 		#pragma omp critical
+		// 		{
+		// 			cells.cFaces[lindex].emplace_back(ii);
+		// 			if (rindex >= 0)
+		// 				cells.cFaces[rindex].emplace_back(ii);
+		// 		}
+		// 	}
+		// }
+
+		vector<int> markers = Get_Scalar_Property_int(fin,"boundarymarker_of_surfaces",cells.nSurf);
+
 		vector<std::pair<int, int>> leftright(nFace);
+		cells.smarkers = vector<std::pair<size_t,int>>(cells.nSurf);
+	
+		vector<size_t> surf_IDs;
 		#pragma omp parallel shared(leftright)
 		{
+			real maxedge = 0.0;
+			vector<size_t> local;
 			#pragma omp for schedule(static) nowait
 			for (size_t ii = 0; ii < nFace; ++ii)
 			{
@@ -1060,9 +1164,64 @@ namespace TAU
 				#pragma omp critical
 				{
 					cells.cFaces[lindex].emplace_back(ii);
-					if (rindex >= 0)
+					if(rindex >= 0)
 						cells.cFaces[rindex].emplace_back(ii);
+					else
+					{
+						local.emplace_back(ii);
+					}
 				}
+
+				/* Find the longest edge */
+				real max_e = 0.0;
+				if(cells.faces[ii].size() == 3)
+				{
+					vector<size_t> const& face = cells.faces[ii];
+					max_e = std::max((cells.verts[face[0]] - cells.verts[face[1]]).norm(),
+							std::max((cells.verts[face[0]] - cells.verts[face[2]]).norm(),
+									(cells.verts[face[1]] - cells.verts[face[2]]).norm()));
+				}
+				else
+				{
+					/* Assume the diagonals are the longest edges*/
+					/* Untrue for a trapezium, but not needed to be perfectly accurate */
+					vector<size_t> const& face = cells.faces[ii];
+					max_e = std::max((cells.verts[face[0]] - cells.verts[face[2]]).norm(),
+									(cells.verts[face[1]] - cells.verts[face[3]]).norm());
+
+				}
+
+				if(max_e > maxedge)
+					maxedge = max_e;
+				
+			}
+
+			#pragma omp for schedule(static) ordered
+			for(int ii = 0; ii < omp_get_num_threads(); ++ii)
+			{
+				#pragma omp ordered
+				{
+					surf_IDs.insert(surf_IDs.end(),local.begin(),local.end());
+					// if(maxedge > cells.maxlength)
+						// cells.maxlength = 5*maxedge;
+				}
+			}
+
+			#pragma omp single
+			{
+				if(surf_IDs.size() != cells.nSurf)
+				{
+					cout << "Mismatch of number of surface faces identified, and the number given" << endl;
+					cout << "Identified: " << surf_IDs.size() << "  Given: " << cells.nSurf << endl;
+					exit(-1);
+				}
+			}
+
+			#pragma omp for schedule(static) nowait
+			for(size_t ii = 0; ii < cells.nSurf; ++ii)
+			{
+				cells.smarkers[ii].first = surf_IDs[ii];
+				cells.smarkers[ii].second = markers[ii];
 			}
 		}
 
@@ -1075,7 +1234,7 @@ namespace TAU
 
 		/*Now go through the faces and see which vertices are unique, to get element data*/
 		cout << "Building elements..." << endl;
-		#pragma omp parallel
+		#pragma omp parallel default(shared)
 		{
 			// Create list of unique vertex indices for each element
 			#pragma omp for schedule(static) nowait
@@ -1171,7 +1330,6 @@ namespace TAU
 		Get_Dim_ID(meshID,"no_of_surfaceelements", surfDimID);
 		Get_Dim_Length(meshID, surfDimID, nSurf);
 
-
 		// Retrieve triangle face dimensions
 		if ((retval = nc_inq_dimid(meshID, "no_of_triangles", &faceTDimID)))
 		{
@@ -1203,10 +1361,10 @@ namespace TAU
 		}
 
 		#ifdef DEBUG
-			dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << endl;
+			dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << " nSurf: " << nSurf << endl;
 		#endif
 
-		cout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << endl;
+		cout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << " nSurf: " << nSurf << endl;
 
 		cells.nPnts = nPnts;
 		cells.nElem = nElem;
@@ -1262,9 +1420,6 @@ namespace TAU
 				<< endl;
 			dbout << "Opening solultion file." << endl;
 		#endif
-		vector<uint> empty;
-		uint ignored = 0;
-		Read_SOLUTION(solIn, fvar, avar, ignored, cells, empty);
 
 		for (size_t ii = 0; ii < cells.cMass.size(); ii++)
 		{

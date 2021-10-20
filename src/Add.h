@@ -1,12 +1,12 @@
 /*********   WCSPH (Weakly Compressible Smoothed Particle Hydrodynamics) Code   *************/
 /*********        Created by Jamie MacLeod, University of Bristol               *************/
 
-#ifndef CROSS_H
-#define CROSS_H
+#ifndef ADD_H
+#define ADD_H
 
 #include "Var.h"
-// #include "IOFunctions.h"
 #include "Containment.h"
+#include "Neighbours.h"
 #include <random>
 #include <stdint.h>
 #include <time.h>
@@ -187,7 +187,7 @@ void Add_Radial_Points(real const y, SIM& svar, FLUID const& fvar, AERO const& a
 		int ncirc = floor(abs(2.0 * M_PI / dtheta));
 		dtheta = 2.0 * M_PI / real(ncirc);
 		
-		for(real theta = 0.0; theta < 2*M_PI; theta += dtheta)
+		for(real theta = 0.0; theta < 2*M_PI-0.5*dtheta; theta += dtheta)
 		{	/* Create a ring of points */
 			real x = rad * sin(theta);
 			real z = rad * cos(theta);
@@ -217,7 +217,7 @@ void Add_Buffer(SIM& svar, FLUID const& fvar, SPHState& pn)
 {
 	for (size_t ii = svar.totPts - svar.nrefresh; ii < svar.totPts; ++ii)
 	{ /*Fill the vector of the last particles*/
-		pn[ii].b = PartState.BACK_;
+		pn[ii].b = BACK;
 		svar.back.emplace_back(ii);
 	}
 
@@ -232,7 +232,7 @@ void Add_Buffer(SIM& svar, FLUID const& fvar, SPHState& pn)
 			SPHPart const& pi = pn[svar.back[jj]];
 			StateVecD xi = pi.xi;
 			xi[1] -= real(level+1.0)*svar.dx;
-			pn.emplace_back(SPHPart(xi, pi, PartState.BUFFER_, pID));
+			pn.emplace_back(SPHPart(xi, pi, BUFFER, pID));
 			svar.buffer[jj][level] = pID;
 			++pID;
 			++svar.simPts;
@@ -245,7 +245,7 @@ void Add_Buffer(SIM& svar, FLUID const& fvar, SPHState& pn)
 	// {
 	// 	StateVecD xi = pn[pi].xi;
 	// 	xi[1] -= itr*svar.dx;
-	// 	pn.emplace_back(SPHPart(xi, pn[pi], PartState.BACK, pID));
+	// 	pn.emplace_back(SPHPart(xi, pn[pi], BACK, pID));
 	// 	pi = pID;
 	// 	++pID;
 	// 	++svar.simPts;
@@ -257,7 +257,7 @@ void Add_Buffer(SIM& svar, FLUID const& fvar, SPHState& pn)
 void CreateDroplet(SIM &svar, const FLUID &fvar, SPHState &pn)
 {
 	size_t pID = svar.totPts;
-	size_t const& pState = PartState.FREE_;
+	size_t const& pState = FREE;
 	StateVecD v = StateVecD::Zero();
 	real rho = fvar.simM/pow(svar.dx,SIMDIM);
 	// real rho = fvar.rho0;
@@ -463,7 +463,7 @@ void CreateDroplet(SIM &svar, const FLUID &fvar, SPHState &pn)
 
 void CreateRDroplet(SIM& svar, FLUID const& fvar, SPHState& pn)
 {
-	size_t const& pState = PartState.FREE_;
+	size_t const& pState = FREE;
 	#if SIMDIM == 3
 		StateVecD xi = StateVecD::Zero();
 		StateVecD v = StateVecD::Zero();
@@ -985,8 +985,8 @@ namespace PoissonSample
 				{
 					processList.push_back(newPoint);
 					// StateVecD Point = newPoint+origin;
-					samplePoints.push_back(SPHPart(newPoint+origin,StateVecD::Zero(),0.0,0.0,0.0,PartState.GHOST_,0));
-					airP.emplace_back(SPHPart(newPoint+origin,vel,press,rho,mass,PartState.GHOST_,pID));
+					samplePoints.push_back(SPHPart(newPoint+origin,StateVecD::Zero(),0.0,0.0,0.0,GHOST,0));
+					airP.emplace_back(SPHPart(newPoint+origin,vel,press,rho,mass,GHOST,pID));
 					pID++;
 					grid.insert(newPoint);
 					// cout << "New Point: " << point(0) << " " << point(1) << endl;
@@ -1048,7 +1048,7 @@ inline void check_if_too_close(Sim_Tree const& NP1_INDEX, real const& sr, SPHSta
 	if(out_dists_sqr[0] > sr)
 	{
 		/* it's far enough away, so point can be added to the array */
-		ghost_particles.emplace_back(SPHPart(xi, vel, dens, mass, press, PartState.GHOST_, pID));
+		ghost_particles.emplace_back(SPHPart(xi, vel, dens, mass, press, GHOST, pID));
 		nGhost++;
 	}
 }
@@ -1226,7 +1226,7 @@ void Check_If_Ghost_Needs_Removing(SIM& svar, FLUID const& fvar, Sim_Tree& NP1_I
 	nanoflann::SearchParams const params(0,0,false);
 	real const search_radius = (2*fvar.H+svar.dx)*(2*fvar.H+svar.dx);
 
-	#pragma omp parallel for
+	#pragma omp parallel for default(shared)
 	for(size_t ii = start; ii < end; ++ii)
 	{
 		uint has_interaction = 0;
@@ -1241,7 +1241,7 @@ void Check_If_Ghost_Needs_Removing(SIM& svar, FLUID const& fvar, Sim_Tree& NP1_I
 
 		for(std::pair<size_t,real> const& jj: matches)
 		{
-			if(pnp1[jj.first].b == PartState.FREE_ || pnp1[jj.first].b == PartState.PIPE_)
+			if(pnp1[jj.first].b == FREE || pnp1[jj.first].b == PIPE)
 			{
 				has_interaction = 1;
 				break;

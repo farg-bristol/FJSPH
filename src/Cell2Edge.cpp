@@ -1,9 +1,5 @@
 #include "Convert.h"
 
-#ifdef DEBUG
-	/*Open debug file to write to*/
-	std::ofstream dbout("Cell2Edge.log",std::ios::out);
-#endif
 
 /*Define Simulation Dimension*/
 #ifndef SIMDIM
@@ -17,65 +13,88 @@ typedef Eigen::Matrix<int,SIMDIM,1> StateVecI;
 typedef struct FACE
 {
 	/*Standard contructor*/
-	FACE(const uint nElem, const uint nPts)
+	FACE(uint const nElem, uint const nPts) : nPnts(nPts), nElem(nElem)
 	{
-		numElem = nElem;
-		numPoint = nPts;
-		verts.reserve(numPoint);
+		verts.reserve(nPts);
 	}
 	
 	/*Zone info*/
-	uint numPoint, numElem;
+	uint nPnts, nElem;
 
 	/*Point based data*/
 	vector<StateVecD> verts;
 
 	/*Surface faces*/
-	vector<vector<uint>> faces;
-	vector<vector<uint>> internal;
+	vector<vector<size_t>> faces;
+	vector<vector<size_t>> sfaces;
 
 	/*Face markers*/
-	// vector<int> markers;
+	vector<int> smarkers;
 }FACE;
 
 typedef class EDGE
 {
 	public:
-	EDGE(const FACE& fdata): numPoint(fdata.numPoint)
+	EDGE(const FACE& fdata) : nPnts(fdata.nPnts), nEdge(0), nSurf(0)
 	{
 		verts = fdata.verts;
-		numElem = fdata.numElem;
-		// numPoint = fdata.numPoint;
-		numEdges = 0; nFar = 0; nWall = 0;
-		// nFacesPElem = new int[fdata.numElem];
+		nElem = fdata.nElem;
 	}	
 
-	EDGE() : numPoint(0)
-	{
-		numEdges = 0; nFar = 0; nWall = 0;
-	};
+	EDGE() : nPnts(0), nEdge(0), nSurf(0) {}
 
 	void insert(const EDGE& elocal)
 	{
 		edges.insert(edges.end(),elocal.edges.begin(),elocal.edges.end());
-		wall.insert(wall.end(),elocal.wall.begin(),elocal.wall.end());
-		far.insert(far.end(),elocal.far.begin(),elocal.far.end());
 		celllr.insert(celllr.end(),elocal.celllr.begin(),elocal.celllr.end());
-		numEdges += elocal.numEdges;
-		nFar += elocal.nFar;
-		nWall += elocal.nWall;
+		smarkers.insert(smarkers.end(),elocal.smarkers.begin(),elocal.smarkers.end());
+		nEdge += elocal.nEdge;
+		nSurf += elocal.nSurf;
+		// nFar += elocal.nFar;
+		// nWall += elocal.nWall;
 	}
 
-	size_t numElem, numEdges, nFar, nWall;
+	size_t nPnts, nElem, nEdge, nSurf;
 	vector<StateVecD> verts;
 	vector<std::pair<size_t,size_t>> edges; /*edge indexes*/
 	vector<std::pair<int,int>> celllr; /*Cell left and right of the face*/
-	vector<std::pair<size_t,size_t>> wall, far;
+	vector<int> smarkers;
 	vector<uint> usedVerts;
 	// int* nFacesPElem;
 
-	uint numPoint;
 }EDGE;
+
+
+std::string ltrim(const std::string &s)
+{
+    size_t start = s.find_first_not_of(" \n\r\t\f\v");
+    return (start == std::string::npos) ? "" : s.substr(start);
+}
+ 
+std::string rtrim(const std::string &s)
+{
+    size_t end = s.find_last_not_of(" \n\r\t\f\v");
+    return (end == std::string::npos) ? "" : s.substr(0, end + 1);
+}
+
+string Get_Parameter_Value(string const& line)
+{
+    size_t pos = line.find(":");
+
+    string value = line.substr(pos + 1);
+    return ltrim(rtrim(value));
+}
+
+template<typename T>
+void Get_Number(string const& line, string const& param, T &value)
+{
+    if(line.find(param) != string::npos)
+    {
+        string temp = Get_Parameter_Value(line);
+        std::istringstream iss(temp);
+        iss >> value;
+    }
+}
 
 int Distance(vector<StateVecD> const &verts, std::pair<size_t, size_t> const &edge, size_t const &point)
 {
@@ -124,41 +143,40 @@ vector<int> Find_Bmap_Markers(const string& bmapIn, int& symPlane1, int& symPlan
 	while(getline(fin,line))
 	{
 
+		size_t end = line.find_first_of('#');
+		if(end != std::string::npos)
+			line = line.substr(0,end+1);
+
 		// cout << line << endl;
-		if(line.find("Type: symmetry plane")!=string::npos) 
+		if(line.find("Type")!=string::npos && line.find("symmetry plane")!=string::npos) 
 		{
-			
+			string line2;
 			/*This marker is a far field, so store it.*/
 			/*Go to the start of the block, and search for the marker ID*/
 			GotoLine(fin,blockstart);
-			while(getline(fin,line))
+			while(getline(fin,line2))
 			{	
+				size_t end = line2.find_first_of('#');
+				if(end != std::string::npos)
+					line2 = line2.substr(0,end+1);
 				// cout << "inner:\t" << line << endl;
-				if(line.find("Markers:")!=string::npos)
+
+				if(line2.find("Markers")!=string::npos)
 				{
 					// cout << "Found a boundary marker" << endl;
-					std::stringstream sstr(line);
-					string temp;
+					string temp = Get_Parameter_Value(line2);
+					std::istringstream sstr(temp);
 					int found;
+					sstr >> found;
 
-					while(!sstr.eof())
+					if(foundSymP == 0)
 					{
-						sstr >> temp;
-						if(std::stringstream(temp) >> found)
-						{
-							if(foundSymP == 0)
-							{
-								symPlane1 = found;
-								foundSymP++;
-							}
-							else
-							{
-								symPlane2 = found;
-							}
-							
-						}
-
-						temp = "";
+						symPlane1 = found;
+						foundSymP++;
+					}
+					else
+					{
+						symPlane2 = found;
 					}
 
 					/*Go back to where we were*/
@@ -168,39 +186,26 @@ vector<int> Find_Bmap_Markers(const string& bmapIn, int& symPlane1, int& symPlan
 				}
 			}
 		}
-		else if(line.find("Type: laminar wall")!=string::npos ||
-			line.find("Type: euler wall")!=string::npos || 
-			line.find("Type: viscous wall")!=string::npos ||
-			line.find("Type: sharp edge")!=string::npos)
+		else if(line.find("Type")!=string::npos )
 		{
-			
-			/*This marker is an internal edge so store it.*/
+			string line2;
+			/*This marker is not a symmetry plane so store it.*/
 			/*Go to the start of the block, and search for the marker ID*/
 			GotoLine(fin,blockstart);
-			while(getline(fin,line))
+			while(getline(fin,line2))
 			{	
+				size_t end = line2.find_first_of('#');
+				if(end != std::string::npos)
+					line2 = line2.substr(0,end+1);
 				// cout << "inner:\t" << line << endl;
-				if(line.find("Markers:")!=string::npos)
+				if(line2.find("Markers")!=string::npos)
 				{
-					// cout << "Found a boundary marker" << endl;
-					std::stringstream sstr;
-
-					sstr << line;
-
-					string temp;
+					string temp = Get_Parameter_Value(line2);
+					std::istringstream sstr(temp);
 					int found;
-
-					while(!sstr.eof())
-					{
-						sstr >> temp;
-						if(std::stringstream(temp) >> found)
-						{
-							markers.emplace_back(found);
-						}
-
-						temp = "";
-					}
-
+					sstr >> found;
+					markers.emplace_back(found);
+					
 					/*Go back to where we were*/
 					blockstart = lineno+2;
 					GotoLine(fin,lineno+2);
@@ -220,12 +225,6 @@ vector<int> Find_Bmap_Markers(const string& bmapIn, int& symPlane1, int& symPlan
 
 	cout << "Symmetry plane markers: " << symPlane1 << "  " << symPlane2 << endl;
 
-	cout << "Wall markers:" << endl;
-
-	for(auto mark:markers)
-	{
-		cout << mark << "  " ;
-	}
 	cout << endl;
 
 	#ifdef DEBUG
@@ -242,7 +241,7 @@ vector<StateVecD> Get_Coordinates(int& fin, size_t const& nPnts, vector<uint> co
 		dbout << "Reading coordinates." << endl;
 	#endif
 
-	vector<Eigen::Vector3d> coords = Get_Coordinate_Vector(fin, nPnts);
+	vector<Eigen::Matrix<real,3,1>> coords = Get_Coordinate_Vector(fin, nPnts);
 	/*Need to find which coordinate to ignore*/
 	#ifdef DEBUG
 		dbout << "Checking which dimension to ignore" << endl;
@@ -254,19 +253,22 @@ vector<StateVecD> Get_Coordinates(int& fin, size_t const& nPnts, vector<uint> co
 	#pragma omp parallel for
 	for(auto const ii : ptIndex)
 	{
-		if (abs(coords[ii](0)) < tolerance || (abs(coords[ii](0)) < 1 + tolerance && abs(coords[ii](0)) > 1 - tolerance))
+		if (abs(coords[ii](0)) < tolerance || 
+			(abs(coords[ii](0)) < 1 + tolerance && abs(coords[ii](0)) > 1 - tolerance))
 		{
 			#pragma omp atomic
 			counts[0]++;
 		}
 
-		if (abs(coords[ii](1)) < tolerance || (abs(coords[ii](1)) < 1 + tolerance && abs(coords[ii](1)) > 1 - tolerance))
+		if (abs(coords[ii](1)) < tolerance || 
+			(abs(coords[ii](1)) < 1 + tolerance && abs(coords[ii](1)) > 1 - tolerance))
 		{
 			#pragma omp atomic
 			counts[1]++;
 		}
 
-		if (abs(coords[ii](2)) < tolerance || (abs(coords[ii](2)) < 1 + tolerance && abs(coords[ii](2)) > 1 - tolerance))
+		if (abs(coords[ii](2)) < tolerance || 
+			(abs(coords[ii](2)) < 1 + tolerance && abs(coords[ii](2)) > 1 - tolerance))
 		{
 			#pragma omp atomic
 			counts[2]++;
@@ -314,7 +316,8 @@ vector<StateVecD> Get_Coordinates(int& fin, size_t const& nPnts, vector<uint> co
 	return coordVec;	
 }
 
-void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers, int const& symPlane1, int const& symPlane2)
+void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers, 
+				int const& symPlane1, int const& symPlane2)
 {
 	#ifdef DEBUG
 	dbout << "Entering Get_Data..." << endl;
@@ -322,7 +325,7 @@ void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers, i
 	int retval;
 
 	/*Faces*/
-	vector<vector<uint>> faceVec;
+	vector<vector<size_t>> faceVec;
 
 	int nSTDimID, nPpSTDimID;
 	size_t nSTri, nPpST;
@@ -337,7 +340,7 @@ void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers, i
 	{
 		Get_Dimension(fin, "no_of_surfacetriangles", nSTDimID, nSTri);
 		Get_Dimension(fin, "points_per_surfacetriangle", nPpSTDimID, nPpST);
-		vector<vector<uint>> localVec = Get_Element(fin, "points_of_surfacetriangles", nSTri, nPpST);
+		vector<vector<size_t>> localVec = Get_Element(fin, "points_of_surfacetriangles", nSTri, nPpST);
 
 		#ifdef DEBUG
 		dbout << "Number of triangles: " << nSTri << endl;
@@ -359,7 +362,7 @@ void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers, i
 	{
 		Get_Dimension(fin, "no_of_surfacequadrilaterals", nSQDimID, nSQua);
 		Get_Dimension(fin, "points_per_surfacequadrilateral", nPpSQDimID, nPpSQ);
-		vector<vector<uint>> localVec = Get_Element(fin, "points_of_surfacequadrilaterals", nSQua, nPpSQ);
+		vector<vector<size_t>> localVec = Get_Element(fin, "points_of_surfacequadrilaterals", nSQua, nPpSQ);
 
 		#ifdef DEBUG
 		dbout << "Number of quadrilaterals: " << nSTri << endl;
@@ -387,7 +390,7 @@ void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers, i
 	// cout << "symPlane: " << symPlane << endl;
 
 	/*Create the faces of the symmetry plane*/
-	vector<vector<uint>> symFace1, symFace2; 
+	vector<vector<size_t>> symFace1, symFace2; 
 	for(uint ii = 0; ii < nMarkers; ++ii)
 	{
 		if(faceMarkers[ii] == symPlane1)
@@ -399,29 +402,30 @@ void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers, i
 			symFace2.emplace_back(faceVec[ii]);
 		}
 		else if(std::find(markers.begin(),markers.end(),faceMarkers[ii])!= markers.end())
-		{	/*Its an internal face*/
-			fdata.internal.emplace_back(faceVec[ii]);
+		{	/*Its a boundary face*/
+			fdata.smarkers.emplace_back(faceMarkers[ii]);
+			fdata.sfaces.emplace_back(faceVec[ii]);
 		}
 	}
 
-	// cout << "Symmetry plane 1 faces: " << symFace1.size() << endl;
-	// cout << "Symmetry plane 2 faces: " << symFace1.size() << endl;
-	// cout << "   Internal faces: " << fdata.internal.size() << endl;
+	cout << "Symmetry plane 1 faces: " << symFace1.size() << endl;
+	cout << "Symmetry plane 2 faces: " << symFace1.size() << endl;
+	cout << "        Boundary faces: " << fdata.smarkers.size() << endl;
 
 	#ifdef DEBUG
 		dbout << "Symmetry plane 1 faces: " << symFace1.size() << endl;
 		dbout << "Symmetry plane 2 faces: " << symFace1.size() << endl;
-		dbout << "   Internal faces: " << fdata.internal.size() << endl;
+		dbout << "        Boundary faces: " << fdata.smarkers.size() << endl;
 	#endif
 
 	vector<uint> index1;
-	for(auto const face:symFace1)
+	for(auto const& face:symFace1)
 	{
 		index1.insert(index1.end(),face.begin(),face.end());
 	}
 
 	vector<uint> index2;
-	for (auto const face : symFace2)
+	for (auto const& face : symFace2)
 	{
 		index2.insert(index2.end(), face.begin(), face.end());
 	}
@@ -430,7 +434,7 @@ void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers, i
 	auto max1 = std::max_element(index1.begin(), index1.end());
 	auto max2 = std::max_element(index2.begin(), index2.end());
 
-	cout << *max1 << "  " << *max2 << endl;
+	cout << "Index 1: " << *max1+1 << "  Index 2: " << *max2+1 << endl;
 	vector<uint> ptIndex;
 	if (*max1+1 == nPnts/2)
 	{
@@ -463,7 +467,7 @@ void Add_Edge(std::pair<uint,uint> const& edge, std::pair<int,int> const& leftri
 {
 	edata.celllr.emplace_back(leftright);
 	edata.edges.emplace_back(edge);
-	edata.numEdges++;
+	edata.nEdge++;
 }
 
 
@@ -473,7 +477,7 @@ void BuildEdges(const FACE& fdata, EDGE& edata)
 	dbout << "Entering BuildFaces..." << endl;
 	#endif
 	uint nFace = fdata.faces.size();
-	uint nPts = fdata.numPoint;
+	uint nPts = fdata.nPnts;
 	uint unmfaces=0;
 	uint nEdges = 0;
 
@@ -515,7 +519,7 @@ void BuildEdges(const FACE& fdata, EDGE& edata)
 		#pragma omp for schedule(static) nowait 
 		for(uint lindex = 0; lindex < nFace; ++lindex)
 		{	
-			const vector<uint> lcell = fdata.faces[lindex];
+			const vector<size_t> lcell = fdata.faces[lindex];
 	
 			uint numl = lcell.size();
 			uint l0 = lcell[numl-1];
@@ -531,7 +535,7 @@ void BuildEdges(const FACE& fdata, EDGE& edata)
 						continue;	
 
 					/*Define that the cell of the inner search is on the 'right'*/
-					const vector<uint> rcell = fdata.faces[rindex];
+					const vector<size_t> rcell = fdata.faces[rindex];
 
 					uint numr = rcell.size();
 					uint r0 = rcell[numr-1];
@@ -564,34 +568,37 @@ void BuildEdges(const FACE& fdata, EDGE& edata)
 				/*If a match has not been found, the face must be a boundary face*/	
 				if(colour[lindex][lfaceindex] == 0)
 				{			
-					for (auto sface:fdata.internal)
+
+					for (size_t ii = 0; ii < fdata.smarkers.size(); ++ii)
 					{	/*Search through the surface faces to identify */
-						/*if the face is an internal face or not*/
+						/*if the face is an boundary face or not*/
+						vector<size_t> const& sface = fdata.sfaces[ii];
+
 						int a = (std::find(sface.begin(),sface.end(),l0) != sface.end());
 						int b = (std::find(sface.begin(),sface.end(),l1) != sface.end());
 
 						if(a && b)
-						{	/*edge is an internal face*/
+						{	/*edge is an boundary face*/
 							
 							std::pair<int,int> leftright(lindex,-1);
 							#pragma omp atomic
 								colour[lindex][lfaceindex]++;
 							std::pair<uint,uint> edge(l0,l1);
 							Add_Edge(edge,leftright,elocal);
-							elocal.wall.emplace_back(edge);
-							elocal.nWall++;
+							elocal.smarkers.emplace_back(fdata.smarkers[ii]);
+							elocal.nSurf++;
 							goto matchfound;
 						}
 					}
 
 					/*If still uncoloured, then face is an external boundary*/
-					std::pair<int,int> leftright(lindex,-2);
-					#pragma omp atomic
-					colour[lindex][lfaceindex]++;
-					std::pair<uint,uint> edge(l0,l1);
-					Add_Edge(edge,leftright,elocal);
-					elocal.far.emplace_back(edge);
-					elocal.nFar++;
+					// std::pair<int,int> leftright(lindex,-2);
+					// #pragma omp atomic
+					// colour[lindex][lfaceindex]++;
+					// std::pair<uint,uint> edge(l0,l1);
+					// Add_Edge(edge,leftright,elocal);
+					// elocal.far.emplace_back(edge);
+					// elocal.nSurf++;
 				}
 
 		matchfound:	
@@ -656,29 +663,29 @@ void BuildEdges(const FACE& fdata, EDGE& edata)
 	if(unmfaces != 0)
 	cout << "There are " << unmfaces << " unmatched faces." << endl;
 
-	if (edata.edges.size() != edata.numEdges)
+	if (edata.edges.size() != edata.nEdge)
 	{
 		cout << "Not all edges have been found." << endl;
-		cout << "Edges vector size: "<< edata.edges.size() << "  nEdges: " << edata.numEdges << endl;
+		cout << "Edges vector size: "<< edata.edges.size() << "  nEdges: " << edata.nEdge << endl;
 	}
 
-	if(edata.celllr.size() != edata.numEdges)
+	if(edata.celllr.size() != edata.nEdge)
 	{
 		cout << "Not all edges have left and right cells identified." << endl;
 		cout << "Celllr size: " << edata.celllr.size();
-		cout << "  nEdges: " << edata.numEdges << endl;
+		cout << "  nEdges: " << edata.nEdge << endl;
 	}
 
 	#ifdef DEBUG
-	dbout << "Building edges complete. Number of edges: " << edata.numEdges << endl;
-	dbout << "Average number of edges per element: " << float(edata.numEdges)/float(nFace) << endl;
-	dbout << "Number of wall edges: " << edata.nWall << " Far field edges: " << edata.nFar << endl;
+	dbout << "Building edges complete. Number of edges: " << edata.nEdge << endl;
+	dbout << "Average number of edges per element: " << float(edata.nEdge)/float(nFace) << endl;
+	dbout << "Number of surface edges: " << edata.nSurf << endl;
 	dbout << "Exiting BuildFaces..." << endl;
 	#endif
 
-	cout << "Building edges complete. Number of edges: " << edata.numEdges << endl;
-	cout << "Average number of edges per element: " << float(edata.numEdges)/float(nFace) << endl;
-	cout << "Number of wall edges: " << edata.nWall << " Far field edges: " << edata.nFar << endl;
+	cout << "Building edges complete. Number of edges: " << edata.nEdge << endl;
+	cout << "Average number of edges per element: " << float(edata.nEdge)/float(nFace) << endl;
+	cout << "Number of surface edges: " << edata.nSurf << endl;
 	// cout << edata.wall.size() << "  " << edata.far.size() << endl;
 }
 
@@ -727,17 +734,22 @@ void Recast_Data(EDGE& edata)
 	dbout << "vertInUse size: " << newsize << endl;
 #endif
 	cout << "vertInUse size: " << newsize << endl;
+	if(newsize != edata.nPnts/2)
+	{
+		cout << "Used points do not equal exactly half the mesh points.\n Something has gone wrong." << endl;
+		exit(-1); 
+	}
 	/*Now the edges need recasting to the index of the vector*/
 	vector<StateVecD> newVerts(newsize);
 	// vector<std::pair<size_t,size_t>> edges;
 	#pragma omp parallel shared(newVerts, edata, vertInUse)
 	{
 		// #pragma omp for schedule(static) nowait
-		for(auto& edge:edata.edges)
-		{
-			if(edge.first != vertInUse[edge.first] || edge.second != vertInUse[edge.second])
-				cout << "A value that is not in vinuse is used" << endl;
-		} 
+		// for(auto& edge:edata.edges)
+		// {
+		// 	if(edge.first != vertInUse[edge.first] || edge.second != vertInUse[edge.second])
+		// 		cout << "A value that is not in vinuse is used" << endl;
+		// } 
 	// 		int ifirst = search(vertInUse,edge.first);
 	// 		// cout << "Found first index " << ifirst << endl;
 
@@ -775,7 +787,7 @@ void Recast_Data(EDGE& edata)
 	}
 	edata.usedVerts = vertInUse;
 	edata.verts = newVerts;
-	edata.numPoint = newsize;
+	edata.nPnts = newsize;
 
 #ifdef DEBUG
 	dbout << "Exiting recast data..." << endl;
@@ -815,16 +827,16 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 	}
 
 	/* Define the dimensions. */
-	int nElemID, nEdgeID, nPpEcID, nWallID, nFarID, nPntsID;
+	int nElemID, nEdgeID, nPpEcID, nPntsID, nMarkID;
 
-	if ((retval = nc_def_dim(meshID, "no_of_elements", edata.numElem, &nElemID)))
+	if ((retval = nc_def_dim(meshID, "no_of_elements", edata.nElem, &nElemID)))
 	{
 		cout << "Error: Failed to define \"no_of_elements\"" << endl;
 		ERR(retval);
 		exit(-1);
 	}
 
-	if ((retval = nc_def_dim(meshID, "no_of_edges", edata.numEdges, &nEdgeID)))
+	if ((retval = nc_def_dim(meshID, "no_of_edges", edata.nEdge, &nEdgeID)))
 	{
 		cout << "Error: Failed to define \"no_of_edges\"" << endl;
 		ERR(retval);
@@ -838,21 +850,28 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 		exit(-1);
 	}
 
-	if ((retval = nc_def_dim(meshID, "no_of_wall_edges", edata.nWall, &nWallID)))
+	// if ((retval = nc_def_dim(meshID, "no_of_wall_edges", edata.nWall, &nWallID)))
+	// {
+	// 	cout << "Error: Failed to define \"no_of_wall_edges\"" << endl;
+	// 	ERR(retval);
+	// 	exit(-1);
+	// }
+
+	// if ((retval = nc_def_dim(meshID, "no_of_farfield_edges", edata.nFar, &nFarID)))
+	// {
+	// 	cout << "Error: Failed to define \"no_of_farfield_edges\"" << endl;
+	// 	ERR(retval);
+	// 	exit(-1);
+	// }
+
+	if ((retval = nc_def_dim(meshID, "no_of_surfaceelements", edata.nSurf, &nMarkID)))
 	{
-		cout << "Error: Failed to define \"no_of_wall_edges\"" << endl;
+		cout << "Error: Failed to define \"no_of_surfaceelements\"" << endl;
 		ERR(retval);
 		exit(-1);
 	}
 
-	if ((retval = nc_def_dim(meshID, "no_of_farfield_edges", edata.nFar, &nFarID)))
-	{
-		cout << "Error: Failed to define \"no_of_farfield_edges\"" << endl;
-		ERR(retval);
-		exit(-1);
-	}
-
-	if ((retval = nc_def_dim(meshID, "no_of_points", edata.numPoint, &nPntsID)))
+	if ((retval = nc_def_dim(meshID, "no_of_points", edata.nPnts, &nPntsID)))
 	{
 		cout << "Error: Failed to define \"no_of_points\"" << endl;
 		ERR(retval);
@@ -860,7 +879,7 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 	}
 
 	/* Define the variables */
-	int edgeVarID, leftVarID, rightVarID, usedPID, ptsxID, ptszID;
+	int edgeVarID, leftVarID, rightVarID, usedPID, ptsxID, ptszID, markID;
 
 	/*Define the faces*/
 	int dimIDs[] = {nEdgeID, nPpEcID};
@@ -884,6 +903,14 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 							 &nEdgeID, &rightVarID)))
 	{
 		cout << "Error: Failed to define \"right_element_of_edges\"" << endl;
+		ERR(retval);
+		exit(-1);
+	}
+
+	if ((retval = nc_def_var(meshID, "boundarymarker_of_surfaces", NC_INT, 1,
+							 &nMarkID, &markID)))
+	{
+		cout << "Error: Failed to define \"boundarymarker_of_surfaces\"" << endl;
 		ERR(retval);
 		exit(-1);
 	}
@@ -918,8 +945,8 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 
 
 	/*Create the C array for the faces*/
-	int* edges = new int[edata.numEdges*2];
-	for(uint ii = 0; ii < edata.numEdges; ++ii)
+	int* edges = new int[edata.nEdge*2];
+	for(uint ii = 0; ii < edata.nEdge; ++ii)
 	{
 		edges[index(ii,0,2)] = static_cast<int>(edata.edges[ii].first);
 		edges[index(ii,1,2)] = static_cast<int>(edata.edges[ii].second);
@@ -927,7 +954,7 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 
 	/*Put edges into the file*/
 	size_t start[] = {0, 0};
-	size_t end[] = {edata.numEdges, 2};
+	size_t end[] = {edata.nEdge, 2};
 	if ((retval = nc_put_vara_int(meshID, edgeVarID, start, end, &edges[0])))
 	{
 		cout << "Failed to write edge data" << endl;
@@ -936,10 +963,10 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 	}
 
 	/*Put face left and right into the file*/
-	int* left = new int[edata.numEdges];
-	int* right = new int[edata.numEdges];
+	int* left = new int[edata.nEdge];
+	int* right = new int[edata.nEdge];
 
-	for(uint ii = 0; ii < edata.numEdges; ++ii)
+	for(uint ii = 0; ii < edata.nEdge; ++ii)
 	{
 		left[ii] = edata.celllr[ii].first;
 		right[ii] = edata.celllr[ii].second;
@@ -959,10 +986,19 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 		exit(-1);
 	}
 
-	/*Write which vertices are in use, for reading the solution file*/
-	int* uVert = new int[edata.numPoint];
+	
 
-	for(size_t ii = 0; ii < edata.numPoint; ++ii)
+	if ((retval = nc_put_var_int(meshID, markID, &edata.smarkers[0])))
+	{
+		cout << "Failed to write surface marker data" << endl;
+		ERR(retval);
+		exit(-1);
+	}
+
+	/*Write which vertices are in use, for reading the solution file*/
+	int* uVert = new int[edata.nPnts];
+
+	for(size_t ii = 0; ii < edata.nPnts; ++ii)
 	{
 		uVert[ii] = edata.usedVerts[ii]; 
 	}
@@ -975,10 +1011,10 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 	}
 
 	/*Create the C arrays for the vertices*/
-	double* x = new double[edata.numPoint];
-	double* z = new double[edata.numPoint];
+	double* x = new double[edata.nPnts];
+	double* z = new double[edata.nPnts];
 
-	for(uint ii = 0; ii < edata.numPoint; ++ii)
+	for(uint ii = 0; ii < edata.nPnts; ++ii)
 	{
 		x[ii] = edata.verts[ii](0);
 		z[ii] = edata.verts[ii](1);
@@ -1018,7 +1054,7 @@ void Write_Edge_Tecplot(const EDGE& edata)
 	fout << "VARIABLES= \"X\" \"Z\" " << endl;
 	fout << "ZONE T=\"FEPOLYGON Test\"" << endl;
 	fout << "ZONETYPE=FEPOLYGON" << endl;
-	fout << "NODES=" << edata.numPoint << " ELEMENTS=" << edata.numElem << " FACES=" << edata.numEdges << endl;
+	fout << "NODES=" << edata.nPnts << " ELEMENTS=" << edata.nElem << " FACES=" << edata.nEdge << endl;
 	fout << "NumConnectedBoundaryFaces=0 TotalNumBoundaryConnections=0" << endl;
 
 	uint w = 15;
@@ -1070,12 +1106,12 @@ void Write_Edge_Tecplot(const EDGE& edata)
 	{
 			/*Write face vertex indexes*/
 			fout << std::setw(w) << edata.edges[ii].first+1;
-			if (edata.edges[ii].first > edata.numPoint)
+			if (edata.edges[ii].first > edata.nPnts)
 			{
 				cout << "Trying to write a vertex outside of the number of points." << endl;
 			}
 			fout << std::setw(w) << edata.edges[ii].second+1;
-			if (edata.edges[ii].first > edata.numPoint)
+			if (edata.edges[ii].first > edata.nPnts)
 			{
 				cout << "Trying to write a vertex outside of the number of points." << endl;
 			}
@@ -1184,7 +1220,8 @@ void Write_griduns(const EDGE& edata)
 	fout << std::left << std::fixed;
 	uint w = 9;
 
-	fout << std::setw(w) << edata.numElem << std::setw(w) << edata.numEdges << std::setw(w) << edata.numPoint << endl;
+	fout << std::setw(w) << edata.nElem << std::setw(w) << edata.nEdge
+		 << std::setw(w) << edata.nPnts << endl;
 
 	if(leftright == 1)
 	{

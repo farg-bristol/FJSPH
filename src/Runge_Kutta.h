@@ -53,7 +53,7 @@ real Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& 
 	Get_Boundary_Pressure(fvar,start,outlist,st_2);
 	Forces(svar, fvar, avar, cells, st_2, outlist, dp, res_1, Rrho_1, Af, Force);
 
-	#pragma omp parallel shared(svar,pn,st_2) /*reduction(+:Force,dropVel)*/
+	#pragma omp parallel default(shared) // shared(svar,pn,st_2) /*reduction(+:Force,dropVel)*/
 	{
 		if(svar.Asource == 2)
 		{
@@ -89,7 +89,7 @@ real Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& 
 			/* PIPE = in the pipe, with free motion                         */
 			/* FREE = free of the pipe and receives an aero force           */
 
-			if(st_2[ii].b > PartState.BUFFER_)
+			if(st_2[ii].b > BUFFER)
 			{	
 
 				// Step_1(dt,pn[ii].xi,pn[ii].v,pn[ii].rho,pn[ii].acc,pn[ii].Rrho,
@@ -108,7 +108,7 @@ real Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& 
 				st_2[ii].Af = Af[ii];
 				st_2[ii].Rrho = Rrho_1[ii];
 
-				if(svar.Asource == 2 && st_2[ii].b == PartState.FREE_)
+				if(svar.Asource == 2 && st_2[ii].b == FREE)
 				{
 					#pragma omp atomic
 						cells.fNum[st_2[ii].cellID]++;
@@ -191,7 +191,7 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 	Get_Boundary_Pressure(fvar,start,outlist,st_2);
 	Forces(svar, fvar, avar, cells, st_2, outlist, dp, res_2, Rrho_2, Af, Force);
 
-	#pragma omp parallel shared(svar,pn,st_2,res_2,Rrho_2,st_3,res_3,Rrho_3)
+	#pragma omp parallel default(shared) // shared(svar,pn,st_2,res_2,Rrho_2,st_3,res_3,Rrho_3)
 	{
 		
 		// #pragma omp for schedule(static) nowait
@@ -211,7 +211,7 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 			/* PIPE = in the pipe, with free motion                         */
 			/* FREE = free of the pipe and receives an aero force           */
 
-			if(st_3[ii].b > PartState.BUFFER_)
+			if(st_3[ii].b > BUFFER)
 			{	
 				#ifdef ALE
 				st_3[ii].xi = pn[ii].xi + 0.5 * dt * (st_2[ii].v + st_2[ii].vPert);
@@ -220,9 +220,9 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 				#endif
 
 				st_3[ii].v = pn[ii].v + 0.5 * dt * res_2[ii];
-				st_3[ii].rho = pn[ii].rho + 0.5 * dt * Rrho_2[ii];
-				st_3[ii].p = B * (pow(st_3[ii].rho / fvar.rho0, gam) - 1);
-				// st_3[ii].p = fvar.Cs*fvar.Cs * (st_3[ii].rho - fvar.rho0);
+				real const rho = pn[ii].rho + 0.5 * dt * Rrho_2[ii];
+				st_3[ii].rho = rho;
+				st_3[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 
 			}
 
@@ -236,10 +236,10 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 			{ /* Define buffer off the back particle */
 				size_t const &buffID = svar.buffer[ii][jj];
 
-				real frac = std::min(1.0, real(jj + 1) / 3.0);
-
-				st_3[buffID].rho = frac * fvar.rhoJ + (1.0 - frac) * (pn[buffID].rho + dt * Rrho_2[buffID]);
-				st_3[buffID].p = frac * fvar.pPress + (1.0 - frac) * (B * (pow(st_3[buffID].rho / fvar.rho0, gam) - 1));
+				real const frac = std::min(1.0, real(jj + 1) / 3.0);
+				real const rho = frac * fvar.rhoJ + (1.0 - frac) * (pn[buffID].rho + dt * Rrho_2[buffID]); 
+				st_3[buffID].rho = rho;
+				st_3[buffID].p = frac * fvar.pPress + (1.0 - frac) * pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 
 				st_3[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
 			}
@@ -264,7 +264,7 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 	Get_Boundary_Pressure(fvar,start,outlist,st_3);
 	Forces(svar, fvar, avar, cells, st_3, outlist, dp, res_3, Rrho_3, Af, Force);
 
-	#pragma omp parallel shared(svar,pn,st_3,res_3,Rrho_3,st_4,res_4,Rrho_4)
+	#pragma omp parallel default(shared) // shared(svar,pn,st_3,res_3,Rrho_3,st_4,res_4,Rrho_4)
 	{
 		#pragma omp for schedule(static) nowait
 		for (size_t ii=start; ii < end; ++ii)
@@ -276,13 +276,13 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 			/* FREE = free of the pipe and receives an aero force           */
 
 			/*Check if the particle is clear of the starting area*/
-			// if(st_3[ii].b == PartState.START_ || st_3[ii].b == PartState.BACK_)
+			// if(st_3[ii].b == START || st_3[ii].b == BACK)
 			// {   
 			// 	/*For the particles marked 1, perform a prescribed motion*/
 			// 	st_4[ii].xi = pn[ii].xi + dt*pn[ii].v;
 			// }
 
-			if(st_4[ii].b > PartState.BUFFER_)
+			if(st_4[ii].b > BUFFER)
 			{	
 				#ifdef ALE
 				st_4[ii].xi = pn[ii].xi + dt * (st_3[ii].v + st_3[ii].vPert);
@@ -291,8 +291,9 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 				#endif
 
 				st_4[ii].v = pn[ii].v + dt * res_3[ii];
-				st_4[ii].rho = pn[ii].rho + dt * Rrho_3[ii];
-				st_4[ii].p = B*(pow(st_4[ii].rho/fvar.rho0,gam)-1);
+				real const rho = pn[ii].rho + dt * Rrho_3[ii];
+				st_4[ii].rho = rho;
+				st_4[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 				// st_4[ii].p = fvar.Cs*fvar.Cs * (st_4[ii].rho - fvar.rho0);
 			}
 		}
@@ -306,9 +307,9 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 				size_t const &buffID = svar.buffer[ii][jj];
 
 				real frac = std::min(1.0, real(jj + 1) / 3.0);
-
-				st_4[buffID].rho = frac * fvar.rhoJ + (1.0 - frac) * (pn[buffID].rho + dt * Rrho_3[buffID]);
-				st_4[buffID].p = frac * fvar.pPress + (1.0 - frac) * (B * (pow(st_4[buffID].rho / fvar.rho0, gam) - 1));
+				real const rho = frac * fvar.rhoJ + (1.0 - frac) * (pn[buffID].rho + dt * Rrho_3[buffID]);
+				st_4[buffID].rho = rho;
+				st_4[buffID].p = frac * fvar.pPress + (1.0 - frac) * pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 				st_4[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
 			}
 		}
@@ -331,7 +332,7 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 	Get_Boundary_Pressure(fvar,start,outlist,st_4);
 	Forces(svar, fvar, avar, cells, st_4, outlist, dp, res_4, Rrho_4, Af, Force);
 
-	#pragma omp parallel shared(svar,pn,pnp1,st_2,res_2,Rrho_2,st_3,res_3,Rrho_3,st_4,res_4,Rrho_4)
+	#pragma omp parallel default(shared) // shared(svar,pn,pnp1,st_2,res_2,Rrho_2,st_3,res_3,Rrho_3,st_4,res_4,Rrho_4)
 	{
 		if(svar.Asource == 2)
 		{
@@ -344,50 +345,20 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 					cells.vFnp1[ii] = StateVecD::Zero();
 			}
 		}
-	
-		#pragma omp for schedule(static) nowait
-		for (size_t ii=0; ii < start; ++ii)
-		{	/****** BOUNDARY PARTICLES ***********/
-			pnp1[ii].rho = pn[ii].rho + 
-				(dt/6.0) * (pn[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii]);
-			pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-			// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
 
-			pnp1[ii].acc = res_4[ii];
-			pnp1[ii].Rrho = Rrho_4[ii];
-		}
 
 		#pragma omp for schedule(static) nowait
 		for (size_t ii=start; ii < end; ++ii)
 		{	/****** FLUID PARTICLES **************/
 			
-			/* START = pipe particle receiving prescribed motion            */
-			/* BACK = the latest particle in that column                    */
-			/* PIPE = in the pipe, with free motion                         */
-			/* FREE = free of the pipe and receives an aero force           */
-
-			/*Check if the particle is clear of the starting area*/
-			// if(pnp1[ii].b == PartState.START_ || pnp1[ii].b == PartState.BACK_)
-			// {   
-			// 	StateVecD vec = svar.Transp*(pnp1[ii].xi-svar.Start);
-			// 	if(vec(1) > svar.clear)
-			// 	{	/*Tag it as clear if it's higher than the plane of the exit*/
-			// 		pnp1[ii].b=PartState.PIPE_;
-			// 	}
-			// 	else
-			// 	{	/*For the particles marked 1, perform a prescribed motion*/
-			// 		pnp1[ii].xi = pn[ii].xi + dt*pn[ii].v;
-			// 	}
-			// }
-
-			if(pnp1[ii].b > PartState.BUFFER_)
+			if(pnp1[ii].b > BUFFER)
 			{	
-				if(pnp1[ii].b == PartState.PIPE_)
+				if(pnp1[ii].b == PIPE)
 				{	/*Do a check to see if it needs to be given an aero force*/
 					StateVecD vec = svar.Transp*(st_4[ii].xi-svar.sim_start);
 					if(vec(1) > 0.0)
 					{
-						pnp1[ii].b = PartState.FREE_;
+						pnp1[ii].b = FREE;
 						if(svar.Asource == 1 || svar.Asource == 2)
 						{
 							/*retrieve the cell it's in*/
@@ -426,17 +397,17 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 				pnp1[ii].v = pn[ii].v + 
 					(dt/6.0) * (st_2[ii].acc + 2.0 * res_2[ii] + 2.0 * res_3[ii] + res_4[ii]);
 
-				pnp1[ii].rho = pn[ii].rho + (dt / 6.0) * 
+				real const rho = pn[ii].rho + (dt / 6.0) * 
 					(st_2[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii]);
+				pnp1[ii].rho = rho;
 
-				pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-				// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
+				pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 
 				pnp1[ii].acc = res_4[ii];
 				pnp1[ii].Af = Af[ii];
 				pnp1[ii].Rrho = Rrho_4[ii];
 
-				if(svar.Asource == 2 && pnp1[ii].b == PartState.FREE_)
+				if(svar.Asource == 2 && pnp1[ii].b == FREE)
 				{
 					#pragma omp atomic
 						cells.fNum[pnp1[ii].cellID]++;
@@ -466,13 +437,14 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 				real frac = std::min(1.0, real(jj + 1) / 3.0);
 
 				pnp1[buffID].Rrho = Rrho_4[buffID];
-				pnp1[buffID].rho = frac * fvar.rhoJ + (1.0 - frac) * 
+
+				real const rho = frac * fvar.rhoJ + (1.0 - frac) * 
 								(pn[buffID].rho + (dt / 6.0) * 
 								(st_2[buffID].Rrho + 2.0 * Rrho_2[buffID] + 
 								 2.0 * Rrho_3[buffID] + Rrho_4[buffID]));
+				pnp1[buffID].rho = rho;
 
-				pnp1[buffID].p = frac * fvar.pPress + (1.0 - frac) * 
-							(B * (pow(pnp1[buffID].rho / fvar.rho0, gam) - 1));
+				pnp1[buffID].p = frac * fvar.pPress + (1.0 - frac) * pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 
 				pnp1[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
 			}
