@@ -2,7 +2,7 @@
 #define GEOMETRY_H
 
 #include "Var.h"
-#include "IOFunctions.h"
+#include "Kernel.h"
 #include "Third_Party/Eigen/Geometry"
 
 #define PERTURB(i,j) pow(MEPSILON,pow(2,i*SIMDIM-j))
@@ -14,7 +14,7 @@
 void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start, size_t const& end,
                  DELTAP const& dp, OUTL const& outlist, MESH const& cells, SPHState& pnp1)
 {
-    #pragma omp parallel shared(pnp1)
+    #pragma omp parallel default(shared) // shared(pnp1)
     {
         real const h = 1.33 * svar.Pstep;
 
@@ -24,7 +24,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
         #pragma omp for schedule(static) nowait
         for(size_t ii = start; ii < end; ++ii)
         {
-            if(pnp1[ii].b < PartState.PIPE_)
+            if(pnp1[ii].b < PIPE)
             {
                 pnp1[ii].surf = 0;
                 pnp1[ii].woccl = 1;
@@ -55,11 +55,11 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
 
                 for(std::pair<size_t,real> const& jj:outlist[ii])
                 {
-                    if(jj.first == ii || pnp1[jj.first].b == PartState.GHOST_)
+                    if(jj.first == ii || pnp1[jj.first].b == GHOST)
                         continue;
 
                     /*Occlusion for Gissler Aero Method*/
-                    if (pnp1[ii].b == PartState.FREE_ && (avar.acase == 4 || avar.acase == 1))
+                    if (pnp1[ii].b == FREE && (avar.acase == 4 || avar.acase == 1))
                     {
                         real const r = sqrt(jj.second);
                         StateVecD const Rij = pnp1[ii].xi - pnp1[jj.first].xi;
@@ -79,6 +79,10 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
             {   /*Particle could be a surface particle. Perform a test*/
                 real woccl_ = 0.0;
                 StateVecD Vdiff = StateVecD::Zero();
+                StateVecD norm = StateVecD::Zero();
+                real curve = 0.0;
+                real correc = 0.0;
+                
                 if (svar.Asource == 1)
                 {
                     Vdiff = (pnp1[ii].cellV) - dp.avgV[ii];
@@ -106,9 +110,12 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                 uint surf = 1; /*Begin by assuming a surface, and proving otherwise*/
                 for(std::pair<size_t,real> const& jj:outlist[ii])
                 {
-                    if(jj.first == ii || pnp1[jj.first].b == PartState.GHOST_)
+                    if(jj.first == ii || pnp1[jj.first].b == GHOST)
                         continue;
+
+                    StateVecD const Rij = pnp1[ii].xi - pnp1[jj.first].xi;
                     
+
                     StateVecD const x_jT = pnp1[jj.first].xi - pointT;
                     real const r = sqrt(jj.second);
                     
@@ -130,8 +137,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                                 break;
                             }
                         #else
-                            StateVecD const Rij = pnp1[jj.first].xi - xi; 
-                            if(acos(dp.norm[ii].normalized().dot(Rij/r)) < M_PI/4.0)
+                            if(acos(dp.norm[ii].normalized().dot(-Rij/r)) < M_PI/4.0)
                             {
                                 surf = 0; 
                                 break;
@@ -140,9 +146,8 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                     }
 
                     /*Occlusion for Gissler Aero Method*/
-                    if (pnp1[ii].b == PartState.FREE_ && (avar.acase == 4 || avar.acase == 1))
+                    if (pnp1[ii].b == FREE && (avar.acase == 4 || avar.acase == 1))
                     {
-                        StateVecD const Rij = pnp1[ii].xi - pnp1[jj.first].xi;
                         real const frac = Rij.dot(Vdiff)/(Vdiff.norm()*r);
                         
                         if (frac > woccl_)
@@ -150,8 +155,22 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                             woccl_ = frac;
                         }
                     }    
+
+                    real volj = pnp1[jj.first].m/pnp1[jj.first].rho;
+
+                    #if defined(CSF) || defined(HESF)
+                    norm -= volj * (dp.colour[jj.first] - dp.colour[ii])*GradK(Rij,r,fvar.H,fvar.correc);
+                    #endif
+
+                    /* Needed for induced pressure model */
+                    curve -= volj * (dp.norm[jj.first].normalized() - dp.norm[ii].normalized()).dot
+                            (GradK(Rij,r,fvar.H,fvar.correc));
+                    correc += volj * Kernel(r,fvar.H,fvar.correc);        
+
                 }
 
+                pnp1[ii].norm = norm;
+                pnp1[ii].curve = curve/correc;
                 pnp1[ii].surf = surf;
                 pnp1[ii].woccl = std::max(0.0,std::min(woccl_,1.0));  
             }
@@ -161,71 +180,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
                 pnp1[ii].woccl = 1;
             }
         }
-
-        // #pragma omp for schedule(static) nowait
-        // for(size_t ii = start; ii < end; ++ii)
-        // {
-        //     /*Find the curvature for the surface particles*/
-        //     if(dp.lam[ii] < 0.75 )
-        //     {
-        //         real curve = 0.0;
-        //         real correc = 0.0;
-
-        //         if(dp.lam[ii] < 0.75 && pnp1[ii].b == PartState.FREE_)
-        //         {
-                
-        //             for(std::pair<size_t,real> const& jj:outlist[ii])
-        //             {
-        //                 if (ii == jj.first)
-        //                     continue;
-
-        //                 StateVecD Rij = pnp1[jj.first].xi - pnp1[ii].xi;
-        //                 real r = sqrt(jj.second);
-        //                 real volj = pnp1[jj.first].m/pnp1[jj.first].rho;
-        //                 StateVecD diffK = volj *  GradK(Rij,r,fvar.H,fvar.correc);                      
-
-        //                 if (pnp1[jj.first].surf == 1)
-        //                 {
-        //                     curve -= (dp.norm[jj.first].normalized()-dp.norm[ii].normalized()).dot(diffK);
-        //                     correc += volj * Kernel(r,fvar.H,fvar.correc);
-        //                     // curve += curves[jj] * pnp1[jj].m/pnp1[jj].rho* kern / dp.kernsum[ii];
-        //                 }
-        //             }
-        //         }
-
-        //         curves[ii] = curve/correc;
-        //         correcs[ii] = correc;
-        //     }
-        // }
-
-        // #pragma omp for schedule(static) nowait
-        // for(size_t ii = start; ii < end; ++ii)
-        // {
-        //     /*Find the curvature for the surface particles*/
-        //     if(pnp1[ii].surf == 1)
-        //     {
-        //         real curve = 0.0;
-
-        //         for(std::pair<size_t,real> const& jj:outlist[ii])
-        //         {
-        //             if (pnp1[jj.first].surf != 1)
-        //                 continue;
-
-        //             if (ii == jj.first)
-        //             {
-        //                 curve += curves[ii] * fvar.correc/correcs[ii];
-        //                 continue;
-        //             }
-
-        //             real r = sqrt(jj.second);
-        //             real kern = pnp1[jj.first].m/pnp1[jj.first].rho * Kernel(r,fvar.H,fvar.correc);
-
-        //             curve += curves[jj.first] * kern/correcs[ii];
-        //         }
-
-        //         pnp1[ii].curve = curve;
-        //     }
-        // }   
+ 
     }
 }
 
@@ -439,50 +394,46 @@ bool get_line_intersection(vector<StateVecD> const& verts, vector<size_t> const&
     }
 
     /* Check for the distance from the face the point lies. It is already assumed that the ray crosses */
-/* Used for implicit particle tracking */
-void RayNormalIntersection(MESH const& cells, StateVecD const& rayOrigin, StateVecD const& rayVector,
-                           vector<size_t> const& face, int const& cellID, real& dt, real& denom)
-{
-    /* find the normal vector of the face */
-    StateVecD norm(cells.verts[face[0]][1] - cells.verts[face[1]][1], cells.verts[face[1]][0] - cells.verts[face[0]][0]);
-
-    /* Check for normal orientation */
-    StateVecD celldir;
-
-    
-    /* Use the face centre as the second part for the direction */
-    StateVecD face_c = cells.verts[face[0]] + cells.verts[face[1]];
-    face_c /= 2.0;
-
-    celldir = face_c - cells.cCentre[cellID];
-    
-
-    if(norm.dot(celldir) < 0)
+    /* Used for implicit particle tracking */
+    void RayNormalIntersection(MESH const& cells, StateVecD const& rayOrigin, StateVecD const& rayVector,
+                            vector<size_t> const& face, int const& cellID, real& dt, real& denom)
     {
-        /* Normal points inwards to the cell , so flip it*/
-        norm = -1.0 * norm;
+        /* find the normal vector of the face */
+        StateVecD norm(cells.verts[face[0]][1] - cells.verts[face[1]][1], cells.verts[face[1]][0] - cells.verts[face[0]][0]);
+        
+        /* Use the face centre as the second part for the direction */
+        StateVecD face_c = cells.verts[face[0]] + cells.verts[face[1]];
+        face_c /= 2.0;
+
+        /* Check for normal orientation */
+        StateVecD celldir = face_c - cells.cCentre[cellID];
+        
+        if(norm.dot(celldir) < 0)
+        {
+            /* Normal points inwards to the cell , so flip it*/
+            norm = -1.0 * norm;
+        }
+
+        StateVecD temp_p = StateVecD::Zero();
+
+        /* Find the most distant point from the current point */
+        for(size_t ii = 0; ii < face.size(); ii++)
+        {
+            if( (cells.verts[face[ii]] - rayOrigin).squaredNorm() > temp_p.squaredNorm())
+                temp_p = (cells.verts[face[ii]] - rayOrigin);
+        }
+
+        /* Find numerator */
+        denom = rayVector.dot(norm);
+        dt = temp_p.dot(norm)/denom; 
     }
-
-    StateVecD temp_p = StateVecD::Zero();
-
-    /* Find the most distant point from the current point */
-    for(size_t ii = 0; ii < face.size(); ii++)
-    {
-        if( (cells.verts[face[ii]] - rayOrigin).squaredNorm() > temp_p.squaredNorm())
-            temp_p = (cells.verts[face[ii]] - rayOrigin);
-    }
-
-    /* Find numerator */
-    denom = rayVector.dot(norm);
-    dt = temp_p.dot(norm)/denom; 
-}
 
 #endif
 
 
 #if SIMDIM == 3
 int Crossings3D(vector<StateVecD> const& verts, vector<size_t> const& face, 
-    StateVecD const& point, StateVecD const& point2, uint& perturb)
+    StateVecD const& point, StateVecD const& point2/* , uint& perturb */)
 {   /*Using Signed volumes of tetrahedra*/
     /*Shewchuk J.R 1996, & 
     Robust Adaptive Floating-Point Geometric Predicates
@@ -973,8 +924,8 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& pnp1)
     #endif
 
     svar.dx = svar.Pstep * pow(fvar.rho0/fvar.rhoJ,1.0/SIMDIM);
-    GetYcoef(avar, fvar, svar.Pstep);
-    fvar.H = 2.0*svar.Pstep;
+    avar.GetYcoef(fvar, svar.Pstep);
+    fvar.H = fvar.Hfac*svar.Pstep;
     fvar.HSQ = fvar.H*fvar.H; 
 
     fvar.sr = 4.0*fvar.HSQ;   /*KDtree search radius*/

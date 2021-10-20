@@ -7,7 +7,8 @@
 #include "Third_Party/Eigen/LU"
 #include "Var.h"
 #include "IOFunctions.h"
-#include "CDFIO.h"
+#include "BinaryIO.h"
+#include "Geometry.h"
 #include <ctime>
 // #include "Restart.h"
 // #include "TauIO.h"
@@ -108,11 +109,28 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar)
 	fvar.simM = fvar.rho0*pow(svar.Pstep,SIMDIM); 
 	fvar.bndM = fvar.simM;
 	avar.gasM = avar.rhog*pow(svar.Pstep,SIMDIM);
-	avar.qInf = 0.5*avar.rhog*avar.vRef*avar.vRef;
+
+	avar.sos = sqrt(avar.T*avar.Rgas*avar.gamma);
+	if(avar.MRef != -1)
+	{
+		/* Mach has been defined, not velocity */
+		avar.vRef = avar.sos * avar.MRef;
+	}
+	else
+	{
+		avar.MRef = avar.vRef/avar.sos;
+	}
+		
+	avar.qInf = 0.5*avar.MRef*avar.MRef*avar.gamma*avar.pRef;
 
 	svar.addcount = 0;
-  	svar.dt = 2E-010; 			/*Initial timestep*/
-  	fvar.H = 2.0*svar.Pstep;
+	
+	if(svar.dt_min > 0)
+		svar.dt = svar.dt_min;
+	else
+		svar.dt = 2E-010; 			/*Initial timestep*/
+
+  	fvar.H = fvar.Hfac*svar.Pstep;
   	fvar.HSQ = fvar.H*fvar.H; 
 	fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
 
@@ -145,17 +163,18 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar)
 		#endif
 	#endif
 		
-		fvar.Wdx = Kernel(svar.Pstep,fvar.H,fvar.correc);
+	fvar.Wdx = Kernel(svar.Pstep,fvar.H,fvar.correc);
 
 	#if SIMDIM == 3
 		if (svar.Asource == 3)
 		{
-			svar.vortex.Init(svar.infile);
+			svar.vortex.Init(svar.vlm_file);
 			svar.vortex.GetGamma(avar.vInf);
 		}
 	#endif
 
-		GetYcoef(avar, fvar, /*fvar.H*/ svar.Pstep);
+	avar.GetYcoef(fvar, /*fvar.H*/ svar.Pstep);
+
 	#if SIMDIM == 3
 		avar.aPlate = svar.Pstep * svar.Pstep;
 		// avar.aPlate = fvar.H*fvar.H;
@@ -275,6 +294,7 @@ void Print_Settings(char** argv, SIM const& svar, FLUID const& fvar, AERO const&
 
 }
 
+
 void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 {
 	if (argc > 2) 
@@ -301,9 +321,9 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
     string line;
     while (getline(fin,line))
     {
-        line = ltrim(line);
-        if(line[0] == '#') /* Skip commented line */
-            continue;
+        size_t end = line.find_first_of('#');
+		if(end != std::string::npos)
+			line = line.substr(0,end+1);
 
         /* File Inputs */
         Get_String(line, "Primary grid face filename", svar.taumesh);
@@ -317,6 +337,9 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
         Get_Number(line, "OpenFOAM binary (0/1)", svar.isBinary);
         Get_Number(line, "Label size (32/64)", svar.labelSize);
         Get_Number(line, "Scalar size (32/64)", svar.scalarSize);
+		#if SIMDIM == 3
+		Get_String(line, "VLM definition filename", svar.vlm_file); 
+		#endif 
 
         /* File outputs */
 		Get_String(line, "Output files prefix", svar.output_prefix);
@@ -339,10 +362,11 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
         Get_Number(line, "Reference Mach number", avar.MRef);
         Get_Number(line, "Reference density", avar.qInf);
         Get_Number(line, "Reference temperature", avar.T);
+		Get_Number(line, "Gas constant gamma", avar.gamma);
 
 		// Get_Number(line, "SPH surface tension contact angle", fvar.contangb);
 
-        /* Simulation settings */
+		/* Simulation settings */
 		Get_Number(line, "SPH maximum timestep", svar.dt_max);
 		Get_Number(line, "SPH minimum timestep", svar.dt_min);
 		Get_Number(line, "SPH starting pressure", fvar.pPress);
@@ -351,6 +375,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
         Get_Number(line, "SPH Newmark-Beta iteration limit", svar.subits);
         Get_Number(line, "SPH initial spacing", svar.Pstep);
         Get_Number(line, "SPH boundary spacing factor", svar.Bstep);
+        Get_Number(line, "SPH smoothing length factor", fvar.Hfac);
         Get_String(line, "SPH aerodynamic case", avar.aero_case);
         Get_Number(line, "SPH use ghost particles (0/1)", svar.ghost);
         Get_Vector(line, "SPH start coordinates", svar.sim_start);
@@ -372,6 +397,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
         Get_Vector(line, "SPH freestream velocity", avar.vInf);
 
         /* Particle tracking settings */
+		Get_Number(line, "Transition to IPT (0/1)", svar.using_ipt);
         Get_Number(line, "Velocity equation order (1/2)", svar.eqOrder);
         Get_Number(line, "SPH tracking conversion x coordinate", svar.max_x_sph);
         Get_Number(line, "Maximum x trajectory coordinate", svar.max_x);
@@ -389,7 +415,20 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		
 		if(svar.foamdir.empty())
 		{
-			svar.Asource = 0;	
+			#if SIMDIM == 3
+			if(svar.vlm_file.empty())
+				svar.Asource = 0;
+			else
+			{
+				svar.Asource = 3;
+
+				if(svar.vlm_file == "(thisfile)")
+					svar.vlm_file = svar.infile;
+			}
+
+			#else
+			svar.Asource = 0;
+			#endif
 		}
 		else
 		{
@@ -412,6 +451,11 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 			cout << "Input TAU bmap file not defined." << endl;
 			exit(-1);
 		}
+		else if(svar.taubmap == "(thisfile)")
+		{
+			/* The para file is the boundary definition file, so set it so */
+			svar.taubmap = svar.infile;
+		}
 
 		if(svar.tausol.empty())
 		{
@@ -420,6 +464,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		}
 
 	}
+	
 
 	if(!svar.restart_prefix.empty())
 	{
@@ -428,11 +473,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		svar.output_prefix = svar.restart_prefix;
 	}
 
-	if(svar.Pstep < 0)
-	{
-		cout << "SPH initial spacing has not been defined." << endl;
-		exit(-1);
-	}
+
 
 	/* Check starting geometry conditions */
 	if (svar.sim_start[0] == 999999 || svar.sim_start[1] == 999999
@@ -455,10 +496,18 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 			#endif
 			)
 		{
-			cout << "Some or all of the SPH box resolutions have not been defined." << endl;
-			exit(-1);
+			if(svar.Pstep < 0)
+			{
+				cout << "SPH box resolution or initial spacing has not been defined." << endl;
+				exit(-1);
+			}	
 		}
-
+		else
+		{
+			real dx = svar.sim_box[0]/svar.xyPART[0];
+			real dy = svar.sim_box[1]/svar.xyPART[1];
+			svar.Pstep = std::min(dx,dy);
+		}
 		
 	}
 	else if(svar.start_type == "cylinder")
@@ -519,7 +568,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		svar.Bcase = 1;
 
 		if (svar.bound_start[0] == 999999 || svar.bound_start[1] == 999999
-#if SIMDIM == 3
+			#if SIMDIM == 3
 			|| svar.bound_start[2] == 999999
 			#endif
 		)
@@ -580,6 +629,12 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		exit(-1);
 	}
 
+	if(svar.Pstep < 0)
+	{
+		cout << "SPH initial spacing has not been defined." << endl;
+		exit(-1);
+	}
+
 	if(svar.Nframe < 0)
 	{
 		cout << "Number of frames to output not defined." << endl;
@@ -619,44 +674,89 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	{
 		svar.dt = svar.dt_min;
 	}
+
 	/* Particle Tracking Settings */
-    // if(svar.partout == 1)
-    // {
-    //     if(svar.outdir.empty())
-    //     {
-    //         cout << "Output particle directory not defined." << endl;
-    //         exit(-1);
-    //     }
-    // }
+	if(svar.using_ipt)
+	{
+		// if(svar.partout == 1)
+		// {
+		//     // if(svar.outdir.empty())
+		//     // {
+		//     //     cout << "Output particle directory not defined." << endl;
+		//     //     exit(-1);
+		//     // }
+		// 	string partf = svar.output_prefix + "_parts.dat";
 
-    // if(svar.streakout == 1)
-    // {
-    //     if(svar.streakdir.empty())
-    //     {
-    //         cout << "Output particle streaks directory not defined." << endl;
-    //         exit(-1);
-    //     }
-    // }
+		// 	svar.partfile.open(partf,std::ios::out);
+		// 	if(!svar.cellfile)
+		// 	{
+		// 		cout << "Failed to open the particle tracking scatter file." << endl;
+		// 		exit(-1);
+		// 	}
+		// }
 
-    // if(svar.cellsout == 1)
-    // {
-    //     if(svar.celldir.empty())
-    //     {
-    //         cout << "Output cell intersections directory not defined." << endl;
-    //         exit(-1);
-    //     }
-    // }
+		// if(svar.streakout == 1)
+		// {
+		//     // if(svar.streakdir.empty())
+		//     // {
+		//     //     cout << "Output particle streaks directory not defined." << endl;
+		//     //     exit(-1);
+		//     // }
+		// 	string streakf = svar.output_prefix + "_streaks.dat";
+		// 	svar.streakfile.open(streakf,std::ios::out);
+		// 	if(!svar.cellfile)
+		// 	{
+		// 		cout << "Failed to open the particle tracking streaks file." << endl;
+		// 		exit(-1);
+		// 	}
+		// }
 
-    if(svar.eqOrder > 2 || svar.eqOrder < 1)
-    {
-        cout << "Equation order not 1 or 2. Please choose between these." << endl;
-        exit(-1);
-    }
+		// if(svar.cellsout == 1)
+		// {
+		//     // if(svar.celldir.empty())
+		//     // {
+		//     //     cout << "Output cell intersections directory not defined." << endl;
+		//     //     exit(-1);
+		//     // }
+		// 	string cellf = svar.output_prefix + "_cells.dat";
+		// 	svar.cellfile.open(cellf,std::ios::out);
+		// 	if(!svar.cellfile)
+		// 	{
+		// 		cout << "Failed to open the particle tracking cell file." << endl;
+		// 		exit(-1);
+		// 	}
+		// }
 
-    // svar.streakdir = svar.outfile;
-    // size_t pos = svar.streakfile.find_last_of(".");
-    // svar.streakfile.insert(pos,"_streak");
-    
+		if(svar.eqOrder > 2 || svar.eqOrder < 1)
+		{
+			cout << "Equation order not 1 or 2. Please choose between these." << endl;
+			exit(-1);
+		}
+
+		if(svar.max_x < svar.sim_start[0])
+		{
+			cout << "ERROR: Maximum x coordinate for particle tracking or SPH is less than the starting position." << endl;
+			exit(-1);
+		}
+
+		if(svar.max_x < svar.max_x_sph)
+		{
+			cout << "WARNING: Maximum x coordinate for particle tracking is less than that for SPH." << endl;
+			cout << "         No particle tracking will be performed." << endl;
+			svar.using_ipt = 0;
+		}
+
+		if(svar.max_x_sph < svar.sim_start[0])
+		{
+			cout << "WARNING: Maximum x coordinate for SPH particles is less than the starting position." << endl;
+			cout << "         Particles will immediately transition to tracking." << endl;
+		}
+
+		// svar.streakdir = svar.outfile;
+		// size_t pos = svar.streakfile.find_last_of(".");
+		// svar.streakfile.insert(pos,"_streak");
+	}
+	
     if(svar.offset_axis != 0)
     {
         if(SIMDIM != 2)
@@ -877,12 +977,11 @@ void Write_ASCII_Timestep(std::fstream& fp, SIM& svar, SPHState const& pnp1,
 }
 
 void Write_First_Step(std::fstream& f1, std::fstream& fb, std::fstream& fg, 
-						SIM& svar, SPHState const& pnp1, SPHState const& airP)
+						SIM& svar, SPHState const& pnp1/* , SPHState const& airP */)
 {
 	if(svar.out_encoding == 1 )
 	{
 		/*Write sim particles*/
-		
 		Init_Binary_PLT(svar,"_fuel.szplt","Simulation Particles",svar.fuelFile);
 		if(svar.restart == 0)
 		{
@@ -898,11 +997,11 @@ void Write_First_Step(std::fstream& f1, std::fstream& fb, std::fstream& fg,
 				Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2,svar.boundFile); 
 		}	
 
-		if (svar.ghost == 1 && svar.gout == 1)
-		{
-			/*Write boundary particles*/
-			Init_Binary_PLT(svar,"_ghost.szplt","Ghost Particles",svar.ghostFile);		
-		}	
+		// if (svar.ghost == 1 && svar.gout == 1)
+		// {
+		// 	/*Write boundary particles*/
+		// 	Init_Binary_PLT(svar,"_ghost.szplt","Ghost Particles",svar.ghostFile);		
+		// }	
 	}
 	else
 	{
@@ -939,17 +1038,17 @@ void Write_First_Step(std::fstream& f1, std::fstream& fb, std::fstream& fg,
 			exit(-1);
 		}
 
-		if(svar.ghost == 1 && svar.gout == 1)
-		{
-			string ghostfile = svar.output_prefix;
-			ghostfile.append("_ghost.plt");
-			fg.open(ghostfile,std::ios::out);
-			if(fg.is_open())
-			{
-				Write_ASCII_header(fg,svar);
-				Write_ASCII_Timestep(fg,svar,airP,0,0,airP.size(),"Ghost");
-			}
-		}
+		// if(svar.ghost == 1 && svar.gout == 1)
+		// {
+		// 	string ghostfile = svar.output_prefix;
+		// 	ghostfile.append("_ghost.plt");
+		// 	fg.open(ghostfile,std::ios::out);
+		// 	if(fg.is_open())
+		// 	{
+		// 		Write_ASCII_header(fg,svar);
+		// 		Write_ASCII_Timestep(fg,svar,airP,0,0,airP.size(),"Ghost");
+		// 	}
+		// }
 	}
 
 	if(svar.restart == 0)
@@ -973,7 +1072,7 @@ void Write_First_Step(std::fstream& f1, std::fstream& fb, std::fstream& fg,
 }
 
 void Write_Timestep(std::fstream& f1, std::fstream& fb, std::fstream& fg, 
-				SIM& svar, SPHState const& pnp1, SPHState const& airP)
+				SIM& svar, SPHState const& pnp1/* , SPHState const& airP */)
 {
 	if (svar.out_encoding == 1)
 	{
@@ -982,8 +1081,8 @@ void Write_Timestep(std::fstream& f1, std::fstream& fb, std::fstream& fg,
 			Write_Binary_Timestep(svar,pnp1,0,svar.bndPts,"Boundary",2,svar.boundFile); 
 		}
 		Write_Binary_Timestep(svar,pnp1,svar.bndPts,svar.totPts,"Fuel",1,svar.fuelFile); /*Write sim particles*/
-		if(svar.ghost != 0 && svar.gout == 1 && airP.size() != 0)
-			Write_Binary_Timestep(svar,airP,0,airP.size(),"Ghost",3,svar.ghostFile);
+		// if(svar.ghost != 0 && svar.gout == 1 && airP.size() != 0)
+		// 	Write_Binary_Timestep(svar,airP,0,airP.size(),"Ghost",3,svar.ghostFile);
 	} 
 	else
 	{
@@ -994,584 +1093,9 @@ void Write_Timestep(std::fstream& f1, std::fstream& fb, std::fstream& fg,
 			Write_ASCII_Timestep(fb,svar,pnp1,1,0,svar.bndPts,"Boundary");
 		}
 
-		if(svar.ghost != 0 && svar.gout == 1 && airP.size() != 0)
-			Write_ASCII_Timestep(fg,svar,airP,0,0,airP.size(),"Ghost");
+		// if(svar.ghost != 0 && svar.gout == 1 && airP.size() != 0)
+		// 	Write_ASCII_Timestep(fg,svar,airP,0,0,airP.size(),"Ghost");
 	}
-}
-
-
-/* Particle tracking functions */
-namespace IPT
-{
-	void Write_ASCII_variables(ofstream& fp)
-	{
-		string variables = 
-	"\"X\", \"Y\", \"Z\", \"t\", \"dt\", \"v\", \"a\", \"ptID\", \"Cell_V\", \"Cell_Rho\", \"Cell_ID\"";
-
-		fp << "VARIABLES = " << variables << "\n";
-	}
-
-	void Write_ASCII_Scatter_Header(ofstream& fp)
-	{
-		fp << "TITLE =\"IPT particle scatter data\" \n";
-		fp << "F=POINT\n";
-		fp << std::left << std::scientific << std::setprecision(6);
-	}
-
-	void Write_ASCII_Streaks_Header(ofstream& fout)
-	{
-		fout << "TITLE = \"IPT Streaks\"\n";
-		Write_ASCII_variables(fout);
-	}
-
-	void Write_ASCII_Cells_Header(ofstream& fout)
-	{
-		fout << "TITLE = \"IPT intersecting cells\"\n";
-		fout << "VARIABLES= \"X\" \"Y\" \"Z\" " << endl;
-	}
-	
-	void Init_IPT_Files(SIM& svar)
-	{
-		string partf, cellf, streakf, surfacef;
-
-		partf = svar.output_prefix;
-		partf.append("_IPT_scatter.dat");
-
-		streakf = svar.output_prefix;
-		streakf.append("_IPT_streaks.dat");
-
-		cellf = svar.output_prefix;
-		cellf.append("_IPT_cells.dat");
-
-		surfacef = svar.output_prefix;
-		surfacef.append("_surface_impacts.dat");
-
-		if(svar.partout == 1)
-		{
-			svar.partfile.open(partf,std::ios::in);
-			
-			if(svar.partfile.is_open())
-			{
-				Write_ASCII_Scatter_Header(svar.partfile);
-			}
-			else
-			{
-				cout << "Couldn't open the IPT particle scatter output file." << endl;
-				exit(-1);
-			}
-		}
-
-		if(svar.streakout == 1)
-		{
-			svar.streakfile.open(streakf,std::ios::in);
-
-			if(svar.streakfile.is_open())
-			{
-				Write_ASCII_Streaks_Header(svar.streakfile);
-			}
-			else
-			{
-				cout << "Couldn't open the IPT streaks output file." << endl;
-				exit(-1);
-			}
-		}
-
-		if(svar.cellsout == 1)
-		{
-			svar.cellfile.open(cellf,std::ios::in);
-
-			if(svar.cellfile.is_open())
-			{
-				Write_ASCII_Cells_Header(svar.cellfile);
-			}
-			else
-			{
-				cout << "Couldn't open the IPT cell intersection output file." << endl;
-				exit(-1);
-			}
-		}
-
-		// svar.surfacefile.open(surfacef,std::ios::in);
-	}
-
-	void Write_ASCII_Point(ofstream& fp, real const& scale, IPTPart const& pnp1)
-	{
-		const static uint width = 15;
-
-		for(uint dim = 0; dim < 3; ++dim)
-			fp << setw(width) << pnp1.xi[dim]/scale;
-
-		fp << setw(width) << pnp1.t; 
-
-		fp << setw(width) << pnp1.dt; 
-		
-		fp << setw(width) << pnp1.v.norm(); 
-
-		fp << setw(width) << pnp1.acc; 
-
-		fp << setw(width) << pnp1.partID;
-
-		fp << setw(width) << pnp1.cellV.norm();
-
-		fp << setw(width) << pnp1.cellRho;
-		fp << setw(width) << pnp1.cellID << "\n"; 
-	}
-
-	void Write_ASCII_Timestep(ofstream& fp, SIM const& svar, IPTState const& pnp1)
-	{
-		fp <<  "ZONE T=\"" << "IPT scatter data" << "\"";
-		fp <<", I=" << pnp1.size() << ", F=POINT" <<", STRANDID=1, SOLUTIONTIME=" << svar.t  << "\n";
-		fp << std::left << std::scientific << std::setprecision(6);
-		
-		for (size_t ii = 0; ii < pnp1.size(); ++ii)
-		{
-			Write_ASCII_Point(fp, svar.scale, pnp1[ii]);
-		}
-		fp << std::flush;
-	}
-
-	void Write_ASCII_Streaks( SIM& svar, IPTState const& t_pnp1, IPTPart const& pnp1)
-	{
-		ofstream& fp = svar.streakfile;
-		if(!fp.is_open())
-		{
-			cout << "The streak output file is not open. Cannot write." << endl;
-			exit(-1);
-		}
-		
-		size_t nTimes = t_pnp1.size();
-		size_t time = 0;
-		
-		fp <<  "ZONE T=\"" << "Ash particle " << pnp1.partID << "\"";
-		
-		if(pnp1.failed == 0)
-			fp <<", I=" << nTimes+1 << ", J=1, K=1, DATAPACKING=POINT"<< "\n";
-		else
-			fp <<", I=" << nTimes << ", J=1, K=1, DATAPACKING=POINT"<< "\n";
-
-		fp << std::left << std::scientific << std::setprecision(6);
-
-		for (time = 0; time < nTimes; ++time)
-		{ /* Inner loop to write the times of the particle */
-			Write_ASCII_Point(fp, svar.scale, t_pnp1[time]);
-		}
-
-		if(pnp1.failed == 0)
-			Write_ASCII_Point(fp, svar.scale, pnp1);
-
-	}
-
-
-	void Write_ASCII_Cells(SIM& svar, MESH const& cells, IPTState const& t_pnp1)
-	{
-		size_t nTimes = t_pnp1.size();
-		size_t time = 0;
-
-		/* Write file for each particle. Gonna get way too confusing otherwise */
-		ofstream& fout = svar.cellfile;
-
-		if(!fout.is_open())
-		{
-			cout << "Couldn't open the cell intersection output file." << endl;
-			exit(-1);
-		}
-
-		int TotalNumFaceNodes = 0;
-
-		vector<size_t> vertIndexes;
-		vector<size_t> faceIndexes;
-		vector<int> cellIndexes;
-
-		vector<StateVecD> usedVerts;
-		vector<vector<size_t>> faces;
-		vector<int> left;
-		vector<int> right;
-
-
-		/* Get cell properties for the intersected cells (delete duplicates later)*/
-		for (time = 0; time < nTimes; ++time)
-		{
-			int cellID = t_pnp1[time].cellID;
-			
-			/* Find how many vertices the cell has */
-			vertIndexes.insert(vertIndexes.end(), cells.elems[cellID].begin(), cells.elems[cellID].end());
-			
-			faceIndexes.insert(faceIndexes.end(), cells.cFaces[cellID].begin(), cells.cFaces[cellID].end());
-
-			cellIndexes.emplace_back(cellID);
-		}
-
-		/* Delete repeats of vertex mentions*/
-		std::sort(vertIndexes.begin(),vertIndexes.end());
-		vertIndexes.erase( std::unique( vertIndexes.begin(), vertIndexes.end()), vertIndexes.end() );
-
-		std::sort(faceIndexes.begin(),faceIndexes.end());
-		faceIndexes.erase( std::unique( faceIndexes.begin(), faceIndexes.end()), faceIndexes.end() );
-
-		for(size_t const& vert : vertIndexes)
-		{
-			usedVerts.emplace_back(cells.verts[vert]);
-		}
-
-		/* Get faces properties used in the cell */
-		for(size_t const& face: faceIndexes )
-		{
-			faces.emplace_back(cells.faces[face]);
-			left.emplace_back(cells.leftright[face].first);
-			right.emplace_back(cells.leftright[face].second);
-		}
-
-		/* Go through the faces indexes, finding the appropriate index to change it to */
-
-		for(vector<size_t>& face : faces)
-		{
-			for(size_t& vert : face)
-			{
-				vector<size_t>::iterator index = std::find(vertIndexes.begin(), vertIndexes.end(), vert);
-				if(index != vertIndexes.end())
-				{
-					vert = index - vertIndexes.begin() + 1 ;
-				}
-				else
-				{
-					cout << "Couldn't find the vertex used in the prepared list." << endl;
-					exit(-1);
-				}                
-			}
-			TotalNumFaceNodes += face.size();
-		}
-
-		/* Find the cell used and change it's index */
-		for(int& leftCell:left)
-		{
-			vector<int>::iterator index = std::find(cellIndexes.begin(), cellIndexes.end(), leftCell);
-			if(index != cellIndexes.end())
-			{
-				leftCell = (index - cellIndexes.begin())+1;
-			}
-			else
-			{   /* Cell isn't intersected, so it won't be drawn. Boundary face. */
-				leftCell = 0;
-			} 
-		}
-
-		for(int& rightCell:right)
-		{
-			vector<int>::iterator index = std::find(cellIndexes.begin(), cellIndexes.end(), rightCell);
-			if(index != cellIndexes.end())
-			{
-				rightCell = index - cellIndexes.begin() + 1;
-			}
-			else
-			{   /* Cell isn't intersected, so it won't be drawn. Boundary face. */
-				rightCell = 0;
-			}
-		}
-
-		fout << "ZONE T=\"particle " << t_pnp1[0].partID << " intersecting cells\"" << endl;
-		fout << "ZONETYPE=FEPOLYHEDRON" << endl;
-		fout << "NODES=" << usedVerts.size() << " ELEMENTS=" << cellIndexes.size() << 
-				" FACES=" << faces.size() << endl;
-		fout << "TotalNumFaceNodes=" << TotalNumFaceNodes << endl;
-		fout << "NumConnectedBoundaryFaces=0 TotalNumBoundaryConnections=0" << endl;
-
-		size_t w = 15;
-		size_t preci = 6;
-		fout << std::left << std::scientific << std::setprecision(preci);
-
-		size_t newl = 0;
-		fout << std::setw(1);
-		for(size_t DIM = 0; DIM < 3; ++DIM)
-		{
-			for(size_t ii = 0; ii < usedVerts.size(); ++ii)
-			{
-				fout << std::setw(w) << usedVerts[ii][DIM];
-				newl++;
-
-				if(newl>4)
-				{
-					fout << endl;
-					fout << " ";
-					newl=0;
-				}
-			}
-		}
-		fout << endl;
-
-		fout << std::left << std::fixed;
-		w = 9;
-		/*Inform of how many vertices in each face*/
-		fout << "#node count per face" << endl;
-		newl = 0;
-		for (size_t ii = 0; ii < faces.size(); ++ii)
-		{
-			fout << std::setw(w) << faces[ii].size();
-			newl++;
-
-			if(newl>4)
-			{
-				fout << endl;
-				newl=0;
-			}
-		}
-		fout << endl;
-		/*Write the face data*/
-		fout << "#face nodes" << endl;
-		for (size_t ii = 0; ii < faces.size(); ++ii)
-		{
-			for(auto const& vertex:faces[ii])
-			{	/*Write face vertex indexes*/
-				fout << std::setw(w) << vertex;
-				// if (vertex > fdata.nPnts)
-				// {
-				// 	cout << "Trying to write a vertex outside of the number of points." << endl;
-				// }
-			}
-			fout << endl;
-		}
-
-		/*Write face left and right*/
-		newl = 0;
-		fout << "#left elements" << endl;
-		for (size_t ii = 0; ii < left.size(); ++ii)
-		{
-			fout << std::setw(w) << left[ii] ;
-			newl++;
-
-			if(newl>4)
-			{
-				fout << endl;
-				newl=0;
-			}
-		}
-		fout << endl;
-
-		newl = 0;
-		fout << "#right elements" << endl;
-		for (size_t ii = 0; ii < right.size(); ++ii)
-		{
-			fout << std::setw(w) << right[ii] ;
-			newl++;
-
-			if(newl>4)
-			{
-				fout << endl;
-				newl=0;
-			}
-		}
-
-		fout.close();
-	}
-
-
-	void Write_ASCII_Impacts(SIM const& svar, FLUID const& fvar, MESH const& cells, 
-				vector<SURF> const& surfs, vector<vector<real>> const& beta_data)
-	{
-		// uint nSurf = svar.markers.size();
-		uint nSurf = 0;
-		vector<int> marks;
-		vector<string> names;
-		vector<SURF> surfaces_to_write;
-		for(size_t ii = 0; ii < surfs.size(); ii++)
-		{
-			if(surfs[ii].output == 1)
-			{
-				marks.emplace_back(svar.markers[ii]);
-				names.emplace_back(svar.bnames[ii]);
-				surfaces_to_write.emplace_back(surfs[ii]);
-			}
-			nSurf += surfs[ii].output;
-		}
-
-		nSurf = 0;
-		for(size_t ii = 0; ii < surfs.size(); ii++)
-		{
-			if(surfs[ii].output == 1)
-			{
-				surfaces_to_write[nSurf].face_count = surfs[ii].face_count;
-				surfaces_to_write[nSurf].face_beta = surfs[ii].face_beta;
-				surfaces_to_write[nSurf].face_area = surfs[ii].face_area;
-			}
-			nSurf += surfs[ii].output;
-		}
-		
-
-		vector<vector<vector<size_t>>> faces(nSurf);
-		vector<std::pair<size_t,int>> smarkers = cells.smarkers;
-
-		vector<vector<size_t>> vertIndexes(nSurf);
-		vector<vector<StateVecD>> usedVerts(nSurf);
-		
-		/* Do I need to sort the markers? */
-		std::sort(smarkers.begin(), smarkers.end(),
-		[](std::pair<size_t,int> const& p1, std::pair<size_t,int> const& p2){return p1.second > p2.second;});
-
-		
-		for(size_t ii = 0; ii < surfaces_to_write.size(); ++ii)
-		{
-
-			for(size_t jj = 0; jj < surfaces_to_write[ii].faceIDs.size(); ++jj )
-			{
-				size_t faceID = surfaces_to_write[ii].faceIDs[jj];
-				faces[ii].emplace_back(cells.faces[faceID]);
-			}
-		
-			/* Get the vertex indexes, delete duplicates, reorder, and recast the face indexes */
-			for (vector<size_t> const& face : faces[ii])
-				vertIndexes[ii].insert(vertIndexes[ii].end(), face.begin(), face.end());
-			
-
-			std::sort(vertIndexes[ii].begin(),vertIndexes[ii].end());
-			vertIndexes[ii].erase(std::unique( vertIndexes[ii].begin(), vertIndexes[ii].end()), vertIndexes[ii].end() );
-
-			for(size_t const& vert : vertIndexes[ii])
-				usedVerts[ii].emplace_back(cells.verts[vert]);
-		
-
-			for(vector<size_t>& face : faces[ii])
-			{
-				for(size_t& vert : face)
-				{
-					vector<size_t>::iterator index = std::find(vertIndexes[ii].begin(), vertIndexes[ii].end(), vert);
-					if(index != vertIndexes[ii].end())
-					{
-						vert = index - vertIndexes[ii].begin() + 1 ;
-					}
-					else
-					{
-						cout << "Couldn't find the vertex used in the prepared list." << endl;
-						exit(-1);
-					}                
-				}
-			}
-		}
-
-		
-		string file = svar.output_prefix;
-		file.append("_surface_impacts.dat");
-
-		ofstream fout(file);
-
-		if(!fout.is_open())
-		{
-			cout << "Couldn't open the surface impact output file." << endl;
-			exit(-1);
-		}
-
-		fout << "TITLE=\"Surface collision metrics\"\n";
-		fout << "VARIABLES= \"X\" \"Y\" \"Z\" \"Number of Impacts\" \"beta\" \"average area\"\n";
-		
-		for(size_t ii = 0; ii < faces.size(); ++ii)
-		{
-			fout << "ZONE T=\"" << names[ii] << "\"\n";
-			fout << "N=" << usedVerts[ii].size() << ", E=" << faces[ii].size();
-			fout << ", F=FEBLOCK ET=QUADRILATERAL, VARLOCATION=([1-3]=NODAL,[4-7]=CELLCENTERED)\n\n";
-			
-			
-			size_t w = 15;
-			size_t preci = 6;
-			fout << std::left << std::scientific << std::setprecision(preci);
-
-			size_t newl = 0;
-			fout << std::setw(1);
-			for(size_t DIM = 0; DIM < SIMDIM; ++DIM)
-			{
-				for(size_t jj = 0; jj < usedVerts[ii].size(); ++jj)
-				{
-					fout << std::setw(w) << usedVerts[ii][jj][DIM];
-					newl++;
-
-					if(newl>4)
-					{
-						fout << endl;
-						fout << " ";
-						newl=0;
-					}
-				}
-			}
-			fout << endl << endl;
-
-			/* Variable data goes here */
-			fout << "#face impact count" << endl;
-			for(size_t jj = 0; jj < surfaces_to_write[ii].face_count.size(); ++jj)
-			{
-				fout << std::setw(w) << surfaces_to_write[ii].face_count[jj];
-				newl++;
-
-				if(newl>4)
-				{
-					fout << endl;
-					fout << " ";
-					newl=0;
-				}
-			}
-			fout << endl << endl;
-
-			// for(size_t jj = 0; jj < surfs[surf].mass.size(); ++jj)
-			// {
-			//     fout << std::setw(w) << surfs[surf].mass[jj];
-			//     newl++;
-
-			//     if(newl>4)
-			//     {
-			//         fout << endl;
-			//         fout << " ";
-			//         newl=0;
-			//     }
-			// }
-			// fout << endl;
-			fout << "#face beta value" << endl; 
-			for(size_t jj = 0; jj < surfaces_to_write[ii].face_beta.size(); ++jj)
-			{
-				fout << std::setw(w) << surfaces_to_write[ii].face_beta[jj];
-				newl++;
-
-				if(newl>4)
-				{
-					fout << endl;
-					fout << " ";
-					newl=0;
-				}
-			}
-			fout << endl << endl;
-
-			fout << "#face area value" << endl;
-			for(size_t jj = 0; jj < surfaces_to_write[ii].face_area.size(); ++jj)
-			{
-				fout << std::setw(w) << surfaces_to_write[ii].face_area[jj];
-				newl++;
-
-				if(newl>4)
-				{
-					fout << endl;
-					fout << " ";
-					newl=0;
-				}
-			}
-			fout << endl << endl;
-
-
-			/*Write the face data*/
-			fout << "#face nodes" << endl;
-			for (size_t jj = 0; jj < faces[ii].size(); ++jj)
-			{
-				for(auto const& vertex:faces[ii][jj])
-				{	/*Write face vertex indexes*/
-					fout << std::setw(w) << vertex;
-					// if (vertex > fdata.nPnts)
-					// {
-					// 	cout << "Trying to write a vertex outside of the number of points." << endl;
-					// }
-				}
-
-				if(faces[ii][jj].size() == 3)
-					fout << std::setw(w) << faces[ii][jj].back();
-
-				fout << endl;
-			}
-		}
-		fout.close();
-	}   
 }
 
 #endif

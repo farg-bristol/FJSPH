@@ -75,83 +75,157 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 	real rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
 
 /************** Create the boundary pn  *****************/ 	 
+	int nlevels = 3;
 	real step = svar.Pstep*svar.Bstep;
-	int Ny = ceil((svar.bound_box(1)+4*svar.Pstep)/step);	
-	int Nx = ceil((svar.bound_box(0)+4*svar.Pstep)/step);
-	#if (SIMDIM == 3)
-		int Nz = ceil(svar.bound_box(2)/step);
-	#endif
-	uint pID = 0;
 
+	int Nx = ceil((svar.bound_box[0]+2*(svar.Pstep - step))/step);
+	real dx = (svar.bound_box[0]+2*(svar.Pstep - step))/(Nx-1);
+
+	int Ny = ceil((svar.bound_box[1]+nlevels*dx+svar.Pstep)/step);
+	real dy = (svar.bound_box[1]+nlevels*dx+svar.Pstep)/(Ny-1);
+	
+	#if (SIMDIM == 3)
+		int Nz = ceil((svar.bound_box[2])/step);
+		real dz = (svar.bound_box[2])/(Nz-1);
+	#endif
+	
+	uint pID = 0;
 	/* Bcase == 0 -> no boundary */
 	if(svar.Bcase == 1) /*Rectangle*/
 	{	
 		#if SIMDIM == 3
-			for(int j = 0; j <= Ny ; ++j) 
-			{
-				for (int k=0; k<=Nz; ++k) 
-				{	/*Create Left and right boundary faces*/
-					StateVecD xi(0.0,j*step,k*step);
-					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-					pID++;
-					xi(0) = svar.bound_box(0);
-					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-					pID++;
+			// for(int j = 0; j <= Ny ; ++j) 
+			// {
+			// 	for (int k=0; k<=Nz; ++k) 
+			// 	{	/*Create Left and right boundary faces*/
+			// 		StateVecD xi(0.0,j*step,k*step);
+			// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+			// 		pID++;
+			// 		xi(0) = svar.bound_box(0);
+			// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+			// 		pID++;
+			// 	}
+				
+			// }
+			// for(int i = 1; i<Nx ; ++i) 
+			// {
+			// 	for (int j=1; j<Ny; ++j)
+			// 	{	/*Create top and bottom boundary faces*/
+			// 		StateVecD xi(i*step,j*step,0);
+			// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+			// 		pID++;
+			// 		// xi(2)= bound_box(2); //Top boundary (Typically omitted)
+			// 		// pn.emplace_back(SPHPart(xi,v,f,rho,Rrho,bndM,0));
+			// 	}
+				
+			// }
+			// for(int i= 1; i<Nx; ++i) 
+			// {
+			// 	for(int k = 0; k <= Nz; ++k) 
+			// 	{	/*Create far and near boundary*/
+			// 		StateVecD xi(i*step, 0, k*step);
+			// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+			// 		pID++;
+			// 		xi(1) = svar.bound_box(1);
+			// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+			// 		pID++;
+			// 	}
+			// }
+
+			for(int level = nlevels-1; level >=0; level--)
+			{	
+				for(real z = svar.bound_start[2]+dz-svar.Pstep; z <= svar.bound_box[2]+svar.bound_start[2]; z+=dz )
+				{
+					for(real y = svar.bound_box[1] + svar.bound_start[1]; y >= svar.bound_start[1]-(nlevels)*dy-svar.Pstep; y -= dy)
+					{	/* Left wall */
+						StateVecD xi(svar.bound_start[0] - (level)*dx - svar.Pstep, y, z);
+						pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+						pID++;
+					}
+
+					for(real x = svar.bound_start[0]- svar.Pstep + dx; x <=  svar.bound_box[0]+svar.bound_start[0]+svar.Pstep; x += dx) 
+					{	/*Floor*/
+						StateVecD xi(x, svar.bound_start[1] - (level)*dy - svar.Pstep, z);
+						pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+						pID++;
+					}
+
+					for(real y =  svar.bound_start[1]-(nlevels)*dy-svar.Pstep; y <= svar.bound_box[1] + svar.bound_start[1]; y += dy)
+					{	/* Right wall */
+						StateVecD xi(svar.bound_start[0] + svar.bound_box[0] + (level)*dx + svar.Pstep, y, z);
+						pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+						pID++;
+					}
+
+				}
+
+				for(real y =  svar.bound_start[1]-(nlevels)*dy-svar.Pstep; y <= svar.bound_box[1] + svar.bound_start[1]; y += dy)
+				{	
+					for(real x = svar.bound_start[0]- svar.Pstep + dx; x <=  svar.bound_box[0]+svar.bound_start[0]+svar.Pstep; x += dx) 
+					{	/* Back wall */
+						StateVecD xi(x, y, svar.bound_start[2] - (level)*dz - svar.Pstep );
+						pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+						pID++;
+
+					}
+				}
+
+				for(real y =  svar.bound_start[1]-(nlevels)*dy-svar.Pstep; y <= svar.bound_box[1] + svar.bound_start[1]; y += dy)
+				{	
+					for(real x = svar.bound_start[0] - svar.Pstep + dx; x <=  svar.bound_box[0]+svar.bound_start[0]+svar.Pstep; x += dx) 
+					{	/* Front wall */
+						StateVecD xi(x, y, svar.bound_start[2] + svar.bound_box[2] + (level)*dz + svar.Pstep );
+						pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+						pID++;
+					}
 				}
 				
-			}
-			for(int i = 1; i<Nx ; ++i) 
-			{
-				for (int j=1; j<Ny; ++j)
-				{	/*Create top and bottom boundary faces*/
-					StateVecD xi(i*step,j*step,0);
-					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-					pID++;
-					// xi(2)= bound_box(2); //Top boundary (Typically omitted)
-					// pn.emplace_back(SPHPart(xi,v,f,rho,Rrho,bndM,0));
-				}
 				
+				// 	// Optional lid
+				// for(int i = 1; i <Nx ; ++i) {
+				// 	StateVecD xi(i*stepx,bound_box(1));
+				// 	particles.emplace_back(SPHPart(xi,v,f,rho,Rrho,bndM,Bound));	
+				// }
+				// StateVecD x(stepx-svar.bound_start(0),(Ny+0.5)*stepy);
+				// pn.emplace_back(SPHPart(x,v,f,rho,fvar.bndM,true));
+				// x(0) = svar.bound_box(0) -stepx;
+				// pn.emplace_back(SPHPart(x,v,f,rho,fvar.bndM,true));
 			}
-			for(int i= 1; i<Nx; ++i) 
-			{
-				for(int k = 0; k <= Nz; ++k) 
-				{	/*Create far and near boundary*/
-					StateVecD xi(i*step, 0, k*step);
-					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-					pID++;
-					xi(1) = svar.bound_box(1);
-					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-					pID++;
-				}
-			}
+
 		#else /*SIMDIM == 2*/
-			for(int i = 0; i <= Ny ; ++i) 
-			{	/* Left Wall*/
-				StateVecD xi(-svar.bound_start(0)-2*svar.Pstep,i*step-svar.bound_start(1)-2*svar.Pstep);
-				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-				pID++;
-			}
-	/*			// Optional lid
-			for(int i = 1; i <Nx ; ++i) {
-				StateVecD xi(i*stepx,bound_box(1));
-				particles.emplace_back(SPHPart(xi,v,f,rho,Rrho,bndM,Bound));	
-			}
-			StateVecD x(stepx-svar.bound_start(0),(Ny+0.5)*stepy);
-			pn.emplace_back(SPHPart(x,v,f,rho,fvar.bndM,true));
-			x(0) = svar.bound_box(0) -stepx;
-			pn.emplace_back(SPHPart(x,v,f,rho,fvar.bndM,true));
-	*/
-			for(int i= Ny; i>0; --i) 
-			{	/*Right Wall*/
-				StateVecD xi(Nx*step-svar.bound_start(0)-2*svar.Pstep,i*step-svar.bound_start(1)-2*svar.Pstep);
-				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));	
-				pID++;
-			}
-			for(int i = Nx; i > 0; --i) 
-			{	/*Floor*/
-				StateVecD xi(i*step-svar.bound_start(0)-2*svar.Pstep,-svar.bound_start(1)-2*svar.Pstep);
-				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
-				pID++;
+
+			for(int level = nlevels-1; level >=0; level--)
+			{
+				for(real y = svar.bound_box[1] + svar.bound_start[1]; y >= svar.bound_start[1]-(nlevels)*dy-svar.Pstep; y -= dy)
+				{	/* Left wall */
+					StateVecD xi(svar.bound_start[0] - (level)*dx - svar.Pstep, y);
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+					pID++;
+				}
+
+				for(real x = svar.bound_start[0]- svar.Pstep + dx; x <=  svar.bound_box[0]+svar.bound_start[0]+svar.Pstep; x += dx) 
+				{	/*Floor*/
+					StateVecD xi(x, svar.bound_start[1] - (level)*dy - svar.Pstep);
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+					pID++;
+				}
+
+				for(real y =  svar.bound_start[1]-(nlevels)*dy-svar.Pstep; y <= svar.bound_box[1] + svar.bound_start[1]; y += dy)
+				{	/* Right wall */
+					StateVecD xi(svar.bound_start[0] + svar.bound_box[0] + (level)*dx + svar.Pstep, y);
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
+					pID++;
+				}
+				
+				// 	// Optional lid
+				// for(int i = 1; i <Nx ; ++i) {
+				// 	StateVecD xi(i*stepx,bound_box(1));
+				// 	particles.emplace_back(SPHPart(xi,v,f,rho,Rrho,bndM,Bound));	
+				// }
+				// StateVecD x(stepx-svar.bound_start(0),(Ny+0.5)*stepy);
+				// pn.emplace_back(SPHPart(x,v,f,rho,fvar.bndM,true));
+				// x(0) = svar.bound_box(0) -stepx;
+				// pn.emplace_back(SPHPart(x,v,f,rho,fvar.bndM,true));
 			}
 		#endif		
 	}
@@ -179,7 +253,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 						StateVecD perturb(random(interval), random(interval), random(interval));
 						StateVecD xi(r*sin(theta), y, r*cos(theta));
 						xi += perturb;
-						pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+						pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 						pID++;
 					}	
 				}
@@ -190,24 +264,23 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 			real stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
-			for(real ii = 0; ii < 4; ii+=1.0)
+			for(real x = jetR; x < jetR + 2*fvar.H - svar.dx; x+=stepb)
 			{
-				real x = jetR + ii*stepb;
-				for (real y = 0.0; y >= -svar.jet_depth - 2.0 * stepb; y-=stepb)			
+				for (real y = 0.0; y >= -(svar.jet_depth + 6.0 * svar.dx); y-=stepb)			
 				{
 					StateVecD perturb(random(interval), random(interval));
 					StateVecD xi(-x,y);
 					xi += perturb;
-					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 					pID++;
 				}
 
-				for (real y = 0.0; y >= -svar.jet_depth - 2.0 * stepb; y -= stepb)
+				for (real y = 0.0; y >= -(svar.jet_depth + 6.0 * svar.dx); y -= stepb)
 				{
 					StateVecD perturb(random(interval), random(interval));
 					StateVecD xi(x,y);
 					xi += perturb;
-					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 					pID++;
 				}
 			}
@@ -228,7 +301,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(r*sin(theta), y, r*cos(theta));
-					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 					pID++;
 				}	
 			}
@@ -240,7 +313,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(x*sin(theta), y, x*cos(theta));
-					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 					pID++;
 				}	
 			}
@@ -253,7 +326,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 				for(real theta = 0; theta < 2*M_PI; theta += dtheta)
 				{
 					StateVecD xi(r*sin(theta), y, r*cos(theta));
-					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 					pID++;
 				}	
 			}
@@ -267,7 +340,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 			for (real y = -svar.jet_depth*2; y >= -svar.jet_depth*3; y-=stepb)
 			{
 				StateVecD xi(-resR,y);
-				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 				pID++;
 			}	
 
@@ -277,7 +350,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 				/*Interpolate between resR and jetR*/
 				real x = resR + (y-2*svar.jet_depth)*(jetR-resR)/(-svar.jet_depth);
 				StateVecD xi(-x,y);
-				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 				pID++;
 			}
 
@@ -285,7 +358,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 			for (real y = 0; y > -svar.jet_depth; y-=stepb)
 			{
 				StateVecD xi(-jetR,y);
-				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 				pID++;
 			}
 
@@ -293,7 +366,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 			for (real y = -svar.jet_depth*2; y >= -svar.jet_depth*3; y-=stepb)
 			{
 				StateVecD xi(resR,y);
-				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 				pID++;
 			}
 
@@ -303,7 +376,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 				/*Interpolate between resR and jetR*/
 				real x = resR + (y-2*svar.jet_depth)*(jetR-resR)/(-svar.jet_depth);
 				StateVecD xi(x,y);
-				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 				pID++;
 			}
 
@@ -311,7 +384,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 			for (real y = 0; y > -svar.jet_depth; y-=stepb)
 			{
 				StateVecD xi(jetR,y);
-				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+				pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 				pID++;
 			}
 		#endif
@@ -334,7 +407,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		// 	{ /*Do the centerline of points*/
 		// 		real y = -(2*svar.jet_depth+tankD+fvar.H);
 		// 		StateVecD xi(0.0,y,z);
-		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.simM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.simM,press,BOUND,pID));
 		// 		++pID;
 		// 	}
 
@@ -346,13 +419,13 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		//     		{   /*If the point is inside the hole diameter, add it*/
 		//     			real y = -(2*svar.jet_depth+tankD+fvar.H);
 		// 				StateVecD xi(x,y,z);
-		// 				pn.emplace_back(SPHPart(xi,v,rho,fvar.simM,press,PartState.BOUND_,pID));
+		// 				pn.emplace_back(SPHPart(xi,v,rho,fvar.simM,press,BOUND,pID));
 		// 				++pID;
 		// 				++svar.simPts;
 		// 				++svar.nrefresh;
 
 		// 				xi(0) = -x;
-		// 				pn.emplace_back(SPHPart(xi,v,rho,fvar.simM,press,PartState.BOUND_,pID));
+		// 				pn.emplace_back(SPHPart(xi,v,rho,fvar.simM,press,BOUND,pID));
 		// 				++pID;
 		// 			}
 		// 		}
@@ -367,7 +440,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		// 		{
 		// 			StateVecD xi(resR*sin(theta), y, resR*cos(theta));
 		// 			/*Apply Rotation...*/
-		// 			pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 			pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 		// 			pID++;
 		// 		}	
 		// 	}
@@ -381,7 +454,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		// 		{
 		// 			StateVecD xi(x*sin(theta), y, x*cos(theta));
 		// 			/*Apply Rotation...*/
-		// 			pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 			pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 		// 			pID++;
 		// 		}	
 		// 	}
@@ -394,7 +467,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		// 		{
 		// 			StateVecD xi(jetR*sin(theta), y, jetR*cos(theta));
 		// 			/*Apply Rotation...*/
-		// 			pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 			pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 		// 			pID++;
 		// 		}	
 		// 	}
@@ -414,7 +487,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		// 	for(real x = -(resR-fvar.H); x < (resR -fvar.H); x+=stepb)
 		// 	{
 		// 		StateVecD xi(x,-(2*svar.jet_depth+tankD+3*fvar.H));
-		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 		// 		pID++;
 		// 		svar.psnPts = pID;
 		// 	}
@@ -424,7 +497,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		// 	for (real y = -(svar.jet_depth*2+tankD+3*fvar.H); y <= -svar.jet_depth*2; y+=stepb)
 		// 	{
 		// 		StateVecD xi(-resR,y);
-		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 		// 		pID++;
 		// 	}
 
@@ -436,7 +509,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		// 		/*Interpolate between resR and jetR*/
 		// 		real x = resR - (y+2*svar.jet_depth)*(jetR-resR)/(-svar.jet_depth);
 		// 		StateVecD xi(-x,y);
-		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 		// 		pID++;
 		// 	}
 
@@ -444,7 +517,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		// 	for (real y = -svar.jet_depth; y < 0; y+=stepb)
 		// 	{
 		// 		StateVecD xi(-jetR,y);
-		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 		// 		pID++;
 		// 	}
 
@@ -452,7 +525,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		// 	for (real y = 0; y > -svar.jet_depth; y-=stepb)
 		// 	{
 		// 		StateVecD xi(jetR,y);
-		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 		// 		pID++;
 		// 	}
 
@@ -462,7 +535,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		// 		/*Interpolate between resR and jetR*/
 		// 		real x = resR - (y+2*svar.jet_depth)*(jetR-resR)/(-svar.jet_depth);
 		// 		StateVecD xi(x,y);
-		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 		// 		pID++;
 		// 	}
 
@@ -470,7 +543,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		// 	for (real y = -svar.jet_depth*2; y >= -(svar.jet_depth*2+tankD+3*fvar.H); y-=stepb)
 		// 	{
 		// 		StateVecD xi(resR,y);
-		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.BOUND_,pID));
+		// 		pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 		// 		pID++;
 		// 	}
 		// #endif
@@ -499,9 +572,9 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		for (y = 0.0; y >  -svar.jet_depth; y-= svar.dx)
 		{
 			#if SIMDIM == 3
-				Add_Radial_Points(y, svar, fvar, avar, pn, PartState.FREE_);
+				Add_Radial_Points(y, svar, fvar, avar, pn, FREE);
 			#else
-				AddPoints(y, svar, fvar, avar, pn, PartState.FREE_);
+				AddPoints(y, svar, fvar, avar, pn, FREE);
 			#endif
 		}
 	}
@@ -528,7 +601,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 			for (real y = -svar.jet_depth*2; y > -svar.jet_depth*3; y-=svar.dx)
 			{
 				// cout << "In add points for-loop" << endl;
-				AddPoints(y, svar, fvar, avar, pn, PartState.PIPE_);
+				AddPoints(y, svar, fvar, avar, pn, PIPE);
 			}
 
 			Add_Buffer(svar,fvar,pn);
@@ -539,9 +612,9 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 			for (y = 0.0; y >  -svar.jet_depth; y -= svar.dx)
 			{
 				#if SIMDIM == 3
-					Add_Radial_Points(y, svar, fvar, avar, pn, PartState.PIPE_);
+					Add_Radial_Points(y, svar, fvar, avar, pn, PIPE);
 				#else
-					AddPoints(y, svar, fvar, avar, pn, PartState.PIPE_);
+					AddPoints(y, svar, fvar, avar, pn, PIPE);
 				#endif
 			}
 
@@ -561,7 +634,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 					for (int k=0; k < svar.xyPART(2); ++k )
 					{
 						StateVecD xi(i*svar.dx,	j*svar.dx, k*svar.dx);		
-						pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.FREE_,pID));
+						pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,FREE,pID));
 						pID++;
 					}		
 				}
@@ -573,7 +646,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 				for(int j=0; j< svar.xyPART(1); ++j)
 				{				
 					StateVecD xi(i*svar.dx,j*svar.dx);		
-					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,PartState.FREE_,pID));
+					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,FREE,pID));
 					// pn.back().cellP = 20000-fvar.gasPress;
 					pID++;
 				}

@@ -22,8 +22,8 @@
 #endif
 
 /****** Eigen vector definitions ************/
-typedef Eigen::Matrix<real,SIMDIM,1> StateVecD;
-typedef Eigen::Matrix<int,SIMDIM,1> StateVecI;
+typedef vec<real,SIMDIM> StateVecD;
+typedef vec<int,SIMDIM> StateVecI;
 
 const std::string WHITESPACE = " \n\r\t\f\v";
 

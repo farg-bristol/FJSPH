@@ -5,7 +5,7 @@
 
 #ifdef CUBIC
 	///******Cubic Spline Kernel*******///
-	real const Kernel(real const dist, real const H, real const correc)
+	inline real const Kernel(real const dist, real const H, real const correc)
 	{
 		real const q = dist/H;
 
@@ -21,7 +21,7 @@
 		return 0;
 	}
 
-	StateVecD const GradK(StateVecD const& Rij, real const dist, real const H, real const correc)
+	inline StateVecD const GradK(StateVecD const& Rij, real const dist, real const H, real const correc)
 	{
 		real const q = dist/H;
 
@@ -39,7 +39,7 @@
 
 #else
 	///******Wendland's C2 Quintic Kernel*******///
-	real const Kernel(real const& dist, real const& H, real const& correc) 
+	inline real const Kernel(real const& dist, real const& H, real const& correc) 
 	{
 		// if(dist/H > 2.0)
 		// {
@@ -50,7 +50,7 @@
 	}
 
 	/*Gradient*/
-	StateVecD const GradK(StateVecD const& Rij, real const& dist, real const& H, real const& correc)
+	inline StateVecD const GradK(StateVecD const& Rij, real const& dist, real const& H, real const& correc)
 	{
 		if(dist/H < 1e-12)
 		{
@@ -67,7 +67,7 @@
 #endif
 
 
-real const BoundaryKernel(real const dist, real const H, real const beta)
+inline real const BoundaryKernel(real const dist, real const H, real const beta)
 {
 	real const q = dist/H;
 	if (q < 2.0/3.0)

@@ -3,12 +3,13 @@
 
 #include "Var.h"
 #include "Kernel.h"
+#include "Resid.h"
 #include "Third_Party/Eigen/LU"
 #include "Third_Party/Eigen/Eigenvalues"
 
 
 /*L matrix for delta-SPH calculation*/
-void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHState const& pnp1, 
+void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState const& pnp1, 
 				 OUTL const& outlist, DELTAP& dp)
 {
 	/************   RENORMALISATION MATRIX CALCULATION    ************/
@@ -23,8 +24,9 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 	vector<real> lam_nb(end);
     vector<real> lam_ng(end);
 	vector<real> kernsum(end);
-
-	#pragma omp parallel shared(Lmat,gradRho,norm,lam,lam_nb,lam_ng,kernsum)
+	vector<real> colour(end);
+	real npd = 0.0;
+	#pragma omp parallel default(shared) reduction(+:npd) // shared(Lmat,gradRho,norm,lam,lam_nb,lam_ng,kernsum)
 	{
 		#pragma omp for schedule(static) nowait
 		for(size_t ii = 0; ii < end; ++ii)
@@ -36,6 +38,7 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 			StateVecD norm_ = StateVecD::Zero();
 			StateVecD avgV_ = StateVecD::Zero();
 			real kernsum_ = 0.0;
+			real colour_ = 0.0;
 		
 			SPHPart const& pi = pnp1[ii];
 	
@@ -62,19 +65,21 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 
 				gradRho_ += volj * (pj.rho - pi.rho)*Grad;
 
-				if(pj.b > PartState.PISTON_)
+				if(pj.b > PISTON)
 				{
 					Lmat_nb_ -= volj * Rij * Grad.transpose();
 	
-                    if(pj.b != PartState.GHOST_)
+                    if(pj.b != GHOST)
                     {   /* Ignore ghost particles */   
                         norm_ += volj*Grad;
                         avgV_ += pj.v * kern;
                         kernsum_ += kern;
+						colour_ += volj*kern;
+						npd += kern;
                     }
 				}
 
-                if(pj.b != PartState.GHOST_)
+                if(pj.b != GHOST)
                 {
                     Lmat_ng_ -= volj * Rij * Grad.transpose();
                 }
@@ -123,7 +128,7 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 			
 
 
-			if(pi.b == PartState.BOUND_)
+			if(pi.b == BOUND)
 			{
 				lam[ii] = 1.0;
 				lam_nb[ii] = 1.0;
@@ -131,7 +136,8 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 			}
 	
 			avgV[ii] = (avgV_/kernsum_);
-			kernsum[ii] = (kernsum_);	
+			kernsum[ii] = (kernsum_);
+			colour[ii] = colour_;	
 		}
 
 		// #pragma omp for schedule(static) 
@@ -181,6 +187,7 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 
 	}	/*End parallel section*/	
 
+	dp.npd = npd/real(end);
 	dp.L = Lmat;
 	dp.gradRho = gradRho;
 	dp.norm = norm;
@@ -189,6 +196,57 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 	dp.lam_nb = lam_nb;
     dp.lam_ng = lam_ng;
 	dp.kernsum = kernsum;
+	dp.colour = colour;
+}
+
+/* Calculate dissipation terms before freezing. */
+void dissipation_terms(FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
+DELTAP const& dp, SPHState& pnp1)
+{
+
+	for(size_t ii = start; ii < end; ++ii )
+	{
+		SPHPart const& pi = pnp1[ii];
+		
+		StateVecD artViscI = StateVecD::Zero();
+
+		#ifndef NODSPH
+		real Rrhod = 0.0;
+		#endif
+
+		for (std::pair<size_t,real> const& jj : outlist[ii])
+		{	/* Neighbour list loop. */
+			
+			/*Check if the position is the same, and skip the particle if yes*/
+			if(ii == jj.first)
+				continue;
+
+			SPHPart const& pj = pnp1[jj.first];
+
+			StateVecD const Rij = pj.xi-pi.xi;
+			StateVecD const Vij = pj.v-pi.v;
+			real const rr = jj.second;
+			real const r = sqrt(rr);
+			#ifndef NODSPH	
+			real const volj = pj.m/pj.rho;
+			#endif
+			// StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);
+			StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);/* gradK;*/
+
+
+			artViscI += pj.m*ArtVisc(fvar.nu,pi,pj,fvar,Rij,Vij,rr,gradK);
+
+			#ifndef NODSPH
+			Rrhod -= Continuity_dSPH(Rij,rr,fvar.HSQ,gradK,volj,dp.gradRho[ii],dp.gradRho[jj.first],pi,pj);
+			#endif
+		}
+
+		pnp1[ii].aVisc = artViscI;
+		#ifndef NODSPH
+		pnp1[ii].deltaD = fvar.dCont*Rrhod;
+		#endif
+
+	}
 }
 
 #ifdef ALE
@@ -204,7 +262,7 @@ DELTAP const& dp, SPHState& pnp1)
 
 	// real const maxU = fvar.maxU;
 
-	#pragma omp parallel
+	#pragma omp parallel default(shared)
 	{
 		#pragma omp for schedule(static) nowait
 		for(size_t ii = start; ii < end; ++ii)
@@ -311,7 +369,7 @@ DELTAP const& dp, SPHState& pnp1)
 
 	// real const maxU = fvar.maxU;
 
-	#pragma omp parallel
+	#pragma omp parallel default(shared)
 	{
 		#pragma omp for schedule(static) nowait
 		for(size_t ii = start; ii < end; ++ii)
