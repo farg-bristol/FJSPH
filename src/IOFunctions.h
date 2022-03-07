@@ -99,88 +99,113 @@ void Check_If_Restart_Possible(SIM const& svar)
   	/*Check output folder for any prexisting files*/
   	if(svar.out_encoding == 1)
   	{
-  		string file = svar.restart_prefix;
-  		file.append("_fuel.szplt.szdat");
+		cout << "Checking for previous fluid files..." << endl;
+  		struct stat info;
+
+		// Check if there is the constructed szplt
+  		string file = svar.restart_prefix + "_fuel.szplt";
 		#ifdef DEBUG
-			dbout << "Checking for existence of previous szplt files." << endl;
+			dbout << "Checking for existence of szplt file." << endl;
 			dbout << "Path: " << file << endl;
 		#endif
-  		struct stat info;
   		if(stat( file.c_str(), &info ) == 0)
   		{
-  			// cout << "Split files exist..." << endl;
+  			// cout << "Combined file exists..." << endl;
+			auto sztime = info.st_mtime;
 
-			// Check if there is the constructed szplt
-			file = svar.restart_prefix;				
-			file.append("_fuel.szplt");
-			if(stat( file.c_str(), &info ) != 0)
-			{	/*Fuel.szplt does not exist - needs creating*/
-				if(Combine_SZPLT(file) == -1)
-					exit(-1);
-			}
-			else
+			file = svar.restart_prefix + "_fuel.szplt.szdat";
+			#ifdef DEBUG
+				dbout << "Checking for existence of uncombined szplt file." << endl;
+				dbout << "Path: " << file << endl;
+			#endif
+
+			if(stat( file.c_str(), &info ) == 0)
 			{	// Both the combined and split szplt exist - check which is more recent.
 				// cout << "Both file types exist" << endl << endl;
-				auto sztime = info.st_mtime;
-				file.append(".szdat");
-				if(stat(file.c_str(), &info) == 0)
-				{
-					auto szdattime = info.st_mtime;
-					if (szdattime > (sztime+10))
-					{	// combine the files
-						file = svar.output_prefix;
-						file.append("_fuel.szplt");
-						if(Combine_SZPLT(file) == -1)
-							exit(-1);
-					}
+				auto szdattime = info.st_mtime;
+				if (szdattime > (sztime+10))
+				{	// combine the files
+					file = svar.output_prefix + "_fuel.szplt";
+					if(Combine_SZPLT(file) == -1)
+						exit(-1);
 				}
 			}
 		}
 		else
-		{
-			cout << "The fuel szplt files needed to restart could not be found. Stopping." << endl;
-			exit(-1);
+		{	/* Combined file doesnt exist. Can it be created? */
+			file = svar.restart_prefix + "_fuel.szplt.szdat";
+			#ifdef DEBUG
+				dbout << "Checking for existence of uncombined szplt file." << endl;
+				dbout << "Path: " << file << endl;
+			#endif
+
+			if(stat( file.c_str(), &info ) == 0)
+			{
+				// combine the files
+				file = svar.restart_prefix + "_fuel.szplt";
+				if(Combine_SZPLT(file) == -1)
+					exit(-1);
+			}
+			else
+			{	/* Neither set of files exist, so no data - can't restart */
+				cout << "The fuel szplt files needed to restart could not be found. Stopping." << endl;
+				exit(-1);
+			}
+
 		}
 
 		if(svar.Bcase != 0)
 		{
-			file = svar.restart_prefix;
-			file.append("_boundary.szplt.szdat");
-
+			cout << "Checking for previous boundary files..." << endl;
+			file = svar.restart_prefix + "_boundary.szplt";
+			#ifdef DEBUG
+				dbout << "Checking for existence of szplt file." << endl;
+				dbout << "Path: " << file << endl;
+			#endif
 			if(stat( file.c_str(), &info ) == 0)
 			{
-				// cout << "Split files exist..." << endl;
-				// Check if there is the constructed szplt
-				file = svar.restart_prefix;				
-				file.append("_boundary.szplt");
-				if(stat( file.c_str(), &info ) != 0)
-				{	/*Fuel.szplt does not exist - needs creating*/
+				auto sztime = info.st_mtime;
+				// cout << "Combined file exists..." << endl;
+				// Check if there is the unconstructed szplt
+				file = svar.restart_prefix + "_boundary.szplt.szdat";				
+				#ifdef DEBUG
+					dbout << "Checking for existence of uncombined szplt file." << endl;
+					dbout << "Path: " << file << endl;
+				#endif
+		
+				if(stat( file.c_str(), &info ) == 0)
+				{	// Both the combined and split szplt exist - check which is more recent.
+					// cout << "Both file types exist" << endl << endl;
+					auto szdattime = info.st_mtime;
+					if (szdattime > (sztime+10))
+					{	// combine the files
+						file = svar.restart_prefix;
+						file.append("_boundary.szplt");
+						if(Combine_SZPLT(file) == -1)
+							exit(-1);
+					}	
+				}
+			}
+			else
+			{ 	/* Combined file doesnt exist. Can it be created? */
+				file = svar.restart_prefix + "_boundary.szplt.szdat";				
+				#ifdef DEBUG
+					dbout << "Checking for existence of uncombined szplt file." << endl;
+					dbout << "Path: " << file << endl;
+				#endif
+		
+				if(stat( file.c_str(), &info ) == 0)
+				{	
+					file = svar.restart_prefix + "_boundary.szplt";
 					if(Combine_SZPLT(file) == -1)
 						exit(-1);
 				}
 				else
-				{	// Both the combined and split szplt exist - check which is more recent.
-					// cout << "Both file types exist" << endl << endl;
-					auto sztime = info.st_mtime;
-					file.append(".szdat");
-					if(stat(file.c_str(), &info) == 0)
-					{
-						auto szdattime = info.st_mtime;
-						if (szdattime > (sztime+10))
-						{	// combine the files
-							file = svar.restart_prefix;
-							file.append("_boundary.szplt");
-							if(Combine_SZPLT(file) == -1)
-								exit(-1);
-						}
-					}
+				{
+					cout << "The boundary szplt files needed to restart could not be found. Stopping." << endl;
+					exit(-1);
 				}
-			}
-			else
-			{
-				cout << "The boundary szplt files needed to restart could not be found. Stopping." << endl;
-				exit(-1);
-			}			
+			}	
 		}
   	}
 }
@@ -309,7 +334,7 @@ void Get_Vector(string const& line, string const& param,
 }
 
 void Get_Vector(string const& line, string const& param, 
-				Eigen::Matrix<int,2,1>/* vec<int,2> */ &value)
+				Eigen::Matrix<int,2,1>& value)
 {
     if(line.find(param) != string::npos)
     {
@@ -331,12 +356,33 @@ void Get_Vector(string const& line, string const& param,
     }
 }
 
-uint index(uint ii, uint jj, uint nPts)
+template<typename T>
+void Get_Array(string const& line, string const& param, 
+				vector<T>& value)
 {
-	return(ii*nPts + jj);
+    if(line.find(param) != string::npos)
+    {
+        string temp = Get_Parameter_Value(line);
+        std::istringstream iss(temp);
+        
+        T a;
+        string temp2;
+        
+		while(std::getline(iss,temp2,','))
+		{
+			std::istringstream iss2(temp2);
+			iss2 >> a;
+			value.emplace_back(a);
+		} 
+    }
 }
 
-std::ifstream& GotoLine(std::ifstream& file, unsigned int num)
+inline const uint index(uint ii, uint jj, uint nii)
+{
+	return(ii + jj*nii);
+}
+
+inline std::ifstream& GotoLine(std::ifstream& file, unsigned int num)
 {
     file.seekg(std::ios::beg);
     for(uint ii=0; ii < num - 1; ++ii){

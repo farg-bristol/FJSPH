@@ -101,8 +101,10 @@ real Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& 
 				#endif
 
 				st_2[ii].v = pn[ii].v + 0.5 * dt * res_1[ii];
-				st_2[ii].rho = pn[ii].rho + 0.5 * dt * Rrho_1[ii];
-				st_2[ii].p = B*(pow(st_2[ii].rho/fvar.rho0,gam)-1);
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+								pn[ii].rho + 0.5 * dt * Rrho_1[ii]));
+				st_2[ii].rho = rho;
+				st_2[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 				// st_2[ii].p = fvar.Cs*fvar.Cs * (st_2[ii].rho - fvar.rho0);
 				st_2[ii].acc = res_1[ii];
 				st_2[ii].Af = Af[ii];
@@ -138,10 +140,16 @@ real Get_First_RK(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& 
 			{ /* Define buffer off the back particle */
 				size_t const &buffID = svar.buffer[ii][jj];
 
-				real frac = std::min(1.0, real(jj + 1) / 3.0);
+				// real frac = std::min(1.0, real(jj + 1) / 3.0);
 
-				st_2[buffID].rho = frac * fvar.rhoJ + (1.0 - frac) * (pn[buffID].rho + dt * Rrho_1[buffID]);
-				st_2[buffID].p = frac * fvar.pPress + (1.0 - frac) * (B * (pow(st_2[buffID].rho / fvar.rho0, gam) - 1));
+				// st_2[buffID].rho = frac * fvar.rhoJ + (1.0 - frac) * (pn[buffID].rho + dt * Rrho_1[buffID]);
+				// st_2[buffID].p = frac * fvar.pPress + (1.0 - frac) * (B * (pow(st_2[buffID].rho / fvar.rho0, gam) - 1));
+				
+				st_2[buffID].Rrho = Rrho_1[buffID];
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+								pn[buffID].rho + 0.5 * dt * Rrho_1[buffID]));
+				st_2[buffID].rho = rho;
+				st_2[buffID].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 
 				st_2[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
 			}
@@ -220,10 +228,10 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 				#endif
 
 				st_3[ii].v = pn[ii].v + 0.5 * dt * res_2[ii];
-				real const rho = pn[ii].rho + 0.5 * dt * Rrho_2[ii];
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+								pn[ii].rho + 0.5 * dt * Rrho_2[ii]));
 				st_3[ii].rho = rho;
 				st_3[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
-
 			}
 
 		}
@@ -236,10 +244,14 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 			{ /* Define buffer off the back particle */
 				size_t const &buffID = svar.buffer[ii][jj];
 
-				real const frac = std::min(1.0, real(jj + 1) / 3.0);
-				real const rho = frac * fvar.rhoJ + (1.0 - frac) * (pn[buffID].rho + dt * Rrho_2[buffID]); 
+				// real const frac = std::min(1.0, real(jj + 1) / 3.0);
+				// real const rho = frac * fvar.rhoJ + (1.0 - frac) * (pn[buffID].rho + dt * Rrho_2[buffID]); 
+				// st_3[buffID].rho = rho;
+				// st_3[buffID].p = frac * fvar.pPress + (1.0 - frac) * pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+								 pn[buffID].rho + 0.5 * dt * Rrho_2[buffID]));
 				st_3[buffID].rho = rho;
-				st_3[buffID].p = frac * fvar.pPress + (1.0 - frac) * pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
+				st_3[buffID].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 
 				st_3[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
 			}
@@ -291,7 +303,7 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 				#endif
 
 				st_4[ii].v = pn[ii].v + dt * res_3[ii];
-				real const rho = pn[ii].rho + dt * Rrho_3[ii];
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, pn[ii].rho + dt * Rrho_3[ii]));
 				st_4[ii].rho = rho;
 				st_4[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 				// st_4[ii].p = fvar.Cs*fvar.Cs * (st_4[ii].rho - fvar.rho0);
@@ -306,10 +318,14 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 			{ /* Define buffer off the back particle */
 				size_t const &buffID = svar.buffer[ii][jj];
 
-				real frac = std::min(1.0, real(jj + 1) / 3.0);
-				real const rho = frac * fvar.rhoJ + (1.0 - frac) * (pn[buffID].rho + dt * Rrho_3[buffID]);
+				// real frac = std::min(1.0, real(jj + 1) / 3.0);
+				// real const rho = frac * fvar.rhoJ + (1.0 - frac) * (pn[buffID].rho + dt * Rrho_3[buffID]);
+				// st_4[buffID].rho = rho;
+				// st_4[buffID].p = frac * fvar.pPress + (1.0 - frac) * pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+								pn[buffID].rho + 0.5 * dt * Rrho_3[buffID]));
 				st_4[buffID].rho = rho;
-				st_4[buffID].p = frac * fvar.pPress + (1.0 - frac) * pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
+				st_4[buffID].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 				st_4[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
 			}
 		}
@@ -397,8 +413,8 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 				pnp1[ii].v = pn[ii].v + 
 					(dt/6.0) * (st_2[ii].acc + 2.0 * res_2[ii] + 2.0 * res_3[ii] + res_4[ii]);
 
-				real const rho = pn[ii].rho + (dt / 6.0) * 
-					(st_2[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii]);
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, pn[ii].rho + (dt / 6.0) * 
+					(st_2[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii])));
 				pnp1[ii].rho = rho;
 
 				pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
@@ -434,18 +450,22 @@ void Perform_RK4(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& a
 			{ /* Define buffer off the back particle */
 				size_t const &buffID = svar.buffer[ii][jj];
 
-				real frac = std::min(1.0, real(jj + 1) / 3.0);
+				// real frac = std::min(1.0, real(jj + 1) / 3.0);
 
 				pnp1[buffID].Rrho = Rrho_4[buffID];
 
-				real const rho = frac * fvar.rhoJ + (1.0 - frac) * 
-								(pn[buffID].rho + (dt / 6.0) * 
-								(st_2[buffID].Rrho + 2.0 * Rrho_2[buffID] + 
-								 2.0 * Rrho_3[buffID] + Rrho_4[buffID]));
+				// real const rho = frac * fvar.rhoJ + (1.0 - frac) * 
+				// 				(pn[buffID].rho + (dt / 6.0) * 
+				// 				(st_2[buffID].Rrho + 2.0 * Rrho_2[buffID] + 
+				// 				 2.0 * Rrho_3[buffID] + Rrho_4[buffID]));
+				// pnp1[buffID].rho = rho;
+
+				// pnp1[buffID].p = frac * fvar.pPress + (1.0 - frac) * pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, pn[buffID].rho + (dt / 6.0) * 
+					(st_2[buffID].Rrho + 2.0 * Rrho_2[buffID] + 2.0 * Rrho_3[buffID] + Rrho_4[buffID])));
 				pnp1[buffID].rho = rho;
 
-				pnp1[buffID].p = frac * fvar.pPress + (1.0 - frac) * pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
-
+				pnp1[buffID].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 				pnp1[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
 			}
 		}

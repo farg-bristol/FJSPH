@@ -85,4 +85,30 @@ inline real const BoundaryKernel(real const dist, real const H, real const beta)
 	return 0;
 }
 
+/* Consider making a member function of fvar. Then can use member variables and only have 1 input */
+inline real pressure_equation(real const& rho, real const& B, real const& gam, 
+							real const& Cs, real const& rho0)
+{
+	#ifdef COLEEOS
+		(void)Cs;
+		return B*(pow(rho/rho0,gam)-1); /* Cole EOS */
+	#else
+		(void)B;
+		(void)gam;
+		return Cs*Cs * (rho - rho0); /* Isothermal EOS */
+	#endif
+}
+
+inline real density_equation(real const& press, real const& B, real const& gam, 
+							real const& Cs, real const& rho0)
+{
+	#ifdef COLEEOS
+		(void)Cs;
+		return rho0*pow((press/B) + 1.0, 1.0/gam); /* Cole EOS */
+	#else
+		(void)B;
+		(void)gam;
+		return press/(Cs*Cs) + rho0; /* Isothermal EOS */
+	#endif
+}
 #endif

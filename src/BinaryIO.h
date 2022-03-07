@@ -265,7 +265,7 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, int32_t frame, SPHState&
 /*************************************************************************/
 /*************************** BINARY OUTPUTS ******************************/
 /*************************************************************************/
-void Write_Real_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+void Write_Real_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
 						vector<real> const& varVec, string const& varName)
 {
 	int retval;
@@ -284,7 +284,7 @@ void Write_Real_Vector(void* const& fileHandle, int32_t const& outputZone, int32
 	varCount++;
 }
 
-void Write_Int_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+void Write_Int_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
 						vector<int32_t> const& varVec, string const& varName)
 {
 	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varCount, 0, size, &varVec[0]))
@@ -296,7 +296,7 @@ void Write_Int_Vector(void* const& fileHandle, int32_t const& outputZone, int32_
 	varCount++;
 }
 
-void Write_UInt_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+void Write_UInt_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
 						vector<uint8_t> const& varVec, string const& varName)
 {
 	if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, varCount, 0, size, &varVec[0]))
@@ -308,7 +308,7 @@ void Write_UInt_Vector(void* const& fileHandle, int32_t const& outputZone, int32
 	varCount++;
 }
 
-void Write_Real_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+void Write_Real_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
 						real const& value, string const& varName)
 {
 	int retval;
@@ -329,7 +329,7 @@ void Write_Real_Value(void* const& fileHandle, int32_t const& outputZone, int32_
 	varCount++;
 }
 
-void Write_Int_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+void Write_Int_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
 						int32_t const& value, string const& varName)
 {
 	int retval;
@@ -347,7 +347,7 @@ void Write_Int_Value(void* const& fileHandle, int32_t const& outputZone, int32_t
 	varCount++;
 }
 
-void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
 						uint8_t const& value, string const& varName)
 {
 	int retval;
@@ -368,7 +368,7 @@ void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone, int32_
 void Write_Binary_Timestep(SIM const& svar, SPHState const& pnp1, 
 	uint const start, uint const end, char const* group, int32_t const& strandID, void* const& fileHandle)
 {
-	int64_t const size = end - start;
+	int32_t const size = end - start;
 
 	double solTime = svar.t;     
 	int32_t outputZone;
@@ -636,68 +636,68 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 
     /* Open the file and write the tecplot datafile header information  */
 	#if SIMDIM == 2
-    	std::string variables = "X,Z";	
-		if (svar.outform == 1)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v,a,partID";
-		}
-		else if (svar.outform == 2)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID";
-		}
-		else if (svar.outform == 3)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,Cell_Vx,Cell_Vz,Cell_P,Cell_Rho,Cell_ID";
-		}
-		else if (svar.outform == 4)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v,a,partID,Neighbours,Aero";
-		}
-		else if (svar.outform == 5)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,Cell_ID";
-		}
-		else if (svar.outform == 6)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,lambda,surface";
-		}
-		else if (svar.outform == 7)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z";
-		}
-	#endif
+		std::string variables;
+		std::string a1, a2;
 
+		if(svar.offset_axis == 1)
+		{
+			variables = "Y,Z";
+			a1 = "y";
+			a2 = "z";
+		}
+		else if (svar.offset_axis == 2)
+    	{
+			variables = "X,Z";
+			a1 = "x";
+			a2 = "z";
+		}
+		else if (svar.offset_axis == 3)
+		{
+			variables = "X,Y";
+			a1 = "x";
+			a2 = "y";
+		}
+
+		if(svar.outform > 0)
+			variables += ",Rrho,rho,press,m";
+
+		if (svar.outform == 1)
+			variables += ",v,a,partID";
+		else if (svar.outform == 2)
+			variables += ",v_"+a1+",v_"+a2+",a_"+a1+",a_"+a2+",b,partID";
+		else if (svar.outform == 3)
+			variables += ",v_"+a1+",v_"+a2+",a_"+a1+",a_"+a2+",b,partID,Cell_V"+a1+",Cell_V"+a2+",Cell_P,Cell_Rho,Cell_ID";
+		else if (svar.outform == 4)
+			variables += ",v,a,partID,Neighbours,Aero";
+		else if (svar.outform == 5)
+			variables += ",v_"+a1+",v_"+a2+",a_"+a1+",a_"+a2+",b,partID,Cell_ID";
+		else if (svar.outform == 6)
+			variables += ",v_"+a1+",v_"+a2+",a_"+a1+",a_"+a2+",b,partID,lambda,surface";
+		else if (svar.outform == 7)
+			variables += ",v_"+a1+",v_"+a2+",a_"+a1+",a_"+a2+",b,partID,lambda,surface,a_aero_"+a1+",a_aero_"+a2;
+
+	#endif
 	#if SIMDIM == 3
 		std::string variables = "X,Y,Z";  
+		if(svar.outform > 0)
+			variables += ",Rrho,rho,press,m";
+
 		if (svar.outform == 1)
-		{
-			variables = "X,Y,Z,Rrho,rho,press,m,v,a,partID";
-		}
+			variables += ",v,a,partID";
 		else if (svar.outform == 2)
-		{
-			variables = "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID";
-		}
+			variables += ",v_x,v_y,v_z,a_x,a_y,a_z,b,partID";
 		else if (svar.outform == 3)
-		{
-			variables = 
-		"X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_Rho,Cell_ID";
-		}
+			variables += 
+		",v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_Rho,Cell_ID";
 		else if (svar.outform == 4)
-		{
-			variables = "X,Y,Z,Rrho,rho,press,m,v,a,partID,Neighbours,Aero";
-		}
+			variables += ",v,a,partID,Neighbours,Aero";
 		else if (svar.outform == 5)
-		{
-			variables = "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_ID";
-		}
+			variables += ",v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_ID";
 		else if (svar.outform == 6)
-		{
-			variables = "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface";
-		}
+			variables += ",v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface";
 		else if (svar.outform == 7)
-		{
-			variables = "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z";
-		}
+
+			variables += ",v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z";
 	#endif
 
 	vector<int32_t> varTypes;
@@ -778,6 +778,9 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 		}
 	}
 	svar.varTypes = varTypes;
+	cout << "Offset axis: " << svar.offset_axis << endl;
+	cout << "Variables: " << variables << endl;
+	cout << "varTypes size: " << svar.varTypes.size() << endl;
 
 	if(tecFileWriterOpen(file.c_str(),zoneName.c_str(),variables.c_str(),fileFormat,FileType,1,NULL,&fileHandle))
     {
@@ -839,14 +842,31 @@ void Write_Cell_Data(MESH const& cdata)
 		if (kk % 5 != 0)
 			fout << "\n";
 	}
-
+	
 	/*Write element indexing*/
 	fout << std::fixed;
-	for (uint ii = 0; ii < cdata.elems.size(); ++ii)
+	for (uint index = 0; index < cdata.cFaces.size(); ++index)
 	{
-		for (auto elem : cdata.elems[ii])
+		/* Build the element unique index list */
+		vector<size_t> elem;
+		for (auto const& faceID: cdata.cFaces[index])
 		{
-			fout << std::setw(6) << elem + 1;
+			vector<size_t> const face = cdata.faces[faceID];
+			for (auto const& vert : face)
+			{
+				if (std::find(elem.begin(), elem.end(), vert) == elem.end())
+				{ /*Vertex doesn't exist in the elems vector yet.*/
+					#pragma omp critical
+					{
+						elem.emplace_back(vert);
+					}
+				}
+			}
+		}
+
+		for (auto const& vert : elem)
+		{
+			fout << std::setw(6) << vert + 1;
 		}
 		fout << "\n";
 	}
@@ -1253,7 +1273,9 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& 
 		pn[ii].xi *= svar.scale;
 		
 		/* Set density based on pressure. More information this way */
-		pn[ii].rho = fvar.rho0*pow((pn[ii].p/fvar.B) + 1.0, 1.0/fvar.gam);
+		pn[ii].rho = std::max(fvar.rhoMin,std::min(fvar.rhoMax, 
+			density_equation(pn[ii].p, fvar.B, fvar.gam, fvar.Cs, fvar.rho0)));
+
 
 		if(pn[ii].b == BACK)
 		{

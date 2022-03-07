@@ -9,6 +9,7 @@
 #include "Var.h"
 #include "Resid.h"
 #include "Containment.h"
+#include "Neighbours.h"
 
 int Check_Error(KDTREE& TREE, SIM& svar, FLUID const& fvar, size_t const& start, size_t const& end, 
 		real& error1, real& error2, real& logbase, 
@@ -112,7 +113,8 @@ void Do_NB_Iter(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 	Force = StateVecD::Zero();
 	svar.AForce = StateVecD::Zero();
 
-	Get_Boundary_Pressure(fvar,start,outlist,pnp1);
+	if(svar.bound_solver == 0)
+		Get_Boundary_Pressure(fvar,start,outlist,pnp1);
 
 	Forces(svar,fvar,avar,cells,pnp1,outlist,dp,res,Rrho,Af,Force); /*Guess force at time n+1*/
 
@@ -123,7 +125,7 @@ void Do_NB_Iter(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 
 		if(svar.Asource == 2)
 		{
-			#pragma omp for schedule(static) /*nowait*/
+			#pragma omp for /*nowait*/
 			for(size_t const& ii : cellsused)
 			{
 				cells.fNum[ii] = 0;
@@ -133,17 +135,18 @@ void Do_NB_Iter(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 			}
 		}
 
-		// #pragma omp for schedule(static) nowait
-		// for (size_t ii=0; ii < start; ++ii)
-		// {	/****** BOUNDARY PARTICLES ***********/
-		// 	pnp1[ii].rho = pn[ii].rho+0.5*dt*(pn[ii].Rrho+Rrho[ii]);
-		// 	pnp1[ii].p = B*(pow(pnp1[ii].rho/fvar.rho0,gam)-1);
-		// 	// pnp1[ii].p = fvar.Cs*fvar.Cs * (pnp1[ii].rho - fvar.rho0);
-		// 	// pnp1[ii].p = fvar.pPress;
-		// 	// pnp1[ii].rho = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
-		// 	// pnp1[ii].acc = res[ii];
-		// 	pnp1[ii].Rrho = Rrho[ii];
-		// }
+		if(svar.bound_solver == 1)
+		{
+			#pragma omp for schedule(static) nowait
+			for (size_t ii=0; ii < start; ++ii)
+			{	/****** BOUNDARY PARTICLES ***********/
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+								pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
+				pnp1[ii].rho = rho;
+				pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
+				pnp1[ii].Rrho = Rrho[ii];
+			}
+		}
 
 
 		#pragma omp for nowait 
@@ -167,7 +170,7 @@ void Do_NB_Iter(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 					if(vec(1) > 0.0)
 					{
 						pnp1[ii].b = FREE;
-						if(dp.lam_ng[ii] < 0.75 && (svar.Asource == 1 || svar.Asource == 2))
+						if(dp.lam_ng[ii] < avar.cutoff && (svar.Asource == 1 || svar.Asource == 2))
 						{
 							/*retrieve the cell it's in*/
 							uint to_del = 0;
@@ -177,10 +180,10 @@ void Do_NB_Iter(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 							{
 								#pragma omp critical
 								{
-								// cout << "Particle has crossed an outer boundary!" << endl;
-								// cout << "Particle will be deleted." << endl;
-								pnp1.erase(pnp1.begin()+ii);
-								pn.erase(pn.begin()+ii);
+									// cout << "Particle has crossed an outer boundary!" << endl;
+									// cout << "Particle will be deleted." << endl;
+									pnp1.erase(pnp1.begin()+ii);
+									pn.erase(pn.begin()+ii);
 								}
 								#pragma omp atomic
 									svar.totPts--;
@@ -198,12 +201,13 @@ void Do_NB_Iter(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 				pnp1[ii].xi = pn[ii].xi+dt*pn[ii].v+dt2*(c*pn[ii].acc+d*res[ii]);
 				#endif
 
-				pnp1[ii].v =  (pn[ii].v/* + pnp1[ii].vPert*/) +dt*(a*pn[ii].acc+b*res[ii]);
+				pnp1[ii].v = pn[ii].v + dt*(a*pn[ii].acc+b*res[ii]);
 				pnp1[ii].acc = res[ii];
 				pnp1[ii].Af = Af[ii];
 				pnp1[ii].Rrho = Rrho[ii];
 
-				real const rho = pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii]);
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+								pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
 				pnp1[ii].rho = rho;
 				pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 
@@ -229,11 +233,11 @@ void Do_NB_Iter(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 					}	
 				}
 
-				if(pnp1[ii].b == GHOST)
-				{
-					// pnp1[ii].v += (avar.vInf - pnp1[ii].v).norm()*avar.vInf.normalized();
-					pnp1[ii].v += 0.01*(avar.vInf - pnp1[ii].v);
-				}
+				// if(pnp1[ii].b == GHOST)
+				// {
+				// 	// pnp1[ii].v += (avar.vInf - pnp1[ii].v).norm()*avar.vInf.normalized();
+				// 	pnp1[ii].v += 0.01*(avar.vInf - pnp1[ii].v);
+				// }
 			}
 			pnp1[ii].s = dp.lam_ng[ii];
 
@@ -243,19 +247,39 @@ void Do_NB_Iter(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 		#pragma omp for schedule(static) nowait
 		for(size_t ii = 0; ii < svar.back.size(); ++ii)
 		{	
+			// size_t const& backID = svar.back[ii];
 			for(size_t jj = 0; jj < 4; ++jj)
 			{	/* Define buffer off the back particle */
 
 				size_t const& buffID = svar.buffer[ii][jj];
 
-				real frac = real(jj)/4.0;
+				// real frac = real(jj)/4.0;
 
 				pnp1[buffID].Rrho = Rrho[buffID];
-				real const rho = frac * fvar.rhoJ + (1.0-frac) * (pn[buffID].rho+dt*(a*pn[buffID].Rrho+b*Rrho[buffID])); 
+				// real const rho = frac * fvar.rhoJ + (1.0-frac) * (pn[buffID].rho+dt*(a*pn[buffID].Rrho+b*Rrho[buffID])); 
+ 				// pnp1[buffID].rho = rho;
+				// pnp1[buffID].p = frac * fvar.pPress + (1.0-frac) * pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
+
+				/* Try setting pressure to zero gradient, and fixed value for velocity */
+				// pnp1[buffID].Rrho = Rrho[backID];
+				// pnp1[buffID].rho = pnp1[backID].rho;
+				// pnp1[buffID].p = pnp1[backID].p;
+				
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+								pn[buffID].rho+dt*(a*pn[buffID].Rrho+b*Rrho[buffID]))); 
  				pnp1[buffID].rho = rho;
-				pnp1[buffID].p = frac * fvar.pPress + (1.0-frac) * pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
+				pnp1[buffID].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
+
+				// pnp1[buffID].rho = pn[buffID].rho+dt*(a*pn[buffID].Rrho+b*Rrho[buffID]);
+				// pnp1[buffID].p = pressure_equation(pnp1[buffID].rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 
 				pnp1[buffID].xi = pn[buffID].xi + dt*pn[buffID].v;
+
+				// if(jj == 3)
+				// {
+				// 	#pragma omp critical
+				// 	cout << pnp1[buffID].Rrho << "  " << pnp1[buffID].p << "  " << Rrho[buffID] << endl;
+				// }
 			}	
 		}
 

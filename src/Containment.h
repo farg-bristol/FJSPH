@@ -150,13 +150,32 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
         f1 << std::setw(w) << testp[0]/svar.scale << std::setw(w) << testp[1]/svar.scale << std::setw(w) << testp[2]/svar.scale << endl;
 
         for(auto const& index:ret_indexes)
-        {  
-            /*Number of points*/
-            size_t size = cells.elems[index].size();
+        {             
             uint numFaces = 0;
             uint TotalNumFaceNodes = 0;
             uint nQuad = 0;
             uint nTrig = 0;
+            vector<size_t> elem;
+            
+            /* Build the element unique index list */
+            for (auto const &faceID: cells.cFaces[index])
+            {
+                vector<size_t> const face = cells.faces[faceID];
+                for (auto const &vert : face)
+                {
+                    if (std::find(elem.begin(), elem.end(), vert) == elem.end())
+                    { /*Vertex doesn't exist in the elems vector yet.*/
+                        #pragma omp critical
+                        {
+                           elem.emplace_back(vert);
+                        }
+                    }
+                }
+            }
+
+			/*Number of points*/
+            size_t size = elem.size();
+
             if(size == 8)
             {   /*Hexahedron*/
                 numFaces = 6;
@@ -186,8 +205,6 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
                 nTrig = 4;
             }
             
-            
-
             /*Write zone header information*/
             f1 << "ZONE T=\"Cell " << index << "\""<< endl;
             f1 << "ZONETYPE=FEPOLYHEDRON" << endl;
@@ -198,7 +215,7 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
             /*Write vertices in block format*/
             for(size_t dim = 0; dim < SIMDIM; ++dim)
             {
-                for(auto const& cellv:cells.elems[index])
+                for(auto const& cellv:elem)
                 {
                     f1 << std::setw(w) << cells.verts[cellv][dim]/cells.scale ;   
                 }
@@ -224,10 +241,10 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
             for(auto const& faces:cells.cFaces[index])
             {
                 for(auto const& vertex:cells.faces[faces])
-                {   /*How to get the vertex list to start from 1...*/
-                    /*SPHState the position along the elems list*/
-                    auto it = std::find(cells.elems[index].begin(),cells.elems[index].end(),vertex);
-                    size_t ind = std::distance(cells.elems[index].begin(),it);
+                {   
+                    /*state the position along the elems list*/
+                    auto it = std::find(elem.begin(),elem.end(),vertex);
+                    size_t ind = std::distance(elem.begin(),it);
                     f1 << std::setw(w) << ind+1;
                 }
             }
@@ -312,10 +329,26 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
 
         for(auto const& index:ret_indexes)
         {  
+            /* Build the element unique index list */
+            vector<size_t> elem;
+            for (auto const &faceID: cells.cFaces[index])
+            {
+                vector<size_t> const face = cells.faces[faceID];
+                for (auto const &vert : face)
+                {
+                    if (std::find(elem.begin(), elem.end(), vert) == elem.end())
+                    { /*Vertex doesn't exist in the elems vector yet.*/
+                        #pragma omp critical
+                        {
+                           elem.emplace_back(vert);
+                        }
+                    }
+                }
+            }
+
             /*Number of points*/
-            size_t size = cells.elems[index].size();
-            uint numFaces = 0;                
-            numFaces = size;
+            size_t size = elem.size();
+            uint numFaces = size;
 
             /*Write zone header information*/
             f1 << "ZONE T=\"Cell " << index << "\""<< endl;
@@ -326,9 +359,9 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
             /*Write vertices in block format*/
             for(size_t dim = 0; dim < SIMDIM; ++dim)
             {
-            for(auto const& cellv:cells.elems[index])
+                for(auto const& cellv:elem)
                 {
-                    f1 << std::setw(w) << cells.verts[cellv][dim] ;   
+                    f1 << std::setw(w) << cells.verts[cellv][dim];   
                 }
                 f1 << endl;
             }
@@ -337,20 +370,21 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
             for(auto const& faces:cells.cFaces[index])
             {
                 for(auto const& vertex:cells.faces[faces])
-                {   /*How to get the vertex list to start from 1...*/
-                    /*SPHState the position along the elems list*/
-                    auto it = std::find(cells.elems[index].begin(),cells.elems[index].end(),vertex);
-                    size_t ind = std::distance(cells.elems[index].begin(),it);
+                {   /* State the position along the elems list*/
+                    auto it = std::find(elem.begin(),elem.end(),vertex);
+                    size_t ind = std::distance(elem.begin(),it);
                     f1 << std::setw(w) << ind+1;
                 }
             }
             f1 << endl;
+
             /*Write left elements*/
             for(size_t ii = 0; ii < numFaces; ++ii)
             {
                 f1 << std::setw(w) << 1;
             }
             f1 << endl;
+
             /*Write right elements*/
             for(size_t ii = 0; ii < numFaces; ++ii)
             {
@@ -361,10 +395,7 @@ void Write_Containment(SIM const& svar, vector<size_t> const& ret_indexes, MESH 
 
         f1.close();
 
-
-
     #endif
-
 }
 
 uint CheckCell(size_t const& cell, MESH const& cells, StateVecD const& testp)
@@ -611,7 +642,7 @@ void FirstCell(SIM& svar, Vec_Tree const& CELL_INDEX, MESH const& cells, SPHPart
 /* <summary> Find the cells for all non-boundary particles. Checks for whether a paricle is free.  */
 /* It is assumed that the particle does have a previous cell defined, and checks this cell */
 /* before going to the KD Tree to find the nearest cells to iterate through. </summary> */
-void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, DELTAP const& dp, SPHState& pn, SPHState& pnp1)
+void FindCell(SIM& svar, AERO const& avar, KDTREE const& TREE, MESH const& cells, DELTAP const& dp, SPHState& pn, SPHState& pnp1)
 {
     /*Find which cell the particle is in*/
     vector<size_t> toDelete;
@@ -624,219 +655,196 @@ void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, 
     #pragma omp for schedule(static) nowait 
     for (size_t ii = start; ii < end; ++ii)
     {
-        if (pnp1[ii].b == FREE && dp.lam_ng[ii] < 0.75)
+        if (pnp1[ii].b != FREE || dp.lam_ng[ii] > avar.cutoff)
+        {
+            pnp1[ii].cellID = 0;
+            continue;   
+        }
+
+        StateVecD testp = pnp1[ii].xi;  
+        uint inside_flag = 0;
+        if(CheckCell(pnp1[ii].cellID,cells,testp))
+        {   /* Particle is still in the same cell, so do nothing */
+            inside_flag = 1;
+            pnp1[ii].nFailed = 0;
+            continue;
+        }
+
+        // if(pert == 1)
+        // {
+        //     #if SIMDIM == 3
+        //         testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
+        //     #else
+        //         testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2));
+        //     #endif
+
+        //     if(CheckCell(pnp1[ii].cellID,cells,testp,pert))
+        //     {
+        //         inside_flag = 1;
+        //         continue;
+        //     }
+
+        //     if(pert == 2)
+        //     {
+        //         cout << "Still can't identify which cell point is in even after perturbation" << endl; 
+        //     }
+        // }
+
+        if(inside_flag == 0)
         {   
-            StateVecD testp = pnp1[ii].xi;  
-            uint inside_flag = 0;
-            if(CheckCell(pnp1[ii].cellID,cells,testp))
-            {   /* Particle is still in the same cell, so do nothing */
-                inside_flag = 1;
-                pnp1[ii].nFailed = 0;
-                continue;
-            }
-
-            // if(pert == 1)
-            // {
-            //     #if SIMDIM == 3
-            //         testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
-            //     #else
-            //         testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2));
-            //     #endif
-
-            //     if(CheckCell(pnp1[ii].cellID,cells,testp,pert))
-            //     {
-            //         inside_flag = 1;
-            //         continue;
-            //     }
-
-            //     if(pert == 2)
-            //     {
-            //         cout << "Still can't identify which cell point is in even after perturbation" << endl; 
-            //     }
-            // }
-
-            if(inside_flag == 0)
-            {   
-                /*Perform a small search, since most cells are found within 1 or 2 indexes.*/
-                #if SIMDIM == 3
-                    size_t const num_results = 5;
-                #else
-                    size_t const num_results = 5;
-                #endif
-                vector<size_t> ret_indexes(num_results);
-                vector<real> out_dists_sqr(num_results);
-                #ifdef DEBUG
-                    // cout << "Having to perform neighbour search again. size: " << num_results << endl;
-                #endif
-
-                nanoflann::KNNResultSet<real> resultSet(num_results);
-                resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
-                
-                TREE.CELL.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
-                // uint count = 0;
-                for(auto const& cell:ret_indexes)
-                {   
-                    if(CheckCell(cell,cells,testp))
-                    {
-                        #ifdef DEBUG
-                        // cout << "Moved to a neighbour cell." << endl;
-                        #endif
-
-                        pnp1[ii].cellID = cell;
-                        pnp1[ii].cellV = cells.cVel[cell];
-                        pnp1[ii].cellP = cells.cP[cell];
-                        pnp1[ii].cellRho = cells.cRho[cell];
-                        pnp1[ii].nFailed = 0;
-                        inside_flag = 1;
-                        break;
-                        // cout << "Found new cell at " << count << " in list" << endl;
-                    }
-
-                    // if(pert == 1)
-                    // {
-                    //     #if SIMDIM == 3
-                    //         testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
-                    //     #else
-                    //         testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2));
-                    //     #endif
-
-                    //     if(CheckCell(pnp1[ii].cellID,cells,testp,pert))
-                    //     {
-                    //         inside_flag = 1;
-                    //         pnp1[ii].cellID = cell;
-                    //         pnp1[ii].cellV = cells.cVel[cell];
-                    //         pnp1[ii].cellP = cells.cP[cell];
-                    //         pnp1[ii].cellRho = cells.cRho[cell];
-                    //         pnp1[ii].nFailed = 0;
-                    //         break;
-                    //     }
-                    // }
-
-                    // if(pert > 1)
-                    // {
-                    //     cout << "Still can't identify which cell point is in even after perturbation" << endl; 
-                    // }
-
-                    // count++;
-                }
-            }
-
-            
-            if(inside_flag == 0)
-            {   /*If first search fails to find the cell, perform a large search*/
-                // In tets, the cell centre can be very far away, making the index large
-                size_t const num_results = 200;
-                vector<size_t> ret_indexes(num_results);
-                vector<real> out_dists_sqr(num_results);
-
-                #ifdef DEBUG
+            /*Perform a small search, since most cells are found within 1 or 2 indexes.*/
+            #if SIMDIM == 3
+                size_t const num_results = 5;
+            #else
+                size_t const num_results = 5;
+            #endif
+            vector<size_t> ret_indexes(num_results);
+            vector<real> out_dists_sqr(num_results);
+            #ifdef DEBUG
                 // cout << "Having to perform neighbour search again. size: " << num_results << endl;
-                #endif
+            #endif
 
-                nanoflann::KNNResultSet<real> resultSet(num_results);
-                resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
-                
-                TREE.CELL.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
-                // uint count = 0;
-                for(auto const& cell:ret_indexes)
-                {   
-                    if(CheckCell(cell,cells,testp))
-                    {
-                        #ifdef DEBUG
-                            // cout << "Moved to a neighbour cell." << endl;
-                        #endif
+            nanoflann::KNNResultSet<real> resultSet(num_results);
+            resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
+            
+            TREE.CELL.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
+            // uint count = 0;
+            for(auto const& cell:ret_indexes)
+            {   
+                if(CheckCell(cell,cells,testp))
+                {
+                    #ifdef DEBUG
+                    // cout << "Moved to a neighbour cell." << endl;
+                    #endif
 
-                        pnp1[ii].cellID = cell;
-                        pnp1[ii].cellV = cells.cVel[cell];
-                        pnp1[ii].cellP = cells.cP[cell];
-                        pnp1[ii].cellRho = cells.cRho[cell];
-                        pnp1[ii].nFailed = 0;
-                        inside_flag = 1;
-                        break;
-                        // cout << "Found new cell at " << count << " in list" << endl;
-                    }
-
-                    // if(pert == 1)
-                    // {
-                    //     #if SIMDIM == 3
-                    //         testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
-                    //     #else
-                    //         testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2));
-                    //     #endif
-
-                    //     if(CheckCell(pnp1[ii].cellID,cells,testp,pert))
-                    //     {
-                    //         inside_flag = 1;
-                    //         pnp1[ii].cellID = cell;
-                    //         pnp1[ii].cellV = cells.cVel[cell];
-                    //         pnp1[ii].cellP = cells.cP[cell];
-                    //         pnp1[ii].cellRho = cells.cRho[cell];
-                    //         pnp1[ii].nFailed = 0;
-                    //         break;
-                    //     }
-                    // }
-
-                    // if(pert > 1)
-                    // {
-                    //     cout << "Still can't identify which cell point is in even after perturbation" << endl; 
-                    // }
-
-                    // count++;
+                    pnp1[ii].cellID = cell;
+                    pnp1[ii].cellV = cells.cVel[cell];
+                    pnp1[ii].cellP = cells.cP[cell];
+                    pnp1[ii].cellRho = cells.cRho[cell];
+                    pnp1[ii].nFailed = 0;
+                    pnp1[ii].internal = 0;
+                    inside_flag = 1;
+                    break;
+                    // cout << "Found new cell at " << count << " in list" << endl;
                 }
 
-                if(inside_flag == 0)
+                // if(pert == 1)
+                // {
+                //     #if SIMDIM == 3
+                //         testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
+                //     #else
+                //         testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2));
+                //     #endif
+
+                //     if(CheckCell(pnp1[ii].cellID,cells,testp,pert))
+                //     {
+                //         inside_flag = 1;
+                //         pnp1[ii].cellID = cell;
+                //         pnp1[ii].cellV = cells.cVel[cell];
+                //         pnp1[ii].cellP = cells.cP[cell];
+                //         pnp1[ii].cellRho = cells.cRho[cell];
+                //         pnp1[ii].nFailed = 0;
+                //         break;
+                //     }
+                // }
+
+                // if(pert > 1)
+                // {
+                //     cout << "Still can't identify which cell point is in even after perturbation" << endl; 
+                // }
+
+                // count++;
+            }
+        }
+
+
+        
+        if(inside_flag == 0)
+        {   /*If first search fails to find the cell, perform a large search*/
+            // In tets, the cell centre can be very far away, making the index large
+            size_t const num_results = 200;
+            vector<size_t> ret_indexes(num_results);
+            vector<real> out_dists_sqr(num_results);
+
+            #ifdef DEBUG
+            // cout << "Having to perform neighbour search again. size: " << num_results << endl;
+            #endif
+
+            nanoflann::KNNResultSet<real> resultSet(num_results);
+            resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
+            
+            TREE.CELL.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
+            // uint count = 0;
+            for(auto const& cell:ret_indexes)
+            {   
+
+                if(CheckCell(cell,cells,testp))
                 {
-                    // cout << "Checking if particle has crossed a boundary." << endl;
-                    // If still not found, then the point could be across a boundary.
-                    // Check if the ray from the point to the cell centre crosses a boundary face.
-                    uint cross = 0;
-                    for(auto const& index:ret_indexes)
-                    {
-                        StateVecD rayp = cells.cCentre[index];            
-                        for (size_t const& findex:cells.cFaces[index] ) 
-                        {   /*If its a boundary face, check if the point crosses it*/
-                            if(cells.leftright[findex].second < 0)
+                    #ifdef DEBUG
+                        // cout << "Moved to a neighbour cell." << endl;
+                    #endif
+
+                    pnp1[ii].cellID = cell;
+                    pnp1[ii].cellV = cells.cVel[cell];
+                    pnp1[ii].cellP = cells.cP[cell];
+                    pnp1[ii].cellRho = cells.cRho[cell];
+                    pnp1[ii].nFailed = 0;
+                    pnp1[ii].internal = 0;
+                    inside_flag = 1;
+                    break;
+                    // cout << "Found new cell at " << count << " in list" << endl;
+                }
+            }
+
+            if(inside_flag == 0)
+            {
+                // cout << "Checking if particle has crossed a boundary." << endl;
+                // If still not found, then the point could be across a boundary.
+                // Check if the ray from the point to the cell centre crosses a boundary face.
+                uint cross = 0;
+                for(auto const& index:ret_indexes)
+                {
+                    StateVecD rayp = cells.cCentre[index];            
+                    for (size_t const& findex:cells.cFaces[index] ) 
+                    {   /*If its a boundary face, check if the point crosses it*/
+                        if(cells.leftright[findex].second < 0)
+                        {
+                            vector<size_t> const& face = cells.faces[findex];
+                            int ints;
+                            #if SIMDIM == 3                   
+                                // uint perturb = FALSE;              
+                                ints = Crossings3D(cells.verts,face,testp,rayp);
+                            #else                           /*2D line intersection*/
+                                ints = get_line_intersection(cells.verts,face,testp,rayp);
+                            #endif
+                            if(ints)
                             {
-                                vector<size_t> const& face = cells.faces[findex];
-                                int ints;
-                                #if SIMDIM == 3                   
-                                    // uint perturb = FALSE;              
-                                    ints = Crossings3D(cells.verts,face,testp,rayp);
-                                    // if(perturb == TRUE)
-                                    // {
-                                    //     #if SIMDIM == 3
-                                    //         testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2),PERTURB(0,3));
-                                    //     #else
-                                    //         testp = pnp1[ii].xi + StateVecD(PERTURB(0,1),PERTURB(0,2));
-                                    //     #endif
-                                    //     ints = Crossings3D(cells.verts,face,testp,rayp);
-                                    // }
-                                #else                           /*2D line intersection*/
-                                    ints = get_line_intersection(cells.verts,face,testp,rayp);
-                                #endif
-                                if(ints)
+
+                                cross=!cross;
+                                if(cells.leftright[findex].second == -1)
                                 {
-                                    cross=!cross;
-                                    if(cells.leftright[findex].second == -1)
+                                    #pragma omp critical
                                     {
-                                        #pragma omp critical
-                                        {
-                                            cout << "Particle has crossed an inner boundary!" << endl;
-                                        }
-                                        break;
+
+                                        cout << "Particle has crossed an inner boundary!" << endl;
                                     }
-                                    else if(cells.leftright[findex].second == -2)
-                                    {
-                                        // cout << "Particle has crossed an outer boundary!" << endl; 
-                                        localDel.emplace_back(ii);         
-                                        break;
-                                    }
-                                }  
-                            }
+                                    pnp1[ii].internal = 1;
+                                    break;
+                                }
+                                else if(cells.leftright[findex].second == -2)
+                                {
+                                    // cout << "Particle has crossed an outer boundary!" << endl; 
+                                    localDel.emplace_back(ii);         
+                                    break;
+                                }
+                            }  
                         }
                     }
+                }
 
-                    if(cross == 0)
+                if(cross == 0)
+                {
+                    if(pnp1[ii].nFailed > 10)
                     {
                         if(pnp1[ii].nFailed > 10)
                         {
@@ -849,22 +857,26 @@ void FindCell(SIM& svar, real const& sr, KDTREE const& TREE, MESH const& cells, 
                         }
                         else
                         {
-                            #pragma omp critical
-                            cout << "Couldn't identify which cell particle " << ii-start << " is inside, but continuing..." << endl;
-
-                            #pragma omp atomic
-                            pnp1[ii].nFailed++;
+                            cout << "Particle " << ii-start << " containing cell not found. Something is wrong." << endl;
+                            Write_Containment(svar,ret_indexes,cells,testp);
+                            // exit(-1);
                         }
-                        
+                        localDel.emplace_back(ii); /* Just delete particle and allow simulation to continue. */
+                            /* Allow user to examine in post whether simulation is bogus */
                     }
+                    else
+                    {
+                        #pragma omp critical
+                        cout << "Couldn't identify which cell particle " << ii-start << " is inside, but continuing..." << endl;
+
+                        #pragma omp atomic
+                        pnp1[ii].nFailed++;
+                    }
+                    
                 }
             }
-                 
-        } //end if particle is valid
-        else
-        {
-            pnp1[ii].cellID = 0;
         }
+        
     }   // End of particle loop
 
     #pragma omp for schedule(static) ordered

@@ -35,8 +35,9 @@ using std::setw;
 	std::ofstream dbout("WCSPH.log",std::ios::out);
 #endif
 
+#ifdef DAMBREAK
 std::ofstream dambreak("Dam_Data.log",std::ios::out);
-
+#endif
 // std::ofstream pertLog("cellPert.log",std::ios::out);
 
 /*Define Simulation Dimension*/
@@ -99,28 +100,16 @@ const std::string WHITESPACE = " \n\r\t\f\v";
 #pragma omp declare reduction(+:StateVecD : omp_out=omp_out+omp_in)\
                     initializer(omp_priv = omp_orig) 
 
+#pragma omp declare reduction(min: StateVecD : omp_out = \
+			omp_out.norm() < omp_in.norm() ? omp_in : omp_out)\
+                    initializer(omp_priv = omp_orig) 
+
+#pragma omp declare reduction(max: StateVecD : omp_out = \
+			omp_out.norm() > omp_in.norm() ? omp_in : omp_out)\
+                    initializer(omp_priv = omp_orig) 
+
+
 /*Define particle type indexes*/
-// typedef struct PState{
-// 	PState()
-// 	{
-// 		BOUND_ = 0;
-// 	    PISTON_ = 1;
-// 		BUFFER_ = 2;
-// 		BACK_ = 3; 
-// 		PIPE_ = 4;
-// 		FREE_ = 5;
-// 		GHOST_ = 6;
-// 	}
-
-// 	size_t BOUND_ ,
-//     PISTON_,
-// 	BUFFER_, 
-// 	BACK_,
-// 	PIPE_,
-// 	FREE_,
-// 	GHOST_;
-// } PState;
-
 enum partType{BOUND=0,PISTON,BUFFER,BACK,PIPE,FREE,GHOST};
 
 #ifndef TRUE
@@ -135,14 +124,21 @@ inline real random(int const& interval)
 	return real(rand() % interval - interval / 2) * MERROR;
 }
 
-typedef struct SIM {
+struct SIM 
+{
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	SIM()
 	{
 		/* Input files */
 		CDForFOAM = 0;
 		isBinary = 0; labelSize = 32; scalarSize = 64;
-		offset_axis = 0; angle_alpha = 0;
+		#if SIMDIM == 3
+		offset_axis = 0;
+		#else
+		offset_axis = 2; /* Default to XZ plane in 2D */
+		#endif 
+		
+		angle_alpha = 0;
 
 		out_encoding = 1; /* default to binary */
 		outform = 5; gout = 0; /* Default to restartable data */
@@ -161,6 +157,9 @@ typedef struct SIM {
 		bound_type = "(none)"; /* Default to no boundary */
 		Scase = 0; Bcase = 0;
 		Bclosed = 0; ghost = 0;
+		Asource = 0;
+		init_hydro_pressure = 0;
+		hydro_height = -1;
 
 		/* Universal geometry parameters */
 		sim_start.setConstant(-1);
@@ -168,6 +167,7 @@ typedef struct SIM {
 		Angle = StateVecD::Zero();
 		Rotate = StateMatD::Zero();
 		Transp = StateMatD::Zero();
+
 
 		/* Jet geometry parameters */
 		jet_diam = -1;
@@ -186,6 +186,8 @@ typedef struct SIM {
 		subits = 20;
 		Nframe = -1;
 		frame = 0;
+		bound_solver = 0;
+		cfl = 1.0;
 		t = 0.0;
 		dt = 2e-10;
 		framet = -1;
@@ -214,6 +216,8 @@ typedef struct SIM {
 		nSuccess = 0; nFailed = 0;
 		IPT_diam = 0.0; IPT_area = 0.0;
 		cellsout = 0; streakout = 1; partout = 0;
+
+		dropDragSweep = 0;
 	}
 
 	/* File input parameters */
@@ -267,10 +271,12 @@ typedef struct SIM {
 
 	/* Geometry parameters */
 	string start_type, bound_type;
-	int Scase, Bcase;				 /* What initial shape to take */
-	StateVecD sim_start, bound_start;/* Starting coordinates (For box, bottom left) */
-	int Bclosed, ghost;		  		 /* If the jet is closed or not */
-	int Asource;                     /* Source of aerodynamic solution */
+	int Scase, Bcase;				  /* What initial shape to take */
+	StateVecD sim_start, bound_start; /* Starting coordinates (For box, bottom left) */
+	int Bclosed, ghost;		  		  /* If the jet is closed or not */
+	int Asource;                      /* Source of aerodynamic solution */
+	int init_hydro_pressure;          /* Initialise fluid with hydrostatic pressure? */
+	real hydro_height;                /* Hydrostatic height to initialise using */
 
 	/* Jet geometry parameters */
 	real jet_diam;			        /* Jet diameter */
@@ -288,6 +294,8 @@ typedef struct SIM {
 	uint subits;                    /* Max number of sub-iterations */
 	uint Nframe; 			        /* Max number of frames to output */
 	uint frame;						/* Current frame number */
+	uint bound_solver;              /* Use boundary pressure or ghost particles */
+	double cfl;                     /* CFL criterion number */
 	double t;                       /* Simulation time */
 	real dt, framet;			    /* Timestep, frame times */
 	real dt_max;					/* Maximum timestep */
@@ -320,6 +328,13 @@ typedef struct SIM {
 	void* streakHandle;
 	void* partHandle;
 
+	/* Droplet sweep parameters */
+	int dropDragSweep;
+	vector<size_t> nacross;
+	vector<real> diameters;
+	vector<real> velocities;
+	vector<real> Reynolds;
+
 	/*Post Processessing settings*/
 	uint afterSim;
 	uint sliceOrSet;
@@ -328,22 +343,27 @@ typedef struct SIM {
 	StateVecD maxC, minC;			  /* Max and min coords to make grid */
 	uint numVars, wrongDim;
 	real postRadius;
-} SIM;
+};
 
 /*Fluid and smoothing parameters*/
-typedef struct FLUID {
+struct FLUID 
+{
+	// EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	/* Add default values */
 	FLUID()
 	{
 		H = -1;
 		HSQ = -1;
 		sr = -1;
-		Hfac = 1.5;
+		Hfac = 2;
 		Wdx = -1;
 
 		rho0 = 1000;
 		rhoJ = 1000;
 		pPress = 0;
+		rhoMax = 1500;	/* Allow a large variation by default */
+		rhoMin = 500;	/* making it essentially unbounded other */
+		rhoVar = 50.0;	/* than truly unphysical pressures */
 
 		alpha = 0.1;
 		Cs = 300;
@@ -358,7 +378,9 @@ typedef struct FLUID {
 	real Hfac;
 	real Wdx;                   /*Kernel value at the initial particle spacing distance.*/
 	real rho0, rhoJ; 			/*Resting Fluid density*/
-	real pPress;		/*Starting pressure in pipe*/
+	real pPress;				/*Starting pressure in pipe*/
+	real rhoMax, rhoMin;			/* Minimum and maximum pressure */
+	real rhoVar;				/* Maximum density variation allowed (in %) */
 	
 	real simM, bndM;			/*SPHPart and boundary masses*/
 	real correc;				/*Smoothing Kernel Correction*/
@@ -376,13 +398,15 @@ typedef struct FLUID {
 	real dMom;  /*delta-SPH momentum constant term (dCont * rho0)*/
 
 	// real maxU; /*Maximum particle velocity shift*/ (No longer needed)
-}FLUID;
+};
 
 /*Aerodynamic Properties*/
-typedef struct AERO
+struct AERO
 {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	AERO()
 	{
+		useDef = 0;
 		Cf = 1.0/3.0;
 		Ck = 8.0;
 		Cd = 5.0;
@@ -397,26 +421,28 @@ typedef struct AERO
 		Rgas = 287.0;
 		gamma = 1.403;
 		sos = sqrt(T*Rgas*gamma);
+		isossqr = 1.0/(sos*sos);
 		MRef = -1.0;
 
 		acase = 0;
 		vStart = StateVecD::Zero();
 		vInf = StateVecD::Zero();
 		vJetMag = -1.0;
+		cutoff = 0.75;
 	}
 
 	void GetYcoef(const FLUID& fvar, const real diam)
 	{
 		#if SIMDIM == 3
 			L = diam * std::cbrt(3.0/(4.0*M_PI));
-		#endif
-		#if SIMDIM == 2
+			aSphere = M_PI*L*L;
+			aPlate = diam*diam;
+		#else
 			L = diam/sqrt(M_PI);
+			aSphere = 2*L;
+			aPlate = diam;
 		#endif
 
-		// L = diam / 2.0; pow(diam,1.25)/2.0;
-
-		
 		td = (2.0*fvar.rho0*pow(L,SIMDIM-1))/(Cd*fvar.mu);
 
 		omega = sqrt((Ck*fvar.sig)/(fvar.rho0*pow(L,SIMDIM))-1.0/pow(td,2.0));
@@ -432,6 +458,7 @@ typedef struct AERO
 	}
 	
 	/*Gissler Parameters*/
+	int useDef;
 	real L;
 	real td;
 	real omega;
@@ -439,32 +466,30 @@ typedef struct AERO
 	real ycoef;
 	real Cf, Ck, Cd, Cb, Cdef;
 
-	real pVol;                     /*Volume of a particle*/
-	real aPlate;                   /*Area of a plate*/
+	real pVol;                     /* Volume of a particle */
+	real aSphere;				   /* Area of a sphere/cylinder */
+	real aPlate;                   /* Area of a plate*/
 
 	/* Gas Properties*/
-	real qInf, vRef, pRef;         /*Reference gas values*/
+	real qInf, vRef, pRef;         /* Reference gas values*/
 	
 	real rhog, mug;
-	real gasM;					   /*A gas particle mass*/
-	real T;						   /*Temperature*/
-	real Rgas;                     /*Specific gas constant*/
+	real gasM;					   /* A gas particle mass*/
+	real T;						   /* Temperature*/
+	real Rgas;                     /* Specific gas constant*/
 	real gamma;                    /* Ratio of specific heats */
 	real sos;                      /* Speed of sound */
+	real isossqr;				   /* Inverse speed of sound squared */
 	real MRef;    
 	
 	string aero_case;
-	int acase;	                   /*Aerodynamic force case*/
-	StateVecD vStart, vInf;          /*Jet & Freestream velocity*/
+	int acase;	                   /* Aerodynamic force case*/
+	StateVecD vStart, vInf;        /* Jet & Freestream velocity*/
 	real vJetMag;
+	real cutoff;				   /* Lambda value cutoff */
+};
 
-	// real a;                        /*Case 3 tuning parameters*/
-	// real b;                        /*}*/
-	// real h1;                       /*}*/
-	// real h2;                       /*}*/
-}AERO;
-
-typedef struct MESH
+struct MESH
 {
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	/*Standard contructor*/
@@ -472,7 +497,29 @@ typedef struct MESH
 
 	inline size_t size()
 	{
-		return elems.size();
+		return nElem;
+	}
+
+	inline void alloc(size_t nPnts_, size_t nElem_, size_t nFace_, size_t nSurf_, int Asource )
+	{
+		nPnts = nPnts_; nElem = nElem_; nFace = nFace_; nSurf = nSurf_;
+		verts = vector<StateVecD>(nPnts);
+		faces.reserve(nFace*2);
+		leftright.reserve(nFace);
+
+		// elems = vector<vector<size_t>>(nElem);
+		cCentre = vector<StateVecD>(nElem);
+		cFaces = vector<vector<size_t>>(nElem);
+
+		cVel = vector<StateVecD>(nElem);
+		cP = vector<real>(nElem);
+		cRho = vector<real>(nElem);
+
+		if(Asource == 2)
+		{
+			cVol = vector<real>(nElem);
+			cMass = vector<real>(nElem);
+		}
 	}
 
 	/*Zone info*/
@@ -491,7 +538,7 @@ typedef struct MESH
 	vector<std::pair<size_t,int>> smarkers;
 
 	/*Cell based data*/
-	vector<vector<size_t>> elems;
+	// vector<vector<size_t>> elems;
 	vector<StateVecD> cCentre;
 	vector<vector<size_t>> cFaces;
 
@@ -499,7 +546,6 @@ typedef struct MESH
 	vector<StateVecD> cVel;
 	vector<real> cCp;
 	vector<real> cP;
-	vector<real> cMass;
 	vector<real> cRho;
 	// vector<real> cRho_SPH;
 	
@@ -507,6 +553,7 @@ typedef struct MESH
 	vector<StateVecD> cPertn;
 	vector<StateVecD> cPertnp1;
 	vector<real> cVol;
+	vector<real> cMass;
 
 
 	vector<size_t> fNum; // number of fuel particles in cell
@@ -515,11 +562,13 @@ typedef struct MESH
 	vector<StateVecD> vFn;
 	vector<StateVecD> vFnp1;
 
-}MESH;
+};
 
 /* Structure to track impacts and data for a surface marker of the mesh */
 struct SURF
 {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
 	SURF()
 	{ 
 		marker_count = 0;
@@ -560,7 +609,8 @@ struct SURF
 
 
 /*Container for delta-plus SPH calculations*/
-typedef class DELTAP {
+class DELTAP 
+{
 	public: 
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 		DELTAP(size_t const& size)
@@ -649,10 +699,11 @@ typedef class DELTAP {
 		}
 
 
-}DELTAP;
+};
 
 /*SPHPart data class*/
-typedef struct SPHPart {
+struct SPHPart 
+{
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	SPHPart(StateVecD const& X, StateVecD const& Vi, real const Rhoi, real const Mi, 
 		real const press, int const bound, uint const pID)
@@ -684,7 +735,7 @@ typedef struct SPHPart {
 		curve = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0; deltaD = 0.0;
 
 		cellV = StateVecD::Zero();
-		cellP = 0.0; cellRho = 0.0;
+		cellP = pj.cellP; cellRho = pj.cellRho;
 		internal = 0;
 
 		vPert = StateVecD::Zero();
@@ -705,6 +756,7 @@ typedef struct SPHPart {
 	size_t partID, cellID, faceID;
 	uint b; //What state is a particle. See PartState above for possible options
 	uint surf; /*Is a particle a surface? 1 = yes, 0 = no*/
+	uint surfzone; /* Is particle in the surface area? */
 	uint nFailed; /* How many times has the containment query failed */
 	StateVecD xi, v, acc, Af, aVisc;
 	real Rrho, rho, p, m, curve, s, woccl, pDist, deltaD;
@@ -718,11 +770,11 @@ typedef struct SPHPart {
 	real y;
 	
 	StateVecD vPert;		
-}SPHPart;
+};
 
-typedef struct IPTPart
+struct IPTPart
 {
-	public:
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	IPTPart()
 	{
 		partID = 0;
@@ -852,20 +904,23 @@ typedef struct IPTPart
 
 	real mass; /* SPHPart mass */
 	real d, A; /* SPHPart diameter and area */
-}IPTPart;
+};
 
 
 typedef std::vector<SPHPart> SPHState;
 typedef std::vector<IPTPart> IPTState;
 typedef std::vector<SURF> SURFS;
+
 /* Neighbour search tree containers */
 typedef std::vector<std::vector<std::pair<size_t,real>>> OUTL;
 typedef std::vector<std::vector<size_t>> celll;
 typedef KDTreeVectorOfVectorsAdaptor<SPHState,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Sim_Tree;
 typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Vec_Tree;
 
-typedef struct KDTREE
+struct KDTREE
 {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
 	KDTREE(SPHState const& pnp1, MESH const& cells): NP1(SIMDIM,pnp1,20), 
 	CELL(SIMDIM,cells.cCentre,20)/* , BOUNDARY(SIMDIM,cells.bVerts,20) */ {}
 
@@ -873,6 +928,6 @@ typedef struct KDTREE
 	Vec_Tree CELL;
 	// Vec_Tree BOUNDARY;	
 
-}KDTREE;
+};
 
 #endif /* VAR_H */

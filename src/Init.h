@@ -93,6 +93,20 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 	/* Bcase == 0 -> no boundary */
 	if(svar.Bcase == 1) /*Rectangle*/
 	{	
+		if(svar.bound_solver == 1)
+		{
+			svar.bound_start[0] -= svar.Pstep;
+			svar.bound_start[1] -= svar.Pstep;
+
+			svar.bound_box[0] += 2*svar.Pstep;
+			svar.bound_box[1] += 2*svar.Pstep;
+
+			#if SIMDIM == 3
+			svar.bound_start[2] -= svar.Pstep;
+			svar.bound_box[2] += 2*svar.Pstep;
+			#endif
+		}
+
 		#if SIMDIM == 3
 			// for(int j = 0; j <= Ny ; ++j) 
 			// {
@@ -196,21 +210,24 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 
 			for(int level = nlevels-1; level >=0; level--)
 			{
-				for(real y = svar.bound_box[1] + svar.bound_start[1]; y >= svar.bound_start[1]-(nlevels)*dy-svar.Pstep; y -= dy)
+				for(real y = svar.bound_box[1] + svar.bound_start[1]; 
+					y >= svar.bound_start[1]-(nlevels-1)*dy-svar.Pstep; y -= dy)
 				{	/* Left wall */
 					StateVecD xi(svar.bound_start[0] - (level)*dx - svar.Pstep, y);
 					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 					pID++;
 				}
 
-				for(real x = svar.bound_start[0]- svar.Pstep + dx; x <=  svar.bound_box[0]+svar.bound_start[0]+svar.Pstep; x += dx) 
+				for(real x = svar.bound_start[0]- svar.Pstep + dx; 
+					x <=  svar.bound_box[0]+svar.bound_start[0]+svar.Pstep; x += dx) 
 				{	/*Floor*/
 					StateVecD xi(x, svar.bound_start[1] - (level)*dy - svar.Pstep);
 					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
 					pID++;
 				}
 
-				for(real y =  svar.bound_start[1]-(nlevels)*dy-svar.Pstep; y <= svar.bound_box[1] + svar.bound_start[1]; y += dy)
+				for(real y =  svar.bound_start[1]-(nlevels-1)*dy-svar.Pstep; 
+					y <= svar.bound_box[1] + svar.bound_start[1]; y += dy)
 				{	/* Right wall */
 					StateVecD xi(svar.bound_start[0] + svar.bound_box[0] + (level)*dx + svar.Pstep, y);
 					pn.emplace_back(SPHPart(xi,v,rho,fvar.bndM,press,BOUND,pID));
@@ -233,7 +250,11 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 	{	/*Jet*/
 		int const interval = 20000;
 		#if SIMDIM == 3
-			real holeD = svar.jet_diam+6.75*svar.dx; /*Diameter of hole (or width)*/
+
+			real holeD = svar.jet_diam+2*svar.dx; /*Diameter of hole (or width)*/
+			if(svar.bound_solver == 1)
+				holeD += 3*svar.dx;
+
 			real stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
@@ -243,7 +264,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 	    	int ncirc = floor(2.0*M_PI/dtheta);
 	    	dtheta = 2.0*M_PI/real(ncirc);
 
-			for(real ii = 0; ii < 4; ii+=1.0)
+			for(real ii = 0; ii < 3; ii+=1.0)
 			{
 				r = 0.5*holeD + ii*stepb;
 				for (real y = 0; y >= -svar.jet_depth-stepb; y-=stepb)			
@@ -261,12 +282,15 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		#else
 
 			real jetR = 0.5*(svar.jet_diam+2*svar.dx); /*Radius of hole (or width)*/
+			if(svar.bound_solver == 1)
+				jetR += 2*svar.dx;
+
 			real stepb = (svar.Pstep*svar.Bstep);
 			
 			/*Create a bit of the pipe downward.*/
 			for(real x = jetR; x < jetR + 2*fvar.H - svar.dx; x+=stepb)
 			{
-				for (real y = 0.0; y >= -(svar.jet_depth + 6.0 * svar.dx); y-=stepb)			
+				for (real y = 0.0; y >= -(svar.jet_depth + 4.0 * svar.dx); y-=stepb)			
 				{
 					StateVecD perturb(random(interval), random(interval));
 					StateVecD xi(-x,y);
@@ -275,7 +299,7 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 					pID++;
 				}
 
-				for (real y = 0.0; y >= -(svar.jet_depth + 6.0 * svar.dx); y -= stepb)
+				for (real y = 0.0; y >= -(svar.jet_depth + 4.0 * svar.dx); y -= stepb)
 				{
 					StateVecD perturb(random(interval), random(interval));
 					StateVecD xi(x,y);
@@ -655,14 +679,8 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 
 	}
 
-
-		
-	// svar.simPts+=10*10;
-
 	svar.totPts = pn.size();
 	svar.partID = pn.size();
-
-	
 
 	for(size_t ii = 0; ii < svar.bndPts; ++ii)
 		pn[ii].xi = (svar.Rotate * pn[ii].xi) + svar.bound_start;
@@ -675,6 +693,18 @@ void InitSPH(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState& pn, SPHSt
 		// 	pn[ii].cellV = avar.vInf;
 		// }
 	}
+
+	if(svar.init_hydro_pressure)
+	{	/* If using hydrostatic initialisation, set pressure */
+		for(size_t ii = 0; ii < svar.totPts; ++ii)
+		{
+			real press = std::max(0.0, fvar.rho0 * svar.grav[1] * (svar.hydro_height -  pn[ii].xi[1]));
+			real dens = density_equation(press, fvar.B, fvar.gam, fvar.Cs, fvar.rho0);
+			pn[ii].p = press;
+			pn[ii].rho = dens;
+		}
+	}
+	
 	pnp1 = pn;
 
 	// cout << "Boundary pn: " << svar.bndPts << endl;

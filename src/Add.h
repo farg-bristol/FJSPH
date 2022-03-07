@@ -254,7 +254,7 @@ void Add_Buffer(SIM& svar, FLUID const& fvar, SPHState& pn)
 	
 }
 
-void CreateDroplet(SIM &svar, const FLUID &fvar, SPHState &pn)
+void CreateDroplet(SIM& svar, FLUID const& fvar, SPHState& pn)
 {
 	size_t pID = svar.totPts;
 	size_t const& pState = FREE;

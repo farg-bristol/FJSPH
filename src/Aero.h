@@ -40,60 +40,69 @@ inline StateVecD const AeroForce(StateVecD const& Vdiff, AERO const& avar, real 
 	return (0.5*avar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai);
 }
 
-/*Gissler et al (2017)*/
+
+/*Sphere-Plate interpolation method - Gissler et al (2017)*/
 inline StateVecD const GisslerForce(AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, 
-						real const& rho, real const& press, real const& lam, real const& woccl)
+						real const& rho, real const& press, real const& mass, real const& lam, real const& woccl)
 {
 	// real const nfull = avar.nfull;
-
-	// real ymax = Vdiff.squaredNorm()*avar.ycoef;
-	// // ymax = 0.0;
-	// if (ymax > 1.0)
-	// 	ymax = 1.0;
-
 	real const Re = 2.0*rho*Vdiff.norm()*avar.L/avar.mug;
 	
-
-	real const frac2 = std::min(2.0 * lam, 1.0);
+  real const frac2 = std::min(2.0 * lam, 1.0);
 	real const frac1 = (1.0 - frac2);
 
  	real const Cds  = GetCd(Re);
-
-	// real const Cdl = Cds*(1+2.632*ymax);
-	real const Cdl = Cds;
-	real const	Cdi = frac1*Cdl + /* 0.5* */ /*1.37**/frac2;
+	real Cdl, Adrop;
 
 	#if SIMDIM == 3 
-		// real const Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
-		real const Adrop = M_PI*pow(avar.L,2);
+		if(avar.useDef)
+		{
+			real ymax = Vdiff.squaredNorm()*avar.ycoef;
+			if (ymax > 1.0)
+				ymax = 1.0;
+			Cdl = Cds*(1+2.632*ymax);
+			Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
+		}
+		else
+		{
+			Cdl = Cds;
+			Adrop = avar.aSphere;
+		}
 	#else
-		// real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax) /** pow(avar.L,1)*/;
-		real const Adrop = 2*avar.L;
+		if(avar.useDef)
+		{
+			real ymax = Vdiff.squaredNorm()*avar.ycoef;
+			if (ymax > 1.0)
+				ymax = 1.0;
+			 Cdl = Cds*(1+2.632*ymax);
+			Adrop = avar.aSphere + 2*(avar.Cb*avar.L*ymax) /** pow(avar.L,1)*/;
+		}
+		else
+		{
+			Cdl = Cds;
+			Adrop = avar.aSphere;
+		}
 	#endif
 
+	real const Cdi = frac1*Cdl + /* 0.5* */ /*1.37**/frac2;
 	real const Aunocc = (frac1*Adrop + frac2*avar.aPlate);
-
-	// real const Ai = (1.0-(std::max(std::min(woccl,1.0),0.0)))*Aunocc;
-	// real woccl_2 = std::min(1.0,std::max(0.0, Vdiff.normalized().dot(norm.normalized())));
-
 	real const Ai = (1.0 - woccl)*Aunocc;
-
-	// StateVecD F = 0.5*avar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai;
 
 	// cout << "Fractions: " << frac1 << "  " << frac2 << endl;
 	// cout << "Areas: " << Ai << "  " << Adrop << "  " << avar.aPlate << endl;
 	// cout << "Re: " << Re << "  Cds: " << Cdi << "  "  << Cdl << "  " << Cds  << endl;
 	// cout << "F: " << F(0) << "  " << F(1) << endl << endl;
 
-	// return  0.5*rho*Vdiff.norm()*Vdiff*Cdi*Ai;
+
+	// return  0.5*rho*Vdiff.norm()*Vdiff*Cdi*Ai / mass;
 	return  0.5 * Vdiff.norm() * Vdiff / (avar.sos*avar.sos) *
-			 avar.gamma * press * Cdi * Ai;
+			 avar.gamma * press * Cdi * Ai / mass;
 
 }
 
-inline StateVecD const InducedPressure(
-		AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, 
-		real const& Pbasei, real const& lam, SPHPart const& pi )
+inline StateVecD const InducedPressure(AERO const& avar, StateVecD const& Vdiff,
+		 StateVecD const& norm, real const& Pbasei, real const& lam, SPHPart const& pi )
+		 
 {
 	real theta = abs(acos(-norm.normalized().dot(Vdiff.normalized())));
 		
@@ -131,7 +140,7 @@ inline StateVecD const InducedPressure(
 	/*Spherical Cp*/
 	if(theta < 2.4455)
 	{
-		Cp_s = 1.0 - (9.0/4.0) * pow(sin(theta),2.0);
+		Cp_s = 1.0 - (2.25) * pow(sin(theta),2.0);
 	}
 	else
 	{
@@ -145,7 +154,7 @@ inline StateVecD const InducedPressure(
 	}
 	else if (theta < 1.9918)
 	{
-		Cp_p = -pow(cos(6.0*theta+M_PI/2.0),1.5);
+		Cp_p = -pow(cos(6.0*theta+0.5*M_PI),1.5);
 	}
 	else if (theta < 2.0838)
 	{
@@ -157,7 +166,7 @@ inline StateVecD const InducedPressure(
 	}
 
 
-	/*Overall Cp*/
+	/* Overall Cp (Ideal to machine learn at some point) */
 	if(pi.curve > 200.0)
 	{
 		if(theta < 1.570796)
@@ -167,12 +176,12 @@ inline StateVecD const InducedPressure(
 	}
 	else if (pi.curve > 0.0)
 	{
-		real const frac = (pi.curve)/(200.0);
+		real const frac = (pi.curve) * 5.0e-3;
 		Cp_tot = frac + (1.0-frac)*Cp_p;
 	}
 	else if (pi.curve > -200.0)
 	{
-		real const frac = (pi.curve + 200.0)/(200.0);
+		real const frac = (pi.curve + 200.0) * 5.0e-3;
 		Cp_tot = frac*Cp_p + (1.0-frac)*Cp_s;
 	}
 	else
@@ -180,16 +189,13 @@ inline StateVecD const InducedPressure(
 		Cp_tot = Cp_s;
 	}
 
-	
 	// real Plocali = 0.5*avar.rhog*Vdiff.squaredNorm()*Cp_tot;
-
-
 
 	/* Compressible dynamic pressure */
 	real const Plocali = 0.5*Vdiff.squaredNorm()/(avar.sos*avar.sos) * avar.gamma * pi.cellP * Cp_tot;
 	// cout << Plocalj << endl;
 
-	real const Pi = (Plocali/* +Pbasei */);
+	real const Pi = (Plocali/* + Pbasei */);
 	
 	// #pragma omp critical
 	// cout << Cp_s << "  " << Cp_p << "  " << Cp_tot << "  " << theta << "  " << pi.curve << "  " << Pi <<  endl;
@@ -199,7 +205,8 @@ inline StateVecD const InducedPressure(
 
 	/* Pure droplet force */
 	StateVecD const acc_drop = 0.5*Vdiff*Vdiff.norm()/(avar.sos*avar.sos) * avar.gamma * pi.cellP
-					* (M_PI*avar.L*avar.L/4) * Cdi/pi.m;
+					* (M_PI*avar.L*avar.L*0.25) * Cdi/pi.m;
+
 	// aeroD = -Pi * avar.aPlate * norm[ii].normalized();
 
 	/* Induce pressure force */
@@ -240,7 +247,7 @@ StateVecD CalcAeroAcc(AERO const& avar, SPHPart const& pi, StateVecD const& Vdif
 	// cout << avar.acase << endl;
 	if( avar.acase == 1)
 	{	/* Original Gissler */
-		acc = GisslerForce(avar,Vdiff,norm,pi.cellRho,pi.cellP,lam,pi.woccl)/pi.m;
+		acc = GisslerForce(avar,Vdiff,norm,pi.cellRho,pi.cellP,pi.m,lam,pi.woccl);
 	}
 	else if(avar.acase == 2)
 	{	/* Induced pressure based model */	
@@ -265,7 +272,7 @@ StateVecD CalcAeroAcc(AERO const& avar, SPHPart const& pi, StateVecD const& Vdif
 
 			StateVecD acc_skin = 0.5*avar.rhog* Vpar.norm() * Cf * avar.aPlate * Vpar/pi.m;
 
-			real const frac2 = std::min(3.0/2.0 * lam, 1.0);
+			real const frac2 = std::min(1.5 * lam, 1.0);
 			real const frac1 = (1.0 - frac2);
 
 			/*Droplet force*/
@@ -279,32 +286,7 @@ StateVecD CalcAeroAcc(AERO const& avar, SPHPart const& pi, StateVecD const& Vdif
 
 	}
 	else if(avar.acase == 4)
-	{ /*Surface particles, with correction based on surface normal*/
-		// cout << size << endl;
-		// if (size < avar.nfull)
-		// {
-		// 	acc = AeroForce(Vdiff, avar, pi.m);
-		// 	/*Correction based on surface tension vector*/
-		// 	real correc = 1.0;
-		// 	if(size > 0.1 * avar.nfull)
-		// 	{
-		// 		real num = norm.dot(Vdiff);
-		// 		real denom = norm.norm()*(Vdiff).norm();
-		// 		real theta = num/denom;
-				
-		// 		if (theta <= 1.0  && theta >= -1.0)
-		// 		{
-		// 			correc = avar.a*Kernel(1-theta,avar.h1,1)+
-		// 				avar.b*Kernel(1-theta,avar.h2,1);
-		// 		}
-		// 	}
-		// 	acc = /*avar.Acorrect**/correc*acc;
-		// }
-		
-	}
-	else if(avar.acase == 5)
 	{
-
 		// real ymax = Vdiff.squaredNorm()*avar.ycoef;
 
 		// acc = AeroForce(Vdiff, avar, pi.m);
@@ -326,7 +308,7 @@ StateVecD CalcAeroAcc(AERO const& avar, SPHPart const& pi, StateVecD const& Vdif
 			Cp = 0.075;
 		}
 
-		real const frac2 = std::min(3.0/2.0 * lam, 1.0);
+		real const frac2 = std::min(1.5 * lam, 1.0);
 		real const frac1 = (1.0 - frac2);
 
 
@@ -340,12 +322,6 @@ StateVecD CalcAeroAcc(AERO const& avar, SPHPart const& pi, StateVecD const& Vdif
 
 		real const Aunocc = frac1*Adrop + frac2*avar.aPlate;
 
-		// #if SIMDIM == 2
-		// 			real area = avar.L;
-		// #else
-		// 			real area = M_PI*avar.L*avar.L;
-		// #endif
-
 		real press = 0.5*avar.rhog*Vdiff.squaredNorm()*Cp;
 
 		#if SIMDIM == 3
@@ -354,26 +330,7 @@ StateVecD CalcAeroAcc(AERO const& avar, SPHPart const& pi, StateVecD const& Vdif
 			acc = -norm.normalized()*Aunocc*press;
 		#endif
 
-		// if (theta <= 1.0  && theta >= -1.0)
-		// {
-		// 	correc = avar.a*W2Kernel(1-theta,avar.h1,1)+
-		// 		avar.b*W2Kernel(1-theta,avar.h2,1);
-		// }
-		
-		// /*Correct based on the number of neighbours*/
-		// Acorrect = 0.9995*exp(-0.04606*real(size))+0.0005;
-		// cout << size << "  " << Acorrect << endl;
-		
-
-		// acc = correc*Acorrect*acc;
-		
 	}
-	// else if(avar.acase == 6)
-	// {	
-	// 	/* All upstream particles */
-	// 	// acc = pi.woccl*avar.Acorrect*AeroForce(Vdiff, avar, pi.m);
-	// }
-
 	return acc;
 }
 

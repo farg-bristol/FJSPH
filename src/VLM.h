@@ -486,7 +486,7 @@ typedef class VLM
 			r2 = C-B;
 
 			coefAB = (1/(4*M_PI))*((r1.cross(r2))/(r1.cross(r2)).squaredNorm())*
-					(r0.dot(r1.normalized())-r0.dot(r2.normalized()));
+					(r0.dot(r1.normalized()-r2.normalized()));
 
 
 			/*Horseshoe vortex from point A*/

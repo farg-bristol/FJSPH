@@ -846,7 +846,10 @@ namespace IPT
             int cellID = t_pnp1[time].cellID;
             
             /* Find how many vertices the cell has */
-            vertIndexes.insert(vertIndexes.end(), cells.elems[cellID].begin(), cells.elems[cellID].end());
+            for(size_t ii = 0; ii < cells.cFaces.size(); ++ii)
+                vertIndexes.insert(vertIndexes.end(), 
+                cells.faces[cells.cFaces[cellID][ii]].begin(), cells.faces[cells.cFaces[cellID][ii]].end());
+
             faceIndexes.insert(faceIndexes.end(), cells.cFaces[cellID].begin(), cells.cFaces[cellID].end());
             cellIndexes.emplace_back(cellID);
         }

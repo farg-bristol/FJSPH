@@ -5,7 +5,7 @@
 #include "IOFunctions.h"
 #include "Geometry.h"
 
-#include <netcdf>
+#include <netcdf.h>
 // using namespace netCDF;
 // using namespace netCDF::exceptions;
 #define NC_ERR 2
@@ -15,174 +15,91 @@
 		exit(-1);                              \
 	}
 
-struct ZONE
-{
-	ZONE()
-	{
-		lineNo = 0;
-	}
 
-	string name, ETtype;
-	uint lineNo;
-	uint ctype;
-	uint nF, nCverts, nFverts, nFverts2;
-	uint nP, nE;
-	uint pressOrcp, nvar;
-	uint veltype, velstart, cpstart, densstart;
-};
-
-/*FOR DEBUGGING*/
-void Write_Zone(string input, ZONE &zn, MESH &cells)
-{
-	std::size_t found1 = input.find_first_of("/\\");
-	std::size_t found2 = input.find_last_of("/\\");
-	string path = input.substr(found1, found2 - found1 + 1);
-
-	string filename = "Outputs";
-	filename.append(path);
-	filename.append(zn.name);
-	filename.append(".plt");
-
-	ofstream fout(filename, std::ios::out);
-	if (!fout.is_open())
-	{
-		cout << "Failed to open data file for writing mesh." << endl;
-		exit(-1);
-	}
-
-	fout << "TITLE = \"3D TAU Solution\"\n";
-	fout << "VARIABLES = \"x (m)\" \"y (m)\" \"z (m)\" \"x_velocity\" \"y_velocity\" \"z_velocity\"\n";
-	fout << "ZONE T=\"" << zn.name << "\"" << endl;
-	fout << " N=" << zn.nP << ", E=" << zn.nE << ", F=FEBLOCK, ET=" << zn.ETtype << endl
-		 << endl;
-
-	fout << std::left << std::scientific << std::setprecision(6);
-	for (uint ii = 0; ii < SIMDIM; ++ii)
-	{
-		uint kk = 0;
-		for (uint jj = cells.verts.size() - zn.nP; jj < cells.verts.size(); ++jj)
-		{
-			fout << cells.verts[jj][ii] << std::setw(15);
-			kk++;
-
-			if (kk == 5)
-			{
-				fout << "\n";
-				kk = 0;
-			}
-		}
-
-		if (kk % 5 != 0)
-			fout << "\n";
-	}
-
-	for (uint ii = 0; ii < SIMDIM; ++ii)
-	{
-		uint kk = 0;
-		for (uint jj = cells.cVel.size() - zn.nP; jj < cells.cVel.size(); ++jj)
-		{
-			fout << cells.cVel[jj][ii] << std::setw(15);
-			kk++;
-
-			if (kk == 5)
-			{
-				fout << "\n";
-				kk = 0;
-			}
-		}
-
-		if (kk % 5 != 0)
-			fout << "\n";
-	}
-
-	// cout << "Velocitices written" << endl;
-	fout << std::fixed;
-	if (zn.ctype == 1 || zn.ctype == 2)
-	{
-		for (uint ii = cells.elems.size() - zn.nE; ii < cells.elems.size(); ++ii)
-		{
-			for (auto elem : cells.elems[ii])
-			{
-				fout << elem + 1 << std::setw(15);
-			}
-			fout << "\n";
-		}
-	}
-
-	if (zn.ctype == 3)
-	{
-		for (uint ii = cells.elems.size() - zn.nE; ii < cells.elems.size(); ++ii)
-		{
-			for (uint jj = 0; jj < 3; ++jj)
-			{
-				fout << cells.elems[ii][jj] + 1 << " ";
-			}
-			fout << cells.elems[ii][2] + 1 << " ";
-			for (uint jj = 3; jj < 6; ++jj)
-			{
-				fout << cells.elems[ii][jj] + 1 << " ";
-			}
-			fout << cells.elems[ii][5] + 1;
-			fout << "\n";
-		}
-	}
-
-	if (zn.ctype == 4)
-	{
-		for (uint ii = cells.elems.size() - zn.nE; ii < cells.elems.size(); ++ii)
-		{
-			for (uint jj = 0; jj < 4; ++jj)
-			{
-				fout << cells.elems[ii][jj] + 1 << " ";
-			}
-			fout << cells.elems[ii][4] + 1 << " ";
-			fout << cells.elems[ii][4] + 1 << " ";
-			fout << cells.elems[ii][4] + 1 << " ";
-			fout << cells.elems[ii][4] + 1 << " ";
-			fout << "\n";
-		}
-	}
-	fout.close();
-}
-
-void Average_Point_to_Cell(vector<StateVecD> const &pData, vector<StateVecD> &cData,
+inline void Average_Point_to_Cell(vector<StateVecD> const &pData, vector<StateVecD> &cData,
 						   vector<vector<size_t>> const &elems)
 {
-	vector<StateVecD> sum(elems.size(), StateVecD::Zero());
+	cData = vector<StateVecD>(elems.size(), StateVecD::Zero());
 
-	#pragma omp parallel for reduction(+ : sum) default(shared)
+	#pragma omp parallel for default(shared)
 	for (uint ii = 0; ii < elems.size(); ++ii)
 	{
-
+		StateVecD sum_ = StateVecD::Zero();
 		uint const nVerts = elems[ii].size();
 		for (auto jj : elems[ii])
 		{
-			sum[ii] += pData[jj];
+			sum_ += pData[jj];
 		}
-		sum[ii] /= nVerts;
+		cData[ii] = sum_/nVerts;
 	}
-
-	cData = sum;
 }
 
-void Average_Point_to_Cell(vector<real> const &pData, vector<real> &cData,
-						   vector<vector<size_t>> const &elems)
+inline void Average_Point_to_Cell(vector<real> const& pData, vector<real> &cData,
+						   vector<vector<size_t>> const& elems)
 {
-	vector<real> sum(elems.size(), 0.0);
-
-	#pragma omp parallel for reduction(+ : sum) default(shared)
+	cData = vector<real>(elems.size(),0.0);
+	#pragma omp parallel for default(shared)
 	for (uint ii = 0; ii < elems.size(); ++ii)
 	{
-
+		real sum_ = 0.0;
 		uint const nVerts = elems[ii].size();
 		for (auto jj : elems[ii])
 		{
-			sum[ii] += pData[jj];
+			sum_ += pData[jj];
 		}
-		sum[ii] /= nVerts;
+		cData[ii] = sum_ / nVerts;
 	}
+}
 
-	cData = sum;
+inline void Average_Point_Data_to_Cell(SIM const& svar, vector<StateVecD> const& vel, 
+	vector<real> const& press, vector<real> const& dens, MESH& cells)
+{
+	#pragma omp parallel for default(shared)
+	for (uint ii = 0; ii < cells.cFaces.size(); ++ii)
+	{
+		vector<size_t> elem;
+		for (auto const& faceID: cells.cFaces[ii])
+		{
+			vector<size_t> const face = cells.faces[faceID];
+			for (auto const& vert : face)
+			{
+				if (std::find(elem.begin(), elem.end(), vert) == elem.end())
+				{ /*Vertex doesn't exist in the elems vector yet.*/
+					elem.emplace_back(vert);
+				}
+			}
+		}
+
+		StateVecD cCentre_ = StateVecD::Zero();
+		StateVecD cVel_ = StateVecD::Zero();
+		real cPress_ = 0.0;
+		real cRho_ = 0.0;
+
+		uint const nVerts = elem.size();
+		for (auto jj : elem)
+		{
+			cCentre_ += cells.verts[jj];
+			cVel_ += vel[jj];
+			cPress_ += press[jj];
+			cRho_ += dens[jj];
+		}
+
+
+		cells.cCentre[ii] = cCentre_ / nVerts;
+		cells.cVel[ii] = cVel_ / nVerts;
+		cells.cP[ii] = cPress_ / nVerts;
+		cells.cRho[ii] = cRho_ / nVerts;
+
+
+		/*Find cell volumes*/
+		if(svar.Asource == 2)
+		{
+			// Find cell volumes 
+			cells.cVol[ii] = Cell_Volume(cells.verts, cells.faces, elem, 
+								cells.cFaces[ii], cells.cCentre[ii]);
+			cells.cMass[ii] = cells.cRho[ii] * cells.cVol[ii];
+		}
+	}
 }
 
 /*****************************************************************************/
@@ -214,7 +131,7 @@ namespace TAU
 		dimLen = dimLen_;
 	}
 
-	void Get_Var_ID(int &meshID, string const &var, int &varID)
+	void Get_Var_ID(int& meshID, string const& var, int& varID)
 	{
 		int retval = 0;
 		int varID_;
@@ -343,7 +260,7 @@ namespace TAU
 	}
 
 	/*To run on the solution file*/
-	vector<real> Get_Scalar_Property_real(int &fin, string const &variable, size_t const &nPts)
+	vector<real> Get_Scalar_Property_real(int& fin, string const& variable, size_t const& nPts)
 	{
 		#ifdef DEBUG
 			dbout << "Reading variable: " << variable << endl;
@@ -380,7 +297,7 @@ namespace TAU
 		return var;
 	}
 
-	vector<int> Get_Scalar_Property_int(int &fin, string variable, int nPts)
+	vector<int> Get_Scalar_Property_int(int& fin, string const& variable, int const& nPts)
 	{
 		#ifdef DEBUG
 			dbout << "Reading variable: " << variable << endl;
@@ -417,7 +334,8 @@ namespace TAU
 	}
 
 	/*To run on the mesh file*/
-	void Get_Element(int &fin, string const &variable, size_t const &nElem, size_t const &nPpEd, vector<vector<size_t>>& vec)
+	void Get_Element(int& fin, string const& variable, size_t const& nElem, 
+	size_t const& nPpEd, vector<vector<size_t>>& vec)
 	{
 		#ifdef DEBUG
 			dbout << "Reading \"" << variable << "\"" << endl;
@@ -469,10 +387,10 @@ namespace TAU
 			/*Convert it to a vector to store*/
 			for (size_t ii = 0; ii < nElem; ++ii)
 				for (size_t jj = 0; jj < nPpEd; ++jj)
-					elemVec[ii][jj] = static_cast<size_t>(elemArray[index(ii,jj,nPpEd)]);
+					elemVec[ii][jj] = static_cast<size_t>(elemArray[index(jj,ii,nPpEd)]);
 
 		}
-		catch (std::bad_alloc &ba)
+		catch (std::bad_alloc& ba)
 		{
 
 			std::cerr << "Bad alloc caught. Failed to allocate \"" << variable << "\"" << endl;
@@ -488,7 +406,7 @@ namespace TAU
 	}
 
 	/*To run on the mesh file*/
-	uint Get_Coordinates(int &fin, size_t const &nPnts, vector<StateVecD> &coordVec)
+	uint Get_Coordinates(int& fin, size_t const& nPnts, vector<StateVecD>& coordVec)
 	{
 		#ifdef DEBUG
 			dbout << "Reading coordinates." << endl;
@@ -637,8 +555,8 @@ namespace TAU
 		#endif
 	}
 
-	void Get_Cell_Faces(vector<vector<uint>> const &cell,
-						vector<vector<uint>> const &facenum, std::vector<std::vector<std::vector<uint>>> &cFaces)
+	void Get_Cell_Faces(vector<vector<uint>> const& cell,
+						vector<vector<uint>> const& facenum, std::vector<std::vector<std::vector<uint>>> &cFaces)
 	{
 		for (uint ii = 0; ii < cell.size(); ++ii)
 		{
@@ -660,14 +578,16 @@ namespace TAU
 	/***************** READING NETCDF SOLUTION DATA FUNCTIONS ********************/
 	/*****************************************************************************/
 
-	void Read_SOLUTION(string const &solIn, FLUID const &fvar, AERO const &avar,
-					uint const ignored, MESH &cells, vector<uint> usedVerts)
+	void Read_SOLUTION(SIM const& svar, FLUID const& fvar, AERO const& avar,
+					uint const ignored, MESH& cells, vector<uint> const& usedVerts)
 	{
 		cout << "Reading solution file..." << endl;
 
 		#ifdef DEBUG
 			dbout << "Opening solultion file." << endl;
 		#endif 
+    
+		string const& solIn = svar.tausol;
 
 		int retval;
 		int solID;
@@ -733,7 +653,7 @@ namespace TAU
 			}
 		#endif
 
-		vector<StateVecD> vel(solPts);
+		vector<StateVecD> vel = vector<StateVecD>(solPts);
 		/*Test for size*/
 		if (xvel.size() == solPts)
 		{ /*Turn the arrays into a state vector*/
@@ -819,13 +739,13 @@ namespace TAU
 			exit(-1);
 		}
 
+		Average_Point_Data_to_Cell(svar, vel, press, dens, cells);
 
-
-		cout << "Averaging points to cell centres..." << endl;
-		Average_Point_to_Cell(vel, cells.cVel, cells.elems);
-		// Average_Point_to_Cell(dens,cells.SPHRho,cells.elems);
-		Average_Point_to_Cell(press, cells.cP, cells.elems);
-		Average_Point_to_Cell(dens, cells.cRho, cells.elems);
+		// cout << "Averaging points to cell centres..." << endl;
+		// Average_Point_to_Cell(vel, cells.cVel, cells.elems);
+		// // Average_Point_to_Cell(dens,cells.SPHRho,cells.elems);
+		// Average_Point_to_Cell(press, cells.cP, cells.elems);
+		// Average_Point_to_Cell(dens, cells.cRho, cells.elems);
 
 		/*Check the data*/
 		// for(auto value:dens)
@@ -873,9 +793,7 @@ namespace TAU
 		// 	}
 		// }
 
-		
 		vector<int> markers = Get_Scalar_Property_int(fin,"boundarymarker_of_surfaces",cells.nSurf);
-
 		vector<std::pair<int, int>> leftright(nEdge);
 		cells.smarkers = vector<std::pair<size_t,int>>(cells.nSurf);
 	
@@ -946,53 +864,6 @@ namespace TAU
 			dbout << "End of placing edges in elements." << endl;
 		#endif
 
-		/*Now go through the faces and see which vertices are unique, to get element data*/
-		cout << "Building elements..." << endl;
-		#pragma omp parallel default(shared)
-		{
-			// vector<vector<uint>> local;
-			#pragma omp for schedule(static) nowait
-			for (uint ii = 0; ii < cells.cFaces.size(); ++ii)
-			{
-				for (auto const &index : cells.cFaces[ii])
-				{
-					vector<size_t> const face = cells.faces[index];
-					for (auto const &vert : face)
-					{
-						if (std::find(cells.elems[ii].begin(), cells.elems[ii].end(), vert) == cells.elems[ii].end())
-						{ /*Vertex doesn't exist in the elems vector yet.*/
-							#pragma omp critical
-							{
-								cells.elems[ii].emplace_back(vert);
-							}
-						}
-					}
-				}
-			}
-
-			/*Find cell centres*/
-			#pragma omp single
-			{
-				cout << "Finding cell centres..." << endl;
-			}
-
-			Average_Point_to_Cell(cells.verts, cells.cCentre, cells.elems);
-
-			/*Find cell centres*/
-			#pragma omp single
-			{
-				cout << "Finding cell volumes..." << endl;
-			}
-
-			// Find cell volumes
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = 0; ii < cells.elems.size(); ++ii)
-			{
-				cells.cVol[ii] = Cell_Volume(cells.verts, cells.faces, cells.elems[ii], cells.cFaces[ii], cells.cCentre[ii]);
-			}
-		}
-		cout << "Elements built." << endl;
-
 		#ifdef DEBUG
 			dbout << "All elements defined." << endl
 				<< endl;
@@ -1054,15 +925,18 @@ namespace TAU
 
 		cout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << " nSurf: " << nSurf << endl;
 
-		cells.nPnts = nPnts;
-		cells.nElem = nElem;
-		cells.nFace = nEdge;
-		cells.nSurf = nSurf;
+		cells.alloc(nPnts, nElem, nEdge, nSurf, svar.Asource);
 
-		cells.elems = vector<vector<size_t>>(nElem);
-		cells.cFaces = vector<vector<size_t>>(nElem);
-		cells.verts = vector<StateVecD>(nPnts);
-		cells.cVol = vector<real>(nElem);
+
+		// cells.nPnts = nPnts;
+		// cells.nElem = nElem;
+		// cells.nFace = nEdge;
+		// cells.nSurf = nSurf;
+
+		// cells.elems = vector<vector<size_t>>(nElem);
+		// cells.cFaces = vector<vector<size_t>>(nElem);
+		// cells.verts = vector<StateVecD>(nPnts);
+		// cells.cVol = vector<real>(nElem);
 		// cells.leftright = vector<std::pair<int,int>>(nFace);
 
 		/*Get the faces of the mesh*/
@@ -1105,11 +979,6 @@ namespace TAU
 				<< endl;
 			
 		#endif
-
-		for (size_t ii = 0; ii < cells.cMass.size(); ii++)
-		{
-			cells.cMass[ii] = cells.cRho[ii] * cells.cVol[ii];
-		}
 	}
 
 	#endif
@@ -1118,7 +987,7 @@ namespace TAU
 	/*************** READING NETCDF FACE BASED DATA FUNCTIONS ********************/
 	/*****************************************************************************/
 
-	void Place_Faces(int &fin, size_t const &nFace, MESH &cells)
+	void Place_Faces(int &fin, size_t const &nFace, SIM const& svar, MESH &cells)
 	{
 		#ifdef DEBUG
 			dbout << "Reading element left/right and placing faces" << endl;
@@ -1170,6 +1039,7 @@ namespace TAU
 					{
 						local.emplace_back(ii);
 					}
+
 				}
 
 				/* Find the longest edge */
@@ -1231,54 +1101,6 @@ namespace TAU
 		#endif
 
 		cells.leftright = leftright;
-
-		/*Now go through the faces and see which vertices are unique, to get element data*/
-		cout << "Building elements..." << endl;
-		#pragma omp parallel default(shared)
-		{
-			// Create list of unique vertex indices for each element
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = 0; ii < cells.cFaces.size(); ++ii)
-			{
-				for (auto const &index : cells.cFaces[ii])
-				{
-					vector<size_t> const face = cells.faces[index];
-					for (auto const& vert : face)
-					{
-						if (std::find(cells.elems[ii].begin(), cells.elems[ii].end(), vert) == cells.elems[ii].end())
-						{ /*Vertex doesn't exist in the elems vector yet.*/
-							#pragma omp critical
-							{
-								cells.elems[ii].emplace_back(vert);
-							}
-						}
-					}
-				}
-			}
-
-			/*Find cell centres*/
-			#pragma omp single
-			{
-				cout << "Finding cell centres..." << endl;
-			}
-
-			Average_Point_to_Cell(cells.verts, cells.cCentre, cells.elems);
-
-			/*Find cell centres*/
-			#pragma omp single
-			{
-				cout << "Finding cell volumes..." << endl;
-			}
-
-			// Find cell volumes 
-			#pragma omp for schedule(static) nowait
-			for (size_t ii = 0; ii < cells.elems.size(); ++ii)
-			{
-				cells.cVol[ii] = Cell_Volume(cells.verts, cells.faces, cells.elems[ii], cells.cFaces[ii], cells.cCentre[ii]);
-			}
-		}
-
-		cout << "Elements built." << endl;
 
 		#ifdef DEBUG
 			dbout << "All elements defined." << endl << endl;
@@ -1366,17 +1188,7 @@ namespace TAU
 
 		cout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << " nSurf: " << nSurf << endl;
 
-		cells.nPnts = nPnts;
-		cells.nElem = nElem;
-		cells.nFace = nFace;
-		cells.nSurf = nSurf;
-
-		cells.elems = vector<vector<size_t>>(nElem);
-		cells.cFaces = vector<vector<size_t>>(nElem);
-		cells.cVol = vector<real>(nElem);
-
-		cells.verts = vector<StateVecD>(nPnts);
-		// cells.leftright = vector<std::pair<int,int>>(nFace);
+		cells.alloc(nPnts, nElem, nFace, nSurf, svar.Asource);
 
 		/*Get the faces of the mesh*/
 		if (hasTrig)
@@ -1413,20 +1225,13 @@ namespace TAU
 		// svar.Jet *= cells.scale;
 
 		/*Get face left and right, and put the faces in the elements*/
-		Place_Faces(meshID, nFace, cells);
+		Place_Faces(meshID, nFace, svar, cells);
 
 		#ifdef DEBUG
 			dbout << "End of interaction with mesh file and ingested data." << endl
 				<< endl;
-			dbout << "Opening solultion file." << endl;
 		#endif
-
-		for (size_t ii = 0; ii < cells.cMass.size(); ii++)
-		{
-			cells.cMass[ii] = cells.cRho[ii] * cells.cVol[ii];
-		}
 	}
 
-	
 }
 #endif

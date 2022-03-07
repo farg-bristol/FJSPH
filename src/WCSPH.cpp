@@ -1,11 +1,10 @@
 /*********   WCSPH (Weakly Compressible Smoothed Particle Hydrodynamics) Code   *************/
 /*********        Created by Jamie MacLeod, University of Bristol               *************/
 /*** Force Calculation: On Simulating Free Surface Flows using SPH. Monaghan, J.J. (1994) ***/
-/***			        + XSPH Correction (Also described in Monaghan)                    ***/
 /*** Viscosity:         Laminar Viscosity as described by Morris (1997)                   ***/
-/*** Surface Tension:   Tartakovsky and Panchenko (2016)   (Currently inactive)           ***/
+/*** Surface Tension:   Tartakovsky and Panchenko (2016)                                  ***/
 /*** Smoothing Kernel: Wendland's C2 ***/
-/*** Integrator: Newmark-Beta ****/
+/*** Integrator: Newmark-Beta or 4th order Runge-Kutta ****/
 /*** Variable Timestep Criteria: CFL + Monaghan, J.J. (1989) conditions ***/
 
 #include <chrono>
@@ -22,6 +21,7 @@
 #include "IOFunctions.h"
 #include "Neighbours.h"
 #include "Shifting.h"
+#include "Droplet.h"
 
 using namespace std::chrono;
 using namespace nanoflann;
@@ -64,6 +64,12 @@ int main(int argc, char *argv[])
 	// 	exit(-1);
 	// }
 
+	if(svar.dropDragSweep)
+	{
+		Droplet_Drag_Sweep(svar, fvar, avar);
+		return 0; /* End after this */
+	}
+
 	if(svar.Asource == 1 || svar.Asource == 2)
 	{
 		#if SIMDIM == 3
@@ -72,7 +78,7 @@ int main(int argc, char *argv[])
 				vector<uint> empty;
 				TAU::Read_BMAP(svar);
 				TAU::Read_TAUMESH_FACE(svar,cells,fvar,avar);
-				TAU::Read_SOLUTION(svar.tausol, fvar, avar, svar.offset_axis, cells, empty);
+				TAU::Read_SOLUTION(svar, fvar, avar, svar.offset_axis, cells, empty);
 			}
 			else
 			{
@@ -84,7 +90,7 @@ int main(int argc, char *argv[])
 				vector<uint> used_verts;
 				TAU::Read_BMAP(svar);
 				TAU::Read_TAUMESH_EDGE(svar,cells,fvar,avar,used_verts);
-				TAU::Read_SOLUTION(svar.tausol, fvar, avar, svar.offset_axis, cells, used_verts);
+				TAU::Read_SOLUTION(svar, fvar, avar, svar.offset_axis, cells, used_verts);
 			}
 			else
 			{
@@ -144,20 +150,15 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		string file = svar.output_prefix;
-		file.append("_boundary.szplt.sz*");
-		string cmd = "exec rm -f ";
-		cmd.append(file);
-
+		string file = svar.output_prefix + "_boundary.szplt.sz*";
+		string cmd = "exec rm -f " + file;
 		if(system(cmd.c_str()))
 	    {
 	    	cout << "No prexisting boundary files deleted." << endl;
 	    }
 
-		file = svar.output_prefix;
-		file.append("_fuel.szplt.sz*");
-		cmd = "exec rm -f ";
-		cmd.append(file);
+		file = svar.output_prefix + "_fuel.szplt.sz*";
+		cmd = "exec rm -f " + file;
 		if(system(cmd.c_str()))
 	    {
 	    	cout << "No prexisting fuel files deleted." << endl;
@@ -206,8 +207,6 @@ int main(int argc, char *argv[])
 
 	// svar.aMom = aMom;
 	// svar.tMom = aMom;
-	
-	// Init_Binary_PLT(svar,"Ghost.szplt","Ghost Particles",svar.ghostFile);
 
 	///*** Perform an iteration to populate the vectors *****/
 	if(svar.restart == 0)
@@ -234,7 +233,7 @@ int main(int argc, char *argv[])
 		if (svar.Asource == 1 || svar.Asource == 2)
 		{
 			// cout << "Finding cells" << endl;
-			FindCell(svar,fvar.sr,TREE,cells,dp,pn,pnp1);
+			FindCell(svar,avar,TREE,cells,dp,pn,pnp1);
 			// if (svar.totPts != pnp1.size())
 			// {	//Rebuild the neighbour list
 			// 	// cout << "Updating neighbour list" << endl;
@@ -449,7 +448,7 @@ int main(int argc, char *argv[])
 	// 			exit(-1);
 	// }
 
-	if(svar.out_encoding == 0)
+	if(svar.out_encoding == 1)
 	{
 		/*Combine the szplt files*/
 
@@ -457,9 +456,12 @@ int main(int argc, char *argv[])
 		outfile.append("_fuel.szplt");
 		Combine_SZPLT(outfile);
 
-		outfile = svar.output_prefix;
-		outfile.append("_boundary.szplt");
-		Combine_SZPLT(outfile);
+		if(svar.Bcase != 0)
+		{
+			outfile = svar.output_prefix;
+			outfile.append("_boundary.szplt");
+			Combine_SZPLT(outfile);
+		}
 		
 		if(svar.gout == 1)
 		{

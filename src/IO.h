@@ -30,10 +30,14 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar)
 		avar.vStart = svar.Rotate*avar.vStart;
 	}
 
-	fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Tait's Eq*/
+	fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Cole's Eq*/
 
 	/*Pipe Pressure calc*/
-	fvar.rhoJ = fvar.rho0*pow((fvar.pPress/fvar.B) + 1.0, 1.0/fvar.gam);
+	fvar.rhoJ = density_equation(fvar.pPress,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
+	
+	/* Upper and lower limits for density */
+	fvar.rhoMax = fvar.rho0*(1.0 + fvar.rhoVar*0.01);
+	fvar.rhoMin = fvar.rho0*(1.0 - fvar.rhoVar*0.01);
 
 	svar.nrad = 1;
 	if(svar.Scase == 1)
@@ -88,8 +92,6 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar)
 	// svar.dx = svar.Pstep;	
 	svar.Pstep = svar.dx * pow(fvar.rhoJ/fvar.rho0,1.0/SIMDIM);
  	
-  	
-
 	// Correct the droplet to have the same volume as the original
 	if(svar.Scase == 3)
 	{
@@ -111,6 +113,8 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar)
 	avar.gasM = avar.rhog*pow(svar.Pstep,SIMDIM);
 
 	avar.sos = sqrt(avar.T*avar.Rgas*avar.gamma);
+	avar.isossqr = 1.0/(avar.sos*avar.sos);
+	
 	if(avar.MRef != -1)
 	{
 		/* Mach has been defined, not velocity */
@@ -241,6 +245,7 @@ void Print_Settings(char** argv, SIM const& svar, FLUID const& fvar, AERO const&
 	cout << endl;		
 	cout << "****** RESTING FUEL SETTINGS *******" << endl;
 	cout << "Resting density: " << fvar.rho0 << endl;
+	cout << "Maxmimum density variation: " << fvar.rhoVar << "\%" << endl;
 	cout << "Particle spacing: " << svar.Pstep << endl;
 	cout << "Support radius: " << fvar.H << endl;
 	cout << "Particle mass: " << fvar.simM << endl;
@@ -271,8 +276,6 @@ void Print_Settings(char** argv, SIM const& svar, FLUID const& fvar, AERO const&
 		cout << "Gas dynamic pressure: " << avar.qInf << endl << endl;
 	}
 	
-	
-
 	cout << "******** FILE SETTINGS ********" << endl;	
 	// cout << "Working directory: " << cCurrentPath << endl;
 	cout << "Input file: " << argv[1] << endl;
@@ -329,7 +332,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
         Get_String(line, "Primary grid face filename", svar.taumesh);
         Get_String(line, "Boundary mapping filename", svar.taubmap);
         Get_String(line, "Restart-data prefix", svar.tausol);
-        Get_String(line, "SPH restart-data prefix", svar.restart_prefix);
+        Get_String(line, "SPH restart prefix", svar.restart_prefix);
         Get_Number(line, "Grid scale", svar.scale);
         Get_Number(line, "2D offset vector (0 / x=1,y=2,z=3)",svar.offset_axis);
         Get_String(line, "OpenFOAM folder", svar.foamdir);
@@ -357,6 +360,11 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
         Get_Number(line, "Sutherland reference viscosity", avar.mug);
         Get_Number(line, "Reference dispersed viscosity", fvar.mu);
         Get_Number(line, "Reference surface tension", fvar.sig);
+		Get_Number(line, "SPH surface tension contact angle", fvar.contangb);
+        Get_Number(line, "Init hydrostatic pressure (0/1)", svar.init_hydro_pressure);
+		Get_Number(line, "Hydrostatic height", svar.hydro_height);
+
+		/* Aerodynamic data */
         Get_Number(line, "Reference velocity", avar.vRef);
         Get_Number(line, "Reference pressure", avar.pRef);
         Get_Number(line, "Reference Mach number", avar.MRef);
@@ -364,23 +372,26 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
         Get_Number(line, "Reference temperature", avar.T);
 		Get_Number(line, "Gas constant gamma", avar.gamma);
 
-		// Get_Number(line, "SPH surface tension contact angle", fvar.contangb);
-
 		/* Simulation settings */
+		Get_Number(line, "SPH boundary solver (0=pressure/1=ghost)", svar.bound_solver);
 		Get_Number(line, "SPH maximum timestep", svar.dt_max);
 		Get_Number(line, "SPH minimum timestep", svar.dt_min);
+        Get_Number(line, "SPH CFL condition", svar.cfl);
 		Get_Number(line, "SPH starting pressure", fvar.pPress);
-		Get_Number(line, "SPH speed of sound", fvar.Cs);
+		Get_Number(line, "SPH maximum density variation (%)", fvar.rhoVar);
 		Get_Number(line, "SPH artificial viscosity factor", fvar.alpha);
+		Get_Number(line, "SPH speed of sound", fvar.Cs);
         Get_Number(line, "SPH Newmark-Beta iteration limit", svar.subits);
         Get_Number(line, "SPH initial spacing", svar.Pstep);
         Get_Number(line, "SPH boundary spacing factor", svar.Bstep);
         Get_Number(line, "SPH smoothing length factor", fvar.Hfac);
         Get_String(line, "SPH aerodynamic case", avar.aero_case);
+        Get_Number(line, "SPH use TAB deformation (0/1)", avar.useDef);
         Get_Number(line, "SPH use ghost particles (0/1)", svar.ghost);
         Get_Vector(line, "SPH start coordinates", svar.sim_start);
 		Get_Vector(line, "SPH boundary start coordinates", svar.bound_start);
 		Get_Number(line, "SPH maximum particle count",svar.finPts);
+        Get_Number(line, "SPH aerodynamic cutoff value", avar.cutoff);
 
         /* Starting area conditions */
         Get_String(line, "SPH start geometry type", svar.start_type);
@@ -401,9 +412,16 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
         Get_Number(line, "Velocity equation order (1/2)", svar.eqOrder);
         Get_Number(line, "SPH tracking conversion x coordinate", svar.max_x_sph);
         Get_Number(line, "Maximum x trajectory coordinate", svar.max_x);
-		Get_Number(line, "Particle scatter output (0/1)", svar.partout);
-        Get_Number(line, "Particle streak output (0/1)", svar.streakout);
-        Get_Number(line, "Particle cell intersection output (0/1)", svar.cellsout);
+		Get_Number(line, "Particle scatter output (0/1/2)", svar.partout);
+        Get_Number(line, "Particle streak output (0/1/2)", svar.streakout);
+        Get_Number(line, "Particle cell intersection output (0/1/2)", svar.cellsout);
+
+		/* Droplet drag sweep settings */
+		Get_Number(line, "Do droplet drag sweep (0/1)", svar.dropDragSweep);
+        Get_Array(line, "Droplet resolutions", svar.nacross);
+		Get_Array(line, "Droplet diameters", svar.diameters);
+		Get_Array(line, "Droplet velocities", svar.velocities);
+		Get_Array(line, "Droplet Reynolds numbers", svar.Reynolds);
     }
 
     fin.close();
@@ -465,16 +483,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 
 	}
 	
-
-	if(!svar.restart_prefix.empty())
-	{
-		svar.restart = 1;
-		Check_If_Restart_Possible(svar);
-		svar.output_prefix = svar.restart_prefix;
-	}
-
-
-
 	/* Check starting geometry conditions */
 	if (svar.sim_start[0] == 999999 || svar.sim_start[1] == 999999
 		#if SIMDIM == 3
@@ -629,6 +637,24 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		exit(-1);
 	}
 
+	if(svar.Bcase != 0)
+	{
+		if(svar.bound_solver > 1)
+		{
+			cout << "Boundary solver not defined correctly." << endl;
+			exit(-1);
+		}
+	}
+
+	/* Check for restart data now boundary case is known */	
+	if(!svar.restart_prefix.empty())
+	{
+		svar.restart = 1;
+		Check_If_Restart_Possible(svar);
+		svar.output_prefix = svar.restart_prefix;
+	}
+
+
 	if(svar.Pstep < 0)
 	{
 		cout << "SPH initial spacing has not been defined." << endl;
@@ -645,6 +671,15 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	{
 		cout << "Frame time interval has not been defined." << endl;
 		exit(-1);
+	}
+
+	if(svar.init_hydro_pressure)
+	{
+		if(svar.hydro_height < 0)
+		{
+			cout << "Hydrostatic height has not been defined." << endl;
+			exit(-1);
+		}
 	}
 
 	/* Aerodynamic settings */
@@ -673,6 +708,35 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	if(svar.dt_min > 0.0)
 	{
 		svar.dt = svar.dt_min;
+	}
+
+	if(svar.dropDragSweep)
+	{
+		if(svar.nacross.empty())
+		{
+			if(svar.diameters.empty())
+			{
+				cout << "" << endl;
+				exit(-1);
+			}
+			else
+			{
+				for(real const& dx : svar.diameters)
+				{
+					/* Droplet case */
+					if(svar.diam/dx < 1.5)
+					{	/*spacing is too close to full size to use standard adjustment*/
+						svar.nacross.emplace_back(1);
+					}
+					else
+					{
+						svar.nacross.emplace_back(ceil(abs(svar.diam/dx)));
+					}
+				}
+			}
+		}
+
+		fvar.pPress = 0;
 	}
 
 	/* Particle Tracking Settings */
@@ -770,6 +834,14 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
         exit(-1);
     }
 
+	#if SIMDIM == 2
+	if(svar.offset_axis == 0)
+	{
+		cout << "ERROR: Offset axis has not been defined." << endl;
+		exit(-1);
+	}
+	#endif
+	
   	Set_Values(svar,fvar,avar);
 
 	Print_Settings(argv,svar,fvar,avar);
@@ -1064,8 +1136,8 @@ void Write_First_Step(std::fstream& f1, std::fstream& fb, std::fstream& fg,
 		char* time = ctime(&now);
 		para << "\n";
 		para << "    solver at " << time;
-		para << "                                          " << 
-				"SPH restart-data prefix: " << svar.output_prefix << endl;
+		para << "                                               " << 
+				"SPH restart prefix: " << svar.output_prefix << endl;
 
 		para.close();
 	}
