@@ -4,14 +4,6 @@
 #ifndef VAR_H
 #define VAR_H
 
-/*Define Simulation Dimension*/
-#ifndef SIMDIM
-#define SIMDIM 2
-#endif
-
-// #ifndef NTHREADS
-// #define NTHREADS 4
-// #endif
 
 #include <limits>
 #include <vector>
@@ -29,18 +21,6 @@
 #include "Third_Party/NanoFLANN/utils.h"
 #include "Third_Party/NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 
-#ifdef DEBUG
-	/*Open debug file to write to*/	
-	std::ofstream dbout("WCSPH.log",std::ios::out);
-#endif
-
-// std::ofstream pertLog("cellPert.log",std::ios::out);
-
-// Define pi
-#ifndef M_PI
-#define M_PI (4.0*atan(1.0))
-#endif
-
 using std::vector;
 using std::cout;
 using std::cerr;
@@ -49,6 +29,26 @@ using std::ofstream;
 using std::endl;
 using std::string; 
 using std::setw;
+
+#ifdef DEBUG
+	/*Open debug file to write to*/	
+	std::ofstream dbout("WCSPH.log",std::ios::out);
+#endif
+
+#ifdef DAMBREAK
+std::ofstream dambreak("Dam_Data.log",std::ios::out);
+#endif
+// std::ofstream pertLog("cellPert.log",std::ios::out);
+
+/*Define Simulation Dimension*/
+#ifndef SIMDIM
+#define SIMDIM 2
+#endif
+
+// Define pi
+#ifndef M_PI
+#define M_PI (4.0*atan(1.0))
+#endif
 
 /* Define data type. */
 #ifndef FOD
@@ -81,6 +81,8 @@ typedef Eigen::Matrix<real,SIMDIM,SIMDIM> StateMatD;
 typedef Eigen::Matrix<real, SIMDIM+1,1> StateP1VecD;
 typedef Eigen::Matrix<real, SIMDIM+1, SIMDIM+1> StateP1MatD;
 
+const std::string WHITESPACE = " \n\r\t\f\v";
+
 #if SIMDIM == 3
 	#include "VLM.h"
 #endif
@@ -98,48 +100,45 @@ typedef Eigen::Matrix<real, SIMDIM+1, SIMDIM+1> StateP1MatD;
 #pragma omp declare reduction(+:StateVecD : omp_out=omp_out+omp_in)\
                     initializer(omp_priv = omp_orig) 
 
-/*Define particle type indexes*/
-typedef struct PState{
-	PState()
-	{
-		BOUND_ = 0;
-	    PISTON_ = 1;
-		BUFFER_ = 2;
-		BACK_ = 3; 
-		PIPE_ = 4;
-		FREE_ = 5;
-		GHOST_ = 6;
-	}
+#pragma omp declare reduction(min: StateVecD : omp_out = \
+			omp_out.norm() < omp_in.norm() ? omp_in : omp_out)\
+                    initializer(omp_priv = omp_orig) 
 
-	size_t BOUND_ ,
-    PISTON_,
-	BUFFER_, 
-	BACK_,
-	PIPE_,
-	FREE_,
-	GHOST_;
-} PState;
+#pragma omp declare reduction(max: StateVecD : omp_out = \
+			omp_out.norm() > omp_in.norm() ? omp_in : omp_out)\
+                    initializer(omp_priv = omp_orig) 
+
+
+/*Define particle type indexes*/
+enum partType{BOUND=0,PISTON,BUFFER,BACK,PIPE,FREE,GHOST};
 
 #ifndef TRUE
 #define TRUE  1
 #define FALSE 0
 #endif
 
-PState PartState;
+// PState PartState;
 
-real random(int const& interval)
+inline real random(int const& interval)
 {
 	return real(rand() % interval - interval / 2) * MERROR;
 }
 
-typedef struct SIM {
+struct SIM 
+{
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	SIM()
 	{
 		/* Input files */
 		CDForFOAM = 0;
 		isBinary = 0; labelSize = 32; scalarSize = 64;
-		offset_axis = 0; angle_alpha = 0;
+		#if SIMDIM == 3
+		offset_axis = 0;
+		#else
+		offset_axis = 2; /* Default to XZ plane in 2D */
+		#endif 
+		
+		angle_alpha = 0;
 
 		out_encoding = 1; /* default to binary */
 		outform = 5; gout = 0; /* Default to restartable data */
@@ -158,6 +157,9 @@ typedef struct SIM {
 		bound_type = "(none)"; /* Default to no boundary */
 		Scase = 0; Bcase = 0;
 		Bclosed = 0; ghost = 0;
+		Asource = 0;
+		init_hydro_pressure = 0;
+		hydro_height = -1;
 
 		/* Universal geometry parameters */
 		sim_start.setConstant(-1);
@@ -165,6 +167,7 @@ typedef struct SIM {
 		Angle = StateVecD::Zero();
 		Rotate = StateMatD::Zero();
 		Transp = StateMatD::Zero();
+
 
 		/* Jet geometry parameters */
 		jet_diam = -1;
@@ -183,6 +186,8 @@ typedef struct SIM {
 		subits = 20;
 		Nframe = -1;
 		frame = 0;
+		bound_solver = 0;
+		cfl = 1.0;
 		t = 0.0;
 		dt = 2e-10;
 		framet = -1;
@@ -204,12 +209,15 @@ typedef struct SIM {
 		tMom = 0; aMom = 0;
 	
 		/* SPHPart tracking settings */
+		using_ipt = 0;
 		eqOrder = 2;
 		max_x_sph = 9999999;
 		max_x = 9999999;
 		nSuccess = 0; nFailed = 0;
 		IPT_diam = 0.0; IPT_area = 0.0;
 		cellsout = 0; streakout = 1; partout = 0;
+
+		dropDragSweep = 0;
 	}
 
 	/* File input parameters */
@@ -236,6 +244,7 @@ typedef struct SIM {
 	vector<int32_t> varTypes;
 
 	ofstream surfacefile; /* Surface impact file */
+	void* surfaceHandle;
 
 	/* Output type */
 	uint out_encoding;              /*ASCII or binary output*/
@@ -262,10 +271,12 @@ typedef struct SIM {
 
 	/* Geometry parameters */
 	string start_type, bound_type;
-	int Scase, Bcase;				 /* What initial shape to take */
-	StateVecD sim_start, bound_start;/* Starting coordinates (For box, bottom left) */
-	int Bclosed, ghost;		  		 /* If the jet is closed or not */
-	int Asource;                     /* Source of aerodynamic solution */
+	int Scase, Bcase;				  /* What initial shape to take */
+	StateVecD sim_start, bound_start; /* Starting coordinates (For box, bottom left) */
+	int Bclosed, ghost;		  		  /* If the jet is closed or not */
+	int Asource;                      /* Source of aerodynamic solution */
+	int init_hydro_pressure;          /* Initialise fluid with hydrostatic pressure? */
+	real hydro_height;                /* Hydrostatic height to initialise using */
 
 	/* Jet geometry parameters */
 	real jet_diam;			        /* Jet diameter */
@@ -283,6 +294,8 @@ typedef struct SIM {
 	uint subits;                    /* Max number of sub-iterations */
 	uint Nframe; 			        /* Max number of frames to output */
 	uint frame;						/* Current frame number */
+	uint bound_solver;              /* Use boundary pressure or ghost particles */
+	double cfl;                     /* CFL criterion number */
 	double t;                       /* Simulation time */
 	real dt, framet;			    /* Timestep, frame times */
 	real dt_max;					/* Maximum timestep */
@@ -296,6 +309,7 @@ typedef struct SIM {
 	vector<vector<size_t>> buffer;  /* ID of particles inside the buffer zone */
 
 	#if SIMDIM == 3
+		string vlm_file;
 		VLM vortex;
 	#endif
 	StateVecD Force, AForce;					/*Total Force*/
@@ -303,12 +317,23 @@ typedef struct SIM {
 	real tMom, aMom;
 	
 	/* Particle tracking settings */
+	int using_ipt;
 	int eqOrder;
-	real max_x_sph, max_x;
+	real max_x_sph, max_x; /* Transition distance for sph (naive assumption) and termination for IPT */
 	size_t nSuccess, nFailed;
 	real IPT_diam, IPT_area;
 	uint cellsout, streakout, partout; /* Whether to output for particle tracking */
 	ofstream cellfile, streakfile, partfile; /* File handles for particle tracking */
+	void* cellHandle; /*TECIO file handles*/
+	void* streakHandle;
+	void* partHandle;
+
+	/* Droplet sweep parameters */
+	int dropDragSweep;
+	vector<size_t> nacross;
+	vector<real> diameters;
+	vector<real> velocities;
+	vector<real> Reynolds;
 
 	/*Post Processessing settings*/
 	uint afterSim;
@@ -318,21 +343,27 @@ typedef struct SIM {
 	StateVecD maxC, minC;			  /* Max and min coords to make grid */
 	uint numVars, wrongDim;
 	real postRadius;
-} SIM;
+};
 
 /*Fluid and smoothing parameters*/
-typedef struct FLUID {
+struct FLUID 
+{
+	// EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	/* Add default values */
 	FLUID()
 	{
 		H = -1;
 		HSQ = -1;
 		sr = -1;
+		Hfac = 2;
 		Wdx = -1;
 
 		rho0 = 1000;
 		rhoJ = 1000;
 		pPress = 0;
+		rhoMax = 1500;	/* Allow a large variation by default */
+		rhoMin = 500;	/* making it essentially unbounded other */
+		rhoVar = 50.0;	/* than truly unphysical pressures */
 
 		alpha = 0.1;
 		Cs = 300;
@@ -344,9 +375,12 @@ typedef struct FLUID {
 		delta = 0.1;
 	}
 	real H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
+	real Hfac;
 	real Wdx;                   /*Kernel value at the initial particle spacing distance.*/
 	real rho0, rhoJ; 			/*Resting Fluid density*/
-	real pPress;		/*Starting pressure in pipe*/
+	real pPress;				/*Starting pressure in pipe*/
+	real rhoMax, rhoMin;			/* Minimum and maximum pressure */
+	real rhoVar;				/* Maximum density variation allowed (in %) */
 	
 	real simM, bndM;			/*SPHPart and boundary masses*/
 	real correc;				/*Smoothing Kernel Correction*/
@@ -364,33 +398,67 @@ typedef struct FLUID {
 	real dMom;  /*delta-SPH momentum constant term (dCont * rho0)*/
 
 	// real maxU; /*Maximum particle velocity shift*/ (No longer needed)
-}FLUID;
+};
 
 /*Aerodynamic Properties*/
-typedef struct AERO
+struct AERO
 {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	AERO()
 	{
+		useDef = 0;
 		Cf = 1.0/3.0;
-		Ck = 8;
-		Cd = 5;
+		Ck = 8.0;
+		Cd = 5.0;
 		Cb = 0.5;
 
-		qInf = 0;
-		vRef = 0;
-		pRef = 101353;
+		qInf = 0.0;
+		vRef = 0.0;
+		pRef = 101353.0;
 		rhog = 1.29251;
 		mug = 1.716e-5;
-		T = 298;
-		Rgas = 287;
+		T = 298.0;
+		Rgas = 287.0;
+		gamma = 1.403;
+		sos = sqrt(T*Rgas*gamma);
+		isossqr = 1.0/(sos*sos);
+		MRef = -1.0;
 
 		acase = 0;
 		vStart = StateVecD::Zero();
 		vInf = StateVecD::Zero();
-		vJetMag = -1;
+		vJetMag = -1.0;
+		cutoff = 0.75;
 	}
 
+	void GetYcoef(const FLUID& fvar, const real diam)
+	{
+		#if SIMDIM == 3
+			L = diam * std::cbrt(3.0/(4.0*M_PI));
+			aSphere = M_PI*L*L;
+			aPlate = diam*diam;
+		#else
+			L = diam/sqrt(M_PI);
+			aSphere = 2*L;
+			aPlate = diam;
+		#endif
+
+		td = (2.0*fvar.rho0*pow(L,SIMDIM-1))/(Cd*fvar.mu);
+
+		omega = sqrt((Ck*fvar.sig)/(fvar.rho0*pow(L,SIMDIM))-1.0/pow(td,2.0));
+
+		tmax = -2.0 *(atan(sqrt(pow(td*omega,2.0)+1)
+						+td*omega) - M_PI)/omega;
+
+		Cdef = 1.0 - exp(-tmax/td)*(cos(omega*tmax)+
+			1/(omega*td)*sin(omega*tmax));
+		ycoef = 0.5*Cdef*(Cf/(Ck*Cb))*(rhog*L)/fvar.sig;
+
+		//cout << ycoef << "  " << Cdef << "  " << tmax << "  " << endl;
+	}
+	
 	/*Gissler Parameters*/
+	int useDef;
 	real L;
 	real td;
 	real omega;
@@ -398,37 +466,60 @@ typedef struct AERO
 	real ycoef;
 	real Cf, Ck, Cd, Cb, Cdef;
 
-	real pVol;                     /*Volume of a particle*/
-	real aPlate;                   /*Area of a plate*/
+	real pVol;                     /* Volume of a particle */
+	real aSphere;				   /* Area of a sphere/cylinder */
+	real aPlate;                   /* Area of a plate*/
 
 	/* Gas Properties*/
-	real qInf, vRef, pRef;         /*Reference gas values*/
-	real MRef;
+	real qInf, vRef, pRef;         /* Reference gas values*/
+	
 	real rhog, mug;
-	real gasM;					   /*A gas particle mass*/
-	real T;						   /*Temperature*/
-	real Rgas;                     /*Specific gas constant*/
-
+	real gasM;					   /* A gas particle mass*/
+	real T;						   /* Temperature*/
+	real Rgas;                     /* Specific gas constant*/
+	real gamma;                    /* Ratio of specific heats */
+	real sos;                      /* Speed of sound */
+	real isossqr;				   /* Inverse speed of sound squared */
+	real MRef;    
+	
 	string aero_case;
-	int acase;	                   /*Aerodynamic force case*/
-	StateVecD vStart, vInf;          /*Jet & Freestream velocity*/
+	int acase;	                   /* Aerodynamic force case*/
+	StateVecD vStart, vInf;        /* Jet & Freestream velocity*/
 	real vJetMag;
+	real cutoff;				   /* Lambda value cutoff */
+};
 
-	// real a;                        /*Case 3 tuning parameters*/
-	// real b;                        /*}*/
-	// real h1;                       /*}*/
-	// real h2;                       /*}*/
-}AERO;
-
-typedef struct MESH
+struct MESH
 {
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	/*Standard contructor*/
-	MESH(){}
+	MESH():scale(1.0),maxlength(9999999){}
 
-	size_t size()
+	inline size_t size()
 	{
-		return elems.size();
+		return nElem;
+	}
+
+	inline void alloc(size_t nPnts_, size_t nElem_, size_t nFace_, size_t nSurf_, int Asource )
+	{
+		nPnts = nPnts_; nElem = nElem_; nFace = nFace_; nSurf = nSurf_;
+		verts = vector<StateVecD>(nPnts);
+		faces.reserve(nFace*2);
+		leftright.reserve(nFace);
+
+		// elems = vector<vector<size_t>>(nElem);
+		cCentre = vector<StateVecD>(nElem);
+		cFaces = vector<vector<size_t>>(nElem);
+
+		cVel = vector<StateVecD>(nElem);
+		cP = vector<real>(nElem);
+		cRho = vector<real>(nElem);
+
+		if(Asource == 2)
+		{
+			cVol = vector<real>(nElem);
+			cMass = vector<real>(nElem);
+		}
 	}
 
 	/*Zone info*/
@@ -447,7 +538,7 @@ typedef struct MESH
 	vector<std::pair<size_t,int>> smarkers;
 
 	/*Cell based data*/
-	vector<vector<size_t>> elems;
+	// vector<vector<size_t>> elems;
 	vector<StateVecD> cCentre;
 	vector<vector<size_t>> cFaces;
 
@@ -455,7 +546,6 @@ typedef struct MESH
 	vector<StateVecD> cVel;
 	vector<real> cCp;
 	vector<real> cP;
-	vector<real> cMass;
 	vector<real> cRho;
 	// vector<real> cRho_SPH;
 	
@@ -463,6 +553,7 @@ typedef struct MESH
 	vector<StateVecD> cPertn;
 	vector<StateVecD> cPertnp1;
 	vector<real> cVol;
+	vector<real> cMass;
 
 
 	vector<size_t> fNum; // number of fuel particles in cell
@@ -471,11 +562,13 @@ typedef struct MESH
 	vector<StateVecD> vFn;
 	vector<StateVecD> vFnp1;
 
-}MESH;
+};
 
 /* Structure to track impacts and data for a surface marker of the mesh */
 struct SURF
 {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
 	SURF()
 	{ 
 		marker_count = 0;
@@ -516,11 +609,13 @@ struct SURF
 
 
 /*Container for delta-plus SPH calculations*/
-typedef class DELTAP {
+class DELTAP 
+{
 	public: 
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 		DELTAP(size_t const& size)
 		{
+			npd = 0.0;
 			L = vector<StateMatD>(size,StateMatD::Zero());
 			gradRho = vector<StateVecD>(size,StateVecD::Zero());
 			norm = vector<StateVecD>(size,StateVecD::Zero());
@@ -530,11 +625,12 @@ typedef class DELTAP {
 			lam_nb = vector<real>(size,0.0);
 			lam_ng = vector<real>(size,0.0);
 			kernsum = vector<real>(size,0.0);
+			colour = vector<real>(size,0.0);
 		}
 
 		DELTAP(){}
 
-		void realloc(size_t const& size)
+		inline void realloc(size_t const& size)
 		{
 			if(L.size() != 0)
 				clear();
@@ -542,25 +638,25 @@ typedef class DELTAP {
 			alloc(size);
 		}
 
-		void update(vector<StateMatD> const& L_, vector<StateVecD> const& gradRho_, 
+		inline void update(vector<StateMatD> const& L_, vector<StateVecD> const& gradRho_, 
 			vector<StateVecD> const& norm_, vector<StateVecD> const& avgV_,
 			vector<real> const& lam_, vector<real> const& lam_nb_, vector<real> const& lam_ng_,
-			vector<real> const& kernsum_)
+			vector<real> const& kernsum_, vector<real> const& colour_)
 		{
 			L = L_; gradRho = gradRho_; norm = norm_; 
 			avgV = avgV_; lam = lam_; lam_nb = lam_nb_; lam_ng = lam_ng_;
-			kernsum = kernsum_;
+			kernsum = kernsum_; colour = colour_;
 		}
 
-		void clear()
+		inline void clear()
 		{
 			L.clear(); gradRho.clear(); norm.clear(); 
 			avgV.clear(); lam.clear(); lam_nb.clear(); lam_ng.clear();
-			kernsum.clear();
+			kernsum.clear(); colour.clear();
 
 		}
 
-		void erase(size_t const& start, size_t const& end)
+		inline void erase(size_t const& start, size_t const& end)
 		{
 			L.erase(L.begin()+start, L.begin()+end);
 			gradRho.erase(gradRho.begin()+start, gradRho.begin()+end);
@@ -570,7 +666,10 @@ typedef class DELTAP {
 			lam_nb.erase(lam_nb.begin()+start, lam_nb.begin()+end);
 			lam_ng.erase(lam_ng.begin()+start, lam_ng.begin()+end);
 			kernsum.erase(kernsum.begin()+start, kernsum.begin()+end);
+			colour.erase(colour.begin()+start, colour.begin()+end);
 		}
+
+		real npd;
 
 		vector<StateMatD> L;
 		vector<StateVecD> gradRho;
@@ -580,12 +679,13 @@ typedef class DELTAP {
 		vector<real> lam;		/* Eigenvalues with all particles considered */
 		vector<real> lam_nb; 	/* Eigenvalues without boundary particles (and ghost particles) */
 		vector<real> lam_ng; 	/* Eigenvalues without ghost particles */
-		vector<real> kernsum;
+		vector<real> kernsum;	/* Summation of the kernel */
+		vector<real> colour;    /* Kernel sum with volume considered. */
 
 
 	private:
 
-		void alloc(size_t const& size)
+		inline void alloc(size_t const& size)
 		{
 			L = vector<StateMatD>(size);
 			gradRho = vector<StateVecD>(size);
@@ -593,24 +693,28 @@ typedef class DELTAP {
 			avgV = vector<StateVecD>(size);
 			lam = vector<real>(size);
 			lam_nb = vector<real>(size);
+			lam_ng = vector<real>(size);
 			kernsum = vector<real>(size);
+			colour = vector<real>(size);
 		}
 
 
-}DELTAP;
+};
 
 /*SPHPart data class*/
-typedef struct SPHPart {
+struct SPHPart 
+{
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	SPHPart(StateVecD const& X, StateVecD const& Vi, real const Rhoi, real const Mi, 
 		real const press, int const bound, uint const pID)
 	{
 		partID = pID; cellID = 0; faceID = 0;
-		b = bound; surf = 0;
+		b = bound; surf = 0; nFailed = 0;
 
 		xi = X;	v = Vi; acc = StateVecD::Zero(); Af = StateVecD::Zero();
+		aVisc = StateVecD::Zero(); norm = StateVecD::Zero();
 		Rrho = 0.0; rho = Rhoi; p = press; m = Mi; 
-		s = 0.0; woccl = 0.0; pDist = 0.0;
+		curve = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0; deltaD = 0.0;
 					
 		cellV = StateVecD::Zero();
 		cellP = 0.0; cellRho = 0.0;
@@ -619,18 +723,19 @@ typedef struct SPHPart {
 		vPert = StateVecD::Zero(); 
 	}
 
-	/*To add particles dynamically for boundary layer*/
+	/*To add particles dynamically for fictitious particles*/
 	SPHPart(StateVecD const& X, SPHPart const& pj, int const bound, size_t const pID)
 	{
 		partID = pID; cellID = 0; faceID = 0;
-		b = bound; surf = 0;
+		b = bound; surf = 0; nFailed = 0;
 
 		xi = X;	v = pj.v; acc = StateVecD::Zero(); Af = StateVecD::Zero();
+		aVisc = StateVecD::Zero(); norm = StateVecD::Zero();
 		Rrho = 0.0; rho = pj.rho; p = pj.p; m = pj.m;
-		s = 0.0; woccl = 0.0; pDist = 0.0;
+		curve = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0; deltaD = 0.0;
 
 		cellV = StateVecD::Zero();
-		cellP = 0.0; cellRho = 0.0;
+		cellP = pj.cellP; cellRho = pj.cellRho;
 		internal = 0;
 
 		vPert = StateVecD::Zero();
@@ -638,12 +743,12 @@ typedef struct SPHPart {
 
 	SPHPart(){};
 
-	int size() const
+	inline int size() const
 	{	/*For neighbour search, return size of xi vector*/
 		return(xi.size());
 	}
 
-	real operator[](int a) const
+	inline real operator[](int a) const
 	{	/*For neighbour search, return index of xi vector*/
 		return(xi[a]);
 	}
@@ -651,8 +756,11 @@ typedef struct SPHPart {
 	size_t partID, cellID, faceID;
 	uint b; //What state is a particle. See PartState above for possible options
 	uint surf; /*Is a particle a surface? 1 = yes, 0 = no*/
-	StateVecD xi, v, acc, Af;
-	real Rrho, rho, p, m, s, woccl, pDist;
+	uint surfzone; /* Is particle in the surface area? */
+	uint nFailed; /* How many times has the containment query failed */
+	StateVecD xi, v, acc, Af, aVisc;
+	real Rrho, rho, p, m, curve, s, woccl, pDist, deltaD;
+	StateVecD norm;
 	StateVecD cellV;
 	real cellP, cellRho;
 	uint internal; 
@@ -662,21 +770,20 @@ typedef struct SPHPart {
 	real y;
 	
 	StateVecD vPert;		
-}SPHPart;
+};
 
-typedef struct IPTPart
+struct IPTPart
 {
-	public:
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	IPTPart()
 	{
 		partID = 0;
 		going = 1;
 		nIters = 0;
-		nNotFound = 0;
 		failed = 0;
 		t = 0; dt = 0;
 
-		/* Set ininial IDs to a nonsense value, so that they don't interfere */
+		/* Set initial IDs to a nonsense value, so that they don't interfere */
 		faceID = -1; 
 		faceV = StateVecD::Zero();
 		faceRho = 0.0;
@@ -699,11 +806,10 @@ typedef struct IPTPart
 		partID = 0;
 		going = 1;
 		nIters = 0;
-		nNotFound = 0;
 		failed = 0;
 		t = 0; dt = 0;
 
-		/* Set ininial IDs to a nonsense value, so that they don't interfere */
+		/* Set initial IDs to a nonsense value, so that they don't interfere */
 		faceID = -1; 
 		faceV = StateVecD::Zero();
 		faceRho = 0.0;
@@ -726,11 +832,10 @@ typedef struct IPTPart
 		partID = pID_;
 		going = 1;
 		nIters = 0;
-		nNotFound = 0;
 		failed = 0;
 		t = 0; dt = 0;
 
-		/* Set ininial IDs to a nonsense value, so that they don't interfere */
+		/* Set initial IDs to a nonsense value, so that they don't interfere */
 		faceID = -1; 
 		faceV = StateVecD::Zero();
 		faceRho = 0.0;
@@ -753,11 +858,10 @@ typedef struct IPTPart
 		partID = pi.partID;
 		going = 1;
 		nIters = 0;
-		nNotFound = 0;
 		failed = 0;
 		t = time; dt = 0;
 
-		/* Set ininial IDs to a nonsense value, so that they don't interfere */
+		/* Set initial IDs to a nonsense value, so that they don't interfere */
 		faceID = -1; 
 		faceV = StateVecD::Zero();
 		faceRho = 0.0;
@@ -780,7 +884,6 @@ typedef struct IPTPart
 	size_t partID;
 	uint going; /* Is particle still being integrated */
 	uint nIters; /* How many integration steps it's gone through */
-	size_t nNotFound;
 	size_t failed;
 
 	/* Timestep properties */
@@ -801,20 +904,23 @@ typedef struct IPTPart
 
 	real mass; /* SPHPart mass */
 	real d, A; /* SPHPart diameter and area */
-}IPTPart;
+};
 
 
 typedef std::vector<SPHPart> SPHState;
 typedef std::vector<IPTPart> IPTState;
 typedef std::vector<SURF> SURFS;
+
 /* Neighbour search tree containers */
 typedef std::vector<std::vector<std::pair<size_t,real>>> OUTL;
 typedef std::vector<std::vector<size_t>> celll;
 typedef KDTreeVectorOfVectorsAdaptor<SPHState,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Sim_Tree;
 typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Vec_Tree;
 
-typedef struct KDTREE
+struct KDTREE
 {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
 	KDTREE(SPHState const& pnp1, MESH const& cells): NP1(SIMDIM,pnp1,20), 
 	CELL(SIMDIM,cells.cCentre,20)/* , BOUNDARY(SIMDIM,cells.bVerts,20) */ {}
 
@@ -822,6 +928,6 @@ typedef struct KDTREE
 	Vec_Tree CELL;
 	// Vec_Tree BOUNDARY;	
 
-}KDTREE;
+};
 
 #endif /* VAR_H */

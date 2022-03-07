@@ -8,16 +8,11 @@
 #include "Var.h"
 #include "Neighbours.h"
 #include "Kernel.h"
-#include <string.h>
-#include <iostream>
-#include <iomanip>
-#include <fstream>
 #include <sys/stat.h>
 #include <chrono>
 #include <thread>
 using std::string;
 
-enum fileType_e { FULL = 0, GRID = 1, SOLUTION = 2 };
 
 /*************************************************************************/
 /**************************** BINARY INPUTS ******************************/
@@ -27,11 +22,11 @@ void Read_Real_Value(void* const& inputHandle, int32_t const& frame, int32_t& va
 {
 	int retval;
 	vector<real> varvec(iMax);
-#if FOD == 1
-	retval = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &varvec[0]);
-#else
-	retval = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &varvec[0]);
-#endif
+	#if FOD == 1
+		retval = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &varvec[0]);
+	#else
+		retval = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &varvec[0]);
+	#endif
 
 	if(retval)
 	{
@@ -77,11 +72,11 @@ void Read_Real_Vector(void* const& inputHandle, int32_t const& frame, int32_t& v
 {
 	int retval;
 	var = vector<real>(iMax);
-#if FOD == 1
-	retval = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &var[0]);
-#else
-	retval = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &var[0]);
-#endif
+	#if FOD == 1
+		retval = tecZoneVarGetDoubleValues(inputHandle, frame, varCount, 1, iMax, &var[0]);
+	#else
+		retval = tecZoneVarGetFloatValues(inputHandle, frame, varCount, 1, iMax, &var[0]);
+	#endif
 
 	if(retval)
 	{
@@ -145,13 +140,13 @@ vector<StateVecD> Read_Binary_Vector(void* inputHandle, INTEGER4& frame,
 	name.append(varName);
 	Read_Real_Vector(inputHandle, frame, varCount, iMax, yVar, name);
 
-#if SIMDIM == 3
+	#if SIMDIM == 3
 	vector<real> zVar(iMax,0.0);
 	// cout << "Trying to get vector z-component. Var: " << varCount << endl;
 	name = "z-component of ";
 	name.append(varName);
 	Read_Real_Vector(inputHandle, frame, varCount, iMax, zVar, name);
-#endif
+	#endif
 
 	vector<StateVecD> vec(iMax);
 	#pragma omp parallel for
@@ -160,9 +155,9 @@ vector<StateVecD> Read_Binary_Vector(void* inputHandle, INTEGER4& frame,
 		vec[ii](0) = xVar[ii];
 		vec[ii](1) = yVar[ii];
 		
-#if SIMDIM == 3
+	#if SIMDIM == 3
 		vec[ii](2) = zVar[ii];
-#endif
+	#endif
 
 		// cout << tsData.verts[ii](0) << "  " << tsData.verts[ii](1) << endl;
 	}
@@ -270,71 +265,71 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, int32_t frame, SPHState&
 /*************************************************************************/
 /*************************** BINARY OUTPUTS ******************************/
 /*************************************************************************/
-void Write_Real_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+void Write_Real_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
 						vector<real> const& varVec, string const& varName)
 {
 	int retval;
-#if FOD == 1
-	retval =  tecZoneVarWriteDoubleValues(fileHandle, outputZone, varCount, 0, size, &varVec[0]);
-#else
-	retval =  tecZoneVarWriteFloatValues(fileHandle, outputZone, varCount, 0, size, &varVec[0]);
-#endif	
+	#if FOD == 1
+		retval =  tecZoneVarWriteDoubleValues(fileHandle, outputZone, varCount, 0, size, &varVec[0]);
+	#else
+		retval =  tecZoneVarWriteFloatValues(fileHandle, outputZone, varCount, 0, size, &varVec[0]);
+	#endif	
 
 	if(retval)
 	{
-		cout << "Failed to read \"" << varName << "\". frame: " << 
+		cout << "Failed to write \"" << varName << "\". frame: " << 
 			outputZone << ". varCount: " << varCount << endl;
 		exit(-1);
 	}
 	varCount++;
 }
 
-void Write_Int_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+void Write_Int_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
 						vector<int32_t> const& varVec, string const& varName)
 {
 	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varCount, 0, size, &varVec[0]))
 	{
-		cout << "Failed to read \"" << varName << "\". frame: " << 
+		cout << "Failed to write \"" << varName << "\". frame: " << 
 			outputZone << ". varCount: " << varCount << endl;
 		exit(-1);
 	}
 	varCount++;
 }
 
-void Write_UInt_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+void Write_UInt_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
 						vector<uint8_t> const& varVec, string const& varName)
 {
 	if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, varCount, 0, size, &varVec[0]))
 	{
-		cout << "Failed to read \"" << varName << "\". frame: " << 
+		cout << "Failed to write \"" << varName << "\". frame: " << 
 			outputZone << ". varCount: " << varCount << endl;
 		exit(-1);
 	}
 	varCount++;
 }
 
-void Write_Real_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+void Write_Real_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
 						real const& value, string const& varName)
 {
 	int retval;
 	vector<real> rvec(size,0.0);
 	rvec[0] = value;
-#if FOD == 1
-	retval = tecZoneVarWriteDoubleValues(fileHandle, outputZone, varCount, 0, size, &rvec[0]);
-#else
-	retval = tecZoneVarWriteFloatValues(fileHandle, outputZone, varCount, 0, size, &rvec[0]);
-#endif	
+	#if FOD == 1
+		retval = tecZoneVarWriteDoubleValues(fileHandle, outputZone, varCount, 0, size, &rvec[0]);
+	#else
+		retval = tecZoneVarWriteFloatValues(fileHandle, outputZone, varCount, 0, size, &rvec[0]);
+	#endif	
 
 	if(retval)
 	{
-		cout << "Failed to read \"" << varName << "\". frame: " << 
+		cout << "Failed to write \"" << varName << "\". frame: " << 
 			outputZone << ". varCount: " << varCount << endl;
 		exit(-1);
 	}
 	varCount++;
 }
 
-void Write_Int_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+void Write_Int_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
 						int32_t const& value, string const& varName)
 {
 	int retval;
@@ -345,14 +340,14 @@ void Write_Int_Value(void* const& fileHandle, int32_t const& outputZone, int32_t
 
 	if(retval)
 	{
-		cout << "Failed to read \"" << varName << "\". frame: " << 
+		cout << "Failed to write \"" << varName << "\". frame: " << 
 			outputZone << ". varCount: " << varCount << endl;
 		exit(-1);
 	}
 	varCount++;
 }
 
-void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int64_t const& size,
+void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
 						uint8_t const& value, string const& varName)
 {
 	int retval;
@@ -363,7 +358,7 @@ void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone, int32_
 
 	if(retval)
 	{
-		cout << "Failed to read \"" << varName << "\". frame: " << 
+		cout << "Failed to write \"" << varName << "\". frame: " << 
 			outputZone << ". varCount: " << varCount << endl;
 		exit(-1);
 	}
@@ -373,7 +368,7 @@ void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone, int32_
 void Write_Binary_Timestep(SIM const& svar, SPHState const& pnp1, 
 	uint const start, uint const end, char const* group, int32_t const& strandID, void* const& fileHandle)
 {
-	int64_t const size = end - start;
+	int32_t const size = end - start;
 
 	double solTime = svar.t;     
 	int32_t outputZone;
@@ -628,94 +623,95 @@ void Write_Binary_Timestep(SIM const& svar, SPHState const& pnp1,
     }
 }
 
+
+
 void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, void* &fileHandle)
 {
     int32_t FileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/
     int32_t fileFormat = 1; // 0 == PLT, 1 == SZPLT
 
-    string file = svar.output_prefix;
-    file.append(filename);
+    string file = svar.output_prefix + filename;
 
     // cout << file << endl;
 
     /* Open the file and write the tecplot datafile header information  */
-#if SIMDIM == 2
-    	std::string variables = "X,Z";	
-		if (svar.outform == 1)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v,a,partID";
-		}
-		else if (svar.outform == 2)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID";
-		}
-		else if (svar.outform == 3)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,Cell_Vx,Cell_Vz,Cell_P,Cell_Rho,Cell_ID";
-		}
-		else if (svar.outform == 4)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v,a,partID,Neighbours,Aero";
-		}
-		else if (svar.outform == 5)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,Cell_ID";
-		}
-		else if (svar.outform == 6)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,lambda,surface";
-		}
-		else if (svar.outform == 7)
-		{
-			variables = "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z";
-		}
-#endif
+	#if SIMDIM == 2
+		std::string variables;
+		std::string a1, a2;
 
-#if SIMDIM == 3
-		std::string variables = "X,Y,Z";  
+		if(svar.offset_axis == 1)
+		{
+			variables = "Y,Z";
+			a1 = "y";
+			a2 = "z";
+		}
+		else if (svar.offset_axis == 2)
+    	{
+			variables = "X,Z";
+			a1 = "x";
+			a2 = "z";
+		}
+		else if (svar.offset_axis == 3)
+		{
+			variables = "X,Y";
+			a1 = "x";
+			a2 = "y";
+		}
+
+		if(svar.outform > 0)
+			variables += ",Rrho,rho,press,m";
+
 		if (svar.outform == 1)
-		{
-			variables = "X,Y,Z,Rrho,rho,press,m,v,a,partID";
-		}
+			variables += ",v,a,partID";
 		else if (svar.outform == 2)
-		{
-			variables = "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID";
-		}
+			variables += ",v_"+a1+",v_"+a2+",a_"+a1+",a_"+a2+",b,partID";
 		else if (svar.outform == 3)
-		{
-			variables = 
-		"X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_Rho,Cell_ID";
-		}
+			variables += ",v_"+a1+",v_"+a2+",a_"+a1+",a_"+a2+",b,partID,Cell_V"+a1+",Cell_V"+a2+",Cell_P,Cell_Rho,Cell_ID";
 		else if (svar.outform == 4)
-		{
-			variables = "X,Y,Z,Rrho,rho,press,m,v,a,partID,Neighbours,Aero";
-		}
+			variables += ",v,a,partID,Neighbours,Aero";
 		else if (svar.outform == 5)
-		{
-			variables = "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_ID";
-		}
+			variables += ",v_"+a1+",v_"+a2+",a_"+a1+",a_"+a2+",b,partID,Cell_ID";
 		else if (svar.outform == 6)
-		{
-			variables = "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface";
-		}
+			variables += ",v_"+a1+",v_"+a2+",a_"+a1+",a_"+a2+",b,partID,lambda,surface";
 		else if (svar.outform == 7)
-		{
-			variables = "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z";
-		}
-#endif
+			variables += ",v_"+a1+",v_"+a2+",a_"+a1+",a_"+a2+",b,partID,lambda,surface,a_aero_"+a1+",a_aero_"+a2;
+
+	#endif
+
+	#if SIMDIM == 3
+		std::string variables = "X,Y,Z";  
+		if(svar.outform > 0)
+			variables += ",Rrho,rho,press,m";
+
+		if (svar.outform == 1)
+			variables += ",v,a,partID";
+		else if (svar.outform == 2)
+			variables += ",v_x,v_y,v_z,a_x,a_y,a_z,b,partID";
+		else if (svar.outform == 3)
+			variables += 
+		",v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_Rho,Cell_ID";
+		else if (svar.outform == 4)
+			variables += ",v,a,partID,Neighbours,Aero";
+		else if (svar.outform == 5)
+			variables += ",v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_ID";
+		else if (svar.outform == 6)
+			variables += ",v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface";
+		else if (svar.outform == 7)
+			variables += ",v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z";
+	#endif
 
 	vector<int32_t> varTypes;
-#if FOD == 1
-	int32_t realType = 2;
-#else
-	int32_t realType = 1;
-#endif
+	#if FOD == 1
+		int32_t realType = 2;
+	#else
+		int32_t realType = 1;
+	#endif
 
 	varTypes.emplace_back(realType);
 	varTypes.emplace_back(realType);
-#if SIMDIM == 3
-	varTypes.emplace_back(realType);	//x,y,z
-#endif
+	#if SIMDIM == 3
+		varTypes.emplace_back(realType);	//x,y,z
+	#endif
 	if(svar.outform != 0)
 	{
 		varTypes.emplace_back(realType);  //Rrho
@@ -741,10 +737,10 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 			varTypes.emplace_back(realType);  //vy
 			varTypes.emplace_back(realType);  //ax
 			varTypes.emplace_back(realType);  //ay
-#if SIMDIM == 3
+			#if SIMDIM == 3
 			varTypes.emplace_back(realType);  //vz
 			varTypes.emplace_back(realType);  //az
-#endif
+			#endif
 			varTypes.emplace_back(5);  //b
 			varTypes.emplace_back(3);  //part_ID
 
@@ -782,6 +778,9 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 		}
 	}
 	svar.varTypes = varTypes;
+	cout << "Offset axis: " << svar.offset_axis << endl;
+	cout << "Variables: " << variables << endl;
+	cout << "varTypes size: " << svar.varTypes.size() << endl;
 
 	if(tecFileWriterOpen(file.c_str(),zoneName.c_str(),variables.c_str(),fileFormat,FileType,1,NULL,&fileHandle))
     {
@@ -789,23 +788,22 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
     	exit(-1);
     }
 
-#ifdef DEBUG
+	#ifdef DEBUG
 	if(tecFileSetDiagnosticsLevel(fileHandle, 1))
 	{
 		cerr << "Failed to set debug option for output file: " << file << endl;
 		exit(-1);
 	}
-
-#endif
+	#endif
 
     
 }
 
 void Write_Cell_Data(MESH const& cdata)
 {
-#ifdef DEBUG
-	dbout << "Entering Write_Cell_Data..." << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Entering Write_Cell_Data..." << endl;
+	#endif
 
 	cout << "Writing cell based data." << endl;
 
@@ -844,23 +842,40 @@ void Write_Cell_Data(MESH const& cdata)
 		if (kk % 5 != 0)
 			fout << "\n";
 	}
-
+	
 	/*Write element indexing*/
 	fout << std::fixed;
-	for (uint ii = 0; ii < cdata.elems.size(); ++ii)
+	for (uint index = 0; index < cdata.cFaces.size(); ++index)
 	{
-		for (auto elem : cdata.elems[ii])
+		/* Build the element unique index list */
+		vector<size_t> elem;
+		for (auto const& faceID: cdata.cFaces[index])
 		{
-			fout << std::setw(6) << elem + 1;
+			vector<size_t> const face = cdata.faces[faceID];
+			for (auto const& vert : face)
+			{
+				if (std::find(elem.begin(), elem.end(), vert) == elem.end())
+				{ /*Vertex doesn't exist in the elems vector yet.*/
+					#pragma omp critical
+					{
+						elem.emplace_back(vert);
+					}
+				}
+			}
+		}
+
+		for (auto const& vert : elem)
+		{
+			fout << std::setw(6) << vert + 1;
 		}
 		fout << "\n";
 	}
 
 	fout.close();
 
-#ifdef DEBUG
-	dbout << "Exiting Write_Cell_Data..." << endl;
-#endif
+	#ifdef DEBUG
+		dbout << "Exiting Write_Cell_Data..." << endl;
+	#endif
 }
 
 void Write_Face_Data(MESH const& cells)
@@ -971,6 +986,406 @@ void Write_Face_Data(MESH const& cells)
 	f1 << endl	<< endl;
 	f1.close();
 	// exit(0);
+}
+
+
+void CheckContents(void* const& inputHandle, SIM& svar, int32_t& numZones, double& time)
+{
+	int32_t numVars, I;
+	I = tecDataSetGetNumVars(inputHandle, &numVars);
+
+	std::ostringstream outputStream;
+    for (int32_t var = 1; var <= numVars; ++var)
+    {
+        char* name = NULL;
+        I = tecVarGetName(inputHandle, var, &name);
+        outputStream << name;
+        if (var < numVars)
+            outputStream << ',';
+        tecStringFree(&name);
+    }
+
+	if (I == -1)
+	{
+		cout << "Couldn't obtain number of variables. Stopping" << endl;
+		exit(-1);
+	}
+
+	cout << "Number of variables in output file: " << numVars << endl;
+
+	uint dataType = 0;
+	#if SIMDIM == 2
+		if( outputStream.str() == "X,Z")
+			dataType = 0;
+
+		else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v,a,partID")
+			dataType = 1;
+
+		else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID")
+			dataType = 2;	
+
+		else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,Cell_Vx,Cell_Vz,Cell_P,Cell_Rho,Cell_ID" )
+			dataType = 3;
+
+		else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v,a,partID,Neighbours,Aero")
+			dataType = 4;
+
+		else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,Cell_ID")
+			dataType = 5;
+
+		else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,lambda,surface")
+			dataType = 6;
+
+		else if (outputStream.str() == "X,Z,Rrho,rho,press,m,v_x,v_z,a_x,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z")
+			dataType = 7;
+
+	#else
+		if( outputStream.str() == "X,Y,Z")
+			dataType = 0;
+
+		else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v,a,partID")
+			dataType = 1;
+
+		else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID")
+			dataType = 2;
+
+		else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_Vx,Cell_Vy,Cell_Vz,Cell_P,Cell_Rho,Cell_ID")
+			dataType = 3;
+
+		else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v,a,partID,Neighbours,Aero")
+			dataType = 4;
+
+		else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,Cell_ID")
+			dataType = 5;
+
+		else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface")
+			dataType = 6;
+
+		else if (outputStream.str() == "X,Y,Z,Rrho,rho,press,m,v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z")
+			dataType = 7;
+		
+	#endif
+	cout << "Variables:  " << outputStream.str() << "  Data type: " << dataType << endl;
+
+	if(dataType == 0 || dataType == 1 || dataType == 4)
+	{
+		cout << "Cannot restart. File does not contain the correct information." << endl;
+		exit(-1);
+	}
+
+    if(dataType!= svar.outform)
+    {
+    	cout << "Data is different from that in the restfings file." << endl;
+    	cout << "Changing to the file data type: " << dataType << endl;
+    }
+
+    I = tecDataSetGetNumZones(inputHandle, &numZones);
+    cout << "Number of zones in file: " << numZones << endl;
+
+    I = tecZoneGetSolutionTime(inputHandle, numZones, &time);
+    cout << "Latest zone time: " << time << endl << endl;
+}
+
+void Restart_Binary(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, SPHState& pn, SPHState& pnp1)
+{	
+	// Read the values from the solution folder, then check. 
+
+	// Check that a restart can be performed. 
+	if(svar.outform == 0 || svar.outform == 1)
+	{
+		cout << "Output type cannot be restarted from. Make sure that you have the correct output selected." << endl;
+		exit(-1);
+	}
+
+	// if(svar.Asource != 0)
+	// {
+	// 	if(svar.outform != 3 || svar.outform != 5)
+	// 	{
+	// 		cout << "No cell information. Cannot restart" << endl;
+	// 		exit(-1);
+	// 	}
+	// }
+
+	#ifdef DEBUG
+		dbout << "Reading frame info file for restart information." << endl;
+	#endif
+
+	// Re-read the settings and fluid file
+	// cout << svar.outfolder << endl;
+
+	// Now get the data from the files. Start with the boundary
+	if(svar.out_encoding == 1)
+	{
+		SPHState boundary, fuel, rest;	
+
+		// Read the fuel
+		void* fuelHandle = NULL;
+		void* boundHandle = NULL;
+
+		int32_t fuelFrames, boundFrames;
+		double fuelTime, boundTime;
+
+		string fuelf = svar.output_prefix;
+		fuelf.append("_fuel.szplt");
+
+		if(tecFileReaderOpen(fuelf.c_str(),&fuelHandle))
+		{
+			cout << "Error opening szplt file. Path:" << endl;
+			cout << fuelf << endl;
+			exit(-1);
+		}
+
+		// Check how many frames are in the fuel file.
+		cout << "Checking Fuel file..." << endl;
+		CheckContents(fuelHandle,svar,fuelFrames,fuelTime);
+
+		if (svar.Bcase !=0)
+		{
+			string boundf = svar.output_prefix;
+			boundf.append("_boundary.szplt");
+
+			if(tecFileReaderOpen(boundf.c_str(),&boundHandle))
+			{
+				cout << "Error opening szplt file. Path:" << endl;
+				cout << boundf << endl;
+				exit(-1);
+			}
+
+			cout << "Checking Boundary file..." << endl;
+			CheckContents(boundHandle,svar,boundFrames,boundTime);
+
+			if(fuelFrames!= boundFrames)
+			{
+				cout << "Caution! Number of frames is not consistent between fuel and boundary files." << endl;
+			}
+
+			if(fuelTime != boundTime)
+			{
+				cout << "Caution! Frame times are not consistent between fuel and boundary files." << endl;
+
+				if(fuelTime > boundTime)
+				{
+					double time = 0.0;
+					for(int32_t frame = fuelFrames-1; frame > 1; frame--)
+					{
+						if(tecZoneGetSolutionTime(fuelHandle, frame, &time))
+						{
+							cout << "Failed to get time data for frame : " << frame << " from fuel file." << endl;
+							continue;
+						}
+						
+						if(time == boundTime)
+						{
+							cout << "Found the correct frame" << endl;
+							fuelFrames = frame;
+							fuelTime = time;
+							break;
+						}
+					}
+				}
+				else
+				{
+					double time = 0.0;
+					for(int32_t frame = boundFrames-1; frame >= 1; frame--)
+					{
+						if(tecZoneGetSolutionTime(boundHandle, frame, &time))
+						{
+							cout << "Failed to get time data for frame : " << frame << " from boundary file." << endl;
+							continue;
+						}
+						
+
+						if(time == fuelTime)
+						{
+							cout << "Found the correct frame" << endl;
+							boundFrames = frame;
+							boundTime = time;
+							break;
+						}
+					}
+				}
+
+				if(fuelTime != boundTime)
+				{
+					cout << "Could not find a consistent time in each file. Stopping." << endl;
+					exit(-1);
+				}
+			}
+
+			cout << "Attempting to read the boundary..." << endl;
+			Read_Binary_Timestep(boundHandle,svar,boundFrames,boundary);
+		}
+
+	    svar.frame = fuelFrames-1;
+
+	    // Read the actual data.
+		cout  << "Attempting to read the fuel..." << endl;
+		Read_Binary_Timestep(fuelHandle,svar,fuelFrames,fuel);
+
+
+		pn = boundary;
+		svar.bndPts = boundary.size();
+		svar.simPts = fuel.size();
+		pn.insert(pn.end(),fuel.begin(),fuel.end());	
+		svar.totPts = pn.size();
+		
+		if(svar.simPts + svar.bndPts != svar.totPts)
+		{
+			cout << "Mismatch of array sizes. Total array is not the sum of sim and boundary arrays" << endl;
+			exit(-1);
+		}
+
+		// Check the frame timings to ensure dt does not go negative.
+		// double frametime = svar.framet * real(fuelFrames-1);
+
+		// if(svar.t > frametime)
+		// {
+		// 	// There's a problem with the frame times.
+		// 	cout << "Time is further ahead than what is supposed by the frame timings." << endl;
+		// 	cout << "Need to adjust frame time to match the current time" << endl;
+
+		// 	// real framet = svar.t/real(fuelFrames-1.0);
+		// 	// cout << "Old frame time: " << svar.framet << "  New frame time: " << framet << endl << endl;
+		// 	// svar.framet = framet;			
+		// }
+
+		// if(svar.totPts != totPts || svar.bndPts != bndPts || svar.simPts != simPts)
+		// {
+		// 	cout << "Mismatch of the particle numbers in the frame file and data file." << endl;
+		// }
+	}
+	else
+	{
+		// TODO: ASCII Restart.
+		// Particle numbers can be found from frame file.
+		// Find EOF, then walk back from there how many particles.
+
+		cout << "ASCII file restart not yet implemented." << endl;
+		exit(-1);
+	}
+
+	// Go through the particles giving them the properties of the cell
+	size_t pID = 0;
+	vector<size_t> buffer;
+	#pragma omp parallel for 
+	for(size_t ii = 0; ii < svar.totPts; ++ii)
+	{
+		pn[ii].xi *= svar.scale;
+		
+		/* Set density based on pressure. More information this way */
+		pn[ii].rho = std::max(fvar.rhoMin,std::min(fvar.rhoMax, 
+			density_equation(pn[ii].p, fvar.B, fvar.gam, fvar.Cs, fvar.rho0)));
+
+		if(pn[ii].b == BACK)
+		{
+			#pragma omp critical
+			svar.back.emplace_back(ii);
+		}
+		else if(pn[ii].b == BUFFER)
+		{
+			#pragma omp critical
+			buffer.emplace_back(ii);
+		}
+
+		if(svar.Asource == 0)
+		{
+			pn[ii].cellRho = avar.rhog;
+			pn[ii].cellP = avar.pRef;
+		}
+		
+		// Initialise the rest of the values to 0
+		pn[ii].s = 0.0;
+		pn[ii].woccl = 0.0;
+		pn[ii].pDist = 0.0;
+		pn[ii].internal = 0;
+
+		pn[ii].vPert = StateVecD::Zero();
+
+		#pragma omp critical
+		{
+			if(pn[ii].partID > pID)
+				pID = pn[ii].partID;
+		}
+	}	
+
+	svar.partID = pID+1;
+
+	/* Put the particles into the buffer vector */
+	size_t const nBack = svar.back.size();
+	size_t const nBuffer = buffer.size();
+
+	if(nBuffer != 4*nBack)
+	{
+		cout << "Mismatch of back vector size and buffer vector size" << endl;
+		cout << "Buffer vector should be 4x back vector size." << endl;
+		cout << "Sizes are:  Buffer: " << nBuffer << "  Back: " << nBack << endl;
+		exit(-1);
+	}
+
+	std::sort(svar.back.begin(),svar.back.end());
+	std::sort(buffer.begin(),buffer.end());
+	svar.buffer = vector<vector<size_t>>(nBack,vector<size_t>(4));
+	real eps = 0.01*svar.dx; /* Tolerance value */
+	size_t nFound = 0;
+	for(size_t ii = 0; ii < nBack; ++ii)
+	{
+		StateVecD const test = svar.Transp*(pn[svar.back[ii]].xi-svar.sim_start);
+		
+		for(size_t index = 0; index < nBuffer; ++index)
+		{
+			/* Check which particle in the back vector it corresponds to by checking which  */
+			/* particle it lies behind */
+			StateVecD const xi = svar.Transp*(pn[buffer[index]].xi-svar.sim_start);
+			// cout << test[0] << "  " << test[1] << "  " << xi[0] << "  " << xi[1] << endl;
+
+			#if SIMDIM == 3
+			if(xi[2] < test[2] + eps && xi[2] > test[2] - eps)
+			{ /* Z coordinate is within bounds, now check x */
+			#endif
+			if(xi[0] < test[0] + eps && xi[0] > test[0] - eps)
+			{	/* X coordinate is within bounds, so should lie behind this point */
+
+				/* Start with the furthest away, and go closer */
+				if (xi[1] < test[1] - 4.0*svar.dx + eps)
+				{
+					svar.buffer[ii][3] = buffer[index];
+					nFound++;
+				}
+				else if (xi[1] < test[1] - 3.0*svar.dx + eps)
+				{
+					svar.buffer[ii][2] = buffer[index];
+					nFound++;
+				}
+				else if (xi[1] < test[1] - 2.0*svar.dx + eps)
+				{
+					svar.buffer[ii][1] = buffer[index];
+					nFound++;
+				}
+				else if (xi[1] < test[1] - svar.dx + eps)
+				{
+					svar.buffer[ii][0] = buffer[index];
+					nFound++;
+				}
+				else
+				{
+					cout << "Couldn't identify where to place the buffer particle" << endl;
+					exit(-1);
+				}
+			}
+			#if SIMDIM == 3
+			}
+			#endif
+		}
+	}	
+
+	if(nFound != nBuffer)
+	{
+		cout << "Some buffer particles have not been attached to a back particle. Cannot continue" << endl;
+		cout << nFound << "  " << nBuffer << endl;
+		exit(-1);
+	}
+	
+	pnp1 = pn;
 }
 
 #endif

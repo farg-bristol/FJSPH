@@ -14,7 +14,6 @@
 #include "Third_Party/Eigen/LU"
 #include "Third_Party/Eigen/Geometry"
 #include "Var.h"
-// #include "IO.h"
 
 // Define pi
 #ifndef M_PI
@@ -39,39 +38,65 @@ typedef struct Panel
 typedef class VLM
 {
 	public:
-		VLM(){}
+		VLM()
+		{
+			coords = Eigen::Matrix<real,2,1>(-1,-1);
+			panels = Eigen::Matrix<int,2,1>(-1,-1);
+			AoA = 0;
+			sweep = 0;
+			taper = 0;
+			flap = Eigen::Vector3i(0,0,0);
+			beta = 0;
+
+			/*Want freestream to be aligned with jet axis*/
+			Freestream = Eigen::Matrix<real,3,1>(0,1,0);
+		}
 
 		void Init(std::string input)
 		{
-			input.append("VLM.dat");
-			std::ifstream filein(input, std::ios::in);
+			// input.append("VLM.dat");
+			std::ifstream fin(input, std::ios::in);
 
-			if(filein.is_open())
+			if(fin.is_open())
 			{
-				/*Define x and y end coordinates of the wing*/
-				coords = getvec(filein);
-
-				/*Split it up into this many panels (Will be reald on the other side)*/
-				panels = getIVec(filein);
-				npanels = 2*panels[0]*panels[1];
-
-				/*Define Angle of attack*/
-				AoA = getD(filein) * M_PI/180.0;
-				
-				/*Sweep*/
-				sweep = getD(filein) * M_PI/180.0;
-				taper = getD(filein);
-
-				/*Flap Properties*/
-				flap = get3dVector(filein);
-				beta = getD(filein) * M_PI/180.0;
+				string line;
+				while (getline(fin,line))
+				{
+					Get_Vector(line,"VLM wing dimensions", coords);
+					Get_Vector(line,"VLM panel counts",panels);
+					Get_Number(line,"VLM angle alpha (degree)",AoA);
+					Get_Number(line,"VLM sweep angle (degree)",sweep);
+					Get_Number(line,"VLM taper ratio",taper);
+					Get_Number(line,"VLM flap start (panels)",flap[0]);
+					Get_Number(line,"VLM flap width (panels)",flap[1]);
+					Get_Number(line,"VLM flap depth (panels)",flap[2]);
+					Get_Number(line,"VLM flap angle (degree)",beta);
+				}
 			}
 			else 
 			{
-				std::cerr << "Couldn't open VLM.dat to read settings. Stopping." << std::endl;
+				std::cerr << "Couldn't open " << input << " to read VLM settings. Stopping." << std::endl;
 				exit(-1);
 			}
-			filein.close();
+			fin.close();
+
+			if(coords[0] == -1 || coords[1] == -1)
+			{
+				cout << "VLM coordinates not defined." << endl;
+				exit(-1);
+			}
+
+			if(panels[0] == -1 || panels[1] == -1)
+			{
+				cout << "VLM panels numbers not defined." << endl;
+				exit(-1);
+			}
+
+			npanels = 2*panels[0]*panels[1];
+
+			AoA *= M_PI/180.0;
+			sweep *= M_PI/180.0;
+			beta *= M_PI/180.0;
 
 			// coords[0] = 5;
 			// coords[1] = 2;
@@ -85,16 +110,6 @@ typedef class VLM
 			aInf = Eigen::Matrix<real,Eigen::Dynamic,Eigen::Dynamic>(npanels,npanels);
 			gamma = Eigen::Matrix<real,Eigen::Dynamic,1>(npanels);
 			RHS = Eigen::Matrix<real,Eigen::Dynamic,1>(npanels);
-
-			
-			// panelxyz.reserve(nverts);
-
-			/*Want freestream to be aligned with jet axis*/
-			Freestream[0]= 0;
-			Freestream[1]= 1;
-			Freestream[2]= 0;
-
-			Freestream = Freestream.normalized();
 
 			MakeMatrix();
 		}
@@ -143,15 +158,15 @@ typedef class VLM
 			return vel+Freestream;
 		}
 
-		void write_VLM_Panels(std::string &folder)
+		void write_VLM_Panels(string &prefix)
 		{	
-			std::string file1 = folder;
-			file1.append("/VLM_Panels.plt");
-			std::ofstream fp(file1, std::ios::out);
+			string file1 = prefix;
+			file1.append("_Panels.dat");
+			ofstream fp(file1, std::ios::out);
 			if(fp.is_open())
 			{
 				fp << "TITLE=\"VLM Panels\"" << std::endl;
-		  		fp << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\""<< std::endl;
+		  		fp << "VARIABLES = \"X\", \"Y\", \"Z\""<< std::endl;
 		  		for (auto p:panelData)
 				{
 					fp << "ZONE" << std::endl;
@@ -171,13 +186,13 @@ typedef class VLM
 				exit(-1);
 			}
 	  	
-		  	std::string file2 = folder;
-		  	file2.append("/VLM_Vortices.plt");
+		  	string file2 = prefix;
+		  	file2.append("_Vortices.dat");
 		  	std::ofstream fq(file2, std::ios::out);
 		  	if(fq.is_open())
 			{
 		  		fq << "TITLE=\"VLM Vortices and Control Points\"" << std::endl;
-		  		fq << "VARIABLES = \"x (m)\", \"y (m)\", \"z (m)\""<< std::endl;
+		  		fq << "VARIABLES = \"X\", \"Y\", \"Z\""<< std::endl;
 		  		for (auto p:panelData)
 				{
 					fq << "ZONE" << std::endl;
@@ -198,72 +213,151 @@ typedef class VLM
 		}
 
 	protected:
-
-		int getI(std::ifstream& In)
+		
+		std::string ltrim(const std::string &s)
 		{
-			std::string line;
-			getline(In,line);
-			int i = stoi(line);
-			return i;
+			size_t start = s.find_first_not_of(WHITESPACE);
+			return (start == std::string::npos) ? "" : s.substr(start);
+		}
+		
+		std::string rtrim(const std::string &s)
+		{
+			size_t end = s.find_last_not_of(WHITESPACE);
+			return (end == std::string::npos) ? "" : s.substr(0, end + 1);
 		}
 
-		real getD(std::ifstream& In)
+		string Get_Parameter_Value(string const& line)
 		{
-			std::string line;
-			getline(In,line);
-			real d = stod(line);
-			return d; 
+			size_t pos = line.find(":");
+			size_t end = line.find_first_of("#",pos+1); /* Check if a comment exists on the line */
+
+			if (end != string::npos)
+			{
+				string value = line.substr(pos + 1, (end-pos+2) );
+				return ltrim(rtrim(value));
+			}
+
+			string value = line.substr(pos + 1);
+			return ltrim(rtrim(value));
 		}
 
-		std::string getS(std::ifstream& In)
+		
+		template<typename T>
+		void Get_Number(string const& line, string const& param, T &value)
 		{
-			std::string line;
-			getline(In,line);
-			return line; 
+			if(line.find(param) != string::npos)
+			{
+				string temp = Get_Parameter_Value(line);
+				std::istringstream iss(temp);
+				iss >> value;
+			}
 		}
 
-		Eigen::Vector2i getIVec(std::ifstream& In)
+		void Get_Vector(string const& line, string const& param, 
+					Eigen::Matrix<real,3,1>/* vec<real,3> */ &value)
 		{
-			std::string line;
-			getline(In,line);
-			std::istringstream sline(line);
-			// cout << sline.str() << endl;
-			Eigen::Vector2i x;
-			sline >> x[0]; sline >> x[1];
-
-			return x;
-		}
-
-		/*Function for a 2D Vector*/
-		Eigen::Matrix<real,2,1> getvec(std::ifstream& In)
-		{
-			std::string line;
-			getline(In,line);
-			std::istringstream sline(line);
-			
-			Eigen::Matrix<real,2,1> x;
-			sline >> x[0]; sline >> x[1]; 
+			if(line.find(param) != string::npos)
+			{
+				string temp = Get_Parameter_Value(line);
+				std::istringstream iss(temp);
 				
-			return x;
+				real a, b, c;
+				string temp2;
+				
+				std::getline(iss,temp2,',');
+				std::istringstream iss2(temp2);
+				iss2 >> a;
+
+				std::getline(iss,temp2,',');
+				iss2 = std::istringstream(temp2);
+				iss2 >> b;
+
+				std::getline(iss,temp2,',');
+				iss2 = std::istringstream(temp2);
+				iss2 >> c;
+				
+				value = /* vec<real,3> */ Eigen::Matrix<real,3,1>(a,b,c);
+			}
 		}
 
-		Eigen::Vector3i get3dVector(std::ifstream& In)
+		void Get_Vector(string const& line, string const& param, 
+					Eigen::Matrix<real,2,1>/* vec<real,2> */ &value)
 		{
-			std::string line;
-			getline(In,line);
-			std::istringstream sline(line);
-			
-			Eigen::Vector3i x;
-			sline >> x[0]; sline >> x[1]; sline >> x[2]; 
+			if(line.find(param) != string::npos)
+			{
+				string temp = Get_Parameter_Value(line);
+				std::istringstream iss(temp);
 				
-			return x;
+				real a, b;
+				string temp2;
+				
+				std::getline(iss,temp2,',');
+				std::istringstream iss2(temp2);
+				iss2 >> a;
+
+				std::getline(iss,temp2,',');
+				iss2 = std::istringstream(temp2);
+				iss2 >> b;
+				
+				value = /* vec<real,2> */ Eigen::Matrix<real,2,1>(a,b);
+			}
+		}
+
+		void Get_Vector(string const& line, string const& param, 
+					Eigen::Matrix<int,3,1>/* vec<int,3> */ &value)
+		{
+			if(line.find(param) != string::npos)
+			{
+				string temp = Get_Parameter_Value(line);
+				std::istringstream iss(temp);
+				
+				int a, b, c;
+				string temp2;
+				
+				std::getline(iss,temp2,',');
+				std::istringstream iss2(temp2);
+				iss2 >> a;
+
+				std::getline(iss,temp2,',');
+				iss2 = std::istringstream(temp2);
+				iss2 >> b;
+
+				std::getline(iss,temp2,',');
+				iss2 = std::istringstream(temp2);
+				iss2 >> c;
+				
+				value = /* vec<int,3> */ Eigen::Matrix<int,3,1>(a,b,c);
+			}
+		}
+
+		void Get_Vector(string const& line, string const& param, 
+						Eigen::Matrix<int,2,1>/* vec<int,2> */ &value)
+		{
+			if(line.find(param) != string::npos)
+			{
+				string temp = Get_Parameter_Value(line);
+				std::istringstream iss(temp);
+				
+				int a, b;
+				string temp2;
+				
+				std::getline(iss,temp2,',');
+				std::istringstream iss2(temp2);
+				iss2 >> a;
+
+				std::getline(iss,temp2,',');
+				iss2 = std::istringstream(temp2);
+				iss2 >> b;
+				
+				value = Eigen::Matrix<int,2,1>(a,b) /* vec<int,2>(a,b) */;
+			}
 		}
 
 		void MakeMatrix(void)
 		{
 			/*Define the steps for each dimension*/
-			real dr0 = coords[1]/real(panels[1]);
-			real dx0 = (coords[0]/real(panels[0]))*cos(sweep);
+			real dr0 = coords[1]/real(panels[1]-1);
+			real dx0 = (coords[0]/real(panels[0]-1))*cos(sweep);
 			real dy0 = cos(AoA)*dr0;
 			real dz0 = sin(AoA)*dr0;
 			
@@ -392,7 +486,7 @@ typedef class VLM
 			r2 = C-B;
 
 			coefAB = (1/(4*M_PI))*((r1.cross(r2))/(r1.cross(r2)).squaredNorm())*
-					(r0.dot(r1.normalized())-r0.dot(r2.normalized()));
+					(r0.dot(r1.normalized()-r2.normalized()));
 
 
 			/*Horseshoe vortex from point A*/

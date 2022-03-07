@@ -2,7 +2,7 @@
 #define GEOMETRY_H
 
 #include "Var.h"
-#include "IOFunctions.h"
+#include "Kernel.h"
 #include "Third_Party/Eigen/Geometry"
 
 #define PERTURB(i,j) pow(MEPSILON,pow(2,i*SIMDIM-j))
@@ -14,7 +14,7 @@
 void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start, size_t const& end,
                  DELTAP const& dp, OUTL const& outlist, MESH const& cells, SPHState& pnp1)
 {
-    #pragma omp parallel shared(pnp1)
+    #pragma omp parallel default(shared) // shared(pnp1)
     {
         real const h = 1.33 * svar.Pstep;
 
@@ -24,13 +24,88 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
         #pragma omp for schedule(static) nowait
         for(size_t ii = start; ii < end; ++ii)
         {
-            if(pnp1[ii].b < PartState.PIPE_)
+            if(pnp1[ii].b < PIPE)
             {
                 pnp1[ii].surf = 0;
                 pnp1[ii].woccl = 1;
             }
             else if(dp.lam_ng[ii] < 0.2)
             {   /*If less that 0.2, then its a surface particle by default*/
+                pnp1[ii].surf = 1;
+            }
+            else if(dp.lam_ng[ii] < 0.75)
+            {   /*Particle could be a surface particle. Perform a test*/
+
+                StateVecD norm = StateVecD::Zero();
+                real curve = 0.0;
+                real correc = 0.0;
+                
+                // Create point T
+                StateVecD const xi = pnp1[ii].xi;
+                StateVecD const pointT = xi + h * dp.norm[ii].normalized();
+
+                uint surf = 1; /*Begin by assuming a surface, and proving otherwise*/
+                for(std::pair<size_t,real> const& jj:outlist[ii])
+                {
+                    if(jj.first == ii || pnp1[jj.first].b == GHOST)
+                        continue;
+
+                    StateVecD const Rij = pnp1[ii].xi - pnp1[jj.first].xi;
+                
+                    StateVecD const x_jT = pnp1[jj.first].xi - pointT;
+                    real const r = sqrt(jj.second);
+                    
+                    if(r >= sqrt(2)*h)
+                    {
+                        if (x_jT.norm() < h)
+                        {
+                            surf = 0;
+                            break;
+                        }
+                    }
+                    else  
+                    {
+                        #if SIMDIM == 2
+                            StateVecD tau(dp.norm[ii](1),-dp.norm[ii](0));
+                            if((abs(dp.norm[ii].normalized().dot(x_jT)) + abs(tau.normalized().dot(x_jT))) < h )
+                            {
+                                surf = 0;
+                                break;
+                            }
+                        #else
+                            if(acos(dp.norm[ii].normalized().dot(-Rij/r)) < M_PI/4.0)
+                            {
+                                surf = 0; 
+                                break;
+                            }
+                        #endif
+                    }
+  
+
+                    real volj = pnp1[jj.first].m/pnp1[jj.first].rho;
+
+                    #if defined(CSF) || defined(HESF)
+                    norm -= volj * (dp.colour[jj.first] - dp.colour[ii])*GradK(Rij,r,fvar.H,fvar.correc);
+                    #endif
+
+                    /* Needed for induced pressure model */
+                    curve -= volj * (dp.norm[jj.first].normalized() - dp.norm[ii].normalized()).dot
+                            (GradK(Rij,r,fvar.H,fvar.correc));
+                    correc += volj * Kernel(r,fvar.H,fvar.correc);        
+
+                }
+
+                pnp1[ii].norm = norm;
+                pnp1[ii].curve = curve/correc;
+                pnp1[ii].surf = surf;
+            }/* end if lam < 0.75 */
+            else
+            {   /*If its eigenvalue is high, then by default it cannot be a surface*/
+                pnp1[ii].surf = 0;
+            }
+
+            if(dp.lam_ng[ii] < avar.cutoff)
+            {
                 real woccl_ = 0.0;
                 StateVecD Vdiff = StateVecD::Zero();
                 if (svar.Asource == 1)
@@ -55,178 +130,49 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
 
                 for(std::pair<size_t,real> const& jj:outlist[ii])
                 {
-                    if(jj.first == ii || pnp1[jj.first].b == PartState.GHOST_)
+                    if(jj.first == ii || pnp1[jj.first].b == GHOST)
                         continue;
 
-                    /*Occlusion for Gissler Aero Method*/
-                    if (pnp1[ii].b == PartState.FREE_ && (avar.acase == 4 || avar.acase == 1))
-                    {
-                        real const r = sqrt(jj.second);
-                        StateVecD const Rij = pnp1[ii].xi - pnp1[jj.first].xi;
-                        real const frac = Rij.dot(Vdiff)/(Vdiff.norm()*r);
-                        
-                        if (frac > woccl_)
-                        {
-                            woccl_ = frac;
-                        }
-                    }
-                }
-
-                pnp1[ii].surf = 1;
-                pnp1[ii].woccl = std::max(0.0,std::min(woccl_,1.0)); 
-            }
-            else if(dp.lam_ng[ii] < 0.75)
-            {   /*Particle could be a surface particle. Perform a test*/
-                real woccl_ = 0.0;
-                StateVecD Vdiff = StateVecD::Zero();
-                if (svar.Asource == 1)
-                {
-                    Vdiff = (pnp1[ii].cellV) - dp.avgV[ii];
-                }
-                else if (svar.Asource == 2)
-                {
-                    Vdiff = (pnp1[ii].cellV+cells.cPertnp1[pnp1[ii].cellID]) - dp.avgV[ii];
-                }
-                #if SIMDIM == 3
-                else if(svar.Asource == 3)
-                {   
-                    StateVecD Vel = svar.vortex.getVelocity(pnp1[ii].xi);
-                    Vdiff = Vel - dp.avgV[ii];
-                }
-                #endif
-                else 
-                {
-                    Vdiff = avar.vInf - pnp1[ii].v /* dp.avgV[ii] */;
-                }
-
-                // Create point T
-                StateVecD const xi = pnp1[ii].xi;
-                StateVecD const pointT = xi + h * dp.norm[ii].normalized();
-
-                uint surf = 1; /*Begin by assuming a surface, and proving otherwise*/
-                for(std::pair<size_t,real> const& jj:outlist[ii])
-                {
-                    if(jj.first == ii || pnp1[jj.first].b == PartState.GHOST_)
-                        continue;
-                    
-                    StateVecD const x_jT = pnp1[jj.first].xi - pointT;
+                    StateVecD const Rij = pnp1[ii].xi - pnp1[jj.first].xi;
                     real const r = sqrt(jj.second);
-                    
-                    if(r >= sqrt(2)*h)
-                    {
-                        if (x_jT.norm() < h)
-                        {
-                            surf = 0;
-                            break;
-                        }
-                    }
-                    else  
-                    {
-                        #if SIMDIM == 2
-                            StateVecD tau(dp.norm[ii](1),-dp.norm[ii](0));
-                            if((abs(dp.norm[ii].normalized().dot(x_jT)) + abs(tau.normalized().dot(x_jT))) < h )
-                            {
-                                surf = 0;
-                                break;
-                            }
-                        #else
-                            StateVecD const Rij = pnp1[jj.first].xi - xi; 
-                            if(acos(dp.norm[ii].normalized().dot(Rij/r)) < M_PI/4.0)
-                            {
-                                surf = 0; 
-                                break;
-                            }
-                        #endif
-                    }
 
+                    
                     /*Occlusion for Gissler Aero Method*/
-                    if (pnp1[ii].b == PartState.FREE_ && (avar.acase == 4 || avar.acase == 1))
+                    if (pnp1[ii].b == FREE && (avar.acase == 4 || avar.acase == 1))
                     {
-                        StateVecD const Rij = pnp1[ii].xi - pnp1[jj.first].xi;
                         real const frac = Rij.dot(Vdiff)/(Vdiff.norm()*r);
                         
                         if (frac > woccl_)
                         {
                             woccl_ = frac;
                         }
-                    }    
+                    }  
+                    
                 }
-
-                pnp1[ii].surf = surf;
                 pnp1[ii].woccl = std::max(0.0,std::min(woccl_,1.0));  
             }
             else
-            {   /*If its eigenvalue is high, then by default it cannot be a surface*/
-                pnp1[ii].surf = 0;
+            {
                 pnp1[ii].woccl = 1;
             }
+        }/* end particle loop */
+
+        #ifdef ALE
+        for(size_t ii = start; ii < end; ++ii)
+        {
+            pnp1[ii].surfzone = 0;
+            for(std::pair<size_t,real> const& jj:outlist[ii])
+            {
+                if(pnp1[jj.first].surf == 1)
+                {
+                    pnp1[ii].surfzone = 1;
+                    break;
+                }
+            }
         }
-
-        // #pragma omp for schedule(static) nowait
-        // for(size_t ii = start; ii < end; ++ii)
-        // {
-        //     /*Find the curvature for the surface particles*/
-        //     if(dp.lam[ii] < 0.75 )
-        //     {
-        //         real curve = 0.0;
-        //         real correc = 0.0;
-
-        //         if(dp.lam[ii] < 0.75 && pnp1[ii].b == PartState.FREE_)
-        //         {
-                
-        //             for(std::pair<size_t,real> const& jj:outlist[ii])
-        //             {
-        //                 if (ii == jj.first)
-        //                     continue;
-
-        //                 StateVecD Rij = pnp1[jj.first].xi - pnp1[ii].xi;
-        //                 real r = sqrt(jj.second);
-        //                 real volj = pnp1[jj.first].m/pnp1[jj.first].rho;
-        //                 StateVecD diffK = volj *  GradK(Rij,r,fvar.H,fvar.correc);                      
-
-        //                 if (pnp1[jj.first].surf == 1)
-        //                 {
-        //                     curve -= (dp.norm[jj.first].normalized()-dp.norm[ii].normalized()).dot(diffK);
-        //                     correc += volj * Kernel(r,fvar.H,fvar.correc);
-        //                     // curve += curves[jj] * pnp1[jj].m/pnp1[jj].rho* kern / dp.kernsum[ii];
-        //                 }
-        //             }
-        //         }
-
-        //         curves[ii] = curve/correc;
-        //         correcs[ii] = correc;
-        //     }
-        // }
-
-        // #pragma omp for schedule(static) nowait
-        // for(size_t ii = start; ii < end; ++ii)
-        // {
-        //     /*Find the curvature for the surface particles*/
-        //     if(pnp1[ii].surf == 1)
-        //     {
-        //         real curve = 0.0;
-
-        //         for(std::pair<size_t,real> const& jj:outlist[ii])
-        //         {
-        //             if (pnp1[jj.first].surf != 1)
-        //                 continue;
-
-        //             if (ii == jj.first)
-        //             {
-        //                 curve += curves[ii] * fvar.correc/correcs[ii];
-        //                 continue;
-        //             }
-
-        //             real r = sqrt(jj.second);
-        //             real kern = pnp1[jj.first].m/pnp1[jj.first].rho * Kernel(r,fvar.H,fvar.correc);
-
-        //             curve += curves[jj.first] * kern/correcs[ii];
-        //         }
-
-        //         pnp1[ii].curve = curve;
-        //     }
-        // }   
-    }
+        #endif
+ 
+    }/* end parallel section */
 }
 
 
@@ -439,50 +385,46 @@ bool get_line_intersection(vector<StateVecD> const& verts, vector<size_t> const&
     }
 
     /* Check for the distance from the face the point lies. It is already assumed that the ray crosses */
-/* Used for implicit particle tracking */
-void RayNormalIntersection(MESH const& cells, StateVecD const& rayOrigin, StateVecD const& rayVector,
-                           vector<size_t> const& face, int const& cellID, real& dt, real& denom)
-{
-    /* find the normal vector of the face */
-    StateVecD norm(cells.verts[face[0]][1] - cells.verts[face[1]][1], cells.verts[face[1]][0] - cells.verts[face[0]][0]);
-
-    /* Check for normal orientation */
-    StateVecD celldir;
-
-    
-    /* Use the face centre as the second part for the direction */
-    StateVecD face_c = cells.verts[face[0]] + cells.verts[face[1]];
-    face_c /= 2.0;
-
-    celldir = face_c - cells.cCentre[cellID];
-    
-
-    if(norm.dot(celldir) < 0)
+    /* Used for implicit particle tracking */
+    void RayNormalIntersection(MESH const& cells, StateVecD const& rayOrigin, StateVecD const& rayVector,
+                            vector<size_t> const& face, int const& cellID, real& dt, real& denom)
     {
-        /* Normal points inwards to the cell , so flip it*/
-        norm = -1.0 * norm;
+        /* find the normal vector of the face */
+        StateVecD norm(cells.verts[face[0]][1] - cells.verts[face[1]][1], cells.verts[face[1]][0] - cells.verts[face[0]][0]);
+        
+        /* Use the face centre as the second part for the direction */
+        StateVecD face_c = cells.verts[face[0]] + cells.verts[face[1]];
+        face_c /= 2.0;
+
+        /* Check for normal orientation */
+        StateVecD celldir = face_c - cells.cCentre[cellID];
+        
+        if(norm.dot(celldir) < 0)
+        {
+            /* Normal points inwards to the cell , so flip it*/
+            norm = -1.0 * norm;
+        }
+
+        StateVecD temp_p = StateVecD::Zero();
+
+        /* Find the most distant point from the current point */
+        for(size_t ii = 0; ii < face.size(); ii++)
+        {
+            if( (cells.verts[face[ii]] - rayOrigin).squaredNorm() > temp_p.squaredNorm())
+                temp_p = (cells.verts[face[ii]] - rayOrigin);
+        }
+
+        /* Find numerator */
+        denom = rayVector.dot(norm);
+        dt = temp_p.dot(norm)/denom; 
     }
-
-    StateVecD temp_p = StateVecD::Zero();
-
-    /* Find the most distant point from the current point */
-    for(size_t ii = 0; ii < face.size(); ii++)
-    {
-        if( (cells.verts[face[ii]] - rayOrigin).squaredNorm() > temp_p.squaredNorm())
-            temp_p = (cells.verts[face[ii]] - rayOrigin);
-    }
-
-    /* Find numerator */
-    denom = rayVector.dot(norm);
-    dt = temp_p.dot(norm)/denom; 
-}
 
 #endif
 
 
 #if SIMDIM == 3
 int Crossings3D(vector<StateVecD> const& verts, vector<size_t> const& face, 
-    StateVecD const& point, StateVecD const& point2, uint& perturb)
+    StateVecD const& point, StateVecD const& point2/* , uint& perturb */)
 {   /*Using Signed volumes of tetrahedra*/
     /*Shewchuk J.R 1996, & 
     Robust Adaptive Floating-Point Geometric Predicates
@@ -830,8 +772,8 @@ void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
         cells.faces.emplace_back(vector<size_t>{7,6,10});
         cells.faces.emplace_back(vector<size_t>{7,10,11});
 
-		cells.elems.emplace_back(vector<size_t>{0,1,2,3,4,5,6,7});
-        cells.elems.emplace_back(vector<size_t>{4,5,6,7,8,9,10,11});
+		// cells.elems.emplace_back(vector<size_t>{0,1,2,3,4,5,6,7});
+        // cells.elems.emplace_back(vector<size_t>{4,5,6,7,8,9,10,11});
 
 
 		cells.cFaces.emplace_back(vector<size_t>{0,1,2,3,4,5,6,7,8,9,10,11});
@@ -860,7 +802,7 @@ void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
 		cells.faces.emplace_back(vector<size_t>{2,3});
 		cells.faces.emplace_back(vector<size_t>{3,0});
 
-		cells.elems.emplace_back(vector<size_t>{0,1,2,3});
+		// cells.elems.emplace_back(vector<size_t>{0,1,2,3});
 
 		cells.cFaces.emplace_back(vector<size_t>{0,1,2,3});
 
@@ -973,8 +915,8 @@ void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& pnp1)
     #endif
 
     svar.dx = svar.Pstep * pow(fvar.rho0/fvar.rhoJ,1.0/SIMDIM);
-    GetYcoef(avar, fvar, svar.Pstep);
-    fvar.H = 2.0*svar.Pstep;
+    avar.GetYcoef(fvar, svar.Pstep);
+    fvar.H = fvar.Hfac*svar.Pstep;
     fvar.HSQ = fvar.H*fvar.H; 
 
     fvar.sr = 4.0*fvar.HSQ;   /*KDtree search radius*/

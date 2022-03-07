@@ -3,12 +3,13 @@
 
 #include "Var.h"
 #include "Kernel.h"
+#include "Resid.h"
 #include "Third_Party/Eigen/LU"
 #include "Third_Party/Eigen/Eigenvalues"
 
 
 /*L matrix for delta-SPH calculation*/
-void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHState const& pnp1, 
+void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState const& pnp1, 
 				 OUTL const& outlist, DELTAP& dp)
 {
 	/************   RENORMALISATION MATRIX CALCULATION    ************/
@@ -23,8 +24,9 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 	vector<real> lam_nb(end);
     vector<real> lam_ng(end);
 	vector<real> kernsum(end);
-
-	#pragma omp parallel shared(Lmat,gradRho,norm,lam,lam_nb,lam_ng,kernsum)
+	vector<real> colour(end);
+	real npd = 0.0;
+	#pragma omp parallel default(shared) reduction(+:npd) // shared(Lmat,gradRho,norm,lam,lam_nb,lam_ng,kernsum)
 	{
 		#pragma omp for schedule(static) nowait
 		for(size_t ii = 0; ii < end; ++ii)
@@ -33,9 +35,11 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 			StateMatD Lmat_nb_ = StateMatD::Zero();
             StateMatD Lmat_ng_ = StateMatD::Zero();
 			StateVecD gradRho_ = StateVecD::Zero();
+			// StateVecD gradRho_2 = StateVecD::Zero();
 			StateVecD norm_ = StateVecD::Zero();
 			StateVecD avgV_ = StateVecD::Zero();
 			real kernsum_ = 0.0;
+			real colour_ = 0.0;
 		
 			SPHPart const& pi = pnp1[ii];
 	
@@ -52,31 +56,33 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 				
 				SPHPart const& pj = pnp1[jj.first];
 
-				StateVecD const Rij = pj.xi - pi.xi;
+				StateVecD const Rji = pj.xi - pi.xi;
 				real const r = sqrt(jj.second);
 				real const volj = pj.m/pj.rho;
 				real const kern = Kernel(r,fvar.H,fvar.correc);
-				StateVecD const Grad = GradK(-Rij,r,fvar.H,fvar.correc);
+				StateVecD const Grad = GradK(-Rji,r,fvar.H,fvar.correc);
 
-				Lmat_ -= volj * Rij * Grad.transpose();
+				Lmat_ -= volj * Rji * Grad.transpose();
 
 				gradRho_ += volj * (pj.rho - pi.rho)*Grad;
 
-				if(pj.b > PartState.PISTON_)
+				if(pj.b > PISTON)
 				{
-					Lmat_nb_ -= volj * Rij * Grad.transpose();
+					Lmat_nb_ -= volj * Rji * Grad.transpose();
 	
-                    if(pj.b != PartState.GHOST_)
+                    if(pj.b != GHOST)
                     {   /* Ignore ghost particles */   
                         norm_ += volj*Grad;
                         avgV_ += pj.v * kern;
                         kernsum_ += kern;
+						colour_ += volj*kern;
+						npd += kern;
                     }
 				}
 
-                if(pj.b != PartState.GHOST_)
+                if(pj.b != GHOST)
                 {
-                    Lmat_ng_ -= volj * Rij * Grad.transpose();
+                    Lmat_ng_ -= volj * Rji * Grad.transpose();
                 }
                 
 			}
@@ -84,54 +90,74 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 			Eigen::FullPivLU<StateMatD> lu(Lmat_);
 			/*If only 1 particle is in the neighbourhood, tensile instability can occur*/
 			/*In this case, L becomes singular, and invertability needs to be checked.*/
+			StateMatD Linv = StateMatD::Zero();
+			Linv(0,0) = 1;
 			if(lu.isInvertible())
 			{	
-				StateMatD Linv = lu.inverse();
-				Lmat[ii] = Linv;
-				gradRho[ii] = Linv * gradRho_ ;
-
-				// StateVecD ntemp = Linv * norm_;
-				// norm[ii] = (norm_.norm() * ntemp.normalized());
-				norm[ii] = Linv.normalized() * norm_;
-				// avgV[ii] = lu.inverse() * avgV_;
-
-				Eigen::SelfAdjointEigenSolver<StateMatD> es;
-		        es.computeDirect(Lmat_);
-		        lam[ii] = ((es.eigenvalues()).minCoeff()); //1 inside fluid, 0 outside fluid  
- 
-			}
-			else
-			{	/*In a sparse neighbourhood if singular, so mark as a surface*/
-				StateMatD Ltemp = StateMatD::Zero();
-				Ltemp(0,0) = 1.0;
-				Lmat[ii] = (Ltemp);
-				gradRho[ii] = (gradRho_);
-				norm[ii] = (norm_);
-				// avgV[ii] = avgV_;
-				lam[ii] = (0.0);
+				Linv = lu.inverse();
 			}
 
-			/*Lmatrix computation for particle shifting, ignoring the boundary*/
+			/*L matrix computation for particle shifting, including all particles*/
+			Eigen::SelfAdjointEigenSolver<StateMatD> es;
+			es.computeDirect(Lmat_);
+			lam[ii] = ((es.eigenvalues()).minCoeff()); //1 inside fluid, 0 outside fluid  
+
+			/*L matrix computation for particle shifting, ignoring the boundary*/
 			Eigen::SelfAdjointEigenSolver<StateMatD> es1;
 			es1.computeDirect(Lmat_nb_);
 			lam_nb[ii] = ((es1.eigenvalues()).minCoeff()); //1 inside fluid, 0 outside fluid    
 
-            /*Lmatrix computation for surface identification, ignoring the ghost particles*/
+            /*L matrix computation for surface identification, ignoring ghost and boundary particles*/
 			Eigen::SelfAdjointEigenSolver<StateMatD> es2;
 			es2.computeDirect(Lmat_ng_);
 			lam_ng[ii] = ((es2.eigenvalues()).minCoeff()); //1 inside fluid, 0 outside fluid    
 			
+			/* Now the matrix has been found, density gradient can be calculated */
+			// for(std::pair<size_t,real> const& jj:outlist[ii])
+			// {
+			// 	if(ii == jj.first)
+			// 	{
+			// 		continue;
+			// 	}
+
+			// 	SPHPart const& pj = pnp1[jj.first];
+
+			// 	StateVecD const Rji = pj.xi - pi.xi;
+			// 	real const r = sqrt(jj.second);
+			// 	real const volj = pj.m/pj.rho;
+			// 	StateVecD const Grad = GradK(-Rji,r,fvar.H,fvar.correc);
+
+			// 	gradRho_2 += volj * (pj.rho - pi.rho) * Linv*Grad;
+			// }
+
+			gradRho_ = Linv*gradRho_;
+			// #pragma omp critical
+			// {
+			// 	cout << gradRho_[0] << "  " << gradRho_[1] << "  " << gradRho_2[0] << "  " << gradRho_2[1] << endl;
+			// }
 
 
-			if(pi.b == PartState.BOUND_)
+			if(pi.b == BOUND)
 			{
 				lam[ii] = 1.0;
 				lam_nb[ii] = 1.0;
                 lam_ng[ii] = 1.0;
 			}
-	
+
+			
+			Lmat[ii] = Linv;
+			gradRho[ii] = gradRho_ ;
+
+			// StateVecD ntemp = Linv * norm_;
+			// norm[ii] = (norm_.norm() * ntemp.normalized());
+			norm[ii] = Linv.normalized() * norm_;
+			// avgV[ii] = lu.inverse() * avgV_;
+
+			
+
 			avgV[ii] = (avgV_/kernsum_);
-			kernsum[ii] = (kernsum_);	
+			kernsum[ii] = (kernsum_);
+			colour[ii] = colour_;	
 		}
 
 		// #pragma omp for schedule(static) 
@@ -149,8 +175,8 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 		// 		if(pi.partID == pj.partID)
 		// 			continue;
 
-		// 		StateVecD const Rij = pj.xi - pi.xi;
-		// 		real const r = Rij.norm();
+		// 		StateVecD const Rji = pj.xi - pi.xi;
+		// 		real const r = Rji.norm();
 		// 		real const volj = pj.m/pj.rho;
 		// 		real const kern = Kernel(r,fvar.H,fvar.correc);
 				
@@ -181,6 +207,7 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 
 	}	/*End parallel section*/	
 
+	dp.npd = npd/real(end);
 	dp.L = Lmat;
 	dp.gradRho = gradRho;
 	dp.norm = norm;
@@ -189,6 +216,60 @@ void dSPH_PreStep(SIM const& svar, FLUID const& fvar, size_t const& end, SPHStat
 	dp.lam_nb = lam_nb;
     dp.lam_ng = lam_ng;
 	dp.kernsum = kernsum;
+	dp.colour = colour;
+}
+
+/* Calculate dissipation terms before freezing. */
+void dissipation_terms(FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
+DELTAP const& dp, SPHState& pnp1)
+{
+
+	for(size_t ii = start; ii < end; ++ii )
+	{
+		SPHPart const& pi = pnp1[ii];
+		
+		StateVecD artViscI = StateVecD::Zero();
+
+		#ifndef NODSPH
+		real Rrhod = 0.0;
+		#endif
+
+		for (std::pair<size_t,real> const& jj : outlist[ii])
+		{	/* Neighbour list loop. */
+			
+			/*Check if the position is the same, and skip the particle if yes*/
+			if(ii == jj.first /* || pnp1[jj.first].b == BOUND */)
+				continue;
+
+			SPHPart const& pj = pnp1[jj.first];
+
+			StateVecD const Rji = pj.xi-pi.xi;
+			StateVecD const Vji = pj.v-pi.v;
+			real const rr = jj.second;
+			real const r = sqrt(rr);
+			real const idist2 = 1.0/(rr + 0.001*fvar.HSQ);
+			// #ifndef NODSPH	
+			real const volj = pj.m/pj.rho;
+			// #endif
+			// StateVecD const gradK = GradK(Rji,r,fvar.H,fvar.correc);
+			StateVecD const gradK = GradK(Rji,r,fvar.H,fvar.correc);/* gradK;*/
+
+
+			// artViscI += pj.m*ArtVisc(fvar.nu,pi,pj,fvar,Rji,Vji,idist2,gradK);
+			artViscI += aVisc(Rji,Vji,idist2,gradK,volj);
+
+			#ifndef NODSPH
+			if(pj.b != BOUND)
+			Rrhod += Continuity_dSPH(Rji,idist2,fvar.HSQ,gradK,volj,dp.gradRho[ii],dp.gradRho[jj.first],pi,pj);
+			#endif
+		}
+
+		pnp1[ii].aVisc = fvar.alpha * fvar.H * fvar.Cs * fvar.rho0 * artViscI / pi.rho;
+		#ifndef NODSPH
+		pnp1[ii].deltaD = fvar.dCont*Rrhod;
+		#endif
+
+	}
 }
 
 #ifdef ALE
@@ -204,7 +285,7 @@ DELTAP const& dp, SPHState& pnp1)
 
 	// real const maxU = fvar.maxU;
 
-	#pragma omp parallel
+	#pragma omp parallel default(shared)
 	{
 		#pragma omp for schedule(static) nowait
 		for(size_t ii = start; ii < end; ++ii)
@@ -229,11 +310,11 @@ DELTAP const& dp, SPHState& pnp1)
 				if(ii == jj.first /*|| pj.b == PartState.BOUND_*/)
 					continue;
 
-				StateVecD const Rij = pj.xi-pi.xi;
+				StateVecD const Rji = pj.xi-pi.xi;
 				real const r = sqrt(jj.second);
 				real const volj = pj.m/pj.rho;
 				real const kern = Kernel(r,fvar.H,fvar.correc);
-				StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);
+				StateVecD const gradK = GradK(Rji,r,fvar.H,fvar.correc);
 
 				deltaU += ( 1.0 + 0.2 * pow(kern/fvar.Wdx,4.0) ) * gradK * volj;
 				// deltaU += 
@@ -257,7 +338,7 @@ DELTAP const& dp, SPHState& pnp1)
 
 			deltaU = std::min(deltaU.norm(), maxUij/2.0) * deltaU.normalized();
 
-			if(pi.b != PartState.BUFFER_)
+			if(pi.b != BUFFER)
 			{
 				// gradLam = gradLam.normalized();
 				// cout << gradLam(0) << "  " << gradLam(1) << endl;
@@ -271,8 +352,8 @@ DELTAP const& dp, SPHState& pnp1)
 				}
 				else /*Already checked if eigenvalue is less than 0.55*/
 				{	/*SPHPart in the surface region, so apply a partial shifting*/
-				    if(norm.dot(deltaU) >= 0.0)
-					{	/*Check if particle is heading towards or away from the surface*/
+				    // if(norm.dot(deltaU) >= 0.0)
+					// {	/*Check if particle is heading towards or away from the surface*/
 						if(woccl < M_PI/12.0)
 						{
 							StateMatD shift = StateMatD::Identity() - norm*norm.transpose();
@@ -281,13 +362,12 @@ DELTAP const& dp, SPHState& pnp1)
 						else
 						{
 							pnp1[ii].vPert = StateVecD::Zero();
-							continue;
 						}
-					}
-					else
-					{
-						pnp1[ii].vPert = deltaU;
-					}
+					// }
+					// else
+					// {
+					// 	pnp1[ii].vPert = deltaU;
+					// }
 				}
 				/*Otherwise, particle is near a surface, and don't shift.*/
 			}
@@ -311,7 +391,7 @@ DELTAP const& dp, SPHState& pnp1)
 
 	// real const maxU = fvar.maxU;
 
-	#pragma omp parallel
+	#pragma omp parallel default(shared)
 	{
 		#pragma omp for schedule(static) nowait
 		for(size_t ii = start; ii < end; ++ii)
@@ -335,11 +415,11 @@ DELTAP const& dp, SPHState& pnp1)
 				if(pj.partID == pi.partID /*|| pj.b == PartState.BOUND_*/)
 					continue;
 
-				StateVecD const Rij = pj.xi-pi.xi;
+				StateVecD const Rji = pj.xi-pi.xi;
 				real const r = sqrt(jj.second);
 				real const volj = pj.m/pj.rho;
 				real const kern = Kernel(r,fvar.H,fvar.correc);
-				StateVecD const gradK = GradK(Rij,r,fvar.H,fvar.correc);
+				StateVecD const gradK = GradK(Rji,r,fvar.H,fvar.correc);
 
 				deltaU += ( 1.0 + 0.2 * pow(kern/fvar.Wdx,4.0) ) * gradK * volj;
 				// deltaU += 
@@ -360,7 +440,7 @@ DELTAP const& dp, SPHState& pnp1)
 
 			deltaU = std::min(deltaU.norm(), maxUij/2.0) * deltaU.normalized();
 
-			if(pi.b != PartState.BUFFER_)
+			if(pi.b != BUFFER)
 			{		
 				/*Apply the partial shifting*/
                 pnp1[ii].vPert = deltaU;

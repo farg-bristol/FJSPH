@@ -617,7 +617,7 @@ namespace FOAM
         /* Find cell centres  */
         cout << "Finding cell centres..." << endl;
         vector<StateVecD> cCentre(nCells);
-        vector<vector<size_t>> elems(nCells);
+        // vector<vector<size_t>> elems(nCells);
         for(size_t ii = 0; ii < nCells; ++ii)
         {
             vector<size_t> verts;
@@ -639,7 +639,7 @@ namespace FOAM
             }
             sum /= verts.size();
             cCentre[ii] = sum;
-            elems[ii] = verts;
+            // elems[ii] = verts;
         }
 
         cout << "Placing data in cell structure..." << endl;
@@ -649,7 +649,7 @@ namespace FOAM
         cells.faces = faces; /* Face data */
         cells.leftright = leftright; 
 
-        cells.elems = elems; /* Cell data */
+        // cells.elems = elems; /* Cell data */
         cells.cCentre = cCentre;
         cells.cFaces = cFaces;
 

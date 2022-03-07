@@ -13,6 +13,7 @@
 #include "Containment.h"
 #include "Shifting.h"
 #include "IPT.h"
+#include "Add.h"
 #ifdef RK
 #include "Runge_Kutta.h"
 #else
@@ -23,8 +24,11 @@
 
 ///**************** Integration loop **************///
 real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar, 
-	MESH& cells, SURFS& surf_marks, DELTAP& dp, SPHState& pn, SPHState& pnp1, SPHState& airP, OUTL& outlist)
+	MESH& cells, SURFS& surf_marks, DELTAP& dp, SPHState& pn, SPHState& pnp1, vector<IPTState>& iptdata, OUTL& outlist)
 {
+	size_t const start = svar.bndPts;
+	size_t end_ng = svar.bndPts + svar.simPts;
+	
 	// cout << "Entered Newmark_Beta" << endl;
 	#ifndef RK
 	uint   k = 0;	//iteration number
@@ -35,17 +39,19 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	
 
 	// Find maximum safe timestep
-	vector<SPHPart>::iterator maxfi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
-		[](SPHPart const& p1, SPHPart const& p2){return p1.acc.norm()< p2.acc.norm();});
+	real maxf = 0.0;
+	real maxU = 0.0;
+	#pragma omp parallel for reduction(max: maxf, maxU)
+	for(size_t ii = start; ii < end_ng; ++ii)
+	{
+		maxf = std::max(maxf, pnp1[ii].acc.norm());
+		maxU = std::max(maxU, pnp1[ii].v.norm());
+	}
 
-	vector<SPHPart>::iterator maxUi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
-		[](SPHPart const& p1, SPHPart const& p2){return p1.v.norm()< p2.v.norm();});
-
-	real maxf = maxfi->acc.norm();
-	real maxU = maxUi->v.norm();
-	real dtv = fvar.HSQ * fvar.rho0/fvar.mu;
-	real dtf = sqrt(fvar.H/maxf);
-	real dtc = fvar.H/(maxU);
+	real dtv = 0.125 * fvar.HSQ * fvar.rho0/fvar.mu; /*Viscosity timestep constraint*/
+	real dtf = 0.25 * sqrt(fvar.H/maxf); 			 /*Force timestep constraint*/
+	real dtc = 2 * fvar.H/(maxU);					 /*Velocity constraint*/
+	real dtc2 = 1.5 * fvar.H/fvar.Cs; /* Acoustic constraint */ /* 2* can't be used without delta-SPH it seems. Divergent in tensile instability */
 
 	// Only use if -fno-finite-math-only is on
 	// if (std::isinf(maxf))
@@ -57,7 +63,8 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	/***********************************************************************************/
 	/***********************************************************************************/
 	/***********************************************************************************/
-		svar.dt = 0.125*std::min(dtf,std::min(dtc,dtv));
+		real safe_dt = 0.75*std::min(std::min(dtf,dtc2),std::min(dtc,dtv));
+		svar.dt = svar.cfl*safe_dt;
 	/***********************************************************************************/
 	/***********************************************************************************/
 	/***********************************************************************************/
@@ -68,25 +75,33 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		svar.dt = svar.dt_max;
 
 	if (svar.dt > (svar.frame+1)*svar.framet-svar.t)
-		svar.dt = (svar.frame+1)*svar.framet-svar.t + 1e-10;
+		svar.dt = (svar.frame+1)*svar.framet-svar.t + svar.dt_min;
 
 	#ifdef DEBUG
-	vector<SPHPart>::iterator maxAfi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
-	[](SPHPart const& p1, SPHPart const& p2){return p1.Af.norm()< p2.Af.norm();});
-	real maxAf = maxAfi->Af.norm();
-	cout << "time: " << svar.t << " dt: " << svar.dt <<  "  dtf: " << dtf << "  dtc: " << dtc << " Maxf: " << maxf << " MaxAf: " << maxAf << endl;
+		real maxAf = 0.0;
+		real maxRhoi = 0.0;
+		#pragma omp parallel for reduction(max: maxAf, maxRhoi)
+		for(size_t ii = start; ii < end_ng; ++ii)
+		{
+			maxAf = std::max(maxAf, pnp1[ii].Af.norm());
+			maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho-fvar.rho0));
+		}
+		real maxRho = 100*maxRhoi/fvar.rho0;
+		real cfl = svar.dt/safe_dt;
+		cout << "time: " << svar.t << " dt: " << svar.dt <<  " CFL: " << cfl 
+			<< " dRho: " << maxRho << " Maxf: " << maxf << " MaxAf: " << maxAf << endl;
 	#endif
 
 	TREE.NP1.index->buildIndex();
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
-	dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+	dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,dp);
 
 	// Check if the particle has moved to a new cell
 	if (svar.Asource == 1 || svar.Asource == 2)
 	{
 		// cout << "Finding cells" << endl;
-		FindCell(svar,fvar.sr,TREE,cells,dp,pn,pnp1);
+		FindCell(svar,avar,TREE,cells,dp,pn,pnp1);
 		if (svar.totPts != pnp1.size())
 		{	//Rebuild the neighbour list
 			// cout << "Updating neighbour list" << endl;
@@ -96,29 +111,57 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			svar.totPts = pnp1.size();
 			TREE.NP1.index->buildIndex();
 			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-			dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+			dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,dp);
 		}	
 	}
-	
+	#if SIMDIM == 3
+	else if (svar.Asource == 3)
+	{
+		/* Find the VLM influence for the particles */
+		for(size_t ii = start; ii < end_ng ; ii++)
+		{
+			if(dp.lam_ng[ii] < avar.cutoff  && pnp1[ii].b == FREE)
+			{
+				pnp1[ii].cellV = svar.vortex.getVelocity(pnp1[ii].xi);
+				pnp1[ii].cellID = 1;
+			}
+			else
+				pnp1[ii].cellID = 0;
+		}
+	}
+	#endif
+	else
+	{
+		for(size_t ii = start; ii < end_ng ; ii++)
+		{
+			if(dp.lam_ng[ii] < avar.cutoff  && pnp1[ii].b == FREE)
+			{
+				pnp1[ii].cellV = avar.vInf;
+				pnp1[ii].cellID = 1;
+			}
+			else
+				pnp1[ii].cellID = 0;
+		}
+	}
+
 	Detect_Surface(svar,fvar,avar,svar.bndPts,svar.totPts,dp,outlist,cells,pnp1);
 
 	if(svar.ghost == 1)
 	{	/* Poisson points */
 		PoissonGhost(svar,fvar,avar,cells,TREE.NP1,outlist,pn,pnp1);
-		dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+		dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,dp);
 	}
 	else if (svar.ghost == 2)
 	{	/* Lattice points */
 		LatticeGhost(svar,fvar,avar,cells,TREE,outlist,pn,pnp1);
-		dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+		dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,dp);
 	}
 
-	size_t const start = svar.bndPts;
 	size_t end = svar.totPts;
-	size_t end_ng = svar.bndPts + svar.simPts;
-	// const size_t piston = svar.psnPts;
 
-	// cout << "Cells found" << endl;
+	#ifndef NOFROZEN
+	dissipation_terms(fvar,start,end,outlist,dp,pnp1);
+	#endif
 
 	#ifdef ALE
 		if(svar.ghost > 0)
@@ -131,13 +174,13 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	if(svar.Asource == 2)
 	{
 		vector<size_t> tempcell;
-		#pragma omp parallel shared(pnp1)
+		#pragma omp parallel default(shared) // shared(pnp1)
 		{
 			std::vector<size_t> local;
 			#pragma omp for schedule(static) nowait
 			for (size_t ii = start; ii < end; ++ii)
 			{	
-				if(pnp1[ii].b == PartState.FREE_)
+				if(pnp1[ii].b == FREE)
 					local.emplace_back(pnp1[ii].cellID);
 			}
 
@@ -173,7 +216,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	StateVecD dropVel = StateVecD::Zero();
 	StateVecD Force = StateVecD::Zero();
 
-	#pragma omp parallel for
+	#pragma omp parallel for default(shared)
 	for(size_t ii = start; ii < end; ++ii )
 	{
 		xih[ii-start] = pnp1[ii].xi;
@@ -203,12 +246,12 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	TREE.NP1.index->buildIndex();
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
-	dSPH_PreStep(svar,fvar,end,pnp1,outlist,dp);
+	dSPH_PreStep(fvar,end,pnp1,outlist,dp);
 
 	if (svar.Asource == 1 || svar.Asource == 2)
 	{
 		// cout << "Finding cells" << endl;
-		FindCell(svar,fvar.sr,TREE,cells,dp,pn,pnp1);
+		FindCell(svar,avar,TREE,cells,dp,pn,pnp1);
 		if (svar.totPts != pnp1.size())
 		{	//Rebuild the neighbour list
 			// cout << "Updating neighbour list" << endl;
@@ -220,13 +263,19 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			end_ng = svar.bndPts + svar.simPts;
 			TREE.NP1.index->buildIndex();
 			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-			dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+			dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,dp);
+			
 		}	
 	}
 
 	Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 
+	#ifndef NOFROZEN
+	dissipation_terms(fvar,start,end,outlist,dp,pnp1);
+	#endif
+	
 	// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
+	
 	#ifdef ALE
 		if(svar.ghost > 0)
 			Particle_Shift_Ghost(svar,fvar,start,end_ng,outlist,dp,pnp1);
@@ -240,13 +289,13 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	{
 		cellsused.clear();
 		vector<size_t> tempcell;
-		#pragma omp parallel shared(pnp1)
+		#pragma omp parallel default(shared) // shared(pnp1)
 		{
 			std::vector<size_t> local;
 			#pragma omp for schedule(static) nowait
 			for (size_t ii = start; ii < end; ++ii)
 			{	
-				if(pnp1[ii].b == PartState.FREE_)
+				if(pnp1[ii].b == FREE)
 					local.emplace_back(pnp1[ii].cellID);
 			}
 
@@ -266,7 +315,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		cellsused.assign(s.begin(),s.end());
 		std::sort(cellsused.begin(),cellsused.end());
 
-		#pragma omp parallel for schedule(static)
+		#pragma omp parallel for schedule(static) default(shared)
 		for(size_t const& ii : cellsused)
 		{
 			// Work out the mass and volume fractions
@@ -339,17 +388,16 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			outlist,dp,logbase,k,error1,error2,xih,pn,pnp1,Force,dropVel);
 	#endif	
 
-	/*Add time to global*/
-	svar.t+=svar.dt;
+	
 
 	// cout << "Timestep Params: " << maxf << " " << fvar.Cs + svar.maxmu << " " << dtf << " " << dtcv << endl;
 	// cout << "New Time: " << svar.t << endl;
 
-	airP.clear();
-	for(size_t ii = end_ng; ii < end; ++ii)
-	{
-		airP.emplace_back(pnp1[ii]);
-	}
+	// airP.clear();
+	// for(size_t ii = end_ng; ii < end; ++ii)
+	// {
+	// 	airP.emplace_back(pnp1[ii]);
+	// }
 
 	/* Remove the ghost particles */
 	// if(svar.ghost != 0)
@@ -362,7 +410,8 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 	// 	svar.gstPts = 0;
 	// }
 
-	Check_If_Ghost_Needs_Removing(svar,fvar,TREE.NP1,pn,pnp1);
+	if(svar.ghost != 0)
+		Check_If_Ghost_Needs_Removing(svar,fvar,TREE.NP1,pn,pnp1);
 
 	/*Check if more particles need to be created*/
 	if(svar.Scase == 4)
@@ -385,10 +434,10 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 			if(vec[1] > clear)
 			{
 				/* particle has cleared the back zone */
-				pnp1[pID].b = PartState.PIPE_;
+				pnp1[pID].b = PIPE;
 
 				/* Update the back vector */
-				pnp1[svar.buffer[ii][0]].b = PartState.BACK_;
+				pnp1[svar.buffer[ii][0]].b = BACK;
 				svar.back[ii] = svar.buffer[ii][0];
 
 				/* Update the buffer vector */
@@ -404,12 +453,13 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 					xi[1] -= svar.dx;
 					xi = svar.Rotate*xi + svar.sim_start;
 					pnp1.insert(pnp1.begin() + end_ng,
-					SPHPart(xi,pnp1[svar.buffer[ii][3]],PartState.BUFFER_,partID));
+					SPHPart(xi,pnp1[svar.buffer[ii][3]],BUFFER,partID));
 					svar.buffer[ii][3] = end_ng;
-					if(svar.Asource == 0)
-					{
-						pnp1[partID].cellRho = pnp1[pID].cellRho;
-					}
+					// if(svar.Asource == 0 || svar.Asource == 3)
+					// {
+					// 	pnp1[end_ng].cellRho = avar.rhog;
+					// 	pnp1[end_ng].cellP = avar.pRef;
+					// }
 
 					svar.simPts++;
 					svar.totPts++;
@@ -419,31 +469,46 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 					nAdd++;
 				}
 			}
-
 		}
 
 		/* Check if any particles need to be deleted, and turned to particle tracking */
-		
-		uint nDel = 0;
-		if(svar.Asource != 0)
+		vector<size_t> to_del;
+		#pragma omp parallel for default(shared)
+		for(size_t ii = 0; ii < end_ng; ii++)
 		{
-			vector<size_t> to_del;
-			vector<IPTPart> IPT_nm1, IPT_n, IPT_np1;
-			#pragma omp parallel for
-			for(size_t ii = 0; ii < end_ng; ii++)
+			if(pnp1[ii].xi[0] > svar.max_x_sph)
 			{
-				if(pnp1[ii].xi[0] > svar.max_x_sph)
+				/* SPHPart is downstream enough to convert to IPT */
+				#pragma omp critical
 				{
-					/* SPHPart is downstream enough to convert to IPT */
-					#pragma omp critical
-					{
-						to_del.emplace_back(ii);
-						IPT_nm1.emplace_back(IPTPart(pnp1[ii],svar.t,svar.IPT_diam,svar.IPT_area));
-					}
+					to_del.emplace_back(ii);
 				}
 			}
+		}
 
-			/* Delete the old particles */
+		if(svar.using_ipt && svar.Asource != 0)
+		{
+			vector<IPTPart> IPT_nm1, IPT_n, IPT_np1;
+			for(size_t const& ii:to_del)
+			{
+				IPT_nm1.emplace_back(IPTPart(pnp1[ii],svar.t,svar.IPT_diam,svar.IPT_area));
+			}
+
+			/* Do particle tracking on the particles converted */
+			IPT_n = IPT_nm1;
+			IPT_np1 = IPT_nm1;
+			#pragma omp parallel for default(shared)
+			for(size_t ii = 0; ii < IPT_np1.size(); ++ii)
+			{
+				IPT::Integrate(svar, fvar,avar, cells,ii,IPT_nm1[ii],IPT_n[ii],IPT_np1[ii]
+							,surf_marks,iptdata);
+			}
+		}
+
+		/* Delete the old particles */
+		uint nDel = 0;
+		if(!to_del.empty())
+		{
 			std::sort(to_del.begin(), to_del.end());
 			for(vector<size_t>::reverse_iterator itr = to_del.rbegin(); itr!=to_del.rend(); ++itr)
 			{
@@ -453,18 +518,21 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				end_ng--;
 				end--;
 				nDel++;
+				svar.delNum++;
 			}
 
-			/* Do particle tracking on the particles converted */
-			IPT_n = IPT_nm1;
-			IPT_np1 = IPT_nm1;
-			#pragma omp parallel for
-			for(size_t ii = 0; ii < IPT_np1.size(); ++ii)
+			/* Need to shift back vector and buffer vector for correct inlet */
+			for(size_t& back:svar.back)
 			{
-				IPT::Integrate(svar, fvar,avar, cells,ii,IPT_nm1[ii],IPT_n[ii],IPT_np1[ii],surf_marks);
+				back -= nDel;
 			}
-		}
 
+			for(vector<size_t>& buffer:svar.buffer)
+				for(size_t& part:buffer)
+				{
+					part -= nDel;
+				}
+		}
 		if(nAdd != 0 || nDel != 0)
 		{
 			TREE.NP1.index->buildIndex();
@@ -493,7 +561,7 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 		real fMom = 0.0;
 		// cout << cells.size() << endl;
 
-		#pragma omp parallel for schedule(static)
+		#pragma omp parallel for schedule(static) default(shared)
 		for(size_t ii = 0; ii < cells.size(); ii++)
 		{
 			real fVol = real(cells.fNum[ii]) * avar.pVol;
@@ -514,7 +582,6 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 				aMomT += aMass*(cells.cVel[ii]+cells.cPertnp1[ii]).norm();
 				tMom += aMass*(cells.cVel[ii]+cells.cPertnp1[ii]).norm();
 			}
-			
 		}
 
 		for(size_t jj = 0; jj < end_ng; ++jj)
@@ -600,11 +667,29 @@ real Integrate(KDTREE& TREE, SIM& svar, const FLUID& fvar, const AERO& avar,
 // 			<< svar.Force.norm() << "  " << svar.Force(1) << endl;
 // 	}
 
+	/*Add time to global*/
+	svar.t+=svar.dt;
+
+	#ifdef DAMBREAK
+	/* Find max x and y coordinates of the fluid */
+		// Find maximum safe timestep
+	vector<SPHPart>::iterator maxXi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
+		[](SPHPart const& p1, SPHPart const& p2){return p1.xi[0] < p2.xi[0];});
+
+	vector<SPHPart>::iterator maxYi = std::max_element(pnp1.begin()+svar.bndPts,pnp1.end(),
+		[](SPHPart const& p1, SPHPart const& p2){return p1.xi[1] < p2.xi[1];});
+
+	real maxX = maxXi->xi[0];
+	real maxY = maxYi->xi[1];
+
+	dambreak << svar.t << "  " << maxX+0.5*svar.Pstep << "  " << maxY+0.5*svar.Pstep << endl;
+	#endif
+
 	return error1;
 }
 
 void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	MESH& cells, OUTL& outlist, DELTAP& dp, SPHState& pnp1, SPHState& pn, SPHState& airP)
+	MESH& cells, OUTL& outlist, DELTAP& dp, SPHState& pnp1, SPHState& pn, vector<IPTState>& iptdata)
 {
 	size_t const start = svar.bndPts;
 	size_t end = svar.totPts;
@@ -615,10 +700,10 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 		dbout << "  Start index: " << start << "  End index: " << end << endl;
 	#endif
 
-	dSPH_PreStep(svar,fvar,end,pnp1,outlist,dp);
+	dSPH_PreStep(fvar,end,pnp1,outlist,dp);
 	if (svar.Asource == 1 || svar.Asource == 2)
 	{
-		FindCell(svar,fvar.sr,TREE,cells,dp,pnp1,pn);
+		FindCell(svar,avar,TREE,cells,dp,pnp1,pn);
 		if (svar.totPts != pnp1.size())
 		{	//Rebuild the neighbour list
 			// cout << "Updating neighbour list" << endl;
@@ -630,7 +715,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 			end_ng = end;
 			TREE.NP1.index->buildIndex();
 			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-			dSPH_PreStep(svar,fvar,end,pnp1,outlist,dp);
+			dSPH_PreStep(fvar,end,pnp1,outlist,dp);
 			
 		}
 	}
@@ -640,13 +725,13 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	if(svar.ghost == 1)
 	{	/* Poisson points */
 		PoissonGhost(svar,fvar,avar,cells,TREE.NP1,outlist,pn,pnp1);
-		dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+		dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,dp);
 		// Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 	}
 	else if (svar.ghost == 2)
 	{	/* Lattice points */
 		LatticeGhost(svar,fvar,avar,cells,TREE,outlist,pn,pnp1);
-		dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
+		dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,dp);
 		// Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
 	}
 
@@ -718,10 +803,14 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 
 	// cout << "time: " << svar.t << " dt: " << svar.dt << "  dtv: " << dtv << "  dtf: " << dtf << "  dtc: " << dtc << " Maxf: " << maxf << endl;
 
+	#ifndef NOFROZEN
+	dissipation_terms(fvar,start,end,outlist,dp,pnp1);
+	#endif
+
 	// /*Previous SPHState for error calc*/
 	vector<StateVecD> xih(end-start);
 	// vector<StateVecD> xi(end); /*Keep original positions to reset after finding forces*/
-	#pragma omp parallel for shared(pnp1)
+	#pragma omp parallel for default(shared) // shared(pnp1)
 	for (size_t  ii=start; ii < end; ++ii)
 	{
 		xih[ii-start] = pnp1[ii].xi;
@@ -774,11 +863,11 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	TREE.NP1.index->buildIndex();
 	FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
-	dSPH_PreStep(svar,fvar,end,pnp1,outlist,dp);
+	dSPH_PreStep(fvar,end,pnp1,outlist,dp);
 
 	if (svar.Asource == 1 || svar.Asource == 2)
 	{
-		FindCell(svar,fvar.sr,TREE,cells,dp,pnp1,pn);
+		FindCell(svar,avar,TREE,cells,dp,pnp1,pn);
 		if (svar.totPts != pnp1.size())
 		{	//Rebuild the neighbour list
 			// cout << "Updating neighbour list" << endl;
@@ -790,12 +879,16 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 			end_ng = end;
 			TREE.NP1.index->buildIndex();
 			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
-			dSPH_PreStep(svar,fvar,end,pnp1,outlist,dp);
+			dSPH_PreStep(fvar,end,pnp1,outlist,dp);
 			
 		}
 	}
 
 	Detect_Surface(svar,fvar,avar,start,end_ng,dp,outlist,cells,pnp1);
+
+	#ifndef NOFROZEN
+	dissipation_terms(fvar,start,end,outlist,dp,pnp1);
+	#endif
 	
 	/*Do time integration*/
 	#ifdef RK
@@ -820,11 +913,11 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 	// 	<< "  avgV: " << dp.avgV[ii].norm() << "  lam: " << dp.lam[ii] << "  kernsum: " << dp.kernsum[ii] << endl;
 	// }
 
-	airP.clear();
-	for(size_t ii = end_ng; ii < end; ++ii)
-	{
-		airP.emplace_back(pnp1[ii]);
-	}
+	// airP.clear();
+	// for(size_t ii = end_ng; ii < end; ++ii)
+	// {
+	// 	airP.emplace_back(pnp1[ii]);
+	// }
 
 	/* Remove the ghost particles */
 	// if(svar.ghost != 0)
@@ -882,7 +975,7 @@ void First_Step(KDTREE& TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
 		bigdrop.mug = avar.mug;
 
 		// real temp = radius / std::cbrt(3.0/(4.0*M_PI));
-		GetYcoef(bigdrop,fvar,svar.diam);
+		bigdrop.GetYcoef(fvar,svar.diam);
 		
 		real ymax = Vdiff.squaredNorm()*bigdrop.ycoef;
 		if (ymax > 1)
