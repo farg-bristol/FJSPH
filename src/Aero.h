@@ -40,6 +40,7 @@ inline StateVecD const AeroForce(StateVecD const& Vdiff, AERO const& avar, real 
 	return (0.5*avar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai);
 }
 
+
 /*Sphere-Plate interpolation method - Gissler et al (2017)*/
 inline StateVecD const GisslerForce(AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, 
 						real const& rho, real const& press, real const& mass, real const& lam, real const& woccl)
@@ -47,13 +48,12 @@ inline StateVecD const GisslerForce(AERO const& avar, StateVecD const& Vdiff, St
 	// real const nfull = avar.nfull;
 	real const Re = 2.0*rho*Vdiff.norm()*avar.L/avar.mug;
 	
-	real const frac2 = std::min(2.0 * lam, 1.0);
+  real const frac2 = std::min(2.0 * lam, 1.0);
 	real const frac1 = (1.0 - frac2);
 
  	real const Cds  = GetCd(Re);
-
 	real Cdl, Adrop;
-	
+
 	#if SIMDIM == 3 
 		if(avar.useDef)
 		{
@@ -92,6 +92,7 @@ inline StateVecD const GisslerForce(AERO const& avar, StateVecD const& Vdiff, St
 	// cout << "Areas: " << Ai << "  " << Adrop << "  " << avar.aPlate << endl;
 	// cout << "Re: " << Re << "  Cds: " << Cdi << "  "  << Cdl << "  " << Cds  << endl;
 	// cout << "F: " << F(0) << "  " << F(1) << endl << endl;
+
 
 	// return  0.5*rho*Vdiff.norm()*Vdiff*Cdi*Ai / mass;
 	return  0.5 * Vdiff.norm() * Vdiff / (avar.sos*avar.sos) *
@@ -205,6 +206,7 @@ inline StateVecD const InducedPressure(AERO const& avar, StateVecD const& Vdiff,
 	/* Pure droplet force */
 	StateVecD const acc_drop = 0.5*Vdiff*Vdiff.norm()/(avar.sos*avar.sos) * avar.gamma * pi.cellP
 					* (M_PI*avar.L*avar.L*0.25) * Cdi/pi.m;
+
 	// aeroD = -Pi * avar.aPlate * norm[ii].normalized();
 
 	/* Induce pressure force */
@@ -285,7 +287,6 @@ StateVecD CalcAeroAcc(AERO const& avar, SPHPart const& pi, StateVecD const& Vdif
 	}
 	else if(avar.acase == 4)
 	{
-
 		// real ymax = Vdiff.squaredNorm()*avar.ycoef;
 
 		// acc = AeroForce(Vdiff, avar, pi.m);
@@ -328,8 +329,8 @@ StateVecD CalcAeroAcc(AERO const& avar, SPHPart const& pi, StateVecD const& Vdif
 		#else
 			acc = -norm.normalized()*Aunocc*press;
 		#endif
-	}
 
+	}
 	return acc;
 }
 

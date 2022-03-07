@@ -84,10 +84,12 @@ inline void Average_Point_Data_to_Cell(SIM const& svar, vector<StateVecD> const&
 			cRho_ += dens[jj];
 		}
 
+
 		cells.cCentre[ii] = cCentre_ / nVerts;
 		cells.cVel[ii] = cVel_ / nVerts;
 		cells.cP[ii] = cPress_ / nVerts;
 		cells.cRho[ii] = cRho_ / nVerts;
+
 
 		/*Find cell volumes*/
 		if(svar.Asource == 2)
@@ -584,7 +586,9 @@ namespace TAU
 		#ifdef DEBUG
 			dbout << "Opening solultion file." << endl;
 		#endif 
+    
 		string const& solIn = svar.tausol;
+
 		int retval;
 		int solID;
 
@@ -789,9 +793,7 @@ namespace TAU
 		// 	}
 		// }
 
-		
 		vector<int> markers = Get_Scalar_Property_int(fin,"boundarymarker_of_surfaces",cells.nSurf);
-
 		vector<std::pair<int, int>> leftright(nEdge);
 		cells.smarkers = vector<std::pair<size_t,int>>(cells.nSurf);
 	
@@ -862,53 +864,6 @@ namespace TAU
 			dbout << "End of placing edges in elements." << endl;
 		#endif
 
-		/*Now go through the faces and see which vertices are unique, to get element data*/
-		// cout << "Building elements..." << endl;
-		// #pragma omp parallel default(shared)
-		// {
-		// 	// vector<vector<uint>> local;
-		// 	#pragma omp for schedule(static) nowait
-		// 	for (uint ii = 0; ii < cells.cFaces.size(); ++ii)
-		// 	{
-		// 		for (auto const &index : cells.cFaces[ii])
-		// 		{
-		// 			vector<size_t> const face = cells.faces[index];
-		// 			for (auto const &vert : face)
-		// 			{
-		// 				if (std::find(cells.elems[ii].begin(), cells.elems[ii].end(), vert) == cells.elems[ii].end())
-		// 				{ /*Vertex doesn't exist in the elems vector yet.*/
-		// 					#pragma omp critical
-		// 					{
-		// 						cells.elems[ii].emplace_back(vert);
-		// 					}
-		// 				}
-		// 			}
-		// 		}
-		// 	}
-
-		// 	/*Find cell centres*/
-		// 	#pragma omp single
-		// 	{
-		// 		cout << "Finding cell centres..." << endl;
-		// 	}
-
-		// 	Average_Point_to_Cell(cells.verts, cells.cCentre, cells.elems);
-
-		// 	/*Find cell centres*/
-		// 	#pragma omp single
-		// 	{
-		// 		cout << "Finding cell volumes..." << endl;
-		// 	}
-
-		// 	// Find cell volumes
-		// 	#pragma omp for schedule(static) nowait
-		// 	for (size_t ii = 0; ii < cells.elems.size(); ++ii)
-		// 	{
-		// 		cells.cVol[ii] = Cell_Volume(cells.verts, cells.faces, cells.elems[ii], cells.cFaces[ii], cells.cCentre[ii]);
-		// 	}
-		// }
-		// cout << "Elements built." << endl;
-
 		#ifdef DEBUG
 			dbout << "All elements defined." << endl
 				<< endl;
@@ -971,6 +926,7 @@ namespace TAU
 		cout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << " nSurf: " << nSurf << endl;
 
 		cells.alloc(nPnts, nElem, nEdge, nSurf, svar.Asource);
+
 
 		// cells.nPnts = nPnts;
 		// cells.nElem = nElem;
@@ -1083,6 +1039,7 @@ namespace TAU
 					{
 						local.emplace_back(ii);
 					}
+
 				}
 
 				/* Find the longest edge */
@@ -1144,58 +1101,6 @@ namespace TAU
 		#endif
 
 		cells.leftright = leftright;
-
-		/*Now go through the faces and see which vertices are unique, to get element data*/
-		// cout << "Building elements..." << endl;
-		// #pragma omp parallel default(shared)
-		// {
-		// 	// Create list of unique vertex indices for each element
-		// 	#pragma omp for schedule(static) nowait
-		// 	for (size_t ii = 0; ii < cells.cFaces.size(); ++ii)
-		// 	{
-		// 		for (auto const &index : cells.cFaces[ii])
-		// 		{
-		// 			vector<size_t> const face = cells.faces[index];
-		// 			for (auto const& vert : face)
-		// 			{
-		// 				if (std::find(cells.elems[ii].begin(), cells.elems[ii].end(), vert) == cells.elems[ii].end())
-		// 				{ /*Vertex doesn't exist in the elems vector yet.*/
-		// 					#pragma omp critical
-		// 					{
-		// 						cells.elems[ii].emplace_back(vert);
-		// 					}
-		// 				}
-		// 			}
-		// 		}
-		// 	}
-
-		// 	/*Find cell centres*/
-		// 	#pragma omp single
-		// 	{
-		// 		cout << "Finding cell centres..." << endl;
-		// 	}
-
-		// 	Average_Point_to_Cell(cells.verts, cells.cCentre, cells.elems);
-
-		// 	/*Find cell volumes*/
-		// 	if(svar.Asource == 2)
-		// 	{
-		// 		#pragma omp single
-		// 		{
-		// 			cout << "Finding cell volumes..." << endl;
-		// 		}
-
-		// 		// Find cell volumes 
-		// 		#pragma omp for schedule(static) nowait
-		// 		for (size_t ii = 0; ii < cells.elems.size(); ++ii)
-		// 		{
-		// 			cells.cVol[ii] = Cell_Volume(cells.verts, cells.faces, cells.elems[ii], 
-		// 								cells.cFaces[ii], cells.cCentre[ii]);
-		// 		}
-		// 	}
-		// }
-
-		// cout << "Elements built." << endl;
 
 		#ifdef DEBUG
 			dbout << "All elements defined." << endl << endl;
@@ -1284,25 +1189,6 @@ namespace TAU
 		cout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << " nSurf: " << nSurf << endl;
 
 		cells.alloc(nPnts, nElem, nFace, nSurf, svar.Asource);
-		// cells.nPnts = nPnts;
-		// cells.nElem = nElem;
-		// cells.nFace = nFace;
-		// cells.nSurf = nSurf;
-
-		// cells.elems = vector<vector<size_t>>(nElem);
-		// cells.cFaces = vector<vector<size_t>>(nElem);
-		// cells.cCentre = vector<StateVecD>(nElem);
-		// if(svar.Asource == 2)
-		// {
-		// 	cells.cVol = vector<real>(nElem);
-		// 	cells.cMass = vector<real>(nElem);
-		// }
-
-		// cells.verts = vector<StateVecD>(nPnts);
-
-		// cells.vel = 
-
-		// cells.leftright = vector<std::pair<int,int>>(nFace);
 
 		/*Get the faces of the mesh*/
 		if (hasTrig)

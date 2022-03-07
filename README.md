@@ -13,11 +13,11 @@ Recently work has been done to massively improve the performance of SPH in regio
 # What does this code do?
 At present the code is still in large development, and many features are not present, that I would like to be. IO is a large area where work has been avoided. This repository is hugely designed for simulating fuel exiting a pipe, into an aerodynamic solution provided using a TAU mesh format. Examples of these are provided to give an idea how to interact with the program. Equations wise, the current code has the following set of formulations (detailed in the references stated below):
 
-Base SPH: Monaghan (1992) + delta-SPH continuity correction (Marrone,2018). Currently undergoing testing for ALE-SPH (Sun,2019).
+Base SPH: Monaghan (1992) + delta-SPH continuity correction (Marrone,2018) + ALE-SPH (Sun,2019).
 
 Laminar Viscosity: Linking of artificial viscosity to actual viscosity (1997).
 
-Surface Tension: Continuum Surface Force (Brackbill,1997) with interactions restricted to surface particles (Ordoubadi,2015).
+Surface Tension: Pairwise force (Nair and Poeschel, 2018).
 
 Aerodynamic coupling: Upwind droplet continuum correction (Gissler et al.,2017).
 
@@ -40,19 +40,20 @@ The bare minimum of Eigen has been provided in the repository, and additional do
 
 # Building
 A makefile is provided to ease compliation. 
-There are several options in the build file, but because there are so few dependencies and files associated at present, it is still a single compile line.
+There are several options in the build file, but because there are so few dependencies and files associated at present, it is still a single compile line. 
+The target directory for compilation has been taken as `$(HOME)/bin` for the compilation, and this will need adjusting to wherever you wish the program to exist.
 In the makefile are four primary options: `2D`, `debug2`, `3D`, and `debug3`. 
 
 These are build options for two and three dimensions, and with or without debug flags. 
-Additionally are options to build associated programs Cell2Edge (`c2e`), for building 2D Edge based mesh files from TAU files, and Cell2Face (`c2f`) for 3D TAU meshes to face based data. 
+Additionally are options to build associated programs Cell2Edge (`c2e`), for building 2D Edge based mesh files from TAU files, and Cell2Face (`c2f`) for 3D TAU meshes to face based data. This does not need to be run for OpenFOAM meshes, as it is already a face based file format.
 
 Lastly are some options that can be passed to the compiler, using the `FLAGS` option, e.g. `make 2D FLAGS='-DNOALE'`. 
-Currently the three accepted flags are `-DNOALE`, `-DCUBIC`, and `-DRK`. 
-The NOALE flag turns off the particle shifting and ALE momentum and continuity equations, which are on by default to improve the distribution of the particles. 
-The cubic flag changes the kernel to the cubic spline, instead of the Wendland C2. While provided, it is not recommended, as in the tests I've done it quickly becomes unstable.
-Lastly, the RK flag switches the integration method from a Newmark-Beta semi-implicit scheme to an explicit Runge-Kutta 4th order scheme, with frozen diffusive terms.
-It is debatable which method is faster, however it has been observed that Newmark-Beta is more stable, and remains the default integration method.
-
+Currently the accepted flags are `-DALE`, `-DDSPH`, `-DRK`, and `-DCUBIC`. 
+DSPH turns on delta-SPH continuity contribution.
+The ALE flag turns on the particle shifting and ALE momentum and continuity equations. 
+The RK flag switches the integration method from a Newmark-Beta semi-implicit scheme to an explicit Runge-Kutta 4th order scheme, with frozen diffusive terms.
+It is debatable which method is faster or more stable, however it is known that Newmark-Beta is more conserving of energy, and remains the default integration method.
+Lastly, the cubic flag changes the kernel to the cubic spline, instead of the Wendland C2. While provided, it is not recommended, as in the tests I've done it quickly becomes unstable.
 
 ## C++ Standards
 The NanoFLANN code requires C++11 standard support, and so will not build on Visual Studio 13, due to an incomplete support of the C++11 standard. If you are on windows and don't have access to VS15, then MinGW is the next best bet (unless you are on windows 10, and have WSL enabled).
@@ -60,34 +61,28 @@ The NanoFLANN code requires C++11 standard support, and so will not build on Vis
 Syntax has been used that requires **g++ 9 or later**, so the code will not compile with g++ 8 or older. 
 
 # Input
-On the command line either one, or two options exists; a clean run or run from a current solution. If no inputs are provided, the code exits without performing anything. Comments are provided in the input file that should be self-explanatory as to their function.
+On the command line, only one argument is accepted; the input para file.
+The executable is assumed to be on the system path, but can be put in the same folder to run.
+Inside the input file, it is hoped that the title of variables give a good indication of their function, but work will need to be done to create documentation of the options available.
+A number of 2D and 3D examples are provided in the examples folder, that should be possible to adapt to the required task.
 
-Option 1: `./WCSPH Droplet2D`
+Example run: `2DFJSPH para2D`
 Provide the input folder for the simulation. This starts the simulation from time 0, and removes any current output files to start writing anew.
+Once the simulation writes the first timestep, it will append a line to the end of the para file to say there is data available to restart from. 
+If a restart is not desired this line will need to be deleted.
 
-Option 2: `./WCSPH -r Droplet2D`
-This restarts the simulation, assuming that the output data exists and can be restarted from.
-
-More than two arguments simply states a warning that they will be ignored. 
-
-In the input folder should be all files required for the simulation.
-The two files that are required for any and all simulations is the "settings" and "fluid" files. 
-If the simulation involves a mesh, then the mesh and solution file are expected in the same folder, and these file names are expected in the fluid file, after the solution file. For an example of a mesh based simulation, look at the **RAE2822** folder. 
+If the simulation involves a mesh, then the mesh and solution file are expected in the same folder; look at the **RAE2822** folder for an example. 
 
 # Output
 The code uses the TECIO library to output szplt files, because of it's highly efficient storage, and great ability to append to an existing file, and ability to view the results with the simulation still running. 
-There are three files that are output in this format: "Boundary.szplt", "Fuel.szplt", and "Restart.szplt". 
-The first two files provide the point data for all the SPH particles. The boundary and fuel are separate if one wished to save space and not output the boundary files during the simulation.
-If this option is selected however, restart is not possible. 
+There are two files that are output, appending "_boundary.szplt" and "_fuel.szplt" to the output prefix defined in the para file.  
+If there are no boundary points, the boundary file will not be created.
 
-Lastly, the restart file is written to provide a lossless storage of parameters to restart the simulation.
-For the restart to work, certain output options need to be selected to have restart data. Three options exist, two of which are for mesh-based rruns.
-Output option 2 is restart data for non mesh based runs, i.e. with uniform flow. 
-Output option 5 is restart data for a mesh based run, with less information about the cell, whereas option 3 is all cell data is also written for the point.
+For successful restart certain outputs are required to give enough information. For any simulation, any option above 1 is possible to restart from. However for mesh based simuations, only 3 or 5 can be restarted from, as these contain the cell information.
 
 # Future Plans
-A great amount more work could be done in this field. 
-Section needs to be added to later.
+More work into ghost or fictitious particles would be an interesting avenue, that has a good potential for a lot of information transmission, with higher stability. 
+Not only can momentum information be transferred, but potentially pressure as well.
 
 
 # References 

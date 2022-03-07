@@ -677,7 +677,6 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 			variables += ",v_"+a1+",v_"+a2+",a_"+a1+",a_"+a2+",b,partID,lambda,surface,a_aero_"+a1+",a_aero_"+a2;
 
 	#endif
-
 	#if SIMDIM == 3
 		std::string variables = "X,Y,Z";  
 		if(svar.outform > 0)
@@ -697,6 +696,7 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 		else if (svar.outform == 6)
 			variables += ",v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface";
 		else if (svar.outform == 7)
+
 			variables += ",v_x,v_y,v_z,a_x,a_y,a_z,b,partID,lambda,surface,a_aero_x,a_aero_z";
 	#endif
 
@@ -1275,6 +1275,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& 
 		/* Set density based on pressure. More information this way */
 		pn[ii].rho = std::max(fvar.rhoMin,std::min(fvar.rhoMax, 
 			density_equation(pn[ii].p, fvar.B, fvar.gam, fvar.Cs, fvar.rho0)));
+
 
 		if(pn[ii].b == BACK)
 		{

@@ -30,6 +30,11 @@ using std::vector;
 typedef double real;
 typedef unsigned int uint;
 
+#ifdef DEBUG
+	/*Open debug file to write to*/
+	std::ofstream dbout("Cell_Convert.log",std::ios::out);
+#endif
+
 uint index(uint ii, uint jj, uint nPts)
 {
 	return(ii*nPts + jj);

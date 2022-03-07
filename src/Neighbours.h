@@ -17,7 +17,7 @@ void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, SPHState const
 	// vector<vector<std::pair<size_t,real>>> plist;
 	// plist.reserve(pnp1.size());
 
-	#pragma omp parallel
+	#pragma omp parallel default(shared)
 	{	/*Find neighbour list*/
 		OUTL local; /*Local processor copy*/
 		// vector<vector<std::pair<size_t,real>>> plocal;
@@ -84,7 +84,7 @@ void FindCellNeighbours(Vec_Tree const& CELL_INDEX, vector<StateVecD> const& cel
 
 	outlist = vector<vector<size_t>>(cells.size(),vector<size_t>(num_results));
 
-	#pragma omp parallel
+	#pragma omp parallel default(shared)
 	{	/*Find neighbour list*/
 		
 		#pragma omp for schedule(static) nowait 
