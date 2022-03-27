@@ -19,7 +19,7 @@
 #endif
 
 
-void write_header() 
+inline void write_header() 
 {
 	cout << "******************************************************************" << endl << endl;
 	cout << "                              WCSPH                               " << endl << endl;
@@ -72,7 +72,7 @@ void check_folder(string pathname)
 	}
 }
 
-int Combine_SZPLT(string& file)
+inline int Combine_SZPLT(string& file)
 {
 	string cmd = "exec szcombine \"";
 	cmd.append(file);
@@ -210,19 +210,19 @@ void Check_If_Restart_Possible(SIM const& svar)
   	}
 }
 
-std::string ltrim(const std::string &s)
+inline std::string ltrim(const std::string &s)
 {
     size_t start = s.find_first_not_of(WHITESPACE);
     return (start == std::string::npos) ? "" : s.substr(start);
 }
  
-std::string rtrim(const std::string &s)
+inline std::string rtrim(const std::string &s)
 {
     size_t end = s.find_last_not_of(WHITESPACE);
     return (end == std::string::npos) ? "" : s.substr(0, end + 1);
 }
 
-string Get_Parameter_Value(string const& line)
+inline string Get_Parameter_Value(string const& line)
 {
     size_t pos = line.find(":");
     size_t end = line.find("#",pos+1); /* Check if a comment exists on the line */
@@ -237,9 +237,14 @@ string Get_Parameter_Value(string const& line)
     return ltrim(rtrim(value));
 }
 
-void Get_String(string const& line, string const& param, string &value)
+inline void Get_String(string const& line, string const& param, string &value)
 {
-    if(line.find(param) != string::npos)
+    size_t pos = line.find(":");
+	string substr;
+	if(pos != string::npos)
+		substr = line.substr(0,pos);
+
+    if(substr == param)
     {
         value = Get_Parameter_Value(line);
     }
@@ -248,7 +253,12 @@ void Get_String(string const& line, string const& param, string &value)
 template<typename T>
 void Get_Number(string const& line, string const& param, T &value)
 {
-    if(line.find(param) != string::npos)
+	size_t pos = line.find(":");
+	string substr;
+	if(pos != string::npos)
+		substr = line.substr(0,pos);
+
+    if(substr == param)
     {
         string temp = Get_Parameter_Value(line);
         std::istringstream iss(temp);
@@ -256,10 +266,15 @@ void Get_Number(string const& line, string const& param, T &value)
     }
 }
 
-void Get_Vector(string const& line, string const& param, 
+inline void Get_Vector(string const& line, string const& param, 
 			Eigen::Matrix<real,3,1>/* vec<real,3> */ &value)
 {
-    if(line.find(param) != string::npos)
+    size_t pos = line.find(":");
+	string substr;
+	if(pos != string::npos)
+		substr = line.substr(0,pos);
+
+    if(substr == param)
     {
         string temp = Get_Parameter_Value(line);
         std::istringstream iss(temp);
@@ -283,10 +298,15 @@ void Get_Vector(string const& line, string const& param,
     }
 }
 
-void Get_Vector(string const& line, string const& param, 
+inline void Get_Vector(string const& line, string const& param, 
 			Eigen::Matrix<real,2,1>/* vec<real,2> */ &value)
 {
-    if(line.find(param) != string::npos)
+    size_t pos = line.find(":");
+	string substr;
+	if(pos != string::npos)
+		substr = line.substr(0,pos);
+
+    if(substr == param)
     {
         string temp = Get_Parameter_Value(line);
         std::istringstream iss(temp);
@@ -306,10 +326,15 @@ void Get_Vector(string const& line, string const& param,
     }
 }
 
-void Get_Vector(string const& line, string const& param, 
+inline void Get_Vector(string const& line, string const& param, 
 			Eigen::Matrix<int,3,1>/* vec<int,3> */ &value)
 {
-    if(line.find(param) != string::npos)
+    size_t pos = line.find(":");
+	string substr;
+	if(pos != string::npos)
+		substr = line.substr(0,pos);
+
+    if(substr == param)
     {
         string temp = Get_Parameter_Value(line);
         std::istringstream iss(temp);
@@ -333,10 +358,15 @@ void Get_Vector(string const& line, string const& param,
     }
 }
 
-void Get_Vector(string const& line, string const& param, 
+inline void Get_Vector(string const& line, string const& param, 
 				Eigen::Matrix<int,2,1>& value)
 {
-    if(line.find(param) != string::npos)
+	size_t pos = line.find(":");
+	string substr;
+	if(pos != string::npos)
+		substr = line.substr(0,pos);
+
+    if(substr == param)
     {
         string temp = Get_Parameter_Value(line);
         std::istringstream iss(temp);
@@ -357,10 +387,15 @@ void Get_Vector(string const& line, string const& param,
 }
 
 template<typename T>
-void Get_Array(string const& line, string const& param, 
+inline void Get_Array(string const& line, string const& param, 
 				vector<T>& value)
 {
-    if(line.find(param) != string::npos)
+    size_t pos = line.find(":");
+	string substr;
+	if(pos != string::npos)
+		substr = line.substr(0,pos);
+		
+    if(substr == param)
     {
         string temp = Get_Parameter_Value(line);
         std::istringstream iss(temp);
@@ -377,7 +412,7 @@ void Get_Array(string const& line, string const& param,
     }
 }
 
-inline const uint index(uint ii, uint jj, uint nii)
+inline uint index(uint ii, uint jj, uint nii)
 {
 	return(ii + jj*nii);
 }

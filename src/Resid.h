@@ -98,12 +98,15 @@ inline real surface_tension_fac(int const bA, int const bB)
 }
 
 inline StateVecD SurfaceTens(StateVecD const& Rji, real const& r, real const& h, real const& sig,  real const& lam, 
-					real const& npdm2, real const& pi3o4, int const& bA, int const& bB)
+					real const& npdm2, real const& pi3o4, int const& bA, int const& bB, real const& voli, real const& volj)
 {
-	real fac = surface_tension_fac(bA, bB); 
+	real const fac = surface_tension_fac(bA, bB); 
 
 	/*npd = numerical particle density (see code above) */
-	return -0.5*npdm2*(sig/lam)*fac*cos(pi3o4*r/h)*(Rji/r);
+	return -0.5*npdm2*(sig/lam)*fac*cos(pi3o4*r/h)*(Rji/r) * voli * volj;
+	// (void) voli;
+	// (void) volj;
+	// return -0.5*npdm2*(sig/lam)*fac*cos(pi3o4*r/h)*(Rji/r);
 }
 #endif
 
@@ -347,7 +350,8 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 	const size_t end = svar.totPts;
 
 	#ifdef PAIRWISE
-	real const npdm2 = 1/(dp.npd*dp.npd);
+	// real const npdm2 = 1/(dp.npd*dp.npd);
+	// real const npdm2 = 1/(d)
 	real const pi3o4 = 3.0*M_PI/4.0;
 
 	/*Surface tension factor*/
@@ -384,7 +388,6 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 		/*Gravity Vector*/
 		StateVecD const& g = svar.grav;
 		
-
 		if(svar.bound_solver == 1)
 		{
 			/******** LOOP 2 - Boundary points: Calculate density and pressure. **********/		
@@ -422,7 +425,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 			} /*End of boundary parts*/
 		}
 
-/******* LOOP 4 - All simulation points: Calculate forces on the fluid. *********/
+		/******* LOOP 4 - All simulation points: Calculate forces on the fluid. *********/
 		#pragma omp for reduction(+:Force,RV,Af) schedule(static) nowait
 		for (size_t ii = start; ii < end; ++ii)
 		{
@@ -457,6 +460,9 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 			real Rrhod = 0.0;			
 			#endif
 			#endif
+
+			real const npdm2 = 1/(dp.colour[ii]*dp.colour[ii]);
+			real const voli = pi.m/pi.rho;
 
 			if( dp.lam_ng[ii] < avar.cutoff /* pi.surf == 1 */ && pi.b == FREE )
 			{
@@ -540,10 +546,11 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, S
 					#endif
 					
 					#ifdef PAIRWISE
+					
 					#ifdef ALE
 					if(pi.surfzone == 1)	/* Nair & Poeschel (2017) - Pairwise force */
 					#endif
-						surfT += SurfaceTens(Rji,r, fvar.H, fvar.sig,lam,npdm2,pi3o4,pi.b,pj.b);
+						surfT += SurfaceTens(Rji, r, fvar.H, fvar.sig, lam, npdm2, pi3o4, pi.b, pj.b, voli, volj);
 					#endif	
 				}
 				
