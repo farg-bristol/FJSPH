@@ -757,7 +757,6 @@ void FindCell(SIM& svar, AERO const& avar, KDTREE const& TREE, MESH const& cells
             }
         }
 
-
         
         if(inside_flag == 0)
         {   /*If first search fails to find the cell, perform a large search*/
@@ -777,7 +776,6 @@ void FindCell(SIM& svar, AERO const& avar, KDTREE const& TREE, MESH const& cells
             // uint count = 0;
             for(auto const& cell:ret_indexes)
             {   
-
                 if(CheckCell(cell,cells,testp))
                 {
                     #ifdef DEBUG
@@ -819,13 +817,11 @@ void FindCell(SIM& svar, AERO const& avar, KDTREE const& TREE, MESH const& cells
                             #endif
                             if(ints)
                             {
-
                                 cross=!cross;
                                 if(cells.leftright[findex].second == -1)
                                 {
                                     #pragma omp critical
                                     {
-
                                         cout << "Particle has crossed an inner boundary!" << endl;
                                     }
                                     pnp1[ii].internal = 1;
@@ -846,16 +842,7 @@ void FindCell(SIM& svar, AERO const& avar, KDTREE const& TREE, MESH const& cells
                 {
                     if(pnp1[ii].nFailed > 10)
                     {
-                        if(pnp1[ii].nFailed > 10)
-                        {
-                            #pragma omp critical
-                            {
-                                cout << "Particle " << ii-start << " containing cell not found. Something is wrong." << endl;
-                                Write_Containment(svar,ret_indexes,cells,testp);
-                                exit(-1);
-                            }
-                        }
-                        else
+                        #pragma omp critical
                         {
                             cout << "Particle " << ii-start << " containing cell not found. Something is wrong." << endl;
                             Write_Containment(svar,ret_indexes,cells,testp);

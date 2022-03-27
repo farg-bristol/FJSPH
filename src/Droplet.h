@@ -9,7 +9,7 @@
 
 
 /*Sphere-Plate interpolation method - Gissler et al (2017)*/
-inline void const Droplet_GisslerForce(AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, 
+inline void Droplet_GisslerForce(AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, 
 						real const& rho, real const& press, real const& mass, real const& lam, real const& woccl,
                         StateVecD& totAcc, StateVecD& sphereAcc, StateVecD& plateAcc)
 {
@@ -74,7 +74,7 @@ inline void const Droplet_GisslerForce(AERO const& avar, StateVecD const& Vdiff,
 
 }
 
-inline void const Droplet_InducedPressure(AERO const& avar, StateVecD const& Vdiff,
+inline void Droplet_InducedPressure(AERO const& avar, StateVecD const& Vdiff,
         StateVecD const& norm, real const& Pbasei, real const& lam, SPHPart const& pi,
         StateVecD& totAcc, StateVecD& sphereAcc, StateVecD& plateAcc)
 {

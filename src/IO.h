@@ -36,9 +36,12 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar)
 	fvar.rhoJ = density_equation(fvar.pPress,fvar.B,fvar.gam,fvar.Cs,fvar.rho0);
 	
 	/* Upper and lower limits for density */
-	fvar.rhoMax = fvar.rho0*(1.0 + fvar.rhoVar*0.01);
-	fvar.rhoMin = fvar.rho0*(1.0 - fvar.rhoVar*0.01);
-
+	if(fvar.rhoMax == 1500 && fvar.rhoMin == 500)
+	{	/* If limits are undefined, use a variation around the base density */
+		fvar.rhoMax = fvar.rho0*(1.0 + fvar.rhoVar*0.01);
+		fvar.rhoMin = fvar.rho0*(1.0 - fvar.rhoVar*0.01);
+	}
+	
 	svar.nrad = 1;
 	if(svar.Scase == 1)
 	{
@@ -245,7 +248,8 @@ void Print_Settings(char** argv, SIM const& svar, FLUID const& fvar, AERO const&
 	cout << endl;		
 	cout << "****** RESTING FUEL SETTINGS *******" << endl;
 	cout << "Resting density: " << fvar.rho0 << endl;
-	cout << "Maxmimum density variation: " << fvar.rhoVar << "\%" << endl;
+	cout << "Maxmimum density: " << fvar.rhoMax << endl;
+	cout << "Minimum density: " << fvar.rhoMin << endl;
 	cout << "Particle spacing: " << svar.Pstep << endl;
 	cout << "Support radius: " << fvar.H << endl;
 	cout << "Particle mass: " << fvar.simM << endl;
@@ -324,6 +328,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
     string line;
     while (getline(fin,line))
     {
+		line = ltrim(line);
         size_t end = line.find_first_of('#');
 		if(end != std::string::npos)
 			line = line.substr(0,end+1);
@@ -378,10 +383,14 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		Get_Number(line, "SPH minimum timestep", svar.dt_min);
         Get_Number(line, "SPH CFL condition", svar.cfl);
 		Get_Number(line, "SPH starting pressure", fvar.pPress);
-		Get_Number(line, "SPH maximum density variation (%)", fvar.rhoVar);
+		Get_Number(line, "SPH density variation (%)", fvar.rhoVar);
+		Get_Number(line, "SPH maximum density", fvar.rhoMax);
+		Get_Number(line, "SPH minimum density", fvar.rhoMin);
 		Get_Number(line, "SPH artificial viscosity factor", fvar.alpha);
 		Get_Number(line, "SPH speed of sound", fvar.Cs);
         Get_Number(line, "SPH Newmark-Beta iteration limit", svar.subits);
+		Get_Vector(line, "SPH gravity vector", svar.grav);
+
         Get_Number(line, "SPH initial spacing", svar.Pstep);
         Get_Number(line, "SPH boundary spacing factor", svar.Bstep);
         Get_Number(line, "SPH smoothing length factor", fvar.Hfac);

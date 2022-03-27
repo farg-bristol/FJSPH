@@ -15,7 +15,7 @@
 #include "Var.h"
 #include "Kernel.h"
 
-inline real const GetCd(real const& Re)
+inline real GetCd(real const& Re)
 {
 	return (1.0+0.197*pow(Re,0.63)+2.6e-04*pow(Re,1.38))*(24.0/(Re+0.00001));
 
@@ -25,7 +25,7 @@ inline real const GetCd(real const& Re)
 	// 	return 0.424;
 }
 
-inline StateVecD const AeroForce(StateVecD const& Vdiff, AERO const& avar, real const mass)
+inline StateVecD AeroForce(StateVecD const& Vdiff, AERO const& avar, real const mass)
 {
 	real const Re = 2.0*avar.rhog*Vdiff.norm()*avar.L/avar.mug;
 	real const Cdi = GetCd(Re);
@@ -40,20 +40,20 @@ inline StateVecD const AeroForce(StateVecD const& Vdiff, AERO const& avar, real 
 	return (0.5*avar.rhog*Vdiff.norm()*Vdiff*Cdi*Ai);
 }
 
-
 /*Sphere-Plate interpolation method - Gissler et al (2017)*/
-inline StateVecD const GisslerForce(AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, 
+inline StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, 
 						real const& rho, real const& press, real const& mass, real const& lam, real const& woccl)
 {
 	// real const nfull = avar.nfull;
 	real const Re = 2.0*rho*Vdiff.norm()*avar.L/avar.mug;
 	
-  real const frac2 = std::min(2.0 * lam, 1.0);
+	real const frac2 = std::min(2.0 * lam, 1.0);
 	real const frac1 = (1.0 - frac2);
 
  	real const Cds  = GetCd(Re);
-	real Cdl, Adrop;
 
+	real Cdl, Adrop;
+	
 	#if SIMDIM == 3 
 		if(avar.useDef)
 		{
@@ -93,14 +93,13 @@ inline StateVecD const GisslerForce(AERO const& avar, StateVecD const& Vdiff, St
 	// cout << "Re: " << Re << "  Cds: " << Cdi << "  "  << Cdl << "  " << Cds  << endl;
 	// cout << "F: " << F(0) << "  " << F(1) << endl << endl;
 
-
 	// return  0.5*rho*Vdiff.norm()*Vdiff*Cdi*Ai / mass;
 	return  0.5 * Vdiff.norm() * Vdiff / (avar.sos*avar.sos) *
 			 avar.gamma * press * Cdi * Ai / mass;
 
 }
 
-inline StateVecD const InducedPressure(AERO const& avar, StateVecD const& Vdiff,
+inline StateVecD InducedPressure(AERO const& avar, StateVecD const& Vdiff,
 		 StateVecD const& norm, real const& Pbasei, real const& lam, SPHPart const& pi )
 		 
 {
@@ -206,7 +205,6 @@ inline StateVecD const InducedPressure(AERO const& avar, StateVecD const& Vdiff,
 	/* Pure droplet force */
 	StateVecD const acc_drop = 0.5*Vdiff*Vdiff.norm()/(avar.sos*avar.sos) * avar.gamma * pi.cellP
 					* (M_PI*avar.L*avar.L*0.25) * Cdi/pi.m;
-
 	// aeroD = -Pi * avar.aPlate * norm[ii].normalized();
 
 	/* Induce pressure force */
@@ -329,8 +327,8 @@ StateVecD CalcAeroAcc(AERO const& avar, SPHPart const& pi, StateVecD const& Vdif
 		#else
 			acc = -norm.normalized()*Aunocc*press;
 		#endif
-
 	}
+
 	return acc;
 }
 
