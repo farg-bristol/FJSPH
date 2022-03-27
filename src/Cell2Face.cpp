@@ -22,8 +22,8 @@
 #endif
 
 /****** Eigen vector definitions ************/
-typedef vec<real,SIMDIM> StateVecD;
-typedef vec<int,SIMDIM> StateVecI;
+typedef Eigen::Matrix<real,3,1> StateVecD;
+typedef Eigen::Matrix<int,3,1> StateVecI;
 
 const std::string WHITESPACE = " \n\r\t\f\v";
 
@@ -724,7 +724,7 @@ void Write_Face_Data(string const& meshIn, FACE const& fdata)
 	/* Create the file. */
 	int retval;
 	int meshID;
-	if ((retval = nc_create(meshOut.c_str(), NC_CLOBBER, &meshID)))
+	if ((retval = nc_create(meshOut.c_str(), NC_CLOBBER | NC_64BIT_OFFSET, &meshID)))
 	{	
 		cout << "Error: Failed to open file \"" << meshOut << "\" when outputting." << endl;
 		ERR(retval);
@@ -1091,7 +1091,7 @@ void Write_ASCII_Face_Data(const FACE& fdata)
 	/*Write vertices in block format (Each dimension in turn)*/
 	size_t newl = 0;
 	fout << std::setw(1);
-	for(size_t DIM = 0; DIM < SIMDIM; ++DIM)
+	for(size_t DIM = 0; DIM < 3; ++DIM)
 	{
 		for(size_t ii = 0; ii < fdata.verts.size(); ++ii)
 		{
@@ -1263,7 +1263,7 @@ void Write_Cell_Data(const CELL& cdata)
 	/*Write vertices*/
 	fout << std::left << std::scientific << std::setprecision(6);
 	fout << std::setw(1);
-	for(size_t ii = 0; ii < SIMDIM; ++ii)
+	for(size_t ii = 0; ii < 3; ++ii)
 	{	
 		size_t kk = 0;
 		for(size_t jj = 0; jj < cdata.verts.size(); ++jj)
@@ -1339,7 +1339,7 @@ void Write_Griduns(const FACE& fdata)
 	for(size_t ii = 0; ii < fdata.nPnts; ++ii)
 	{
 		fout << setw(w) << ii;
-		for(size_t jj = 0; jj < SIMDIM; ++jj)
+		for(size_t jj = 0; jj < 3; ++jj)
 		{
 			fout << setw(w) << fdata.verts[ii][jj];
 		}

@@ -46,35 +46,35 @@ int Check_Error(KDTREE& TREE, SIM& svar, FLUID const& fvar, size_t const& start,
 			TREE.NP1.index->buildIndex();
 			FindNeighbours(TREE.NP1, fvar, pnp1, outlist);
 
-			if(svar.Asource == 2)
-			{
-				cellsused.clear();
-				#pragma omp parallel shared(pnp1)
-				{
-					std::vector<size_t> local;
-					#pragma omp for schedule(static) nowait
-					for (size_t ii = start; ii < end; ++ii)
-					{	
-						if(pnp1[ii].b == FREE)
-							local.emplace_back(pnp1[ii].cellID);
-					}
+			// if(svar.Asource == 2)
+			// {
+			// 	cellsused.clear();
+			// 	#pragma omp parallel shared(pnp1)
+			// 	{
+			// 		std::vector<size_t> local;
+			// 		#pragma omp for schedule(static) nowait
+			// 		for (size_t ii = start; ii < end; ++ii)
+			// 		{	
+			// 			if(pnp1[ii].b == FREE)
+			// 				local.emplace_back(pnp1[ii].cellID);
+			// 		}
 
-					#pragma omp for schedule(static) ordered
-					for(int i=0; i<omp_get_num_threads(); i++)
-					{
-						#pragma omp ordered
-						cellsused.insert(cellsused.end(),local.begin(),local.end());
-					}
-				}
+			// 		#pragma omp for schedule(static) ordered
+			// 		for(int i=0; i<omp_get_num_threads(); i++)
+			// 		{
+			// 			#pragma omp ordered
+			// 			cellsused.insert(cellsused.end(),local.begin(),local.end());
+			// 		}
+			// 	}
 
-				// Sort the vector and remove unique values.
-				std::unordered_set<size_t> s;
-				for(size_t const& ii:cellsused)
-					s.insert(ii);
+			// 	// Sort the vector and remove unique values.
+			// 	std::unordered_set<size_t> s;
+			// 	for(size_t const& ii:cellsused)
+			// 		s.insert(ii);
 
-				cellsused.assign(s.begin(),s.end());
-				std::sort(cellsused.begin(),cellsused.end());
-			}
+			// 	cellsused.assign(s.begin(),s.end());
+			// 	std::sort(cellsused.begin(),cellsused.end());
+			// }
 
 			svar.dt = 0.5*svar.dt;
 			cout << "Unstable timestep. New dt: " << svar.dt << endl;
@@ -123,17 +123,17 @@ void Do_NB_Iter(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 		const real dt = svar.dt;
 		const real dt2 = dt*dt;
 
-		if(svar.Asource == 2)
-		{
-			#pragma omp for /*nowait*/
-			for(size_t const& ii : cellsused)
-			{
-				cells.fNum[ii] = 0;
-				cells.fMass[ii] = 0.0;
-				cells.vFn[ii] = StateVecD::Zero();
-				cells.vFnp1[ii] = StateVecD::Zero();
-			}
-		}
+		// if(svar.Asource == 2)
+		// {
+		// 	#pragma omp for /*nowait*/
+		// 	for(size_t const& ii : cellsused)
+		// 	{
+		// 		cells.fNum[ii] = 0;
+		// 		cells.fMass[ii] = 0.0;
+		// 		cells.vFn[ii] = StateVecD::Zero();
+		// 		cells.vFnp1[ii] = StateVecD::Zero();
+		// 	}
+		// }
 
 		if(svar.bound_solver == 1)
 		{
@@ -219,19 +219,19 @@ void Do_NB_Iter(KDTREE const& TREE, SIM& svar, FLUID const& fvar, AERO const& av
 				// pnp1[ii].curve = curve[ii];
 				pnp1[ii].pDist = vec.norm();
 
-				if(svar.Asource == 2 && pnp1[ii].b == FREE)
-				{
-					#pragma omp atomic
-						cells.fNum[pnp1[ii].cellID]++;
-					#pragma omp atomic
-						cells.fMass[pnp1[ii].cellID] += pnp1[ii].m;
+				// if(svar.Asource == 2 && pnp1[ii].b == FREE)
+				// {
+				// 	#pragma omp atomic
+				// 		cells.fNum[pnp1[ii].cellID]++;
+				// 	#pragma omp atomic
+				// 		cells.fMass[pnp1[ii].cellID] += pnp1[ii].m;
 
-					#pragma omp critical
-					{
-						cells.vFn[pnp1[ii].cellID] += pn[ii].v;
-						cells.vFnp1[pnp1[ii].cellID] += pnp1[ii].v;
-					}	
-				}
+				// 	#pragma omp critical
+				// 	{
+				// 		cells.vFn[pnp1[ii].cellID] += pn[ii].v;
+				// 		cells.vFnp1[pnp1[ii].cellID] += pnp1[ii].v;
+				// 	}	
+				// }
 
 				// if(pnp1[ii].b == GHOST)
 				// {
