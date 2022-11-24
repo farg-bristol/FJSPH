@@ -7,7 +7,7 @@
                             Reference surface tension: 0.0
                    2D offset vector (0 / x=1,y=2,z=3): 2
 
-                                  Output files prefix: Dam_Break_Linear
+                                  Output files prefix: Dam_Break
 
 # SPH parameters ------------------------------------: -
                               SPH frame time interval: 0.01
@@ -33,6 +33,3 @@
                         SPH maximum shifting velocity: 5
                     SPH surface tension contact angle: 150.0
                             SPH restart fit tolerance: 0.5
-
-    solver at Mon Nov 21 12:17:02 2022
-                                               SPH restart prefix: Dam_Break_Linear
