@@ -1,1 +1,36 @@
 
+                      Input fluid definition filename: fluid.bmap
+                   Input boundary definition filename: boundary.bmap
+
+                          Reference dispersed density: 1000
+                        Reference dispersed viscosity: 8.94E-04
+                            Reference surface tension: 0.00
+                   2D offset vector (0 / x=1,y=2,z=3): 2
+
+                                  Output files prefix: Standing_Column
+
+# SPH parameters ------------------------------------: -
+                              SPH frame time interval: 1e-2
+                                      SPH frame count: 10000
+               SPH output encoding (0=ascii/1=binary): 1
+                               SPH ghost output (0/1): 0
+
+                                 SPH maximum timestep: 1
+                                 SPH minimum timestep: 1e-9
+                                    SPH CFL condition: 1
+                                  SPH initial spacing: 0.01
+                          SPH boundary spacing factor: 1.0
+                          SPH smoothing length factor: 2.0
+                                 SPH aerodynamic case: (none)
+                        SPH use ghost particles (0/1): 0
+                             SPH boundary box lengths: 1,0.12
+                            SPH rotation angles (deg): 0,0
+                      Init hydrostatic pressure (0/1): 1
+                                   Hydrostatic height: 2.0
+
+                                SPH starting pressure: 0
+                                   SPH speed of sound: 100
+                      SPH artificial viscosity factor: 0.1
+                    SPH surface tension contact angle: 150.0
+                              SPH freestream velocity: 0.0,0.0
+                                SPH starting velocity: 0.0,0.0

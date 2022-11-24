@@ -1,0 +1,43 @@
+ -----------------------------------------------------
+ BOUNDARY MAPPING
+ -----------------------------------------------------
+
+                       Name: Left
+                      Shape: Line
+   Write surface data (0/1): 1
+
+            Boundary solver: Pressure-Gradient
+
+           Start coordinate: 0.0,2.1
+             End coordinate: 0.0,0.0
+ Wall radial particle count: 4
+           Particle spacing: 0.01
+
+ block end
+ ---------------------------
+
+                       Name: Bottom
+                      Shape: Line
+   Write surface data (0/1): 1
+
+            Boundary solver: Pressure-Gradient
+           Start coordinate: -0.02,0.0
+             End coordinate: 1.025,0.0
+ Wall radial particle count: 4
+           Particle spacing: 0.01
+
+ block end
+ ---------------------------
+
+                       Name: Right
+                      Shape: Line
+   Write surface data (0/1): 1
+
+            Boundary solver: Pressure-Gradient
+           Start coordinate: 1.0,0.0
+             End coordinate: 1.0,2.1
+ Wall radial particle count: 4
+           Particle spacing: 0.01
+
+ block end
+ ---------------------------

@@ -1,0 +1,5 @@
+TITLE="Ideal line"
+VARIABLES= "X" "Y"
+ZONE T="Ideal line"
+0 0
+1 1
