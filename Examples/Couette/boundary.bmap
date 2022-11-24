@@ -1,0 +1,37 @@
+ -----------------------------------------------------
+ BOUNDARY MAPPING
+ -----------------------------------------------------
+
+                       Name: Bottom
+                      Shape: Line
+   Write surface data (0/1): 1
+
+            Boundary solver: Pressure-Gradient
+            # Boundary solver: DBC
+      Wall is no slip (0/1): 0
+           Starting density: 1
+           Start coordinate: -0.18,0.0
+             End coordinate: 3.2,0.0
+ Wall radial particle count: 4
+           Particle spacing: 0.02
+
+ block end
+ ---------------------------
+
+                       Name: Top
+                      Shape: Line
+   Write surface data (0/1): 1
+
+            Boundary solver: Pressure-Gradient
+            # Boundary solver: DBC
+      Wall is no slip (0/1): 0
+           Starting density: 1
+          Starting velocity: 0.001,0.0
+
+           Start coordinate: 3.2,1.0
+             End coordinate: -0.2,1.0
+ Wall radial particle count: 4
+           Particle spacing: 0.02
+
+ block end
+ ---------------------------
