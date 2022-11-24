@@ -1,0 +1,30 @@
+ -----------------------------------------------------
+ FLUID MAPPING
+ -----------------------------------------------------
+
+                       Name: Fluid
+                      Shape: Inlet
+   Write surface data (0/1): 1
+
+ Particle ordering (0=grid,1=HCP): 0
+ 
+ Fixed velocity or dynamic inlet BC (0/1): 1
+
+         #  Starting velocity: 0.00001,0.0
+
+           Particle spacing: 0.00004
+          Starting pressure: 0
+           Starting density: 1000
+
+           Start coordinate: 0.0,-0.00046
+             End coordinate: 0.0,0.0005
+                 Pipe depth: 0.005
+           Insertion normal: 1.0,0.0
+   Insertion plane constant: 0.0
+
+            Deletion normal: 1.0,0.0
+    Deletion plane constant: 0.005
+
+
+ block end
+ ---------------------------
