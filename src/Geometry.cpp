@@ -11,8 +11,9 @@
 // #define Y 1
 
 /*Surface detection as described by Marrone, Colagrossi, Le Touze, Graziani - (2010)*/
-void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start, size_t const& end,
-                 /* DELTAP const& dp, */ OUTL const& outlist, MESH const& cells, SPHState& pnp1)
+void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, 
+    size_t const& start, size_t const& end,
+                 OUTL const& outlist, MESH const& cells, VLM& vortex, SPHState& pnp1)
 {
 
     vector<StateVecD> norms(end,StateVecD::Zero());
@@ -155,7 +156,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const
             #if SIMDIM == 3
             else if(svar.Asource == 3)
             {   
-                StateVecD Vel = svar.vortex.getVelocity(pi.xi);
+                StateVecD Vel = vortex.getVelocity(pi.xi);
                 Vdiff = Vel - pi.v /*dp.avgV[ii]*/;
             }
             #endif

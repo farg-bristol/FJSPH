@@ -1,84 +1,99 @@
 #include "inlet.h"
+#include <Eigen/Geometry>
 
 void check_inlet_input(shape_block& block, real& globalspacing)
 {
     int fault = 0;
+    int has_config = 0;
 
-    // if(block.subshape.empty())
-    // {
-    //     std::cout << "ERROR: Block \"" << block.name << 
-    //         "\" sub shape type has not been defined." << std::endl;
-    //     fault = 1;
-    // }
     #if SIMDIM == 3
     if(block.subshape == "Square")
     {
         block.sub_bound_type = squareCube;
+        if(check_vector(block.start) && check_vector(block.right) && check_vector(block.end))
+        {
+            has_config = 1;
+        }
+        
+        if(check_vector(block.start) && block.ni > 0 && block.nj > 0)
+            has_config = 2;
+        
     }
     else if(block.subshape == "Circle")
     {
         block.sub_bound_type = circleSphere;
+        if(check_vector(block.centre))
+        {   /* Default to these values first */
+            if(check_vector(block.right) && check_vector(block.end))
+            {
+                has_config = 4;
+                StateVecD v = block.right - block.centre;
+                StateVecD u = block.end - block.right;
+                block.start = block.centre - v - u;
+                block.right = block.start + 2.0 * v;
+                block.end = block.right + 2.0 * u;
+            }
+
+            if(block.radius > 0)
+            {
+                has_config = 3;
+                block.start = block.centre;
+                block.start[1] -= block.radius;
+                block.start[2] -= block.radius;
+
+                block.end = block.centre;
+                block.end[1] += block.radius;
+                block.end[2] += block.radius;
+
+                block.right = block.centre;
+                block.right[1] += block.radius;
+                block.right[2] -= block.radius;
+            }
+        }
+        else if (check_vector(block.start) && check_vector(block.right) && check_vector(block.end))
+        {
+            has_config = 1;
+            block.centre = 0.5 * (block.start + block.end);
+            StateVecD v = block.right - block.start;
+            block.radius = 0.5 * v.norm();
+            block.right = block.centre + 0.5 * v;
+        }
     }
     else
     {
-        std::cout << "ERROR: Block \"" << block.name << 
-            "\" sub shape type has not been correctly defined." << std::endl;
-        cout << "Please choose from:" << endl;
-        cout << "\t1. Square" << endl;
-        cout << "\t2. Circle" << endl;    
+        printf("ERROR: Inlet block \"%s\" sub shape type has not been correctly defined.\n",block.name.c_str());
+        printf("Please choose from:\n\t1. Square\n\t2. Circle\n");
         fault = 1;
+    }
+    #else
+    if(check_vector(block.start) && check_vector(block.end))
+    {
+        has_config = 1;
+        block.centre = 0.5 * (block.start + block.end);
+        block.radius = (block.centre - block.start).norm();
+    }
+    else if (check_vector(block.centre) && block.radius > 0)
+    {
+        has_config = 3;
+        block.start = block.centre;
+        block.start[1] -= block.radius;
+        block.end[1] += block.radius;
     }
     #endif
 
-    if(!check_vector(block.start))
+    if(has_config == 0)
     {
-        std::cout << "ERROR: Block \"" << block.name << 
-            "\" starting position has not been correctly defined." << std::endl;
+        printf("ERROR: Inlet block \"%s\" geometry not sufficiently defined\n",block.name.c_str());
         fault = 1;
-    }    
-
+    }
 
     block.dx = globalspacing; // Potential to allow different size particles, but not right now.
 
-    // if(block.dx < 0)
-    // {
-    //     block.dx = globalspacing;
-    // }
-
-    // int has_orientation = 0; // Use flag to ensure a viable configuration exists.
-    int has_dimension = 0;
-    if(check_vector(block.end) 
-    #if SIMDIM == 3
-        && check_vector(block.right)
-    #endif    
-        )
+    // Generate the rotation matrix if it exists
+    if(block.angles.norm() != 0)
     {
-        //Have three points to define the plane
-        // has_orientation = 1;
-        has_dimension = 1;
-        StateVecD ab = (block.end - block.start).normalized();
-        #if SIMDIM == 3
-        StateVecD ac = (block.right - block.start).normalized();
-        block.normal = ab.cross(ac).normalized();
-        StateMatD rotmat;
-        rotmat << ab[0]          , ab[1]          , ab[2]          ,
-                  ac[0]          , ac[1]          , ac[2]          , 
-                  block.normal[0], block.normal[1], block.normal[2];
-        #else
-        block.angles[0] = atan2(ab[1],ab[0]);
-        StateMatD rotmat;
-        rotmat << cos(block.angles(0)), sin(block.angles(0)),
-            -sin(block.angles(0)),  cos(block.angles(0));
-        block.normal = rotmat * StateVecD(0.0,1.0);
-        #endif
-        block.rotmat = rotmat;
-        block.insert_norm = block.normal;
-        block.insconst = block.insert_norm.dot(block.start)+0.01*globalspacing;
+        block.angles *= M_PI/180.0; // Convert to radians
 
-    }
-    else if(block.angles.norm() != 0)
-    {
-        // has_orientation = 1;
         // Find the rotation matrix
         #if SIMDIM == 3
             StateMatD rotx, roty, rotz;
@@ -90,8 +105,8 @@ void check_inlet_input(shape_block& block, real& globalspacing)
                     0.0            , 1.0 , 0.0            ,
                     sin(block.angles(1)) , 0.0 , cos(block.angles(1));
 
-            rotz << cos(block.angles(2)) , sin(block.angles(2)) , 0.0 ,
-                    -sin(block.angles(2)), cos(block.angles(2)) , 0.0 ,
+            rotz << cos(block.angles(2)) , -sin(block.angles(2)) , 0.0 ,
+                    sin(block.angles(2)), cos(block.angles(2)) , 0.0 ,
                     0.0            , 0.0            , 1.0 ;
 
             block.rotmat = rotx*roty*rotz;
@@ -102,187 +117,205 @@ void check_inlet_input(shape_block& block, real& globalspacing)
 
             block.rotmat = rotmat;
         #endif
+        block.normal = StateVecD::Zero();
+        block.normal[0] = 1.0;
+        block.normal = block.rotmat * block.normal;
+        block.insert_norm = block.normal;
     }   
-    else if(!check_vector(block.normal))
+    else if(block.normal != default_norm)
     {
-        // has_orientation = 1;
-        // Need to find the rotation matrix now (will lose some information, as no knowledge of rotation around normal)
+        StateMatD rotmat = StateMatD::Identity();
+        // Need to find the rotation matrix now 
+        // (will lose some information, as no knowledge of rotation around normal)
         block.normal.normalize();
 
         #if SIMDIM == 3
-        StateVecD origin = StateVecD::Zero();
-        origin[1] = 1.0;
-        StateVecD fvec = (block.normal - origin).normalized(); // forward vector
+        StateVecD origin = default_norm;
+        StateVecD v = origin.cross(block.normal);
+        // If magnitude of the cross is small, normal is essentially parallel
+        if(v.norm() > 1e-10)
+        {
+            real mag = origin.dot(block.normal);
+            real s = v.norm();
 
-        StateVecD axis = StateVecD::Zero();
-        // check how close the forward vector is to the selected rotation axis
-        if(fabs(fvec[0] - 1.0) > 0.1 && fabs(fvec[0]) < 0.1 && fabs(fvec[2]) < 0.1)
-            axis[0] = 1.0;
-        else
-            axis[1] = 1.0;
+            StateMatD k;
+            k <<  0.0 , -v[2],  v[1],
+                  v[2],  0   , -v[0],
+                 -v[1],  v[0],  0;
 
-        StateVecD right = fvec.cross(axis);
-
-        StateMatD rotmat;
-        rotmat << right[0], right[1], right[2],
-                  axis[0] , axis[1] , axis[2] ,
-                  fvec[0] , fvec[1] , fvec[2] ;
-        
-        block.rotmat = rotmat;
+            rotmat += k + k * k * (1.0 - mag) / (s * s);
+        }
         #else
         // Find rotation matrix
-        block.angles[0] = atan2(-block.normal[0],block.normal[1]);
+        block.angles[0] = atan2(block.normal[1],block.normal[0]);
         StateMatD rotmat;
         rotmat << cos(block.angles(0)), sin(block.angles(0)),
             -sin(block.angles(0)),  cos(block.angles(0));
-
-        block.rotmat = rotmat;
-
         #endif
-        StateVecD end = StateVecD::Zero();
-        end[0] = 1.0;
-        block.end = block.rotmat * end;
+        block.rotmat = rotmat;
+        block.insert_norm = block.normal;
 
     } 
-    else if(!check_vector(block.insert_norm))
+    else if(block.insert_norm != default_norm)
     {
-        // has_orientation = 1;
-        // Need to find the rotation matrix now (will lose some information, as no knowledge of rotation around normal)
+        StateMatD rotmat = StateMatD::Identity();
+        // Need to find the rotation matrix now 
+        // (will lose some information, as no knowledge of rotation around normal)
         block.normal = block.insert_norm;
         block.normal.normalize();
 
         #if SIMDIM == 3
-        StateVecD origin = StateVecD::Zero();
-        origin[1] = 1.0;
-        StateVecD fvec = (block.normal - origin).normalized(); // forward vector
+        StateVecD origin = default_norm;
+        StateVecD v = origin.cross(block.normal);
+        // If magnitude of the cross is small, normal is essentially parallel
+        if(v.norm() > 1e-10)
+        {
+            real mag = origin.dot(block.normal);
+            real s = v.norm();
 
-        StateVecD axis = StateVecD::Zero();
-        // check how close the forward vector is to the selected rotation axis
-        if(fabs(fvec[0] - 1.0) > 0.1 && fabs(fvec[0]) < 0.1 && fabs(fvec[2]) < 0.1)
-            axis[0] = 1.0;
-        else
-            axis[1] = 1.0;
+            StateMatD k;
+            k <<  0.0 , -v[2],  v[1],
+                  v[2],  0   , -v[0],
+                 -v[1],  v[0],  0;
 
-        StateVecD right = fvec.cross(axis);
-
-        StateMatD rotmat;
-        rotmat << right[0], right[1], right[2],
-                  axis[0] , axis[1] , axis[2] ,
-                  fvec[0] , fvec[1] , fvec[2] ;
-        
-        block.rotmat = rotmat;
+            rotmat += k + k * k * (1.0 - mag) / (s * s);
+        }
         #else
         // Find rotation matrix
         block.angles[0] = atan2(block.normal[1],block.normal[0]) - M_PI/2.0;
         StateMatD rotmat;
         rotmat << cos(block.angles(0)), sin(block.angles(0)),
             -sin(block.angles(0)),  cos(block.angles(0));
-
+        #endif
         block.rotmat = rotmat;
-
-        #endif
-        StateVecD end = StateVecD::Zero();
-        end[0] = 1.0;
-        block.end = block.rotmat * end;
-
     } 
-    else
+
+    if(has_config == 1)
     {
-        // define a default normal vector
-        block.normal = StateVecD::Zero();
-        block.normal[1] = 1.0;
-    }
-
-    // if(!has_orientation)
-    // {
-    //     std::cout << "ERROR: Block \"" << block.name << "\" orientation has not been sufficiently defined." << endl;
-    //     fault = 1;
-    // }
-
-    if(has_dimension)
-    {
-        /* Estimate how many points on the Block */
-        // Need to have lengths along the axis to accurately have the counts
-        real xlength = (block.end - block.start).norm();
+        //Have three points to define the plane. Override any normal and rotation matrix def
+        StateVecD ab = (block.end - block.start).normalized();
         #if SIMDIM == 3
-        real ylength = (block.right - block.start).norm();
-        #endif
-
-        int npoints;
-        size_t ni, nk;
-        #if SIMDIM == 3
-        size_t nj;
-        #endif
-        if (block.hcpl == 1)
-        {
-            #if SIMDIM == 2
-            ni = static_cast<int>(ceil(xlength / globalspacing));
-            nk = static_cast<int>(ceil(block.thickness / globalspacing / sqrt(3.0) * 2.0));
-            #else
-            ni = static_cast<int>(ceil(xlength / globalspacing));
-            nj = static_cast<int>(ceil(ylength / globalspacing / sqrt(3.0) * 2.0));
-            nk = static_cast<int>(ceil(block.thickness / globalspacing / sqrt(6.0) * 3.0));
-            #endif
-        }
-        else
-        {
-            ni = static_cast<int>(ceil(xlength / globalspacing));
-            #if SIMDIM == 3
-            nj = static_cast<int>(ceil(ylength/ globalspacing));
-            #endif
-            nk = static_cast<int>(ceil(block.thickness / globalspacing));
-            
-        }
-        ni = ni > 1 ? ni : 1;
-        nk = nk > 1 ? nk : 1;
-        block.nk = nk;
-        block.ni = ni;
-        int nBuff = block.hcpl == 1 ? 5 : 4;
-        #if SIMDIM == 3
-        nj = nj > 1 ? nj : 1;
-        block.nj = nj;
-        npoints = ni * nk * nj;
+        StateVecD ac = (block.right - block.start).normalized();
+        block.normal = (ab.cross(ac)).normalized();
+        StateMatD rotmat;
+        rotmat << ab[0]          , ab[1]          , ab[2]          ,
+                ac[0]          , ac[1]          , ac[2]          , 
+                block.normal[0], block.normal[1], block.normal[2];
         #else
-        npoints = ni * (nk + nBuff);
+        block.angles[0] = atan2(ab[1],ab[0]);
+        StateMatD rotmat;
+        rotmat << cos(block.angles(0)), sin(block.angles(0)),
+            -sin(block.angles(0)),  cos(block.angles(0));
+        block.normal = rotmat * StateVecD(0.0,1.0);
         #endif
-        npoints = npoints > 1 ? npoints : 1;
+        block.rotmat = rotmat;
+        
+        block.insert_norm = block.normal;
+        block.insconst = block.insert_norm.dot(block.start)+0.01*globalspacing;
+    }
+    else if (has_config == 2)
+    {
+        // Start and ni and nj counts have been defined (nk doesn't need to be defined for the inlet)
+        #if SIMDIM == 3
+        block.right = block.start;
+        block.right[1] += globalspacing * block.ni;
+        block.end = block.right;
+        block.end[2] += globalspacing * block.nj;
+        #else
+        block.end = block.start;
+        block.end[1] += globalspacing * block.ni;
+        #endif
 
-        block.npts = npoints;
+        if(block.rotmat != StateMatD::Identity())
+        {
+            block.end = block.rotmat * (block.end - block.start) + block.start;
+            #if SIMDIM == 3
+            block.right = block.rotmat * (block.right - block.start) + block.start;
+            #endif
+        }
+    }
+    else if (has_config == 3 || has_config == 4)
+    {
+        // Centre and radius defined, so start, right and end derived.
+        if(block.rotmat != StateMatD::Identity())
+        {
+            block.start = block.rotmat * (block.start - block.centre) + block.centre;
+            block.end = block.rotmat * (block.end - block.centre) + block.centre;
+            #if SIMDIM == 3
+            block.right = block.rotmat * (block.right - block.centre) + block.centre;
+            #endif
+        }
+    }
+   
+    /* Estimate how many points on the Block */
+    // Need to have lengths along the axis to accurately have the counts
+    #if SIMDIM == 3
+    real xlength = (block.right - block.start).norm();
+    real ylength = (block.end - block.right).norm();
+    #else
+    real xlength = (block.end - block.start).norm();
+    #endif
+
+    size_t ni, nk;
+    #if SIMDIM == 3
+    size_t nj;
+    #endif
+    if (block.hcpl == 1)
+    {
+        #if SIMDIM == 2
+        ni = static_cast<int>(ceil(xlength / globalspacing));
+        nk = static_cast<int>(ceil(block.length / globalspacing / sqrt(3.0) * 2.0));
+        #else
+        ni = static_cast<int>(ceil(xlength / globalspacing));
+        nj = static_cast<int>(ceil(ylength / globalspacing / sqrt(3.0) * 2.0));
+        nk = static_cast<int>(ceil(block.length / globalspacing / sqrt(6.0) * 3.0));
+        #endif
     }
     else
     {
-        // Check for counts
-        if(block.ni > 0)
-        {
-            if(block.nj > 0)
-            {
-                #if SIMDIM == 3
-                if(block.nk > 0)
-                {
-                #endif
-                    has_dimension = 1;
-                #if SIMDIM == 3
-                }
-                #endif
-                // Find the end and right coordinates, then rotate
-                block.end = StateVecD::Zero();
-                block.right = StateVecD::Zero();
-                block.end[0] = globalspacing * block.ni;
-                block.end = block.rotmat * block.end;
-                block.end += block.start;
-                block.right[1] = globalspacing*block.nj;
-                block.right = block.rotmat * block.right;
-                block.right += block.start;
-            }
-        }
+        ni = static_cast<int>(ceil(xlength / globalspacing));
+        #if SIMDIM == 3
+        nj = static_cast<int>(ceil(ylength/ globalspacing));
+        #endif
+        nk = static_cast<int>(ceil(block.length / globalspacing)); 
     }
+    ni = ni > 1 ? ni : 1;
+    nk = nk > 1 ? nk : 1;
+    block.nk = nk;
+    block.ni = ni;
+    int nBuff = block.hcpl == 1 ? 5 : 4;
+    #if SIMDIM == 3
+    nj = nj > 1 ? nj : 1;
+    block.nj = nj;
+    #endif
 
-    if(!has_dimension)
+    #if SIMDIM == 3
+    if (block.sub_bound_type == circleSphere)
     {
-        std::cout << "ERROR: Block \"" << block.name << "\" dimensions have not been sufficiently defined." << endl;
-        fault = 1;
-    }
+        // Find the centre if it's not already defined
+        if(!check_vector(block.centre))
+        {
+            block.centre = 0.5*(block.start + block.end);
+        }
 
+        if(block.radius < 0)
+        {
+            block.radius = (block.centre - block.start).norm();
+            block.radius *= cos(M_PI_4);
+        }
+        block.npts = block.ni * block.nj * M_PI_4 * (nk+nBuff+1);
+    }
+    else
+    {
+        block.npts = block.ni * block.nj * (nk+nBuff+1);
+    }
+    #endif
+
+    #if SIMDIM == 2
+    block.npts = block.ni * (block.nk+nBuff);
+    #endif
+        
+    
     if(fault)
     {
         cout << "Geometry check finished with errors. Stopping" << endl;
@@ -361,7 +394,7 @@ std::vector<StateVecD> create_inlet_zone(shape_block& block, real const& globals
 
 #else
 
-std::vector<StateVecD>  create_inlet_zone(shape_block& block, real const& globalspacing)
+std::vector<StateVecD> create_inlet_zone(shape_block& block, real const& globalspacing)
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */
@@ -371,20 +404,21 @@ std::vector<StateVecD>  create_inlet_zone(shape_block& block, real const& global
     // Which geometry to create?
     if(block.sub_bound_type == squareCube)
     {
-
+        // Depth
         for (int kk =  block.nk - 1; kk > 0; --kk)
-        {
+        {   // Width
             for (int jj = 0; jj < block.nj; ++jj)
-            {
+            {   // Height
                 for (int ii = 0; ii < block.ni; ++ii)
                 {
                     StateVecD newPoint;
                     if (block.hcpl == 1)
-                        newPoint = 0.5 * StateVecD(real(2 * ii + ((jj + kk) % 2)), 
-                            sqrt(3.0) * (real(jj) + real((kk % 2)) / 3.0), 
-                            2.0 / 3.0 * sqrt(6.0) * real(kk));
+                        newPoint = 0.5 * StateVecD(
+                            2.0 / 3.0 * sqrt(6.0) * real(kk),              // x
+                            sqrt(3.0) * (real(jj) + real((kk % 2)) / 3.0), // y
+                            real(2 * ii + ((jj + kk) % 2)));               // z
                     else
-                        newPoint = StateVecD(real(ii), real(jj), real(kk));
+                        newPoint = StateVecD(real(kk), real(ii), real(jj));
 
                     newPoint *= globalspacing;
                     newPoint += StateVecD(unif(re),unif(re),unif(re));
@@ -403,9 +437,9 @@ std::vector<StateVecD>  create_inlet_zone(shape_block& block, real const& global
             {
                 StateVecD newPoint;
                 if (block.hcpl == 1)
-                    newPoint = 0.5 * StateVecD(real(2 * ii + ((jj) % 2)), sqrt(3.0) * (real(jj)), 0.0);
+                    newPoint = 0.5 * StateVecD(0.0, sqrt(3.0) * (real(jj)), real(2 * ii + ((jj) % 2)));
                 else
-                    newPoint = StateVecD(real(ii), real(jj), 0.0);
+                    newPoint = StateVecD(0.0, real(jj), real(ii));
 
                 newPoint *= globalspacing;
                 newPoint += StateVecD(unif(re),unif(re),unif(re));
@@ -419,7 +453,7 @@ std::vector<StateVecD>  create_inlet_zone(shape_block& block, real const& global
         }   /* end j count */
 
         // Create buffer zone
-        size_t nBuff = block.hcpl == 1 ? 5 : 4;
+        int nBuff = block.hcpl == 1 ? 5 : 4;
         block.buffer = vector<vector<size_t>>(block.back.size(), vector<size_t>(nBuff));
         size_t buff = 0;
         for (int kk =  -1; kk >= -nBuff; --kk)
@@ -431,11 +465,12 @@ std::vector<StateVecD>  create_inlet_zone(shape_block& block, real const& global
                 {
                     StateVecD newPoint;
                     if (block.hcpl == 1)
-                        newPoint = 0.5 * StateVecD(real(2 * ii + ((jj + kk) % 2)), 
-                            sqrt(3.0) * (real(jj) + real((kk % 2)) / 3.0), 
-                            2.0 / 3.0 * sqrt(6.0) * real(kk));
+                        newPoint = 0.5 * StateVecD(
+                            2.0 / 3.0 * sqrt(6.0) * real(kk),              // x
+                            sqrt(3.0) * (real(jj) + real((kk % 2)) / 3.0), // y
+                            real(2 * ii + ((jj + kk) % 2)));               // z
                     else
-                        newPoint = StateVecD(real(ii), real(jj), real(kk));
+                        newPoint = StateVecD(real(kk), real(ii), real(jj));
 
                     newPoint *= globalspacing;
                     newPoint += StateVecD(unif(re),unif(re),unif(re));
@@ -452,9 +487,9 @@ std::vector<StateVecD>  create_inlet_zone(shape_block& block, real const& global
     }
     else if(block.sub_bound_type == circleSphere)
     {
-        real const& radius = block.radius/globalspacing;
+        real const& radius = block.radius;
         real const rsq = radius*radius;
-        StateVecD const& centre = block.centre;
+        // StateVecD const& centre = block.centre;
         for (int kk =  block.nk - 1; kk > 0; --kk)
         {
             for (int jj = 0; jj < block.nj; ++jj)
@@ -463,18 +498,20 @@ std::vector<StateVecD>  create_inlet_zone(shape_block& block, real const& global
                 {
                     StateVecD newPoint;
                     if (block.hcpl == 1)
-                        newPoint = 0.5 * StateVecD(real(2 * ii + ((jj + kk) % 2)), 
-                            sqrt(3.0) * (real(jj) + real((kk % 2)) / 3.0), 
-                            2.0 / 3.0 * sqrt(6.0) * real(kk));
+                        newPoint = 0.5 * StateVecD(
+                            2.0 / 3.0 * sqrt(6.0) * real(kk),              // x
+                            sqrt(3.0) * (real(jj) + real((kk % 2)) / 3.0), // y
+                            real(2 * ii + ((jj + kk) % 2)));               // z
                     else
-                        newPoint = StateVecD(real(ii), real(jj), real(kk));
+                        newPoint = StateVecD(real(kk), real(ii), real(jj));
 
-                    real a = newPoint[0] - radius;
-                    real b = newPoint[1] - radius;
+                    newPoint *= globalspacing;
+
+                    real a = newPoint[1] - radius;
+                    real b = newPoint[2] - radius;
                     if((a*a + b*b) > rsq)
                         continue;
 
-                    newPoint *= globalspacing;
                     newPoint += StateVecD(unif(re),unif(re),unif(re));
                     newPoint  = block.rotmat * newPoint;
                     newPoint += block.start;
@@ -492,16 +529,16 @@ std::vector<StateVecD>  create_inlet_zone(shape_block& block, real const& global
             {
                 StateVecD newPoint;
                 if (block.hcpl == 1)
-                    newPoint = 0.5 * StateVecD(real(2 * ii + ((jj) % 2)), sqrt(3.0) * (real(jj)), 0.0);
+                    newPoint = 0.5 * StateVecD(0.0, sqrt(3.0) * (real(jj)), real(2 * ii + ((jj) % 2)));
                 else
-                    newPoint = StateVecD(real(ii), real(jj), 0.0);
+                    newPoint = StateVecD(0.0, real(ii), real(jj));
 
-                real a = newPoint[0] - radius;
-                real b = newPoint[1] - radius;
+                newPoint *= globalspacing;
+                real a = newPoint[1] - radius;
+                real b = newPoint[2] - radius;
                 if((a*a + b*b) > rsq)
                     continue;
 
-                newPoint *= globalspacing;
                 newPoint += StateVecD(unif(re),unif(re),unif(re));
                 newPoint = block.rotmat * newPoint;
                 newPoint += block.start;
@@ -513,7 +550,7 @@ std::vector<StateVecD>  create_inlet_zone(shape_block& block, real const& global
         }   /* end j count */
 
         // Create buffer zone
-        size_t nBuff = block.hcpl == 1 ? 5 : 4;
+        int nBuff = block.hcpl == 1 ? 5 : 4;
         block.buffer = vector<vector<size_t>>(block.back.size(), vector<size_t>(nBuff));
         size_t buff = 0;
         for (int kk =  -1; kk >= -nBuff; --kk)
@@ -525,18 +562,19 @@ std::vector<StateVecD>  create_inlet_zone(shape_block& block, real const& global
                 {
                     StateVecD newPoint;
                     if (block.hcpl == 1)
-                        newPoint = 0.5 * StateVecD(real(2 * ii + ((jj + kk) % 2)), 
-                            sqrt(3.0) * (real(jj) + real((kk % 2)) / 3.0), 
-                            2.0 / 3.0 * sqrt(6.0) * real(kk));
+                        newPoint = 0.5 * StateVecD(
+                            2.0 / 3.0 * sqrt(6.0) * real(kk),              // x
+                            sqrt(3.0) * (real(jj) + real((kk % 2)) / 3.0), // y
+                            real(2 * ii + ((jj + kk) % 2)));               // z
                     else
-                        newPoint = StateVecD(real(ii), real(jj), real(kk));
+                        newPoint = StateVecD(real(kk), real(ii), real(jj));
                     
-                    real a = newPoint[0] - radius;
-                    real b = newPoint[1] - radius;
-                    if((a*a + b*b) > rsq)
-                        continue;
                         
                     newPoint *= globalspacing;
+                    real a = newPoint[1] - radius;
+                    real b = newPoint[2] - radius;
+                    if((a*a + b*b) > rsq)
+                        continue;
                     newPoint += StateVecD(unif(re),unif(re),unif(re));
                     newPoint = block.rotmat * newPoint;
                     newPoint += block.start;
@@ -589,7 +627,7 @@ uint update_buffer_region(SIM& svar, LIMITS& limits, SPHState& pnp1, size_t& end
 
 						pnp1.insert(pnp1.begin() + limits[block].index.second,
 						SPHPart(xi,pnp1[limits[block].buffer[ii].back()],BUFFER,partID));
-						limits[block].buffer[ii].back() = end_ng;
+						limits[block].buffer[ii].back() = limits[block].index.second;
 
 						limits[block].index.second++;
 						// Also need to adjust all blocks after the current

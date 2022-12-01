@@ -31,7 +31,7 @@ real Check_RK_Error(SIM const& svar, size_t const& start, size_t const& end,
 	to perform neighbour search and dissipation terms before freezing </summary */
 real Get_First_RK(SIM& svar, FLUID const& fvar, AERO const& avar, 
 	size_t const& start, size_t const& end, real const& B, real const& gam, real const& npd, MESH& cells,
-	LIMITS const& limits, OUTL const& outlist, /* DELTAP const& dp,*/ real& logbase, SPHState& pn, SPHState& st_2, real& error1)
+	LIMITS const& limits, OUTL const& outlist, real& logbase, SPHState& pn, SPHState& st_2, real& error1)
 {
 	const real dt = svar.dt;
 	
@@ -47,22 +47,22 @@ real Get_First_RK(SIM& svar, FLUID const& fvar, AERO const& avar,
 	vector<StateVecD> Af;
 	svar.AForce = StateVecD::Zero();
 
-	for(size_t ii = 0; ii < svar.nbound; ii++)
+	for(size_t block = 0; block < svar.nbound; block++)
 	{
 
-		if(limits[ii].nTimes != 0)
+		if(limits[block].nTimes != 0)
 		{
 			// Get the current boundary velocity
 			StateVecD vel = StateVecD::Zero();
-			for(size_t time = 0; time < limits[ii].nTimes; time++)
+			for(size_t time = 0; time < limits[block].nTimes; time++)
 			{
-				if(limits[ii].times[time] > svar.t)
+				if(limits[block].times[time] > svar.t)
 				{
-					vel = limits[ii].vels[time];
+					vel = limits[block].vels[time];
 				}
 			}
 
-			for(size_t jj = limits[ii].index.first; jj < limits[ii].index.second; jj++)
+			for(size_t jj = limits[block].index.first; jj < limits[block].index.second; jj++)
 			{
 				st_2[jj].v = vel;
 			}
@@ -70,49 +70,71 @@ real Get_First_RK(SIM& svar, FLUID const& fvar, AERO const& avar,
 		else
 		{
 			#pragma omp parallel for
-			for(size_t jj = limits[ii].index.first; jj < limits[ii].index.second; jj++)
+			for(size_t jj = limits[block].index.first; jj < limits[block].index.second; jj++)
 			{
-				st_2[jj].v = limits[ii].vels[0];
+				st_2[jj].v = limits[block].vels[0];
 			}
 		}
 
-		if(limits[ii].no_slip)
-			Set_No_Slip(fvar,limits[ii].index.first,limits[ii].index.second,outlist,st_2);
+		if(limits[block].no_slip)
+			Set_No_Slip(fvar,limits[block].index.first,limits[block].index.second,outlist,st_2);
 
-		if(limits[ii].bound_solver == 0)
-			Boundary_DBC(fvar,limits[ii].index.first,limits[ii].index.second,
+		if(limits[block].bound_solver == DBC)
+		{
+			Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
 							outlist,st_2,res_1);
-		else if (limits[ii].bound_solver == 1)
-			Get_Boundary_Pressure(svar.grav,fvar,limits[ii].index.first,
-							limits[ii].index.second,outlist,st_2);
-		else if (limits[ii].bound_solver == 2)
-			Boundary_Ghost(fvar,limits[ii].index.first,limits[ii].index.second,
-							outlist,st_2,Rrho_1);
+
+			#pragma omp for schedule(static) nowait
+			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+			{	/****** BOUNDARY PARTICLES ***********/
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+							pn[ii].rho + 0.5 * dt * Rrho_1[ii]));
+				st_2[ii].rho = rho;
+				st_2[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+				st_2[ii].Rrho = Rrho_1[ii];
+			}
+		}
+		else if (limits[block].bound_solver == pressure_G)
+		{
+			Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
+							limits[block].index.second,outlist,st_2);
+		}
+		else if (limits[block].bound_solver == ghost)
+		{
+			vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
+			Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
+							outlist,st_2,Rrho_1,near_inlet);
+
+			#pragma omp for schedule(static) nowait
+			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+			{	/****** BOUNDARY PARTICLES ***********/
+				if(!near_inlet[ii - limits[block].index.first])
+				{
+					real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+								pn[ii].rho + 0.5 * dt * Rrho_1[ii]));
+					st_2[ii].rho = rho;
+					st_2[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+					st_2[ii].Rrho = Rrho_1[ii];
+				}
+				else
+				{	// Don't allow negative pressures
+					real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
+								pn[ii].rho + 0.5 * dt * Rrho_1[ii]));
+					st_2[ii].rho = rho;
+					st_2[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+					st_2[ii].Rrho = fmax(0.0,Rrho_1[ii]);
+				}
+			}
+		}
 	}
 
 	Forces(svar, fvar, avar, cells, st_2, outlist, npd, res_1, Rrho_1, Af, Force);
 
 	#pragma omp parallel default(shared) // shared(svar,pn,st_2) /*reduction(+:Force,dropVel)*/
 	{
-		// uint w = 15;
-
 		/********************************************************************/
 		/*************************  STEP 1  *********************************/
 		/********************************************************************/
-		for(size_t block = 0; block < svar.nbound; block++)
-		{
-			if(limits[block].bound_solver == 0)
-			{
-				#pragma omp for schedule(static) nowait
-				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-				{	/****** BOUNDARY PARTICLES ***********/
-                    st_2[ii].rho = pn[ii].rho + 0.5 * dt * Rrho_1[ii];
-                    st_2[ii].p = pressure_equation(st_2[ii].rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-                    // st_2[ii].p = fvar.Cs*fvar.Cs * (st_2[ii].rho - fvar.rho0);
-                }
-            }
-		}
-
 		for(size_t block = svar.nbound; block < svar.nfluid + svar.nbound; block++)
 		{
 			#pragma omp for nowait 
@@ -242,21 +264,21 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 	/********************************************************************/
 	/*************************  STEP 2  *********************************/
 	/********************************************************************/
-	for(size_t ii = 0; ii < svar.nbound; ii++)
+	for(size_t block = 0; block < svar.nbound; block++)
 	{
-		if(limits[ii].nTimes != 0)
+		if(limits[block].nTimes != 0)
 		{
 			// Get the current boundary velocity
 			StateVecD vel = StateVecD::Zero();
-			for(size_t time = 0; time < limits[ii].nTimes; time++)
+			for(size_t time = 0; time < limits[block].nTimes; time++)
 			{
-				if(limits[ii].times[time] > svar.t)
+				if(limits[block].times[time] > svar.t)
 				{
-					vel = limits[ii].vels[time];
+					vel = limits[block].vels[time];
 				}
 			}
 
-			for(size_t jj = limits[ii].index.first; jj < limits[ii].index.second; jj++)
+			for(size_t jj = limits[block].index.first; jj < limits[block].index.second; jj++)
 			{
 				st_2[jj].v = vel;
 			}
@@ -264,44 +286,68 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 		else
 		{
 			#pragma omp parallel for
-			for(size_t jj = limits[ii].index.first; jj < limits[ii].index.second; jj++)
+			for(size_t jj = limits[block].index.first; jj < limits[block].index.second; jj++)
 			{
-				st_2[jj].v = limits[ii].vels[0];
+				st_2[jj].v = limits[block].vels[0];
 			}
 		}
 
-		if(limits[ii].no_slip)
-			Set_No_Slip(fvar,limits[ii].index.first,limits[ii].index.second,outlist,st_2);
+		if(limits[block].no_slip)
+			Set_No_Slip(fvar,limits[block].index.first,limits[block].index.second,outlist,st_2);
 
-		if(limits[ii].bound_solver == 0)
-			Boundary_DBC(fvar,limits[ii].index.first,limits[ii].index.second,
+		if(limits[block].bound_solver == DBC)
+		{
+			Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
 							outlist,st_2,res_2);
-		else if (limits[ii].bound_solver == 1)
-			Get_Boundary_Pressure(svar.grav,fvar,limits[ii].index.first,
-							limits[ii].index.second,outlist,st_2);
-		else if (limits[ii].bound_solver == 2)
-			Boundary_Ghost(fvar,limits[ii].index.first,limits[ii].index.second,
-							outlist,st_2,Rrho_2);
+
+			#pragma omp for schedule(static) nowait
+			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+			{	/****** BOUNDARY PARTICLES ***********/
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+							pn[ii].rho + 0.5 * dt * Rrho_2[ii]));
+				st_2[ii].rho = rho;
+				st_2[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+				st_2[ii].Rrho = Rrho_2[ii];
+			}
+		}
+		else if (limits[block].bound_solver == pressure_G)
+		{
+			Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
+							limits[block].index.second,outlist,st_2);
+		}
+		else if (limits[block].bound_solver == ghost)
+		{
+			vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
+			Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
+							outlist,st_2,Rrho_2,near_inlet);
+
+			#pragma omp for schedule(static) nowait
+			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+			{	/****** BOUNDARY PARTICLES ***********/
+				if(!near_inlet[ii - limits[block].index.first])
+				{
+					real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+								pn[ii].rho + 0.5 * dt * Rrho_2[ii]));
+					st_3[ii].rho = rho;
+					st_3[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+					st_3[ii].Rrho = Rrho_2[ii];
+				}
+				else
+				{	// Don't allow negative pressures
+					real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
+								pn[ii].rho + 0.5 * dt * Rrho_2[ii]));
+					st_3[ii].rho = rho;
+					st_3[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+					st_3[ii].Rrho = fmax(0.0,Rrho_2[ii]);
+				}
+			}
+		}
 	}
 
 	Forces(svar, fvar, avar, cells, st_2, outlist, npd, res_2, Rrho_2, Af, Force);
 
 	#pragma omp parallel default(shared) // shared(svar,pn,st_2,res_2,Rrho_2,st_3,res_3,Rrho_3)
-	{		
-		for(size_t block = 0; block < svar.nbound; block++)
-		{
-			if(limits[block].bound_solver == 0)
-			{
-				#pragma omp for schedule(static) nowait
-				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-				{	/****** BOUNDARY PARTICLES ***********/
-                    st_3[ii].rho = pn[ii].rho+0.5*dt*(Rrho_2[ii]);
-                    st_3[ii].p = pressure_equation(st_3[ii].rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-                    // st_3[ii].p = fvar.Cs*fvar.Cs * (st_3[ii].rho - fvar.rho0);
-                }
-            }
-		}
-
+	{	
 		for(size_t block = svar.nbound; block < svar.nfluid + svar.nbound; block++)
 		{
 			#pragma omp for nowait 
@@ -393,21 +439,21 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 			Particle_Shift_No_Ghost(svar,fvar,start,end,outlist,st_3);
 	#endif
 
-	for(size_t ii = 0; ii < svar.nbound; ii++)
+	for(size_t block = 0; block < svar.nbound; block++)
 	{
-		if(limits[ii].nTimes != 0)
+		if(limits[block].nTimes != 0)
 		{
 			// Get the current boundary velocity
 			StateVecD vel = StateVecD::Zero();
-			for(size_t time = 0; time < limits[ii].nTimes; time++)
+			for(size_t time = 0; time < limits[block].nTimes; time++)
 			{
-				if(limits[ii].times[time] > svar.t)
+				if(limits[block].times[time] > svar.t)
 				{
-					vel = limits[ii].vels[time];
+					vel = limits[block].vels[time];
 				}
 			}
 
-			for(size_t jj = limits[ii].index.first; jj < limits[ii].index.second; jj++)
+			for(size_t jj = limits[block].index.first; jj < limits[block].index.second; jj++)
 			{
 				st_3[jj].v = vel;
 			}
@@ -415,44 +461,68 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 		else
 		{
 			#pragma omp parallel for
-			for(size_t jj = limits[ii].index.first; jj < limits[ii].index.second; jj++)
+			for(size_t jj = limits[block].index.first; jj < limits[block].index.second; jj++)
 			{
-				st_3[jj].v = limits[ii].vels[0];
+				st_3[jj].v = limits[block].vels[0];
 			}
 		}
-		if(limits[ii].no_slip)
-			Set_No_Slip(fvar,limits[ii].index.first,limits[ii].index.second,outlist,st_3);
+		if(limits[block].no_slip)
+			Set_No_Slip(fvar,limits[block].index.first,limits[block].index.second,outlist,st_3);
 
-		if(limits[ii].bound_solver == 0)
-			Boundary_DBC(fvar,limits[ii].index.first,limits[ii].index.second,
-							outlist,st_3,res_3);
 		
-		else if (limits[ii].bound_solver == 1)
-			Get_Boundary_Pressure(svar.grav,fvar,limits[ii].index.first,
-							limits[ii].index.second,outlist,st_3);
-		else if (limits[ii].bound_solver == 2)
-			Boundary_Ghost(fvar,limits[ii].index.first,limits[ii].index.second,
-							outlist,st_3,Rrho_3);
+		if(limits[block].bound_solver == DBC)
+		{
+			Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
+							outlist,st_3,res_3);
+
+			#pragma omp for schedule(static) nowait
+			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+			{	/****** BOUNDARY PARTICLES ***********/
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+							pn[ii].rho + 0.5 * dt * Rrho_3[ii]));
+				st_4[ii].rho = rho;
+				st_4[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+				st_4[ii].Rrho = Rrho_3[ii];
+			}
+		}
+		else if (limits[block].bound_solver == pressure_G)
+		{
+			Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
+							limits[block].index.second,outlist,st_3);
+		}
+		else if (limits[block].bound_solver == ghost)
+		{
+			vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
+			Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
+							outlist,st_3,Rrho_3,near_inlet);
+
+			#pragma omp for schedule(static) nowait
+			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+			{	/****** BOUNDARY PARTICLES ***********/
+				if(!near_inlet[ii - limits[block].index.first])
+				{
+					real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+								pn[ii].rho + 0.5 * dt * Rrho_3[ii]));
+					st_4[ii].rho = rho;
+					st_4[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+					st_4[ii].Rrho = Rrho_3[ii];
+				}
+				else
+				{	// Don't allow negative pressures
+					real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
+								pn[ii].rho + 0.5 * dt * Rrho_3[ii]));
+					st_4[ii].rho = rho;
+					st_4[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+					st_4[ii].Rrho = fmax(0.0,Rrho_3[ii]);
+				}
+			}
+		}
 	}
 
 	Forces(svar, fvar, avar, cells, st_3, outlist, npd, res_3, Rrho_3, Af, Force);
 
 	#pragma omp parallel default(shared) // shared(svar,pn,st_3,res_3,Rrho_3,st_4,res_4,Rrho_4)
 	{
-		for(size_t block = 0; block < svar.nbound; block++)
-		{
-			if(limits[block].bound_solver == 0)
-			{
-				#pragma omp for schedule(static) nowait
-				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-				{	/****** BOUNDARY PARTICLES ***********/
-                    st_4[ii].rho = pn[ii].rho+0.5*dt*(Rrho_3[ii]);
-                    st_4[ii].p = pressure_equation(st_4[ii].rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-                    // st_3[ii].p = fvar.Cs*fvar.Cs * (st_3[ii].rho - fvar.rho0);
-                }
-            }
-		}
-
 		for(size_t block = svar.nbound; block < svar.nfluid + svar.nbound; block++)
 		{
 			#pragma omp for nowait 
@@ -540,21 +610,21 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 			Particle_Shift_No_Ghost(svar,fvar,start,end,outlist,st_4);
 	#endif
 
-	for(size_t ii = 0; ii < svar.nbound; ii++)
+	for(size_t block = 0; block < svar.nbound; block++)
 	{
-		if(limits[ii].nTimes != 0)
+		if(limits[block].nTimes != 0)
 		{
 			// Get the current boundary velocity
 			StateVecD vel = StateVecD::Zero();
-			for(size_t time = 0; time < limits[ii].nTimes; time++)
+			for(size_t time = 0; time < limits[block].nTimes; time++)
 			{
-				if(limits[ii].times[time] > svar.t)
+				if(limits[block].times[time] > svar.t)
 				{
-					vel = limits[ii].vels[time];
+					vel = limits[block].vels[time];
 				}
 			}
 
-			for(size_t jj = limits[ii].index.first; jj < limits[ii].index.second; jj++)
+			for(size_t jj = limits[block].index.first; jj < limits[block].index.second; jj++)
 			{
 				st_4[jj].v = vel;
 			}
@@ -562,24 +632,62 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 		else
 		{
 			#pragma omp parallel for
-			for(size_t jj = limits[ii].index.first; jj < limits[ii].index.second; jj++)
+			for(size_t jj = limits[block].index.first; jj < limits[block].index.second; jj++)
 			{
-				st_4[jj].v = limits[ii].vels[0];
+				st_4[jj].v = limits[block].vels[0];
 			}
 		}
 
-		if(limits[ii].no_slip)
-			Set_No_Slip(fvar,limits[ii].index.first,limits[ii].index.second,outlist,st_4);
+		if(limits[block].no_slip)
+			Set_No_Slip(fvar,limits[block].index.first,limits[block].index.second,outlist,st_4);
 
-		if(limits[ii].bound_solver == 0)
-			Boundary_DBC(fvar,limits[ii].index.first,limits[ii].index.second,
+		if(limits[block].bound_solver == DBC)
+		{
+			Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
 							outlist,st_4,res_4);
-		else if (limits[ii].bound_solver == 1)
-			Get_Boundary_Pressure(svar.grav,fvar,limits[ii].index.first,
-							limits[ii].index.second,outlist,st_4);
-		else if (limits[ii].bound_solver == 2)
-			Boundary_Ghost(fvar,limits[ii].index.first,limits[ii].index.second,
-							outlist,st_4,Rrho_4);
+
+			#pragma omp for schedule(static) nowait
+			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+			{	/****** BOUNDARY PARTICLES ***********/
+				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+							pn[ii].rho + (dt / 6.0) * (st_2[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii])));
+				pnp1[ii].rho = rho;
+				pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+				pnp1[ii].Rrho = Rrho_2[ii];
+			}
+		}
+		else if (limits[block].bound_solver == pressure_G)
+		{
+			Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
+							limits[block].index.second,outlist,st_4);
+		}
+		else if (limits[block].bound_solver == ghost)
+		{
+			vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
+			Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
+							outlist,st_4,Rrho_4,near_inlet);
+
+			#pragma omp for schedule(static) nowait
+			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+			{	/****** BOUNDARY PARTICLES ***********/
+				if(!near_inlet[ii - limits[block].index.first])
+				{
+					real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+								pn[ii].rho + (dt / 6.0) * (st_2[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii])));
+					pnp1[ii].rho = rho;
+					pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+					pnp1[ii].Rrho = Rrho_4[ii];
+				}
+				else
+				{	// Don't allow negative pressures
+					real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
+							pn[ii].rho + (dt / 6.0) * (st_2[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii])));
+					pnp1[ii].rho = rho;
+					pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+					pnp1[ii].Rrho = fmax(0.0,Rrho_4[ii]);
+				}
+			}
+		}
 
 	}
 
@@ -587,22 +695,6 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 
 	#pragma omp parallel default(shared) // shared(svar,pn,pnp1,st_2,res_2,Rrho_2,st_3,res_3,Rrho_3,st_4,res_4,Rrho_4)
 	{
-		for(size_t block = 0; block < svar.nbound; block++)
-		{
-			if(limits[block].bound_solver == 0)
-			{
-				#pragma omp for schedule(static) nowait
-				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-				{	/****** BOUNDARY PARTICLES ***********/
-					real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, pn[ii].rho + (dt / 6.0) * 
-						(st_2[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii])));
-					pnp1[ii].rho = rho;
-
-					pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-				}
-			}
-		}
-
 		for(size_t block = svar.nbound; block < svar.nfluid + svar.nbound; block++)
 		{
 			#pragma omp for nowait 
@@ -709,7 +801,7 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 
 real Runge_Kutta4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
 	size_t const& start, size_t& end, real const& B, real const& gam, real const& npd, MESH& cells,
-	LIMITS const& limits, OUTL const& outlist, /* DELTAP const& dp, */ real& logbase,
+	LIMITS const& limits, OUTL const& outlist, real& logbase,
 	SPHState& pn, SPHState& st_2, SPHState& pnp1, StateVecD& Force, StateVecD& dropVel)
 {
 	real error = 0.0;

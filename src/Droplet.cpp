@@ -652,6 +652,7 @@ void Droplet_Drag_Sweep(SIM& svar, FLUID& fvar, AERO& avar)
 		svar.nacross.size(),vector<vector<real>>(svar.Reynolds.size(),vector<real>(6,0.0)));
 
     MESH cells;
+	VLM vortex;
 
     if(cells.cCentre.size() == 0)
         cells.cCentre.emplace_back(StateVecD::Zero());
@@ -767,7 +768,7 @@ void Droplet_Drag_Sweep(SIM& svar, FLUID& fvar, AERO& avar)
         FindNeighbours(SPH_TREE, fvar, pn, outlist);
 		real npd = 1.0;
         dSPH_PreStep(fvar,pn.size(),pn,outlist,npd);
-        Detect_Surface(svar,fvar,avar,0,pn.size(),outlist,cells,pn);
+        Detect_Surface(svar,fvar,avar,0,pn.size(),outlist,cells,vortex,pn);
 
         /* Remove particles that aren't going to receive a force */
         SPHState to_test;

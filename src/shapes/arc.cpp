@@ -1,7 +1,7 @@
 
 #include "arc.h"
 
-#include "../Third_Party/Eigen/Dense"
+#include <Eigen/Dense>
 
 void check_arc_input(shape_block& bound, real& globalspacing)
 {

@@ -14,15 +14,15 @@ inline int Combine_SZPLT(string& file)
 	cmd.append("\"");
 
 	#ifdef DEBUG
-		dbout << "Attempting to combine szplt." << endl;
-		dbout << "Command: " << cmd << endl;
+		fprintf(dbout,"Attempting to combine szplt.\n");
+		fprintf(dbout,"Command: %s\n", cmd.c_str());
 	#endif
 
-	cout << "Combining szplt: " << file << endl;
+	printf("Combining szplt: %s\n",file.c_str());
 	if(system(cmd.c_str()))
 	{
-    	cout << "Could not combine szplt file." << endl;
-    	cout << "Command: " << cmd << endl;
+    	printf("Could not combine szplt file.\n");
+    	printf("Command: %s\n",cmd.c_str());
     	return -1;
 	}
 	return 0;

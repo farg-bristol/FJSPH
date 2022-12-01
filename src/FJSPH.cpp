@@ -26,10 +26,11 @@
 #include "Shifting.h"
 #include "Droplet.h"
 #include "Speedtest.h"
+#include "VLM.h"
 
 #ifdef DEBUG
 	/*Open debug file to write to*/
-	std::ofstream dbout;
+	FILE* dbout;
 #endif
 
 using namespace std::chrono;
@@ -44,7 +45,7 @@ int main(int argc, char *argv[])
 	srand(unsigned(time(NULL)));
 	
 	#ifdef DEBUG
-	dbout.open("WCSPH.log",std::ios::out);
+	dbout = fopen("WCSPH.log","w");
 	#endif
 
 	real duration;
@@ -61,6 +62,7 @@ int main(int argc, char *argv[])
 	LIMITS limits;
 	OUTL outlist;
 	MESH cells;
+	VLM vortex;
 	SURFS surf_marks;
 
 	///****** Initialise the particles memory *********/
@@ -70,7 +72,7 @@ int main(int argc, char *argv[])
 	// SPHState airP;
 	// DELTAP dp;
 
-	GetInput(argc,argv,svar,fvar,avar);
+	GetInput(argc,argv,svar,fvar,avar,vortex);
 	
 	// if(MakeOutputDir(argc,argv,svar))
 	// {
@@ -211,7 +213,7 @@ int main(int argc, char *argv[])
 	///*** Perform an iteration to populate the vectors *****/
 	if(!svar.restart)
 	{
-		First_Step(SPH_TREE,CELL_TREE,svar,fvar,avar,cells,limits,outlist,pnp1,pn,iptdata);
+		First_Step(SPH_TREE,CELL_TREE,svar,fvar,avar,vortex,cells,limits,outlist,pnp1,pn,iptdata);
 	}
 	else
 	{
@@ -249,7 +251,7 @@ int main(int argc, char *argv[])
 			// }	
 		}
 
-		Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,pn);
+		Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,vortex,pn);
 
 		// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
 		#ifdef ALE
@@ -297,7 +299,7 @@ int main(int argc, char *argv[])
 	// Make sure that inlets are injecting inside the mesh domain.
 	#if SIMDIM == 3
 	if(!svar.restart && svar.Asource == 3)
-		svar.vortex.write_VLM_Panels(svar.output_prefix);		
+		vortex.write_VLM_Panels(svar.output_prefix);		
 	#endif
 
 	/*Timing calculation + error sum output*/
@@ -329,10 +331,10 @@ int main(int argc, char *argv[])
 		const real d = svar.beta;
 		const real B = fvar.B;
 		const real gam = fvar.gam;
-		dbout << "Newmark Beta integration parameters" << endl;
-		dbout << "a: " << a << "  b: " << b << endl;
-		dbout << "c: " << c << "  d: " << d << endl;
-		dbout << "B: " << B << "  gam: " << gam << endl << endl; 
+		fprintf(dbout,"Newmark Beta integration parameters\n");
+		fprintf(dbout, "a: %f b: %f\n", a, b);
+		fprintf(dbout, "c: %f d: %f\n", c, d);
+		fprintf(dbout, "B: %f gam: %f\n\n", B, gam); 
 	#endif
 
 	
@@ -340,10 +342,16 @@ int main(int argc, char *argv[])
 	{
 		int stepits=0;
 		real stept=0.0;
-		
 		while (stept + 0.1*svar.dt_min < svar.framet)
 		{
-			error = Integrate(SPH_TREE,CELL_TREE,svar,fvar,avar,cells,surf_marks,limits,outlist,pn,pnp1,iptdata);
+			if(stepits % 50 == 0)
+				#ifdef ALE
+				printf("\nTime      | Timestep | CFL  | RMS error | its | dRho (%%) | Max-F     | Max-Af    | Max Shift | Step time (ms)| \n");
+				#else
+				printf("\nTime      | Timestep | CFL  | RMS error | its | dRho (%%) | Max-F     | Max-Af    | Step time (ms)| \n");
+				#endif
+
+			error = Integrate(SPH_TREE,CELL_TREE,svar,fvar,avar,vortex,cells,surf_marks,limits,outlist,pn,pnp1,iptdata);
 			stept+=svar.dt;
 			++stepits;
 		}

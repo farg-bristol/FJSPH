@@ -5,13 +5,13 @@
 #define INTEGRATION_H
 
 #include "Var.h"
-
+#include "VLM.h"
 ///**************** Integration loop **************///
 real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	MESH& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist, /* DELTAP& dp, */ SPHState& pn, SPHState& pnp1, 
-	vector<IPTState>& iptdata);
+	VLM& vortex, MESH& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist,
+	SPHState& pn, SPHState& pnp1, vector<IPTState>& iptdata);
 
 void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	MESH& cells, LIMITS const& limits, OUTL& outlist, /* DELTAP& dp, */ SPHState& pnp1, SPHState& pn, vector<IPTState>& iptdata);
+	VLM& vortex, MESH& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn, vector<IPTState>& iptdata);
 
 #endif

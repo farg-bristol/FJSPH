@@ -200,7 +200,7 @@ namespace TAU
 	void Find_Angle_Alpha(SIM& svar)
 	{
 	#ifdef DEBUG
-		dbout << "Entering Find_Bmap_Markers..." << endl;
+		fprintf(dbout, "Entering Find_Bmap_Markers...\n");
 	#endif
 		string const &bmapIn = svar.taubmap;
 		std::ifstream fin(bmapIn, std::ios::in);
@@ -229,14 +229,14 @@ namespace TAU
 		svar.grav[0] = -oldgrav[1]*sin(svar.angle_alpha);
 
 		#ifdef DEBUG
-			dbout << "Exiting Find_Angle_Alpha..." << endl;
+			fprintf(dbout, "Exiting Find_Angle_Alpha...\n");
 		#endif
 	}
 
 	void Read_BMAP(SIM& svar)
 	{
 		#ifdef DEBUG
-		dbout << "Entering Find_Bmap_Markers..." << endl;
+		fprintf(dbout, "Entering Find_Bmap_Markers...\n");
 		#endif
 		string const& bmapIn = svar.taubmap; 
 		std::ifstream fin(bmapIn, std::ios::in);
@@ -311,7 +311,7 @@ namespace TAU
 		svar.grav[0] = -oldgrav[1]*sin(svar.angle_alpha);
 
 		#ifdef DEBUG
-		dbout << "Exiting Find_Bmap_Markers..." << endl;
+		fprintf(dbout, "Exiting Find_Bmap_Markers...\n");
 		#endif
 	}
 
@@ -319,7 +319,7 @@ namespace TAU
 	vector<real> Get_Scalar_Property_real(int& fin, string const& variable, size_t const& nPts)
 	{
 		#ifdef DEBUG
-			dbout << "Reading variable: " << variable << endl;
+			fprintf(dbout, "Reading variable: %s\n",variable.c_str());
 		#endif
 		int retval;
 		int varID;
@@ -327,18 +327,18 @@ namespace TAU
 		Get_Var_ID(fin, variable.c_str(), varID);
 
 		#ifdef DEBUG
-			dbout << "Allocating array of: " << nPts << endl;
+			fprintf(dbout, "Allocating array of: %zu", nPts);
 		#endif
 
 		double *array = new double[nPts];
 
 		#ifdef DEBUG
-			dbout << "Attempting to read NetCDF variable:  " << variable << endl;
+			fprintf(dbout, "Attempting to read NetCDF variable: %s\n", variable.c_str());
 		#endif
 
 		if ((retval = nc_get_var_double(fin, varID, &array[0])))
 		{
-			cout << "Failed to get variable id for: " << variable << endl;
+			printf("Failed to get variable id for: %s\n", variable.c_str());
 			ERR(retval);
 		}
 
@@ -348,7 +348,7 @@ namespace TAU
 		vector<real> var = propVec;
 
 		#ifdef DEBUG
-			dbout << "returning vector" << endl;
+			fprintf(dbout, "Returning vector\n");
 		#endif
 		return var;
 	}
@@ -356,7 +356,7 @@ namespace TAU
 	vector<int> Get_Scalar_Property_int(int& fin, string const& variable, int const& nPts)
 	{
 		#ifdef DEBUG
-			dbout << "Reading variable: " << variable << endl;
+			fprintf(dbout, "Reading variable: %s\n", variable.c_str());
 		#endif
 		int retval;
 		int varID;
@@ -364,13 +364,13 @@ namespace TAU
 		Get_Var_ID(fin, variable.c_str(), varID);
 
 		#ifdef DEBUG
-			dbout << "Allocating array of: " << nPts << endl;
+			fprintf(dbout, "Allocating array of: %d\n", nPts);
 		#endif
 
 		int *array = new int[nPts];
 
 		#ifdef DEBUG
-			dbout << "Attempting to read NetCDF variable:  " << variable << endl;
+			fprintf(dbout, "Attempting to read NetCDF variable: %s\n", variable.c_str());
 		#endif
 
 		if ((retval = nc_get_var_int(fin, varID, &array[0])))
@@ -384,7 +384,7 @@ namespace TAU
 		propVec.insert(propVec.end(), &array[0], &array[nPts]);
 
 		#ifdef DEBUG
-			dbout << "returning vector" << endl;
+			fprintf(dbout, "Returning vector\n");
 		#endif
 		return propVec;
 	}
@@ -394,7 +394,7 @@ namespace TAU
 	size_t const& nPpEd, vector<vector<size_t>>& vec)
 	{
 		#ifdef DEBUG
-			dbout << "Reading \"" << variable << "\"" << endl;
+			fprintf(dbout, "Reading variable: %s\n", variable.c_str());
 		#endif
 		int retval;
 		int varID;
@@ -408,7 +408,7 @@ namespace TAU
 
 	// cout << nElem << "  " << nPoints << endl;
 		#ifdef DEBUG
-			dbout << "Allocating array of: " << nElem << " by " << nPpEd << endl;
+			fprintf(dbout, "Allocating array of: %zu by %zu\n", nElem, nPpEd);
 		#endif
 
 		vector<vector<size_t>> elemVec(nElem, vector<size_t>(nPpEd));
@@ -430,14 +430,14 @@ namespace TAU
 			}
 
 			#ifdef DEBUG
-			dbout << "Attempting to read NetCDF elements." << endl;
+			fprintf(dbout, "Attempting to read NetCDF elements.\n");
 			#endif
 
 			cout << "Successfully read \"" << variable << "\"" << endl;
 			cout << "Number of cells: " << nElem << endl;
 
 			#ifdef DEBUG
-			dbout << "Successfully read \"" << variable << "\"" << endl;
+			fprintf(dbout, "Successfully read variable: %s\n", variable.c_str());
 			#endif
 
 			/*Convert it to a vector to store*/
@@ -454,7 +454,7 @@ namespace TAU
 		}
 
 		#ifdef DEBUG
-			dbout << "Returning vector" << endl;
+			fprintf(dbout, "Returning vector\n");
 		#endif
 		vec.insert(vec.end(),elemVec.begin(),elemVec.end());
 
@@ -465,7 +465,7 @@ namespace TAU
 	uint Get_Coordinates(int& fin, size_t const& nPnts, vector<StateVecD>& coordVec)
 	{
 		#ifdef DEBUG
-			dbout << "Reading coordinates." << endl;
+			fprintf(dbout, "Reading coordinates.\n");
 		#endif
 			
 		int retval;
@@ -533,18 +533,14 @@ namespace TAU
 				exit(-1);
 			}
 
-		#endif 
-		
-
-		#if SIMDIM == 2
 			#ifdef DEBUG
-				dbout << "Ignored dimension: " << ignore << endl;
+				fprintf(dbout, "Ignored dimension: %u\n", ignore);
 			#endif
 			cout << "Ignored dimension: " << ignore << endl;
-		#endif
+		#endif 
 
 		#ifdef DEBUG
-			dbout << "Number of points: " << nPnts << endl;
+			fprintf(dbout, "Number of points: %zu\n", nPnts);
 		#endif
 		/*Allocate on the heap (can be big datasets)*/
 		real *coordX = new real[nPnts];
@@ -602,7 +598,7 @@ namespace TAU
 		#endif
 
 		#ifdef DEBUG
-			dbout << "Returning coordinates." << endl;
+			fprintf(dbout, "Returning coordinates.\n");
 		#endif
 
 		#if SIMDIM == 3
@@ -641,7 +637,7 @@ namespace TAU
 		cout << "Reading solution file..." << endl;
 
 		#ifdef DEBUG
-			dbout << "Opening solultion file." << endl;
+			fprintf(dbout, "Opening solultion file.\n");
 		#endif 
 		string const& solIn = svar.tausol;
 		int retval;
@@ -665,7 +661,7 @@ namespace TAU
 		Get_Dim_Length(solID, ptDimID, solPts);
 
 		#ifdef DEBUG
-			dbout << "Solution points: " << solPts << endl;
+			fprintf(dbout, "Solution points: %zu\n", solPts);
 		#endif
 
 		#if SIMDIM == 3
@@ -815,7 +811,7 @@ namespace TAU
 	void Place_Edges(int &fin, size_t const &nElem, size_t const &nPnts, size_t const &nEdge, MESH &cells)
 	{
 		#ifdef DEBUG
-			dbout << "Reading element left/right and placing faces" << endl;
+			fprintf(dbout, "Reading element left/right and placing faces\n");
 		#endif
 
 		vector<int> left = Get_Scalar_Property_int(fin,"left_element_of_edges",nEdge);
@@ -915,7 +911,7 @@ namespace TAU
 		cells.leftright = leftright;
 
 		#ifdef DEBUG
-			dbout << "End of placing edges in elements." << endl;
+			fprintf(dbout, "End of placing edges in elements.\n\n");
 		#endif
 
 		/*Now go through the faces and see which vertices are unique, to get element data*/
@@ -966,8 +962,7 @@ namespace TAU
 		// cout << "Elements built." << endl;
 
 		#ifdef DEBUG
-			dbout << "All elements defined." << endl
-				<< endl;
+			fprintf(dbout, "All elements defined.\n");
 		#endif
 	}
 
@@ -977,9 +972,9 @@ namespace TAU
 		string solIn = svar.tausol;
 
 		#ifdef DEBUG
-			dbout << "Attempting read of NetCDF file." << endl;
-			dbout << "Mesh file: " << meshIn << endl;
-			dbout << "Solution file: " << solIn << endl;
+			fprintf(dbout, "Attempting read of NetCDF file.\n");
+			fprintf(dbout, "Mesh file: %s\n", meshIn.c_str());
+			fprintf(dbout, "Solution file: %s\n", solIn.c_str());
 		#endif
 
 		/*Read the mesh data*/
@@ -1021,7 +1016,7 @@ namespace TAU
 
 
 		#ifdef DEBUG
-			dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << " nSurf: " << nSurf << endl;
+			fprintf(dbout, "nElem: %zu nPnts: %zu nEdge: %zu nSurf: %zu\n", nElem, nPnts, nEdge, nSurf);
 		#endif
 
 		cout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << " nSurf: " << nSurf << endl;
@@ -1047,7 +1042,7 @@ namespace TAU
 		vector<int> usedVerts = Get_Scalar_Property_int(meshID, "vertices_in_use", nPnts);
 
 		#ifdef DEBUG
-			dbout << "Successfully read vertices_in_use data." << endl;
+			fprintf(dbout, "Successfully read vertices_in_use data.\n");
 		#endif
 
 		uVerts.resize(nPnts);
@@ -1073,8 +1068,7 @@ namespace TAU
 		Place_Edges(meshID, nElem, nPnts, nEdge, cells);
 
 		#ifdef DEBUG
-			dbout << "End of interaction with mesh file and ingested data." << endl
-				<< endl;
+			fprintf(dbout, "End of interaction with mesh file and ingested data.\n\n");
 			
 		#endif
 	}
@@ -1088,7 +1082,7 @@ namespace TAU
 	void Place_Faces(int &fin, size_t const &nFace, SIM const& svar, MESH &cells)
 	{
 		#ifdef DEBUG
-			dbout << "Reading element left/right and placing faces" << endl;
+			fprintf(dbout, "Reading element left/right and placing faces\n");
 		#endif
 
 		vector<int> left = Get_Scalar_Property_int(fin,"left_element_of_faces",nFace);
@@ -1183,14 +1177,14 @@ namespace TAU
 		maxedge *= 5.0;
 
 		#ifdef DEBUG
-			dbout << "End of placing faces in elements." << endl;
-			dbout << "Building boundary indexes." << endl;
+			fprintf(dbout, "End of placing faces in elements.\n");
+			fprintf(dbout, "Building boundary indexes.\n");
 		#endif
 
 		cells.leftright = leftright;
 
 		#ifdef DEBUG
-			dbout << "All elements defined." << endl << endl;
+			fprintf(dbout, "All elements defined.\n\n");
 		#endif
 	}
 
@@ -1200,9 +1194,9 @@ namespace TAU
 		string solIn = svar.tausol;
 
 		#ifdef DEBUG
-			dbout << "Attempting read of NetCDF file." << endl;
-			dbout << "Mesh file: " << meshIn << endl;
-			dbout << "Solution file: " << solIn << endl;
+			fprintf(dbout, "Attempting read of NetCDF file.\n");
+			fprintf(dbout, "Mesh file: %s\n", meshIn.c_str());
+			fprintf(dbout, "Solution file: %s\n", solIn.c_str());
 		#endif
 
 		/*Read the mesh data*/
@@ -1270,7 +1264,7 @@ namespace TAU
 		}
 
 		#ifdef DEBUG
-			dbout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << " nSurf: " << nSurf << endl;
+			fprintf(dbout, "nElem: %zu nPnts: %zu nFace: %zu nSurf: %zu\n", nElem, nPnts, nFace, nSurf);
 		#endif
 
 		cout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << " nSurf: " << nSurf << endl;
@@ -1321,8 +1315,7 @@ namespace TAU
 		}
 
 		#ifdef DEBUG
-			dbout << "End of interaction with mesh file and ingested data." << endl
-				<< endl;
+			fprintf(dbout, "End of interaction with mesh file and ingested data.\n\n");
 		#endif
 	}
 	#endif

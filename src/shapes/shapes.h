@@ -7,13 +7,14 @@
 
 struct shape_block
 {   /* Basically everything needs to be defined. Provide defaults to check against */
-    shape_block() : bound_type(-1), hcpl(0), fixed_vel_or_dynamic(0), bound_solver(1), no_slip(0),
-        npts(0), insert_norm(StateVecD::Constant(default_val)), insconst(default_val),
-                 delete_norm(StateVecD::Constant(default_val)), delconst(default_val),
-                 pipe_norm(StateVecD::Constant(default_val)), pipeconst(default_val),  
+    shape_block() : bound_type(-1), sub_bound_type(-1), hcpl(0), fixed_vel_or_dynamic(0), 
+        bound_solver(1), no_slip(0), npts(0),
+        insert_norm(default_norm), insconst(default_val),
+        delete_norm(default_norm), delconst(default_val),
+        pipe_norm(default_norm), pipeconst(default_val),  
         ntimes(0), dx(-1), write_data(0),
         stretch(StateVecD::Constant(1.0)), ni(-1), nj(-1), nk(-1), 
-        normal(StateVecD::Constant(default_val)),
+        normal(default_norm),
         angles(StateVecD::Zero()), rotmat(StateMatD::Identity()), 
         start(StateVecD::Constant(default_val)), end(StateVecD::Constant(default_val)), 
         right(StateVecD::Constant(default_val)), mid(StateVecD::Constant(default_val)), 

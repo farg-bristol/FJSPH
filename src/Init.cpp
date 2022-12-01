@@ -11,6 +11,7 @@
 #include "shapes/inlet.h"
 #include "shapes/line.h"
 #include "shapes/square.h"
+#include "shapes/cylinder.h"
 
 void get_boundary_velocity(shape_block& boundvar)
 {
@@ -248,6 +249,11 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
             bound.bound_type = arcSection;
             check_arc_input(bound,globalspacing);
         }
+        else if (bound.shape == "Cylinder")
+        {
+            bound.bound_type = cylinder;
+            check_cylinder_input(bound,globalspacing);
+        }
 		else if (bound.shape == "Inlet")
 		{
 			bound.bound_type = inletZone;
@@ -294,15 +300,15 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
 
 		if(bound.solver_name == "DBC")
 		{
-			bound.bound_solver = 0;
+			bound.bound_solver = DBC;
 		}
 		else if (bound.solver_name == "Pressure-Gradient")
 		{
-			bound.bound_solver = 1;
+			bound.bound_solver = pressure_G;
 		}
         else if (bound.solver_name == "Ghost")
         {
-            bound.bound_solver = 2;
+            bound.bound_solver = ghost;
         }
 
         globalspacing = std::max(bound.dx,globalspacing);
@@ -478,6 +484,35 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
         }
     }
 
+    for(size_t ii = 0; ii < fluvar.nblocks; ++ii)
+    {
+        for(size_t bID = 0; bID < fluvar.block[ii].back.size(); bID++)
+        {
+            size_t backID = fluvar.block[ii].back[bID];
+            int does_int = 0;
+            if(fluvar.block[ii].intersect[backID])
+            {   // If the back particle interstects, don't place any of the inlet
+                does_int = 1;
+            }
+            else
+            {   // Check buffer of that back particle now
+                for(size_t const buffID : fluvar.block[ii].buffer[bID])
+                {
+                    if(fluvar.block[ii].intersect[buffID])
+                        does_int = 1;
+                }
+            }
+
+            if(does_int)
+            {   // Set the intersection of all buffer and back particles to have correct numbers
+                fluvar.block[ii].intersect[backID] = 1;
+
+                for(size_t const buffID : fluvar.block[ii].buffer[bID])
+                    fluvar.block[ii].intersect[buffID] = 1;
+            }
+        }
+    }
+
     size_t nBoundPts = 0, nFluidPts = 0;
     for(size_t blockID = 0; blockID < boundvar.nblocks; blockID++)
     {
@@ -496,7 +531,13 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
     }
 
     // Get number of fluid particles to keep
-    std::cout << "Keeping " << nBoundPts + nFluidPts << " out of " << fluvar.totPts + boundvar.totPts << " fluid particles.\n";
+    printf("Keeping %zu out of %zu boundary points. %.2f%% intersected.\n",
+            nBoundPts,boundvar.totPts,100.0*(boundvar.totPts-nBoundPts)/boundvar.totPts);
+            
+    printf("Keeping %zu out of %zu fluid points. %.2f%% intersected.\n",
+            nFluidPts,fluvar.totPts,100.0*(fluvar.totPts-nFluidPts)/fluvar.totPts);
+
+    printf("Keeping %zu out of %zu total particles.\n",nBoundPts + nFluidPts,fluvar.totPts + boundvar.totPts );
 	boundvar.totPts = nBoundPts;
 	fluvar.totPts = nFluidPts;
 }
@@ -525,6 +566,10 @@ size_t Generate_Points(SIM const& svar, FLUID const& fvar, double const& globals
         {
             bound.coords = 
             create_circle(bound.centre,bound.radius, globalspacing, bound.hcpl);
+        }
+        else if (bound.bound_type == cylinder)
+        {
+            bound.coords = create_cylinder(bound,globalspacing);
         }
         else if (bound.bound_type == arcSection)
         {
@@ -666,57 +711,56 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
             }
 
             // Check if the back line or buffer ends up intersecting
-            vector<size_t> back_index;
+            vector<size_t> back_intersect(fluvar.block[block].back.size(),0);
             
             for(size_t bID = 0; bID < fluvar.block[block].back.size(); bID++)
             {
                 size_t does_int = 0;
                 size_t backID = fluvar.block[block].back[bID];
-                if(!fluvar.block[block].intersect[backID])
-                {
-                    // Check buffer of that back particle
-                    for(size_t const buffID : fluvar.block[block].buffer[bID])
-                    {
-                        if(fluvar.block[block].intersect[buffID])
-                            does_int = 1;
-                    }
-                }
-                else
+
+                // If the back particle interstects, don't place any of the inlet
+                if(fluvar.block[block].intersect[backID])
                     does_int = 1;
 
-                // Create vector of the successful back particles
-                if(!does_int)
-                    back_index.emplace_back(bID);
+                back_intersect[bID] = does_int;
             }
 
             // Insert the back particles
-            for(size_t const backID : back_index)
+            for(size_t bID = 0; bID < fluvar.block[block].back.size(); bID++)
             {
-                size_t pointID = fluvar.block[block].back[backID];
-                pn.emplace_back(SPHPart(fluvar.block[block].coords[pointID],
-                            fluvar.block[block].vel,
-                            fluvar.block[block].dens,fvar.simM,
-                            fluvar.block[block].press,BACK,pID));
+                if(!back_intersect[bID])
+                {
+                    size_t pointID = fluvar.block[block].back[bID];
+                    pn.emplace_back(SPHPart(fluvar.block[block].coords[pointID],
+                                fluvar.block[block].vel,
+                                fluvar.block[block].dens,fvar.simM,
+                                fluvar.block[block].press,BACK,pID));
 
-                limits.back().back.emplace_back(pID);
-                limits.back().buffer.emplace_back(nBuff,0);
+                    limits.back().back.emplace_back(pID);
+                    limits.back().buffer.emplace_back(nBuff,0);
 
-                pID++;
+                    pID++;
+                }
             }
             // Insert the buffer particles
             for(size_t buffID = 0; buffID < nBuff; buffID++)
             {
-                for(size_t bID = 0; bID < back_index.size(); bID++)
+                size_t bIndex = 0;
+                for(size_t bID = 0; bID < fluvar.block[block].back.size(); bID++)
                 {
-                    size_t backID = back_index[bID];
-                    size_t pointID = fluvar.block[block].buffer[backID][buffID];
-                    pn.emplace_back(SPHPart(fluvar.block[block].coords[pointID],
-                                fluvar.block[block].vel,
-                                fluvar.block[block].dens,fvar.simM,
-                                fluvar.block[block].press,BUFFER,pID));
+                    if(!back_intersect[bID])
+                    {
+                        size_t pointID = fluvar.block[block].buffer[bID][buffID];
+                        pn.emplace_back(SPHPart(fluvar.block[block].coords[pointID],
+                                    fluvar.block[block].vel,
+                                    fluvar.block[block].dens,fvar.simM,
+                                    fluvar.block[block].press,BUFFER,pID));
 
-                    limits.back().buffer[bID][buffID] = pID;
-                    pID++;
+                        limits.back().buffer[bIndex][buffID] = pID;
+
+                        pID++;
+                        bIndex++;
+                    }
                 }
             }
         }

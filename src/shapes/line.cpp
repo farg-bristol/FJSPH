@@ -1,4 +1,5 @@
 #include "line.h"
+#include <Eigen/Geometry>
 
 void check_line_input(shape_block& bound, real& globalspacing)
 {
@@ -182,7 +183,7 @@ std::vector<StateVecD> create_plane(shape_block const& block, real const& global
     StateVecD deltai = (block.right - block.start).normalized() * globalspacing;
     StateVecD deltaj = (block.end - block.right).normalized() * globalspacing;
 
-    StateVecD norm = deltaj.cross(deltai).normalized() * globalspacing;
+    StateVecD norm = (deltaj.cross(deltai)).normalized() * globalspacing;
 
     for(int jj = 0; jj < block.nj; ++jj)
     {

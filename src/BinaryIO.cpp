@@ -1183,7 +1183,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 {	
 	// Read the values from the solution folder, then check. 
 	#ifdef DEBUG
-		dbout << "Reading binary files for restart information." << endl;
+		fprintf(dbout,"Reading binary files for restart information.\n");
 	#endif
 
 	void* fluidHandle = NULL;

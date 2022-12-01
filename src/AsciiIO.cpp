@@ -17,7 +17,7 @@
 void ASCII_Restart(SIM& svar, FLUID const& fvar, SPHState& pn)
 {
     #ifdef DEBUG
-		dbout << "Reading ASCII files for restart information." << endl;
+		fprintf(dbout,"Reading ASCII files for restart information.\n");
 	#endif
 
 	string fuelf = svar.restart_prefix;
@@ -46,7 +46,7 @@ void ASCII_Restart(SIM& svar, FLUID const& fvar, SPHState& pn)
 
 
 	#ifdef DEBUG
-		dbout << "Exiting ASCII restart function" << endl;
+		fprintf(dbout,"Exiting ASCII restart function\n");
 	#endif
 }
 
@@ -86,7 +86,7 @@ inline void Write_ASCII_Vector(FILE* fp, vector<StateVecD> const& vec, size_t co
 		for (size_t ii = start; ii < end; ++ii)
 		{
 			for(uint dim = 0; dim < SIMDIM; ++dim)
-			fprintf(fp,"%3.7e",vec[ii][dim]);
+				fprintf(fp,"%3.7e",vec[ii][dim]);
 			fprintf(fp,"\n");  
 	  	}
 	}
@@ -529,7 +529,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 void Write_Cell_Data(MESH const& cdata)
 {
 	#ifdef DEBUG
-		dbout << "Entering Write_Cell_Data..." << endl;
+		fprintf(dbout,"Entering Write_Cell_Data...\n");
 	#endif
 
 	cout << "Writing cell based data." << endl;
@@ -601,7 +601,7 @@ void Write_Cell_Data(MESH const& cdata)
 	fout.close();
 
 	#ifdef DEBUG
-		dbout << "Exiting Write_Cell_Data..." << endl;
+		fprintf(dbout,"Exiting Write_Cell_Data...\n");
 	#endif
 }
 

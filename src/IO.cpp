@@ -1,21 +1,20 @@
 /*********     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code      *************/
 /*********        Created by Jamie MacLeod, University of Bristol               *************/
 
-#include "IO.h"
 #include "AsciiIO.h"
 #include "BinaryIO.h"
 #include "Geometry.h"
+#include "IO.h"
 #include "IOFunctions.h"
 #include "Kernel.h"
+#include "VLM.h"
 #include <ctime>
 #include <Eigen/LU>
-// #include "Restart.h"
-// #include "TauIO.h"
 
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
 /*************************************************************************/
-void Set_Values(SIM& svar, FLUID& fvar, AERO& avar)
+void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex)
 {
 	/*Universal parameters based on input values*/
 	svar.Angle *= M_PI/180.0;
@@ -56,8 +55,8 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar)
 	// 	// Defining dx to fit the pipe, then find rest spacing
 	// 	if(svar.jet_diam/svar.Pstep < 1.5)
 	// 	{	/*spacing is too close to full size to use standard adjustment*/
-	// 		cout << "Warning: particle spacing if of the same order of magintude of the jet diameter." << endl;
-	// 		cout << "Consider a different size for accuracy." << endl;
+	// 		printf("Warning: particle spacing if of the same order of magintude of the jet diameter.\n");
+	// 		printf("Consider a different size for accuracy.\n");
 	// 	}
 	// 	else
 	// 	{
@@ -88,9 +87,8 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar)
 	// Correct the droplet to have the same volume as the original
 	// if(svar.Scase == SPHERE)
 	// {
-	// 	cout << "Droplet Diameter: " << svar.diam << endl;		
+	// 	printf("Droplet Diameter: ", svar.diam, endl;		
 	// }
-
 
 	#if SIMDIM == 3
 		avar.pVol = 4.0/3.0 * M_PI * pow(svar.Pstep*0.5,SIMDIM);
@@ -165,9 +163,11 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar)
 	#if SIMDIM == 3
 		if (svar.Asource == 3)
 		{
-			svar.vortex.Init(svar.vlm_file);
-			svar.vortex.GetGamma(avar.vInf);
-			svar.vortex.write_VLM_Panels(svar.output_prefix);
+			vortex.Init(svar.vlm_file);
+			vortex.GetGamma(avar.vInf);
+			vortex.write_VLM_Panels(svar.output_prefix);
+			if(vortex.write_traj)
+				vortex.Plot_Streamlines(svar.output_prefix);
 		}
 	#endif
 
@@ -186,130 +186,122 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar)
 	svar.IPT_area = M_PI * svar.IPT_diam*svar.IPT_diam/4.0; 
 }
 
+void print_vector(string const& pretext, StateVecD const& vec)
+{
+	#if SIMDIM == 3
+	printf("%s: %f %f %f\n",pretext.c_str(), vec[0],vec[1],vec[2]);
+	#else
+	printf("%s: %f %f\n",pretext.c_str(), vec[0],vec[1]);
+	#endif
+}
+
 void Print_Settings(char** argv, SIM const& svar, FLUID const& fvar, AERO const& avar)
 {
 	#ifdef DEBUG
-		dbout << "Tait Gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
-		dbout << "Pipe rho: " << fvar.rhoJ << endl;
-		dbout << "Number of fluid particles along diameter: " << 2*svar.nrad+1 << endl;
-		dbout << "Pipe step (dx): " << svar.dx << endl;
-		dbout << "Particle mass: " << fvar.simM << endl;
-		dbout << "Freestream initial spacing: " << svar.Pstep << endl;
-		dbout << "Support Radius: " << fvar.H << endl;
-		dbout << "Gas Dynamic pressure: " << avar.qInf << endl << endl;
+		fprintf(dbout,"Tait Gamma: %f Tait B: %f\n", fvar.gam, fvar.B);
+		fprintf(dbout,"Pipe rho: %f\n", fvar.rhoJ);
+		fprintf(dbout,"Number of fluid particles along diameter: %d\n", 2*svar.nrad+1);
+		fprintf(dbout,"Pipe step (dx): %f\n", svar.dx);
+		fprintf(dbout,"Particle mass: %f\n", fvar.simM);
+		fprintf(dbout,"Freestream initial spacing: %f\n", svar.Pstep);
+		fprintf(dbout,"Support Radius: %f\n", fvar.H);
+		fprintf(dbout,"Gas Dynamic pressure: %f\n", avar.qInf);
 	#endif
 
-	cout << "****** SIMULATION SETTINGS *******" << endl;
+	printf("****** SIMULATION SETTINGS *******\n");
 	#pragma omp parallel
 	{
 		#pragma omp single
-		cout << "Number of threads: " << omp_get_num_threads() << endl;
+		printf("Number of threads: %d\n", omp_get_num_threads());
 	}
 	
-	cout << "Frame time interval: " << svar.framet << endl;
-	cout << "Number of frames: " << svar.Nframe << endl;
-	cout << "Output variables: " << svar.output_names << endl;
-	// cout << "Tait gamma: " << fvar.gam << "  Tait B: " << fvar.B << endl;
-	fprintf(stdout, "Tait gamma: %.1f  Tait B: %g\n",fvar.gam,fvar.B);
-	// cout << "Newmark-Beta parameters: " << svar.beta << ", " << svar.gamma << endl;
-	fprintf(stdout, "Newmark-Beta parameters: %.2f, %.2f\n",svar.beta,svar.gamma);
-	cout << "Boundary case: " << svar.Bcase << endl;
-	cout << "Aerodynamic source: " << svar.Asource << endl;
-	cout << "Aerodynamic case: " << avar.acase << endl;
-	cout << endl;
+	printf("Frame time interval: %f\n", svar.framet);
+	printf("Number of frames: %d\n",svar.Nframe);
+	printf("Output variables: %s\n",svar.output_names.c_str());
+	printf("Tait gamma: %.1f  Tait B: %g\n",fvar.gam,fvar.B);
+	printf("Newmark-Beta parameters: %.2f, %.2f\n",svar.beta,svar.gamma);
+	printf("Boundary case: %d\n", svar.Bcase);
+	printf("Aerodynamic source: %d\n", svar.Asource);
+	printf("Aerodynamic case: %d\n\n", avar.acase);
 
-	cout << "****** PIPE SETTINGS *******" << endl;
-	cout << "Pipe pressure: " << fvar.pPress << endl;
-	cout << "Pipe density: " << fvar.rhoJ << endl;
-	cout << "Pipe step (dx): " << svar.dx << endl;
-	cout << "Pipe diameter: " << svar.jet_diam << endl;
-	cout << "Number of fluid particles along diameter: " << 2*svar.nrad+1 << endl;
-	cout << "Pipe start position: " << svar.sim_start(0) << "  " << svar.sim_start(1);
-	#if SIMDIM == 3
-		cout << "  " << svar.sim_start(2);
-	#endif
-	cout << endl;
-	cout << "Pipe start rotation: " << svar.Angle(0) << "  " << svar.Angle(1);
-	#if SIMDIM == 3
-		cout << "  " << svar.Angle(2);
-	#endif
-	cout << endl;
-	cout << "Jet velocity: " << avar.vJetMag << endl;
+	printf("****** PIPE SETTINGS *******\n");
+	printf("Pipe pressure: %f\n", fvar.pPress);
+	printf("Pipe density: %f\n", fvar.rhoJ);
+	printf("Pipe step (dx): %f\n", svar.dx);
+	printf("Pipe diameter: %f\n", svar.jet_diam);
+	printf("Number of fluid particles along diameter: %d\n", 2*svar.nrad+1);
+	print_vector("Pipe start position", svar.sim_start);
+	print_vector("Pipe start rotation", svar.Angle);
+	printf("Jet velocity: %f\n\n", avar.vJetMag);
+	
+	printf("****** RESTING FUEL SETTINGS *******\n");
+	printf("Resting density: %f\n", fvar.rho0);
+	printf("Maxmimum density: %f\n", fvar.rhoMax);
+	printf("Minimum density: %f\n", fvar.rhoMin);
+	printf("Particle spacing: %f\n", svar.Pstep);
+	printf("Support radius: %f\n", fvar.H);
+	printf("Particle mass: %f\n", fvar.simM);
+	printf("Liquid viscosity: %f\n", fvar.mu);
+	printf("Speed of sound: %f\n\n", fvar.Cs);
 
-	cout << endl;		
-	cout << "****** RESTING FUEL SETTINGS *******" << endl;
-	cout << "Resting density: " << fvar.rho0 << endl;
-	cout << "Maxmimum density: " << fvar.rhoMax << endl;
-	cout << "Minimum density: " << fvar.rhoMin << endl;
-	cout << "Particle spacing: " << svar.Pstep << endl;
-	cout << "Support radius: " << fvar.H << endl;
-	cout << "Particle mass: " << fvar.simM << endl;
-	cout << "Liquid viscosity: " << fvar.mu << endl;
-	cout << "Speed of sound: " << fvar.Cs << endl;
-	cout << endl;
-
-	cout << "****** FREESTREAM SETTINGS ******" << endl;
+	printf("****** FREESTREAM SETTINGS ******\n");
 	if(svar.Asource != 1 && svar.Asource != 2)
 	{
-		cout << "Gas Velocity: " << avar.vInf(0) << "  " << avar.vInf(1);
-		#if SIMDIM == 3
-			cout << "  " << avar.vInf(2);
-		#endif
-		cout << endl;
+		print_vector("Gas velocity", avar.vInf);
 	}
 
-	cout << "Gas density: " << avar.rhog << endl;
-	cout << "Gas viscosity: " << avar.mug << endl;
-	cout << "Aerodynamic length: " << avar.L << endl;
-	cout << endl;
+	printf("Gas density: %f\n", avar.rhog);
+	printf("Gas viscosity: %f\n", avar.mug);
+	printf("Aerodynamic length: %f\n", avar.L);
 
 	if(svar.Asource == 1 || svar.Asource == 2)
 	{
-		cout << "Reference velocity: " << avar.vRef << endl;
-		cout << "Reference pressure: " << avar.pRef << endl;
-		cout << "Reference temperature: " << avar.T << endl;
-		cout << "Gas dynamic pressure: " << avar.qInf << endl << endl;
+		printf("Reference velocity: %f\n", avar.vRef);
+		printf("Reference pressure: %f\n", avar.pRef);
+		printf("Reference temperature: %f\n", avar.T);
+		printf("Gas dynamic pressure: %f\n", avar.qInf);
 	}
+	printf("\n");
 	
-	cout << "******** FILE SETTINGS ********" << endl;	
-	// cout << "Working directory: " << cCurrentPath << endl;
-	cout << "Input file: " << argv[1] << endl;
+	printf("******** FILE SETTINGS ********\n");	
+	// printf("Working directory: ", cCurrentPath);
+	printf("Input file: %s\n", argv[1]);
 	if(svar.Asource == 1 || svar.Asource == 2)
 	{
 		if(svar.CDForFOAM == 0)
 		{
-			cout << "Mesh filename: " << svar.taumesh << endl;
-			cout << "Solution filename: " << svar.tausol << endl;
+			printf("Mesh filename: %s\n", svar.taumesh.c_str());
+			printf("Solution filename: %s\n", svar.tausol.c_str());
 		}
 		else
 		{
-			cout << "OpenFOAM root directory: " << svar.foamdir << endl;
-			cout << "OpenFOAM solution time: " << svar.foamsol << endl;
+			printf("OpenFOAM root directory: %s\n", svar.foamdir.c_str());
+			printf("OpenFOAM solution time: %s\n", svar.foamsol.c_str());
 		}
 	}
 
-	cout << "Output prefix: " << svar.output_prefix << endl << endl;
+	printf("Output prefix: %s\n", svar.output_prefix.c_str());
 
 }
 
 
-void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
+void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex)
 {
 	if (argc > 2) 
 	{	/*Check number of input arguments*/
-		cout << "\tWARNING: only a maximum of one input arguments accepted,\n";
-		cout << "1: Input file directory\n";
-		cout << "Other inputs will be ignored." << endl << endl;
+		printf("WARNING: only a maximum of one input arguments accepted,\n");
+		printf("\t1: Input file directory\n");
+		printf("Other inputs will be ignored.\n");
 	}
 
 	if (argc == 1)
     {	/*Check if input has been provided*/
-    	cout << "\tERROR: No inputs provided. Stopping... \n";
+    	printf("ERROR: No inputs provided. Stopping... \n");
     	exit(-1);    	
     }
 
 	/*Get parameters if it has been provided*/
-	// cout << argv[1] << endl;
+	// printf(argv[1], endl;
 	string file = argv[1];
 	    	
 	svar.infile = file;
@@ -317,12 +309,12 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	ifstream fin(argv[1]);
 	if(!fin.is_open())
 	{
-		cout << "ERROR: Failed to open parameter file: " << argv[1] << endl;
+		printf("ERROR: Failed to open parameter file: %s\n", argv[1]);
 		exit(-1);
 	}
 	else
 	{
-		cout << "para file open, reading contents..." << endl;
+		printf("para file open, reading contents...\n");
 	}
 
     string line;
@@ -382,7 +374,9 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		Get_Number(line, "Gas constant gamma", avar.gamma);
 
 		/* Simulation settings */
+		Get_String(line, "SPH integration solver", svar.solver_name);
 		Get_Number(line, "SPH boundary solver (0=pressure/1=ghost)", svar.bound_solver);
+		Get_Number(line, "SPH solver minimum residual", svar.minRes);
 		Get_Number(line, "SPH maximum timestep", svar.dt_max);
 		Get_Number(line, "SPH minimum timestep", svar.dt_min);
         Get_Number(line, "SPH CFL condition", svar.cfl);
@@ -449,11 +443,11 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 
     fin.close();
 
+	int fault = 0;
+
 	/* Need to check if inputs are correct */
-	
 	if(svar.taumesh.empty())
     {
-		
 		if(svar.foamdir.empty())
 		{
 			#if SIMDIM == 3
@@ -475,8 +469,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		{
 			if(svar.foamsol.empty())
 			{
-				cout << "OpenFOAM solution directory not defined." << endl;
-				exit(-1);
+				printf("OpenFOAM solution directory not defined.\n");
+				fault = 1;
 			}
 
 			svar.CDForFOAM = 1;
@@ -489,8 +483,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		svar.Asource = 1;
 		if(svar.taubmap.empty())
 		{
-			cout << "Input TAU bmap file not defined." << endl;
-			exit(-1);
+			printf("Input TAU bmap file not defined.\n");
+			fault = 1;
 		}
 		else if(svar.taubmap == "(thisfile)")
 		{
@@ -500,8 +494,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 
 		if(svar.tausol.empty())
 		{
-			cout << "Input TAU solution file not defined." << endl;
-			exit(-1);
+			printf("Input TAU solution file not defined.\n");
+			fault = 1;
 		}
 
 	}
@@ -513,177 +507,9 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		#endif
 	)
 	{
-		cout << "Some or all of the SPH start coordinates have not been defined." << endl;
-		exit(-1);
+		printf("Some or all of the SPH start coordinates have not been defined.\n");
+		fault = 1;
 	}
-
-	// if(svar.start_type == "box")
-	// {
-	// 	svar.Scase = BOX;
-
-	// 	if(svar.xyPART[0] < 0 || svar.xyPART[1] < 0
-	// 		#if SIMDIM == 3
-	// 			|| svar.xyPART[2] < 0
-	// 		#endif
-	// 		)
-	// 	{
-	// 		if(svar.Pstep < 0)
-	// 		{
-	// 			cout << "SPH box resolution or initial spacing has not been defined." << endl;
-	// 			exit(-1);
-	// 		}	
-	// 	}
-	// 	else
-	// 	{
-	// 		real dx = svar.sim_box[0]/svar.xyPART[0];
-	// 		real dy = svar.sim_box[1]/svar.xyPART[1];
-	// 		svar.Pstep = std::min(dx,dy);
-	// 	}
-		
-	// }
-	// else if(svar.start_type == "cylinder")
-	// {
-	// 	svar.Scase = CYLINDER;
-
-	// 	if(svar.jet_diam < 0)
-	// 	{
-	// 		cout << "SPH cylinder diameter has not been defined." << endl;
-	// 		exit(-1);
-	// 	}
-
-	// 	if(svar.jet_depth < 0)
-	// 	{
-	// 		cout << "SPH cylinder depth has not been defined." << endl;
-	// 		exit(-1);
-	// 	}
-
-	// }	
-	// else if(svar.start_type == "sphere")
-	// {
-	// 	svar.Scase = SPHERE;
-	// 	if(svar.diam < 0)
-	// 	{
-	// 		cout << "SPH sphere diameter has not been defined." << endl;
-	// 		exit(-1);
-	// 	}
-	// }
-	// else if (svar.start_type == "jet")
-	// {
-	// 	svar.Scase = JET;
-
-	// 	if(svar.jet_diam < 0)
-	// 	{
-	// 		cout << "SPH cylinder diameter has not been defined." << endl;
-	// 		exit(-1);
-	// 	}
-
-	// 	if(svar.jet_depth < 0)
-	// 	{
-	// 		cout << "SPH cylinder depth has not been defined." << endl;
-	// 		exit(-1);
-	// 	}
-	// }
-	// else if (svar.start_type == "taper_jet")
-	// {
-	// 	svar.Scase = CONVJET;
-
-	// 	if(svar.jet_diam < 0)
-	// 	{
-	// 		cout << "SPH cylinder diameter has not been defined." << endl;
-	// 		exit(-1);
-	// 	}
-
-	// 	if(svar.jet_depth < 0)
-	// 	{
-	// 		cout << "SPH cylinder depth has not been defined." << endl;
-	// 		exit(-1);
-	// 	}
-	// }
-	// else
-	// {
-	// 	cout << "SPH starting geometry is not defined correctly if at all." << endl;
-	// 	exit(-1);
-	// }
-
-
-	// if(svar.bound_type == "(none)")
-	// {
-	// 	svar.Bcase = NONE;
-	// }
-	// else if (svar.bound_type == "box")
-	// {
-	// 	svar.Bcase = BOX;
-
-	// 	if (svar.bound_start[0] == 999999 || svar.bound_start[1] == 999999
-	// 		#if SIMDIM == 3
-	// 		|| svar.bound_start[2] == 999999
-	// 		#endif
-	// 	)
-	// 	{
-	// 		cout << "Some or all of the SPH boundary start coordinates have not been defined." << endl;
-	// 		exit(-1);
-	// 	}
-
-	// 	if(svar.bound_box[0] < 0 || svar.bound_box[1] < 0
-	// 		#if SIMDIM == 3
-	// 			|| svar.bound_box[2] < 0
-	// 		#endif
-	// 		)
-	// 	{
-	// 		cout << "Some or all of the SPH boundary box lengths have not been defined." << endl;
-	// 		exit(-1);
-	// 	}
-	// }
-	// else if (svar.bound_type == "jet")
-	// {
-	// 	svar.Bcase = JET;
-	// 	if(svar.Scase != JET)
-	// 	{
-	// 		cout << "Boundary geometry is not compatible with starting geometry." << endl;
-	// 		cout << "Starting geometry must be a cylinder to use a jet boundary." << endl;
-	// 		exit(-1);
-	// 	}
-
-	// 	if(avar.vJetMag < 0)
-	// 	{
-	// 		cout << "Jet velocity has not been defined" << endl;
-	// 		exit(-1);
-	// 	}
-
-	// 	svar.bound_start = svar.sim_start;
-	// }
-	// else if (svar.bound_type == "taper_jet")
-	// {
-	// 	svar.Bcase = CONVJET;
-	// 	if(svar.Scase != CONVJET)
-	// 	{
-	// 		cout << "Boundary geometry is not compatible with starting geometry." << endl;
-	// 		cout << "Starting geometry must be a cylinder to use a jet boundary." << endl;
-	// 		exit(-1);
-	// 	}
-
-	// 	if(avar.vJetMag < 0)
-	// 	{
-	// 		cout << "Jet velocity has not been defined" << endl;
-	// 		exit(-1);
-	// 	}
-
-	// 	svar.bound_start = svar.sim_start;
-	// }
-	// else
-	// {
-	// 	cout << "SPH boundary geometry is not defined correctly if at all." << endl;
-	// 	exit(-1);
-	// }
-
-	// if(svar.Bcase != NONE)
-	// {
-	// 	if(svar.bound_solver > 1)
-	// 	{
-	// 		cout << "Boundary solver not defined correctly." << endl;
-	// 		exit(-1);
-	// 	}
-	// }
 
 	/* Check for restart data now boundary case is known */	
 	if(!svar.restart_prefix.empty())
@@ -693,31 +519,48 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		// svar.output_prefix = svar.restart_prefix;
 	}
 
+	if(!svar.solver_name.empty())
+	{
+		if(svar.solver_name == "Newmark-Beta")
+		{
+			svar.solver_type = newmark_beta;
+		}
+		else if(svar.solver_name == "Runge-Kutta")
+		{
+			svar.solver_type = runge_kutta;
+		}
+		else
+		{
+			printf("ERROR: Unrecognised solver name. Choose from the following options:\n");
+			printf("\t1. Newmark-Beta\n\t2. Runge-Kutta\n");
+		fault = 1;
+		}
+	}
 
 	if(svar.Pstep < 0)
 	{
-		cout << "SPH initial spacing has not been defined." << endl;
-		exit(-1);
+		printf("ERROR: SPH initial spacing has not been defined.\n");
+		fault = 1;
 	}
 
 	if(svar.Nframe < 0)
 	{
-		cout << "Number of frames to output not defined." << endl;
-		exit(-1);
+		printf("Number of frames to output not defined.\n");
+		fault = 1;
 	}
 
 	if (svar.framet < 0)
 	{
-		cout << "Frame time interval has not been defined." << endl;
-		exit(-1);
+		printf("Frame time interval has not been defined.\n");
+		fault = 1;
 	}
 
 	if(svar.init_hydro_pressure)
 	{
 		if(svar.hydro_height < 0)
 		{
-			cout << "Hydrostatic height has not been defined." << endl;
-			exit(-1);
+			printf("Hydrostatic height has not been defined.\n");
+			fault = 1;
 		}
 	}
 
@@ -740,8 +583,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	}
 	else
 	{
-		cout << "Aerodynamic coupling model is not defined or correct." << endl;
-		exit(-1);
+		printf("Aerodynamic coupling model is not defined or correct.\n");
+		fault = 1;
 	}
 
 	if(svar.dt_min > 0.0)
@@ -755,8 +598,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 		{
 			if(svar.diameters.empty())
 			{
-				cout << "" << endl;
-				exit(-1);
+				printf("\n");
+				fault = 1;
 			}
 			else
 			{
@@ -781,78 +624,29 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
 	/* Particle Tracking Settings */
 	if(svar.using_ipt)
 	{
-		// if(svar.partout == 1)
-		// {
-		//     // if(svar.outdir.empty())
-		//     // {
-		//     //     cout << "Output particle directory not defined." << endl;
-		//     //     exit(-1);
-		//     // }
-		// 	string partf = svar.output_prefix + "_parts.dat";
-
-		// 	svar.partfile.open(partf,std::ios::out);
-		// 	if(!svar.cellfile)
-		// 	{
-		// 		cout << "Failed to open the particle tracking scatter file." << endl;
-		// 		exit(-1);
-		// 	}
-		// }
-
-		// if(svar.streakout == 1)
-		// {
-		//     // if(svar.streakdir.empty())
-		//     // {
-		//     //     cout << "Output particle streaks directory not defined." << endl;
-		//     //     exit(-1);
-		//     // }
-		// 	string streakf = svar.output_prefix + "_streaks.dat";
-		// 	svar.streakfile.open(streakf,std::ios::out);
-		// 	if(!svar.cellfile)
-		// 	{
-		// 		cout << "Failed to open the particle tracking streaks file." << endl;
-		// 		exit(-1);
-		// 	}
-		// }
-
-		// if(svar.cellsout == 1)
-		// {
-		//     // if(svar.celldir.empty())
-		//     // {
-		//     //     cout << "Output cell intersections directory not defined." << endl;
-		//     //     exit(-1);
-		//     // }
-		// 	string cellf = svar.output_prefix + "_cells.dat";
-		// 	svar.cellfile.open(cellf,std::ios::out);
-		// 	if(!svar.cellfile)
-		// 	{
-		// 		cout << "Failed to open the particle tracking cell file." << endl;
-		// 		exit(-1);
-		// 	}
-		// }
-
 		if(svar.eqOrder > 2 || svar.eqOrder < 1)
 		{
-			cout << "Equation order not 1 or 2. Please choose between these." << endl;
+			printf("Equation order not 1 or 2. Please choose between these.\n");
 			exit(-1);
 		}
 
 		if(svar.max_x < svar.sim_start[0])
 		{
-			cout << "ERROR: Maximum x coordinate for particle tracking or SPH is less than the starting position." << endl;
+			printf("ERROR: Maximum x coordinate for particle tracking or SPH is less than the starting position.\n");
 			exit(-1);
 		}
 
 		if(svar.max_x < svar.max_x_sph)
 		{
-			cout << "WARNING: Maximum x coordinate for particle tracking is less than that for SPH." << endl;
-			cout << "         No particle tracking will be performed." << endl;
+			printf("WARNING: Maximum x coordinate for particle tracking is less than that for SPH.\n");
+			printf("         No particle tracking will be performed.\n");
 			svar.using_ipt = 0;
 		}
 
 		if(svar.max_x_sph < svar.sim_start[0])
 		{
-			cout << "WARNING: Maximum x coordinate for SPH particles is less than the starting position." << endl;
-			cout << "         Particles will immediately transition to tracking." << endl;
+			printf("WARNING: Maximum x coordinate for SPH particles is less than the starting position.\n");
+			printf("         Particles will immediately transition to tracking.\n");
 		}
 
 		// svar.streakdir = svar.outfile;
@@ -864,27 +658,33 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar)
     {
         if(SIMDIM != 2)
 		{
-			cout << "WARNING: trying to use 3D code with a 2D settings file." << endl;
+			printf("WARNING: trying to use 3D code with a 2D settings file.\n");
 			svar.offset_axis = 0;
 		}
     }
     else if (svar.offset_axis > 3)
     {
-        cout << "2D offset axis option out of bounds" << endl;
-        exit(-1);
+        printf("ERROR: 2D offset axis option out of bounds\n");
+        fault = 1;
     }
 
 	#if SIMDIM == 2
 	if(svar.offset_axis == 0)
 	{
-		cout << "ERROR: Offset axis has not been defined." << endl;
-		exit(-1);
+		printf("ERROR: Offset axis has not been defined.\n");
+		fault = 1;
 	}
 	#endif
 	
+	if(fault)
+	{
+		printf("Check of the input settings finished with errors. Stopping\n");
+		exit(-1);
+	}
+
 	Check_Output_Variables(svar);
 
-  	Set_Values(svar,fvar,avar);
+  	Set_Values(svar,fvar,avar,vortex);
 
 	Print_Settings(argv,svar,fvar,avar);
 
@@ -909,7 +709,7 @@ void Write_Headers(FILE* f1, FILE* fb, FILE* fg, SIM& svar)
 			Write_ASCII_header(f1, svar, "Simulation Particles");
 		else
 		{
-			cerr << "Failed to open " << mainfile << ". Stopping." << endl;
+			printf("Failed to open %s. Stopping.\n",mainfile.c_str());
 			exit(-1);
 		}
 
@@ -921,7 +721,7 @@ void Write_Headers(FILE* f1, FILE* fb, FILE* fg, SIM& svar)
 			Write_ASCII_header(fb, svar, "Boundary Particles");
 		else
 		{
-			cerr << "Error opening " << bfile << " file. Stopping" << endl;
+			printf("Error opening %s file. Stopping\n", bfile.c_str());
 			exit(-1);
 		}
 		
@@ -975,21 +775,19 @@ void Append_Restart_Prefix(SIM const& svar)
 	}
 
 	/* Append a restart prefix to the end of the para file */
-	ofstream para(svar.infile, std::ios_base::app | std::ios_base::out);
-	if(!para.is_open())
+	FILE* para = fopen(svar.infile.c_str(), "a");
+	if(para == NULL)
 	{
-		cout << "Failed to reopen para file" << endl;
+		printf("Failed to reopen para file\n");
 		exit(-1);
 	}
 	std::time_t now = std::time(0);
 	char* time = ctime(&now);
-	para << "\n";
-	para << "    solver at " << time;
-	para << "                                               " << 
-			"SPH restart prefix: " << svar.output_prefix << endl;
-
-	para.close();
-	
+	fprintf(para, "\n");
+	fprintf(para, "    solver at %s", time);
+	fprintf(para, "                                   ");
+	fprintf(para, "SPH restart prefix: %s\n", svar.output_prefix.c_str());
+	fclose(para);
 }
 
 void Check_Output_Variables(SIM& svar)
@@ -1122,7 +920,7 @@ void Check_Output_Variables(SIM& svar)
 			}
 			else
 			{
-				std::cout << "Unrecognised output variable \"" << var << "\" defined" << std::endl;
+				std::printf("Unrecognised output variable \"%s\" defined\n", var.c_str());
 			}
 		}
 	}
@@ -1357,7 +1155,7 @@ void Restart_Simulation(SIM& svar, FLUID const& fvar, AERO const& avar,
 		// Particle numbers can be found from frame file.
 		// Find EOF, then walk back from there how many particles.
 		ASCII_Restart(svar,fvar,pn);
-		cout << "ASCII file restart not yet implemented." << endl;
+		printf("ASCII file restart not yet implemented.\n");
 		exit(-1);
 	}
 
@@ -1413,10 +1211,9 @@ void Restart_Simulation(SIM& svar, FLUID const& fvar, AERO const& avar,
 		size_t nBuff = limits[block].hcpl == 1 ? 5 : 4;
 		if(buffer[block].size() != limits[block].back.size()*nBuff)
 		{
-			cout << "Mismatch of back vector size and buffer vector size" << endl;
-			cout << "Buffer vector should be 4/5x back vector size." << endl;
-			cout << "Sizes are:  Buffer: " << buffer[block].size() << 
-					"  Back: " << limits[block].back.size() << endl;
+			printf("Mismatch of back vector size and buffer vector size\n");
+			printf("Buffer vector should be 4/5x back vector size.\n");
+			printf("Sizes are:  Buffer: %zu Back: %zu\n", buffer[block].size(), limits[block].back.size());
 			exit(-1);
 		}
 
@@ -1493,20 +1290,20 @@ void Restart_Simulation(SIM& svar, FLUID const& fvar, AERO const& avar,
 			{
 				if(found[ii][jj] == 0)
 				{
-					cout << "Buffer particle " << ii << ", " << jj << " has not been assigned. " << endl;
+					printf("Buffer particle %zu, %zu has not been assigned. \n", ii, jj);
 				}
 
 				if(found[ii][jj] > 1)
 				{
-					cout << "Buffer particle " << ii << ", " << jj << " has been assigned more than once. " << endl;
+					printf("Buffer particle %zu, %zu has been assigned more than once. \n", ii, jj);
 				}
 			}
 		}
 
 		if(nFound != nBuffer)
 		{
-			cout << "Some buffer particles have not been attached to a back particle. Cannot continue" << endl;
-			cout << "Particles located: " << nFound << "  Particles failed: " << nBuffer - nFound << endl;
+			printf("Some buffer particles have not been attached to a back particle. Cannot continue\n");
+			printf("Particles located: %zu  Particles failed: %zu\n", nFound, nBuffer - nFound);
 			exit(-1);
 		}
 	}

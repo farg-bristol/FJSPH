@@ -14,13 +14,11 @@
 #include <sstream>
 #include <omp.h>
 
+#define EIGEN_USE_BLAS
 // Third party includes
 #include <Eigen/Core>
 #include <Eigen/StdVector>
 #include "Third_Party/NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
-
-#define EIGEN_USE_BLAS
-
 
 using std::vector;
 using std::cout;
@@ -33,7 +31,7 @@ using std::setw;
 
 #ifdef DEBUG
     /*Open debug file to write to*/
-    extern std::ofstream dbout;
+    extern FILE* dbout;
 #endif
 
 #ifdef DAMBREAK
@@ -98,10 +96,6 @@ typedef Eigen::Matrix<real, SIMDIM+1, SIMDIM+1> StateP1MatD;
 
 const std::string WHITESPACE = " \n\r\t\f\v";
 
-#if SIMDIM == 3
-    #include "VLM.h"
-#endif
-
 #pragma omp declare reduction(+: std::vector<StateVecD> : \
         std::transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), \
             [](StateVecD lhs, StateVecD rhs){return lhs + rhs;})) \
@@ -131,10 +125,18 @@ enum partType{BOUND=0,PISTON,BUFFER,BACK,PIPE,GHOST,FREE,OUTLET,LOST};
 enum shapeType{NONE=0,BOX,CYLINDER,SPHERE,JET,CONVJET};
 
 // Shapes for new intitialisation
-enum shape_type {fineLine = 0, linePlane, squareCube, circleSphere, arcSection, coordDef,
+enum shape_type {fineLine = 0, linePlane, squareCube, circleSphere, cylinder, arcSection, coordDef,
                 inletZone};
 
+enum solve_type {newmark_beta = 0, runge_kutta, DBC, pressure_G, ghost};
+
 real const static default_val = 9999999.0;
+
+#if SIMDIM == 3
+StateVecD const static default_norm(1.0,0.0,0.0);
+#else
+StateVecD const static default_norm(1.0,0.0);
+#endif
 
 inline bool check_vector(StateVecD const& v)
 {
@@ -222,10 +224,12 @@ struct SIM
         bound_box.setConstant(-1);
     
         /* Integration parameters */
+        solver_type = newmark_beta;
         subits = 20;
         Nframe = -1;
         frame = 0;
         bound_solver = 0;
+        minRes = -7.0;
         cfl = 1.0;
         t = 0.0;
         tframem1 = 0.0;
@@ -345,6 +349,8 @@ struct SIM
     StateVecD sim_box, bound_box;	/* Box dimensions */
     
     /* Integration parameters */	
+    string solver_name;             /* Name of solver */
+    uint solver_type;               /* Use Runge-Kutta or Newmark-Beta */
     uint subits;                    /* Max number of sub-iterations */
     uint Nframe; 			        /* Max number of frames to output */
     uint frame;						/* Current frame number */
@@ -352,6 +358,7 @@ struct SIM
     double cfl;                     /* CFL criterion number */
     double t;                       /* Simulation time */
     double tframem1;				/* Last written frame time */
+    real minRes;                    /* Minimum solver residual */
     real dt, framet;			    /* Timestep, frame times */
     real dt_max;					/* Maximum timestep */
     real dt_min;					/* Minimum timestep */
@@ -363,10 +370,8 @@ struct SIM
     uint framecount;                /* How many frames have been output */
     real restart_tol;               /* Tolerance on buffer particles fitting*/
 
-    #if SIMDIM == 3
-        string vlm_file;
-        VLM vortex;
-    #endif
+    string vlm_file;
+
     StateVecD Force, AForce;		/*Total Force*/
     real mass;
     real tMom, aMom;
@@ -683,159 +688,6 @@ struct SURF
     vector<real> face_area;
 };
 
-
-/*Container for delta-plus SPH calculations*/
-// class DELTAP 
-// {
-//     public: 
-//         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-//         DELTAP(size_t const& size)
-//         {			
-//             #ifdef PAIRWISE
-//             npd = 0.0;
-//             #endif
-
-//             L = vector<StateMatD>(size,StateMatD::Zero());
-//             gradRho = vector<StateVecD>(size,StateVecD::Zero());
-//             norm = vector<StateVecD>(size,StateVecD::Zero());
-//             avgV = vector<StateVecD>(size,StateVecD::Zero());
-
-//             colourG = vector<real>(size,0.0);
-//             lam = vector<real>(size,0.0);
-//             lam_nb = vector<real>(size,0.0);
-//             lam_ng = vector<real>(size,0.0);
-//             kernsum = vector<real>(size,0.0);
-//             colour = vector<real>(size,0.0);
-//         }
-
-//         DELTAP()
-//         {
-//             #ifdef PAIRWISE
-//                 npd = 0.0;
-//             #endif
-//         }
-
-//         inline void realloc(size_t const& size)
-//         {
-//             if(L.size() != 0)
-//                 clear();
-
-//             alloc(size);
-//         }
-
-//         inline void update(vector<StateMatD> const& L_, vector<StateVecD> const& gradRho_, 
-//             vector<StateVecD> const& norm_, vector<StateVecD> const& avgV_, vector<real> const& colourG_,
-//             vector<real> const& lam_, vector<real> const& lam_nb_, vector<real> const& lam_ng_,
-//             vector<real> const& kernsum_, vector<real> const& colour_)
-//         {
-//             L = L_; gradRho = gradRho_; norm = norm_; 
-//             avgV = avgV_; colourG = colourG_; lam = lam_; lam_nb = lam_nb_; lam_ng = lam_ng_;
-//             kernsum = kernsum_; colour = colour_;
-//         }
-
-//         inline void clear()
-//         {
-//             L.clear(); gradRho.clear(); norm.clear(); 
-//             avgV.clear(); colourG.clear(); lam.clear(); lam_nb.clear(); lam_ng.clear();
-//             kernsum.clear(); colour.clear();
-
-//         }
-
-//         inline void erase(size_t const& start, size_t const& end)
-//         {
-//             L.erase(L.begin()+start, L.begin()+end);
-//             gradRho.erase(gradRho.begin()+start, gradRho.begin()+end);
-//             norm.erase(norm.begin()+start, norm.begin()+end);
-//             avgV.erase(avgV.begin()+start, avgV.begin()+end);
-//             colourG.erase(colourG.begin()+start, colourG.begin()+end);
-//             lam.erase(lam.begin()+start, lam.begin()+end);
-//             lam_nb.erase(lam_nb.begin()+start, lam_nb.begin()+end);
-//             lam_ng.erase(lam_ng.begin()+start, lam_ng.begin()+end);
-//             kernsum.erase(kernsum.begin()+start, kernsum.begin()+end);
-//             colour.erase(colour.begin()+start, colour.begin()+end);
-//         }
-        
-//         inline void alloc(size_t const& size)
-//         {
-//             L = vector<StateMatD>(size);
-//             gradRho = vector<StateVecD>(size);
-//             norm = vector<StateVecD>(size);
-//             avgV = vector<StateVecD>(size);
-//             colourG = vector<real>(size);
-//             lam = vector<real>(size);
-//             lam_nb = vector<real>(size);
-//             lam_ng = vector<real>(size);
-//             kernsum = vector<real>(size);
-//             colour = vector<real>(size);
-//         }
-
-//         inline void resize(size_t const& size)
-//         {
-//             if(size < L.size())
-//             {
-//                 L.resize(size);
-//                 gradRho.resize(size);
-//                 norm.resize(size);
-//                 avgV.resize(size);
-//                 colourG.resize(size);
-//                 lam.resize(size);
-//                 lam_nb.resize(size);
-//                 lam_ng.resize(size);
-//                 kernsum.resize(size);
-//                 colour.resize(size);
-//             }
-//             else
-//             {
-//                 size_t num = size - L.size();
-//                 L.insert(L.end(),num,StateMatD::Zero());
-//                 gradRho.insert(gradRho.end(),num,StateVecD::Zero());
-//                 norm.insert(norm.end(),num,StateVecD::Zero());
-//                 avgV.insert(avgV.end(),num,StateVecD::Zero());
-//                 colourG.insert(colourG.end(),num,0.0);
-//                 lam.insert(lam.end(),num,0.0);
-//                 lam_nb.insert(lam_nb.end(),num,0.0);
-//                 lam_ng.insert(lam_ng.end(),num,0.0);
-//                 kernsum.insert(kernsum.end(),num,0.0);
-//                 colour.insert(colour.end(),num,0.0);
-//             }
-//         }
-
-//         inline void reserve(size_t const& size)
-//         {
-//             L.reserve(size);
-//             gradRho.reserve(size);
-//             norm.reserve(size);
-//             avgV.reserve(size);
-//             colourG.reserve(size);
-//             lam.reserve(size);
-//             lam_nb.reserve(size);
-//             lam_ng.reserve(size);
-//             kernsum.reserve(size);
-//             colour.reserve(size);
-//         }
-
-//         inline size_t size() const
-//         {	
-//             return(L.size());
-//         }
-
-//         #ifdef PAIRWISE
-//         real npd;
-//         #endif
-
-//         vector<StateMatD> L;
-//         vector<StateVecD> gradRho;
-//         vector<StateVecD> norm;
-//         vector<StateVecD> avgV;
-
-//         vector<real> colourG;
-//         vector<real> lam;		/* Eigenvalues with all particles considered */
-//         vector<real> lam_nb; 	/* Eigenvalues without boundary particles (and ghost particles) */
-//         vector<real> lam_ng; 	/* Eigenvalues without ghost particles */
-//         vector<real> kernsum;	/* Summation of the kernel */
-//         vector<real> colour;    /* Kernel sum with volume considered. */
-// };
-
 /*SPHPart data class*/
 struct SPHPart 
 {
@@ -857,7 +709,7 @@ struct SPHPart
 
         L = StateMatD::Zero(); gradRho = StateVecD::Zero(); norm = StateVecD::Zero();
         colourG = 0.0; colour = 0.0; lam = 0.0; lam_nb = 0.0; lam_ng = 0.0; kernsum = 0.0;
-
+        bNorm = StateVecD::Zero(); y = 0.0;
         vPert = StateVecD::Zero(); 
     }
 
@@ -878,7 +730,7 @@ struct SPHPart
 
         L = StateMatD::Zero(); gradRho = StateVecD::Zero(); norm = StateVecD::Zero();
         colourG = 0.0; colour = 0.0; lam = 0.0; lam_nb = 0.0; lam_ng = 0.0; kernsum = 0.0;
-
+        bNorm = StateVecD::Zero(); y = 0.0;
         vPert = StateVecD::Zero();
     }
 

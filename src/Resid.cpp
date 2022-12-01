@@ -45,7 +45,7 @@ void Get_Boundary_Pressure(StateVecD const& grav, FLUID const& fvar,
 				kernsum += kern;
 				pkern += pj.p * kern;
 				acckern +=  kern * pj.rho * Rji;
-				if(pj.lam < 0.7)	// Check if nearby to a surface
+				if(pj.surfzone)	// Check if nearby to a surface
 					isNearSurface = 1;
 			}
 		}/*End of neighbours*/
@@ -106,7 +106,7 @@ void Boundary_DBC( FLUID const& fvar, size_t const& start, size_t const& end,
 /* Basic ghost particles. Basically just static particles, with the same treatment as fluid particles in all equations */
 /* Just don't have the position, velocity, and acceleration updated */
 void Boundary_Ghost( FLUID const& fvar, size_t const& start, size_t const& end,
-	 OUTL const& outlist, SPHState& pnp1, vector<real>& Rrho)
+	 OUTL const& outlist, SPHState& pnp1, vector<real>& Rrho, vector<int>& near_inlet)
 {
 	/******** LOOP 2 - Boundary points: Calculate density and pressure. **********/		
 	#pragma omp for schedule(static) nowait /*Reduction defs in Var.h*/
@@ -114,12 +114,15 @@ void Boundary_Ghost( FLUID const& fvar, size_t const& start, size_t const& end,
 	{
 		SPHPart const& pi = pnp1[ii];
 		real Rrhoi = 0.0;
-
+		near_inlet[ii-start] = 0;
 		for (std::pair<size_t,real> const& jj : outlist[ii])
 		{	/* Neighbour list loop. */
 			SPHPart const& pj = pnp1[jj.first];
 			if(ii == jj.first)
 				continue;
+			
+			if (pj.b == BACK || pj.b == BUFFER)
+				near_inlet[ii-start] = 1;
 
 			StateVecD const Rji = pj.xi-pi.xi;
 			StateVecD const Vji = pj.v-pi.v;
@@ -215,8 +218,8 @@ inline StateVecD SurfTenContrib(SPHPart const& pi, SPHPart const& pj, real const
 }
 
 ///**************** RESID calculation **************
-void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, SPHState const& pnp1,
-	 OUTL const& outlist,/*  DELTAP const& dp, */ real const& npd,
+void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, 
+	SPHState const& pnp1, OUTL const& outlist,/*  DELTAP const& dp, */ real const& npd,
 	 vector<StateVecD>& RV, vector<real>& Rrho, std::vector<StateVecD>& Af, StateVecD& Force)
 {
 

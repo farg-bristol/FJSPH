@@ -34,12 +34,13 @@ DIM=-DSIMDIM=2
 SRC := src/Add.cpp src/AsciiIO.cpp src/BinaryIO.cpp src/CDFIO.cpp src/Containment.cpp\
 	 	src/Droplet.cpp src/FJSPH.cpp src/FOAMIO.cpp src/Geometry.cpp src/Init.cpp src/Integration.cpp src/IO.cpp\
 	    src/IPT.cpp src/Neighbours.cpp src/Newmark_Beta.cpp src/Resid.cpp src/Runge_Kutta.cpp\
-	    src/Shifting.cpp src/Speedtest.cpp\
+	    src/Shifting.cpp src/Speedtest.cpp src/VLM.cpp\
 		src/shapes/arc.cpp src/shapes/circle.cpp src/shapes/cylinder.cpp src/shapes/inlet.cpp src/shapes/line.cpp src/shapes/square.cpp
 
 SRCDIR := src
-2DOBJROOT := src/obj_2d
-3DOBJROOT := src/obj_3d
+# Make the object directories in the excutable, so that it's not uploaded to cloud all the time.
+2DOBJROOT := $(TARGETDIR)/obj_2d
+3DOBJROOT := $(TARGETDIR)/obj_3d
 
 DSPHEXT := dsph
 2DDSPHDIR := $(2DOBJROOT)/$(DSPHEXT)

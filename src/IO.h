@@ -5,11 +5,12 @@
 #define IO_H
 
 #include "Var.h"
+#include "VLM.h"
 
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
 /*************************************************************************/
-void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar);
+void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex);
 
 void Write_Headers(FILE* f1, FILE* fb, FILE* fg, SIM& svar);
 

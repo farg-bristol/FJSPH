@@ -12,6 +12,7 @@
 #define RESID_H
 
 #include "Var.h"
+#include "VLM.h"
 
 /* Boundary pressure calculation - Adami, Hu, and Adams, 2012 - https://doi.org/10.1016/j.jcp.2012.05.005*/
 void Get_Boundary_Pressure(StateVecD const& grav, FLUID const& fvar,
@@ -21,7 +22,7 @@ void Boundary_DBC( FLUID const& fvar, size_t const& start, size_t const& end,
 	 OUTL const& outlist, SPHState& pnp1, vector<StateVecD>& RV);
 
 void Boundary_Ghost( FLUID const& fvar, size_t const& start, size_t const& end,
-	 OUTL const& outlist, SPHState& pnp1, vector<real>& Rrho);
+	 OUTL const& outlist, SPHState& pnp1, vector<real>& Rrho, vector<int>& near_inlet);
 
 void Set_No_Slip( FLUID const& fvar, size_t const& start, size_t const& end,
 	 OUTL const& outlist, SPHState& pnp1);

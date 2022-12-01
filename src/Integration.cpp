@@ -12,19 +12,16 @@
 #include "Resid.h"
 #include "Shifting.h"
 #include "shapes/inlet.h"
-#ifdef RK
 #include "Runge_Kutta.h"
-#else
 #include "Newmark_Beta.h"
-#endif
-
-
-
+#include <chrono>
+using namespace std::chrono;
 ///**************** Integration loop **************///
 real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	MESH& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist, /* DELTAP& dp, */ SPHState& pn, SPHState& pnp1, 
-	vector<IPTState>& iptdata)
+	VLM& vortex, MESH& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist, 
+	SPHState& pn, SPHState& pnp1, vector<IPTState>& iptdata)
 {
+	high_resolution_clock::time_point t1 = high_resolution_clock::now();
 	size_t const start = svar.bndPts;
 	size_t end_ng = svar.bndPts + svar.simPts;
 	
@@ -91,35 +88,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	}
 
 
-	#ifndef DEBUG
-	if(svar.speedTest == 0)
-	{
-	#endif
-		real maxAf = 0.0;
-		real maxRhoi = 0.0;
-		#ifdef ALE
-		real maxShift = 0.0;
-		#endif
-		#pragma omp parallel for reduction(max: maxAf, maxRhoi)
-		for(size_t ii = start; ii < end_ng; ++ii)
-		{
-			maxAf = std::max(maxAf, pnp1[ii].Af.norm());
-			maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho-fvar.rho0));
-			#ifdef ALE
-			maxShift = std::max(maxShift,pnp1[ii].vPert.norm());
-			#endif
-		}
-		real maxRho = 100*maxRhoi/fvar.rho0;
-		real cfl = svar.dt/safe_dt;
-		cout << "time: " << svar.t << " dt: " << svar.dt <<  " CFL: " << cfl 
-			<< " dRho: " << maxRho << " Maxf: " << maxf << " MaxAf: " << maxAf 
-			#ifdef ALE
-			<< " MaxdU: " << maxShift
-			#endif
-			 << endl;
-	#ifndef DEBUG
-	}
-	#endif
+	
 
 	SPH_TREE.index->buildIndex();
 	FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
@@ -181,7 +150,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		{
 			if(pnp1[ii].lam_ng < avar.cutoff  && pnp1[ii].b == FREE)
 			{
-				pnp1[ii].cellV = svar.vortex.getVelocity(pnp1[ii].xi);
+				pnp1[ii].cellV = vortex.getVelocity(pnp1[ii].xi);
 				pnp1[ii].cellID = 1;
 			}
 			else
@@ -204,7 +173,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		}
 	}
 
-	Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,pnp1);
+	Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,vortex,pnp1);
 
 	if(svar.ghost == 1)
 	{	/* Poisson points */
@@ -232,13 +201,11 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 
     Check_Pipe_Outlet(CELL_TREE,svar,avar,cells,limits,pn,pnp1,end,end_ng);
 
-	#ifndef RK
 	const real a = 1 - svar.gamma;
 	const real b = svar.gamma;
 	const real c = 0.5*(1-2*svar.beta);
 	const real d = svar.beta;
-	#endif
-
+	
 	const real B = fvar.B;
 	const real gam = fvar.gam;
 
@@ -253,10 +220,11 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	}
 	
 	/*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
-	#ifdef RK
-		error1 = (Get_First_RK(svar, fvar, avar, start, end, B, gam, npd, cells, cellsused,
-								 outlist, dp, logbase, pn, pnp1, error1));
-	#else
+	if(svar.solver_type == runge_kutta)
+		error1 = Get_First_RK(svar, fvar, avar, start, end, B, gam, npd, cells, 
+								 limits,outlist, logbase, pn, pnp1, error1);
+	else if (svar.solver_type == newmark_beta)
+	{
 		Do_NB_Iter(CELL_TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,npd,
 			cells,limits,outlist,pn,pnp1,Force,dropVel);
 	
@@ -265,8 +233,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		void(Check_Error(SPH_TREE,svar,fvar,start,end,error1,error2,logbase,
 								outlist,xih,pn,pnp1,k,nUnstab));
 		k++; //Update iteration count
-
-	#endif
+	}
 
 	// cout << "Error: " << error1 << endl;
 
@@ -304,7 +271,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		{
 			if(pnp1[ii].lam_ng < avar.cutoff  && pnp1[ii].b == FREE)
 			{
-				pnp1[ii].cellV = svar.vortex.getVelocity(pnp1[ii].xi);
+				pnp1[ii].cellV = vortex.getVelocity(pnp1[ii].xi);
 				pnp1[ii].cellID = 1;
 			}
 			else
@@ -313,7 +280,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	}
 	#endif
 
-	Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,pnp1);
+	Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,vortex,pnp1);
 
 	#ifndef NOFROZEN
 	dissipation_terms(fvar,start,end,outlist,pnp1);
@@ -333,15 +300,18 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	dropVel = StateVecD::Zero();
 
 	/*Do time integration*/
-	#ifdef RK
+	if(svar.solver_type == runge_kutta)
+	{
 		SPHState st_2 = pnp1;
 
-		error1 = Runge_Kutta4(CELL_TREE,svar,fvar,avar,start,end,B,gam,npd,cells,outlist,
-					dp,logbase,pn,st_2,pnp1,Force,dropVel);
-	#else 
+		error1 = Runge_Kutta4(CELL_TREE,svar,fvar,avar,start,end,B,gam,npd,cells,
+					limits,outlist,logbase,pn,st_2,pnp1,Force,dropVel);
+	}
+	else if(svar.solver_type == newmark_beta)
+	{
 		Newmark_Beta(SPH_TREE,CELL_TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,npd,cells,
 			limits,outlist,logbase,k,error1,error2,xih,pn,pnp1,Force,dropVel);
-	#endif	
+	}
 
 	if(svar.ghost != 0)
 		Check_If_Ghost_Needs_Removing(svar, fvar, SPH_TREE, pn, pnp1);
@@ -354,7 +324,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	for(size_t block = svar.nbound; block < svar.nbound + svar.nfluid; block++)
 	{
 		// Need to check if the delete plane is active.
-		if(limits[block].delconst == default_val && !check_vector(limits[block].delete_norm))
+		if(limits[block].delconst == default_val)
 			continue;
 
 		#pragma omp parallel for default(shared)
@@ -440,6 +410,46 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		}
 	}
 
+	#ifndef DEBUG
+	if(svar.speedTest == 0)
+	{
+	#endif
+		real maxAf = 0.0;
+		real maxRhoi = 0.0;
+		#ifdef ALE
+		real maxShift = 0.0;
+		#endif
+		#pragma omp parallel for reduction(max: maxAf, maxRhoi)
+		for(size_t ii = start; ii < end_ng; ++ii)
+		{
+			maxAf = std::max(maxAf, pnp1[ii].Af.norm());
+			maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho-fvar.rho0));
+			#ifdef ALE
+			maxShift = std::max(maxShift,pnp1[ii].vPert.norm());
+			#endif
+		}
+		real maxRho = 100*maxRhoi/fvar.rho0;
+		real cfl = svar.dt/safe_dt;
+		high_resolution_clock::time_point t2 = high_resolution_clock::now();
+		auto duration = duration_cast<milliseconds>(t2-t1).count();
+		#ifdef ALE
+		printf("%9.3e | %7.2e | %4.2f | %8.4f | %7.3f | %9.3e | %9.3e | %9.3e | %14ld|\n",
+				svar.t, svar.dt, cfl, error1, maxRho, maxf, maxAf, maxShift, duration);
+
+		#else
+		printf("%9.3e | %7.2e | %4.2f | %9.4f | %3u | %8.3f | %9.3e | %9.3e | %14ld|\n",
+				svar.t, svar.dt, cfl, error1, k, maxRho, maxf, maxAf, duration);
+		#endif
+		// cout << "time: " << svar.t << " dt: " << svar.dt <<  " CFL: " << cfl 
+		// 	<< " dRho: " << maxRho << " Maxf: " << maxf << " MaxAf: " << maxAf 
+		// 	#ifdef ALE
+		// 	<< " MaxdU: " << maxShift
+		// 	#endif
+		// 	 << endl;
+	#ifndef DEBUG
+	}
+	#endif
+
 	if(pnp1.size() == 0 || svar.simPts == 0)
 	{ 
 		// cout << "No more particles. Stopping." << endl;
@@ -488,15 +498,14 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 }
 
 void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	MESH& cells, LIMITS const& limits, OUTL& outlist, /* DELTAP& dp, */ SPHState& pnp1, SPHState& pn, vector<IPTState>& iptdata)
+	VLM& vortex, MESH& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn, vector<IPTState>& iptdata)
 {
 	size_t const start = svar.bndPts;
 	size_t end = svar.totPts;
 	size_t end_ng = svar.bndPts + svar.simPts;
 	real npd = 1.0;
 	#if DEBUG 
-		dbout << "Starting first step. ";
-		dbout << "  Start index: " << start << "  End index: " << end << endl;
+		fprintf(dbout, "Starting first step. Start index: %zu End index: %zu\n",start, end);
 	#endif
 
 	dSPH_PreStep(fvar,end,pnp1,outlist,npd);
@@ -519,7 +528,7 @@ void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID 
 		}
 	}
 
-	Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,pnp1);
+	Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,vortex,pnp1);
 
 	if(svar.ghost == 1)
 	{	/* Poisson points */
@@ -536,20 +545,15 @@ void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID 
 
 	end = svar.totPts;
 
-	#ifndef RK
 	uint k = 0;	
 	real error2 = 0.0;
-	#endif
 	real logbase = 0.0;
 	real error1 = 0.0;
-	
 
-	#ifndef RK
 	const real a = 1 - svar.gamma;
 	const real b = svar.gamma;
 	const real c = 0.5*(1-2*svar.beta);
 	const real d = svar.beta;
-	#endif
 
 	const real B = fvar.B;
 	const real gam = fvar.gam;
@@ -622,21 +626,21 @@ void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID 
 	}
 
 	/*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
-	#ifdef RK
-		error1 = (Get_First_RK(svar, fvar, avar, start, end, B, gam, npd, cells, cellsused,
-									 outlist, dp, logbase, pn, pnp1, error1));
-	#else
-
-		Do_NB_Iter(CELL_TREE, svar, fvar, avar, start, end_ng, a, b, c, d, B, gam, npd,
-				cells, limits, outlist, pn, pnp1, Force, dropVel);
-
+	if(svar.solver_type == runge_kutta)
+		error1 = Get_First_RK(svar, fvar, avar, start, end, B, gam, npd, cells, 
+								 limits,outlist, logbase, pn, pnp1, error1);
+	else if (svar.solver_type == newmark_beta)
+	{
+		Do_NB_Iter(CELL_TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,npd,
+			cells,limits,outlist,pn,pnp1,Force,dropVel);
+	
 		uint nUnstab = 0;
 
-		void(Check_Error(SPH_TREE, svar, fvar, start, end_ng, error1, error2, logbase,
-						outlist, xih, pn, pnp1, k, nUnstab));
+		void(Check_Error(SPH_TREE,svar,fvar,start,end,error1,error2,logbase,
+								outlist,xih,pn,pnp1,k,nUnstab));
 		k++; //Update iteration count
+	}
 
-	#endif
 
 	/*Find maximum safe timestep*/
 	// maxUi = std::max_element(pnp1.begin(),pnp1.end(),
@@ -688,26 +692,29 @@ void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID 
 		}
 	}
 
-	Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,pnp1);
+	Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,vortex,pnp1);
 
 	#ifndef NOFROZEN
 	dissipation_terms(fvar,start,end,outlist,pnp1);
 	#endif
 	
 	/*Do time integration*/
-	#ifdef RK
+	if(svar.solver_type == runge_kutta)
+	{
 		SPHState st_2 = pnp1;
 
-		error1 = Runge_Kutta4(CELL_TREE, svar, fvar, avar, start, end, B, gam, npd, cells, outlist,
-							  dp, logbase, pn, st_2, pnp1, Force, dropVel);
-	#else
-		Newmark_Beta(SPH_TREE, CELL_TREE, svar, fvar, avar, start, end, a, b, c, d, B, gam, npd,
-			 cells, limits, outlist, logbase, k, error1, error2, xih, pn, pnp1, Force, dropVel);
-	#endif
+		error1 = Runge_Kutta4(CELL_TREE,svar,fvar,avar,start,end,B,gam,npd,cells,
+					limits,outlist,logbase,pn,st_2,pnp1,Force,dropVel);
+	}
+	else if(svar.solver_type == newmark_beta)
+	{
+		Newmark_Beta(SPH_TREE,CELL_TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,npd,cells,
+			limits,outlist,logbase,k,error1,error2,xih,pn,pnp1,Force,dropVel);
+	}
 
 	Check_If_Ghost_Needs_Removing(svar,fvar,SPH_TREE,pn,pnp1);
 
 	#if DEBUG 	
-		dbout << "Exiting first step. Error: " << error1 << endl;
+		fprintf(dbout,"Exiting first step. Error: %f\n", error1);
 	#endif
 }
