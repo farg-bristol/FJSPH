@@ -87,16 +87,13 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		}		
 	}
 
-
-	
-
 	SPH_TREE.index->buildIndex();
 	FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
 
 	dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,npd);
 
 	// Check if the particle has moved to a new cell
-	if (svar.Asource == 1)
+	if (svar.Asource == meshInfl)
 	{
 		// cout << "Finding cells" << endl;
 		vector<size_t> toDelete = FindCell(svar,avar,CELL_TREE,cells,pn,pnp1);
@@ -142,7 +139,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		}	
 	}
 	#if SIMDIM == 3
-	else if (svar.Asource == 3)
+	else if (svar.Asource == VLMInfl)
 	{
 		/* Find the VLM influence for the particles */
 		#pragma omp parallel for
@@ -154,7 +151,10 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 				pnp1[ii].cellID = 1;
 			}
 			else
-				pnp1[ii].cellID = 0;
+			{
+				pnp1[ii].cellV = StateVecD::Zero();
+				pnp1[ii].cellID = -1;
+			}
 		}
 	}
 	#endif
@@ -169,7 +169,10 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 				pnp1[ii].cellID = 1;
 			}
 			else
-				pnp1[ii].cellID = 0;
+			{
+				pnp1[ii].cellV = StateVecD::Zero();
+				pnp1[ii].cellID = -1;
+			}
 		}
 	}
 
@@ -243,7 +246,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 
 	dSPH_PreStep(fvar,end,pnp1,outlist,npd);
 
-	if (svar.Asource == 1 || svar.Asource == 2)
+	if (svar.Asource == meshInfl)
 	{
 		// cout << "Finding cells" << endl;
 		FindCell(svar,avar,CELL_TREE,cells,pn,pnp1);
@@ -263,7 +266,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		}	
 	}
 	#if SIMDIM == 3
-	else if (svar.Asource == 3)
+	else if (svar.Asource == VLMInfl)
 	{
 		/* Find the VLM influence for the particles */
 		#pragma omp parallel for
@@ -275,7 +278,10 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 				pnp1[ii].cellID = 1;
 			}
 			else
-				pnp1[ii].cellID = 0;
+			{
+				pnp1[ii].cellV = StateVecD::Zero();
+				pnp1[ii].cellID = -1;
+			}
 		}
 	}
 	#endif
@@ -353,7 +359,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		}
 	}
 
-	if(svar.using_ipt && svar.Asource != 0)
+	if(svar.using_ipt && svar.Asource != constVel)
 	{
 		vector<IPTPart> IPT_nm1, IPT_n, IPT_np1;
 		for(size_t const& ii:to_del)
@@ -509,7 +515,7 @@ void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID 
 	#endif
 
 	dSPH_PreStep(fvar,end,pnp1,outlist,npd);
-	if (svar.Asource == 1)
+	if (svar.Asource == meshInfl)
 	{
 		FindCell(svar,avar,CELL_TREE,cells,pnp1,pn);
 		if (svar.totPts != pnp1.size())
@@ -673,7 +679,7 @@ void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID 
 
 	dSPH_PreStep(fvar,end,pnp1,outlist,npd);
 
-	if (svar.Asource == 1)
+	if (svar.Asource == meshInfl)
 	{
 		FindCell(svar,avar,CELL_TREE,cells,pnp1,pn);
 		if (svar.totPts != pnp1.size())

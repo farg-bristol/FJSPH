@@ -130,6 +130,10 @@ enum shape_type {fineLine = 0, linePlane, squareCube, circleSphere, cylinder, ar
 
 enum solve_type {newmark_beta = 0, runge_kutta, DBC, pressure_G, ghost};
 
+enum aero_force {none = 0, Gissler, Induced_Pressure, SkinFric};
+
+enum aero_source {constVel = 0, meshInfl, VLMInfl};
+
 real const static default_val = 9999999.0;
 
 #if SIMDIM == 3
@@ -198,7 +202,7 @@ struct SIM
         bound_type = "(none)"; /* Default to no boundary */
         Scase = 0; Bcase = 0;
         Bclosed = 0; ghost = 0;
-        Asource = 0;
+        Asource = constVel;
         init_hydro_pressure = 0;
         use_global_gas_law = 1;
         hydro_height = -1;
@@ -578,7 +582,7 @@ struct MESH
         return nElem;
     }
 
-    inline void alloc(size_t nPnts_, size_t nElem_, size_t nFace_, size_t nSurf_, int Asource )
+    inline void alloc(size_t nPnts_, size_t nElem_, size_t nFace_, size_t nSurf_)
     {
         nPnts = nPnts_; nElem = nElem_; nFace = nFace_; nSurf = nSurf_;
         verts = vector<StateVecD>(nPnts);
@@ -592,12 +596,6 @@ struct MESH
         cVel = vector<StateVecD>(nElem);
         cP = vector<real>(nElem);
         cRho = vector<real>(nElem);
-
-        if(Asource == 2)
-        {
-            cVol = vector<real>(nElem);
-            cMass = vector<real>(nElem);
-        }
     }
 
     /*Zone info*/
@@ -631,8 +629,8 @@ struct MESH
     // Cell information for the momentum balance
     vector<StateVecD> cPertn;
     vector<StateVecD> cPertnp1;
-    vector<real> cVol;
-    vector<real> cMass;
+    // vector<real> cVol;
+    // vector<real> cMass;
 
 
     vector<size_t> fNum; // number of fluid particles in cell
@@ -695,7 +693,7 @@ struct SPHPart
     SPHPart(StateVecD const& X, StateVecD const& Vi, real const Rhoi, real const Mi, 
         real const press, int const bound, uint const pID)
     {
-        partID = pID; cellID = 0; faceID = 0;
+        partID = pID; faceID = 0; cellID = -1;
         b = bound; surf = 0; surfzone = 0; nFailed = 0;
 
         xi = X;	v = Vi; acc = StateVecD::Zero(); Af = StateVecD::Zero();
@@ -716,7 +714,7 @@ struct SPHPart
     /*To add particles dynamically for fictitious particles*/
     SPHPart(StateVecD const& X, SPHPart const& pj, int const bound, size_t const pID)
     {
-        partID = pID; cellID = 0; faceID = 0;
+        partID = pID; faceID = 0; cellID = -1;
         b = bound; surf = 0; surfzone = 0; nFailed = 0;
 
         xi = X;	v = pj.v; acc = StateVecD::Zero(); Af = StateVecD::Zero();
@@ -734,7 +732,7 @@ struct SPHPart
         vPert = StateVecD::Zero();
     }
 
-    SPHPart():partID(0),cellID(0),faceID(0),b(0),surf(0),surfzone(0),nFailed(0),xi(StateVecD::Zero()),
+    SPHPart():partID(0),faceID(0),cellID(-1),b(0),surf(0),surfzone(0),nFailed(0),xi(StateVecD::Zero()),
          v(StateVecD::Zero()), acc(StateVecD::Zero()), Af(StateVecD::Zero()), aVisc(StateVecD::Zero()),
          Rrho(0.0),rho(0.0),p(0.0),m(0.0),curve(0.0),s(0.0),woccl(0.0),pDist(0.0),deltaD(0.0),
          cellV(StateVecD::Zero()),cellP(0.0),cellRho(0.0),internal(0),
@@ -753,7 +751,8 @@ struct SPHPart
         return(xi[a]);
     }
 
-    size_t partID, cellID, faceID;
+    size_t partID, faceID;
+    long int cellID; // Make it signed so that it can be used for checks.
     uint b; //What state is a particle. See PartState above for possible options
     uint surf; /*Is a particle a surface? 1 = yes, 0 = no*/
     uint surfzone; /* Is particle in the surface area? */
@@ -934,7 +933,7 @@ struct IPTPart
     real faceRho;
 
     /* Containing cell properties */
-    int cellID;
+    long int cellID;
     StateVecD cellV;
     real cellRho;
 

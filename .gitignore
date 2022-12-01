@@ -48,7 +48,7 @@
 *.grid*
 
 # Folders
-
+Examples
 
 # Output files
 *.plt
@@ -71,4 +71,4 @@ src/tau2foam.cpp
 src/TAUtozCFD.cpp
 src/testContainment.cpp
 src/zCFD_convert.h
-
+src/Vectors.h

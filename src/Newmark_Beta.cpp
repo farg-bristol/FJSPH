@@ -111,52 +111,60 @@ void Do_NB_Iter(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO co
 		if(limits[block].no_slip)
 			Set_No_Slip(fvar,limits[block].index.first,limits[block].index.second,outlist,pnp1);
 
-		if(limits[block].bound_solver == DBC)
+		switch (limits[block].bound_solver)
 		{
-			Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
-							outlist,pnp1,res);
+			case DBC:
+			{
+				Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
+								outlist,pnp1,res);
 
-			#pragma omp for schedule(static) nowait
-			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-			{	/****** BOUNDARY PARTICLES ***********/
-				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
-								pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
-				pnp1[ii].rho = rho;
-				pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-				pnp1[ii].Rrho = Rrho[ii];
-			}
-		}
-		else if (limits[block].bound_solver == pressure_G)
-		{
-			Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
-							limits[block].index.second,outlist,pnp1);
-		}
-		else if (limits[block].bound_solver == ghost)
-		{
-			vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
-			Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
-							outlist,pnp1,Rrho,near_inlet);
-
-			#pragma omp for schedule(static) nowait
-			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-			{	/****** BOUNDARY PARTICLES ***********/
-				if(near_inlet[ii - limits[block].index.first])
-				{// Don't allow negative pressures
-					real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
-								pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
-					pnp1[ii].rho = rho;
-					pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-					pnp1[ii].Rrho = fmax(0.0,Rrho[ii]);
-				}
-				else
-				{	
+				#pragma omp for schedule(static) nowait
+				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+				{	/****** BOUNDARY PARTICLES ***********/
 					real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
-								pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
+									pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
 					pnp1[ii].rho = rho;
 					pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
 					pnp1[ii].Rrho = Rrho[ii];
 				}
+				break;
 			}
+			case pressure_G:
+			{
+				Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
+								limits[block].index.second,outlist,pnp1);
+				break;
+			}
+			case ghost:
+			{
+				vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
+				Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
+								outlist,pnp1,Rrho,near_inlet);
+
+				#pragma omp for schedule(static) nowait
+				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+				{	/****** BOUNDARY PARTICLES ***********/
+					if(near_inlet[ii - limits[block].index.first])
+					{// Don't allow negative pressures
+						real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
+									pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
+						pnp1[ii].rho = rho;
+						pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+						pnp1[ii].Rrho = fmax(0.0,Rrho[ii]);
+					}
+					else
+					{	
+						real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+									pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
+						pnp1[ii].rho = rho;
+						pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+						pnp1[ii].Rrho = Rrho[ii];
+					}
+				}
+				break;
+			}
+			default:
+				break;
 		}
 	}
 
@@ -210,7 +218,9 @@ void Do_NB_Iter(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO co
 			/* Do the buffer particles */
 			if(limits[block].block_type == inletZone)
 			{
-				if(limits[block].fixed_vel_or_dynamic)
+				switch (limits[block].fixed_vel_or_dynamic)
+				{
+				case 1:
 				{	// Dynamic inlet
 					StateVecD unorm = limits[block].insert_norm.normalized();
 					#pragma omp for schedule(static) nowait
@@ -231,8 +241,9 @@ void Do_NB_Iter(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO co
 							pnp1[buffID].p = pnp1[backID].p; 
 						}	
 					}
+					break;
 				}
-				else
+				case 0:
 				{	// Fixed velocity
 					#pragma omp for schedule(static) nowait
 					for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
@@ -252,6 +263,8 @@ void Do_NB_Iter(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO co
 							pnp1[buffID].xi = pn[buffID].xi + dt*pn[buffID].v;
 						}	
 					}
+					break;
+				}
 				}
 			}
 		}	// End block count

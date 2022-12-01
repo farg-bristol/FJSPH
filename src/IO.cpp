@@ -161,7 +161,7 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex)
 	fvar.Wdx = Kernel(svar.Pstep,fvar.H,fvar.correc);
 
 	#if SIMDIM == 3
-		if (svar.Asource == 3)
+		if (svar.Asource == VLMInfl)
 		{
 			vortex.Init(svar.vlm_file);
 			vortex.GetGamma(avar.vInf);
@@ -245,7 +245,7 @@ void Print_Settings(char** argv, SIM const& svar, FLUID const& fvar, AERO const&
 	printf("Speed of sound: %f\n\n", fvar.Cs);
 
 	printf("****** FREESTREAM SETTINGS ******\n");
-	if(svar.Asource != 1 && svar.Asource != 2)
+	if(svar.Asource != meshInfl)
 	{
 		print_vector("Gas velocity", avar.vInf);
 	}
@@ -254,7 +254,7 @@ void Print_Settings(char** argv, SIM const& svar, FLUID const& fvar, AERO const&
 	printf("Gas viscosity: %f\n", avar.mug);
 	printf("Aerodynamic length: %f\n", avar.L);
 
-	if(svar.Asource == 1 || svar.Asource == 2)
+	if(svar.Asource == meshInfl)
 	{
 		printf("Reference velocity: %f\n", avar.vRef);
 		printf("Reference pressure: %f\n", avar.pRef);
@@ -266,7 +266,7 @@ void Print_Settings(char** argv, SIM const& svar, FLUID const& fvar, AERO const&
 	printf("******** FILE SETTINGS ********\n");	
 	// printf("Working directory: ", cCurrentPath);
 	printf("Input file: %s\n", argv[1]);
-	if(svar.Asource == 1 || svar.Asource == 2)
+	if(svar.Asource == meshInfl)
 	{
 		if(svar.CDForFOAM == 0)
 		{
@@ -452,17 +452,17 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 		{
 			#if SIMDIM == 3
 			if(svar.vlm_file.empty())
-				svar.Asource = 0;
+				svar.Asource = constVel;
 			else
 			{
-				svar.Asource = 3;
+				svar.Asource = VLMInfl;
 
 				if(svar.vlm_file == "(thisfile)")
 					svar.vlm_file = svar.infile;
 			}
 
 			#else
-			svar.Asource = 0;
+			svar.Asource = constVel;
 			#endif
 		}
 		else
@@ -474,13 +474,13 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 			}
 
 			svar.CDForFOAM = 1;
-			svar.Asource = 1;			
+			svar.Asource = meshInfl;			
 		}
     }
 	else
 	{
 		svar.CDForFOAM = 0;
-		svar.Asource = 1;
+		svar.Asource = meshInfl;
 		if(svar.taubmap.empty())
 		{
 			printf("Input TAU bmap file not defined.\n");
@@ -565,21 +565,21 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 	}
 
 	/* Aerodynamic settings */
-	if(avar.aero_case == "Gissler")
+	if(avar.aero_case == "(none)")
 	{
-		avar.acase = 1;
+		avar.acase = none;
+	}
+	else if(avar.aero_case == "Gissler")
+	{
+		avar.acase = Gissler;
 	}
 	else if (avar.aero_case == "Induced_pressure")
 	{
-		avar.acase = 2;
+		avar.acase = Induced_Pressure;
 	}
 	else if (avar.aero_case == "Skin_friction")
 	{
-		avar.acase = 3;
-	}
-	else if(avar.aero_case == "(none)")
-	{
-		avar.acase = 0;
+		avar.acase = SkinFric;
 	}
 	else
 	{
@@ -728,22 +728,22 @@ void Write_Headers(FILE* f1, FILE* fb, FILE* fg, SIM& svar)
 	}
 }
 
-void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limits,
-				 SPHState const& pnp1/* , DELTAP const& dp *//* , SPHState const& airP */)
+void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, real const& rho0, LIMITS const& limits,
+				 SPHState const& pnp1)
 {
 	if (svar.out_encoding == 1)
 	{
 		for(size_t bound = 0; bound < svar.nbound; bound++)
 		{
 			string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name;
-			Write_Binary_Timestep(svar,pnp1,limits[bound],title.c_str(),
+			Write_Binary_Timestep(svar,rho0,pnp1,limits[bound],title.c_str(),
                 static_cast<int32_t>(bound+1),svar.boundFile);
 		}
 
 		for(size_t block = svar.nbound; block < svar.nbound + svar.nfluid; block++)
 		{
 			string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name ;
-			Write_Binary_Timestep(svar,pnp1,limits[block],title.c_str(),
+			Write_Binary_Timestep(svar,rho0,pnp1,limits[block],title.c_str(),
                 static_cast<int32_t>(block+1),svar.fluidFile);
 		}
 	} 
@@ -752,7 +752,7 @@ void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limit
 		for(size_t bound = 0; bound < svar.nbound; bound++)
 		{
 			string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name;
-			Write_ASCII_Timestep(svar,pnp1,limits[bound].index.first,
+			Write_ASCII_Timestep(svar,rho0,pnp1,limits[bound].index.first,
 					limits[bound].index.second,title.c_str(),bound+1,fb);
 		}
 
@@ -760,7 +760,7 @@ void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limit
 		{
 			string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name ;
 		
-			Write_ASCII_Timestep(svar,pnp1,limits[block].index.first,
+			Write_ASCII_Timestep(svar,rho0,pnp1,limits[block].index.first,
 					limits[block].index.second,title.c_str(),block+1,f1);
 		}
 	}
@@ -793,7 +793,7 @@ void Append_Restart_Prefix(SIM const& svar)
 void Check_Output_Variables(SIM& svar)
 {
 	// Set the initial output options
-	svar.outvar = std::vector<uint>(28,0);
+	svar.outvar = std::vector<uint>(29,0);
 	for(size_t ii = 0; ii < 8; ++ii)
 		svar.outvar[ii] = 1;
 
@@ -823,99 +823,104 @@ void Check_Output_Variables(SIM& svar)
 				svar.outvar[8] = 1;
 				nOptVars+=1;
 			}
-			else if(var == "vmag")
+			else if(var == "densVar")
 			{
 				svar.outvar[9] = 1;
-				nOptVars+=1;
+				nOptVars += 1;
 			}
-			else if(var == "surf")
+			else if(var == "vmag")
 			{
 				svar.outvar[10] = 1;
 				nOptVars+=1;
 			}
-			else if(var == "surfZ")
+			else if(var == "surf")
 			{
 				svar.outvar[11] = 1;
 				nOptVars+=1;
 			}
-			else if(var == "aero-mag")
+			else if(var == "surfZ")
 			{
 				svar.outvar[12] = 1;
 				nOptVars+=1;
 			}
-			else if(var == "aero-vec")
+			else if(var == "aero-mag")
 			{
 				svar.outvar[13] = 1;
+				nOptVars+=1;
+			}
+			else if(var == "aero-vec")
+			{
+				svar.outvar[14] = 1;
 				nOptVars+=SIMDIM;
 			}
 			else if(var == "curv")
 			{
-				svar.outvar[14] = 1;
+				svar.outvar[15] = 1;
 				nOptVars+=1;
 			}
 			else if(var == "occl")
 			{
-				svar.outvar[15] = 1;
+				svar.outvar[16] = 1;
 				nOptVars+=1;
 			}
 			else if(var == "cellP")
 			{
-				svar.outvar[16] = 1;
+				svar.outvar[17] = 1;
 				nOptVars+=1;
 			}
 			else if(var == "cellRho")
 			{
-				svar.outvar[17] = 1;
+				svar.outvar[18] = 1;
 				nOptVars+=1;
 			}
 			else if(var == "cellV-mag")
 			{
-				svar.outvar[18] = 1;
+				svar.outvar[19] = 1;
 				nOptVars+=1;
 			}
 			else if(var == "cellV-vec")
 			{
-				svar.outvar[19] = 1;
+				svar.outvar[20] = 1;
 				nOptVars+=SIMDIM;
 			}
 			else if(var == "dsphG")
 			{
-				svar.outvar[20] = 1;
+				svar.outvar[21] = 1;
 				nOptVars+=SIMDIM;
 			}
 			else if(var == "lam")
 			{
-				svar.outvar[21] = 1;
+				svar.outvar[22] = 1;
 				nOptVars+=1;
 			}
 			else if(var == "lam-nb")
 			{
-				svar.outvar[22] = 1;
+				svar.outvar[23] = 1;
 				nOptVars+=1;
 			}
 			else if(var == "colour")
 			{
-				svar.outvar[23] = 1;
+				svar.outvar[24] = 1;
 				nOptVars+=1;
 			}
 			else if(var == "colour-G")
 			{
-				svar.outvar[24] = 1;
+				svar.outvar[25] = 1;
 				nOptVars+=1;
 			}
 			else if(var == "norm")
 			{
-				svar.outvar[25] = 1;
+				svar.outvar[26] = 1;
 				nOptVars+=SIMDIM;
 			}
 			else if(var == "shiftV-mag")
 			{
-				svar.outvar[26] = 1;
+				svar.outvar[27] = 1;
 				nOptVars+=1;
 			}
 			else if(var == "shiftV-vec")
 			{
-				svar.outvar[27] = 1;
+				svar.outvar[28] = 1;
 				nOptVars+=SIMDIM;
 			}
 			else
@@ -1002,29 +1007,35 @@ void Check_Output_Variables(SIM& svar)
 	
 	if(svar.outvar[9])
 	{
-		svar.var_names += ",Vmag";
+		svar.var_names += ",DensVar";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 	
 	if(svar.outvar[10])
 	{
-		svar.var_names += ",Surf";
+		svar.var_names += ",Vmag";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 	
 	if(svar.outvar[11])
 	{
-		svar.var_names += ",Surfzone";
+		svar.var_names += ",Surf";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 	
 	if(svar.outvar[12])
 	{
+		svar.var_names += ",Surfzone";
+		svar.var_types[varCount] = realType; varCount++;
+	}
+	
+	if(svar.outvar[13])
+	{
 		svar.var_names += ",Aero-mag";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 
-	if(svar.outvar[13])
+	if(svar.outvar[14])
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
@@ -1035,37 +1046,37 @@ void Check_Output_Variables(SIM& svar)
 		#endif
 	}
 
-	if(svar.outvar[14])
+	if(svar.outvar[15])
 	{
 		svar.var_names += ",curvature";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 	
-	if(svar.outvar[15])
+	if(svar.outvar[16])
 	{
 		svar.var_names += ",occl";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 
-	if(svar.outvar[16])
+	if(svar.outvar[17])
 	{
 		svar.var_names += ",cellP";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 	
-	if(svar.outvar[17])
+	if(svar.outvar[18])
 	{
 		svar.var_names += ",cellRho";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 	
-	if(svar.outvar[18])
+	if(svar.outvar[19])
 	{
 		svar.var_names += ",cellV-mag";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 
-	if(svar.outvar[19])
+	if(svar.outvar[20])
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
@@ -1076,7 +1087,7 @@ void Check_Output_Variables(SIM& svar)
 		#endif
 	}
 
-	if(svar.outvar[20])
+	if(svar.outvar[21])
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
@@ -1087,31 +1098,31 @@ void Check_Output_Variables(SIM& svar)
 		#endif
 	}
 	
-	if(svar.outvar[21])
+	if(svar.outvar[22])
 	{
 		svar.var_names += ",lam";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 	
-	if(svar.outvar[22])
+	if(svar.outvar[23])
 	{
 		svar.var_names += ",lam-nb";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 	
-	if(svar.outvar[23])
+	if(svar.outvar[24])
 	{
 		svar.var_names += ",colour";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 	
-	if(svar.outvar[24])
+	if(svar.outvar[25])
 	{
 		svar.var_names += ",colourG";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 	
-	if(svar.outvar[25])
+	if(svar.outvar[26])
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
@@ -1122,13 +1133,13 @@ void Check_Output_Variables(SIM& svar)
 		#endif
 	}
 	
-	if(svar.outvar[26])
+	if(svar.outvar[27])
 	{
 		svar.var_names += ",shiftV-mag";
 		svar.var_types[varCount] = realType; varCount++;
 	}
 	
-	if(svar.outvar[27])
+	if(svar.outvar[28])
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
@@ -1184,7 +1195,7 @@ void Restart_Simulation(SIM& svar, FLUID const& fvar, AERO const& avar,
 				buffer[block].emplace_back(ii);
 			}
 
-			if(svar.Asource == 0)
+			if(svar.Asource != meshInfl)
 			{
 				pn[ii].cellRho = avar.rhog;
 				pn[ii].cellP = avar.pRef;

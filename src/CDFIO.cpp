@@ -143,16 +143,6 @@ void Average_Point_Data_to_Cell(SIM const& svar, vector<StateVecD> const& vel,
 		cells.cVel[ii] = cVel_ / nVerts;
 		cells.cP[ii] = cPress_ / nVerts;
 		cells.cRho[ii] = cRho_ / nVerts;
-
-		/*Find cell volumes*/
-		if(svar.Asource == 2)
-		{
-			// Find cell volumes 
-			vector<size_t> elemv(elem.begin(),elem.end());
-			cells.cVol[ii] = Cell_Volume(cells.verts, cells.faces, elemv, 
-								cells.cFaces[ii], cells.cCentre[ii]);
-			cells.cMass[ii] = cells.cRho[ii] * cells.cVol[ii];
-		}
 	}
 }
 
@@ -1021,7 +1011,7 @@ namespace TAU
 
 		cout << "nElem : " << nElem << " nPnts: " << nPnts << " nEdge: " << nEdge << " nSurf: " << nSurf << endl;
 
-		cells.alloc(nPnts, nElem, nEdge, nSurf, svar.Asource);
+		cells.alloc(nPnts, nElem, nEdge, nSurf);
 
 		// cells.nPnts = nPnts;
 		// cells.nElem = nElem;
@@ -1269,7 +1259,7 @@ namespace TAU
 
 		cout << "nElem : " << nElem << " nPnts: " << nPnts << " nFace: " << nFace << " nSurf: " << nSurf << endl;
 
-		cells.alloc(nPnts, nElem, nFace, nSurf, svar.Asource);
+		cells.alloc(nPnts, nElem, nFace, nSurf);
 
 		/*Get the faces of the mesh*/
 		if (hasTrig)

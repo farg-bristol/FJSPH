@@ -181,7 +181,7 @@ namespace IPT
             for(uint dim = 0; dim < SIMDIM; ++dim)
                 fprintf(fout," %2.7e", pnp1.xi[dim]/scale);
 
-            fprintf(fout," %2.7e %2.7e %2.7e %2.7e %zu %2.7e %2.7e %6d\n",
+            fprintf(fout," %2.7e %2.7e %2.7e %2.7e %zu %2.7e %2.7e %6ld\n",
                 pnp1.t,pnp1.dt,pnp1.v.norm(),pnp1.acc,pnp1.partID,pnp1.cellV.norm(),pnp1.cellRho,pnp1.cellID);
         }
 

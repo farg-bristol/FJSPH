@@ -549,42 +549,56 @@ size_t Generate_Points(SIM const& svar, FLUID const& fvar, double const& globals
     for(shape_block& bound:var.block)
     {
         std::cout << "Creating boundary block: " << bound.name << "\t...\t";
-        if(bound.bound_type == linePlane)
+        switch (bound.bound_type)
         {
-            #if SIMDIM == 2
-            bound.coords = create_line(bound, globalspacing);
-            #else
-            bound.coords = create_plane(bound, globalspacing);
-            #endif
-        }
-        else if (bound.bound_type == squareCube)
-        {
-            bound.coords = 
-            create_square(bound.start,bound.end, globalspacing, bound.hcpl);
-        }
-        else if (bound.bound_type == circleSphere)
-        {
-            bound.coords = 
-            create_circle(bound.centre,bound.radius, globalspacing, bound.hcpl);
-        }
-        else if (bound.bound_type == cylinder)
-        {
-            bound.coords = create_cylinder(bound,globalspacing);
-        }
-        else if (bound.bound_type == arcSection)
-        {
-            bound.coords = create_arc_segment(bound,globalspacing);
-        }
-        else if (bound.bound_type == inletZone)
-        {
-            bound.coords = create_inlet_zone(bound,globalspacing);
-        }
-        else if (bound.bound_type == coordDef)
-        {
-            if(!bound.filename.empty())
-            {   /* Read the file */
-                bound.coords = Read_Geom_File(bound.filename);
+            case linePlane:
+            {
+                #if SIMDIM == 2
+                bound.coords = create_line(bound, globalspacing);
+                #else
+                bound.coords = create_plane(bound, globalspacing);
+                #endif
+                break;
             }
+            case squareCube:
+            {
+                bound.coords = 
+                create_square(bound.start,bound.end, globalspacing, bound.hcpl);
+                break;
+            }
+            case circleSphere:
+            {
+                bound.coords = 
+                create_circle(bound.centre,bound.radius, globalspacing, bound.hcpl);
+                break;
+            }
+            case cylinder:
+            {
+                bound.coords = create_cylinder(bound,globalspacing);
+                break;
+            }
+            case arcSection:
+            {
+                bound.coords = create_arc_segment(bound,globalspacing);
+                break;
+            }
+            case inletZone:
+            {
+                bound.coords = create_inlet_zone(bound,globalspacing);
+                break;
+            }
+            case coordDef:
+            {
+                if(!bound.filename.empty())
+                {   /* Read the file */
+                    bound.coords = Read_Geom_File(bound.filename);
+                }
+                break;
+            }
+            default:
+                printf("ERROR: Trying to create unrecognised geometry.\n");
+                exit(-1);
+                break;
         }
 
         if (bound.coords.size() != bound.npts)

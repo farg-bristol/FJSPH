@@ -79,51 +79,57 @@ real Get_First_RK(SIM& svar, FLUID const& fvar, AERO const& avar,
 		if(limits[block].no_slip)
 			Set_No_Slip(fvar,limits[block].index.first,limits[block].index.second,outlist,st_2);
 
-		if(limits[block].bound_solver == DBC)
+		switch (limits[block].bound_solver)
 		{
-			Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
-							outlist,st_2,res_1);
+			case DBC:
+			{
+				Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
+								outlist,st_2,res_1);
 
-			#pragma omp for schedule(static) nowait
-			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-			{	/****** BOUNDARY PARTICLES ***********/
-				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
-							pn[ii].rho + 0.5 * dt * Rrho_1[ii]));
-				st_2[ii].rho = rho;
-				st_2[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-				st_2[ii].Rrho = Rrho_1[ii];
-			}
-		}
-		else if (limits[block].bound_solver == pressure_G)
-		{
-			Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
-							limits[block].index.second,outlist,st_2);
-		}
-		else if (limits[block].bound_solver == ghost)
-		{
-			vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
-			Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
-							outlist,st_2,Rrho_1,near_inlet);
-
-			#pragma omp for schedule(static) nowait
-			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-			{	/****** BOUNDARY PARTICLES ***********/
-				if(!near_inlet[ii - limits[block].index.first])
-				{
+				#pragma omp for schedule(static) nowait
+				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+				{	/****** BOUNDARY PARTICLES ***********/
 					real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
 								pn[ii].rho + 0.5 * dt * Rrho_1[ii]));
 					st_2[ii].rho = rho;
 					st_2[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
 					st_2[ii].Rrho = Rrho_1[ii];
 				}
-				else
-				{	// Don't allow negative pressures
-					real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
-								pn[ii].rho + 0.5 * dt * Rrho_1[ii]));
-					st_2[ii].rho = rho;
-					st_2[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-					st_2[ii].Rrho = fmax(0.0,Rrho_1[ii]);
+				break;
+			}
+			case pressure_G:
+			{
+				Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
+								limits[block].index.second,outlist,st_2);
+				break;
+			}
+			case ghost:
+			{
+				vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
+				Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
+								outlist,st_2,Rrho_1,near_inlet);
+
+				#pragma omp for schedule(static) nowait
+				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+				{	/****** BOUNDARY PARTICLES ***********/
+					if(!near_inlet[ii - limits[block].index.first])
+					{
+						real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+									pn[ii].rho + 0.5 * dt * Rrho_1[ii]));
+						st_2[ii].rho = rho;
+						st_2[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+						st_2[ii].Rrho = Rrho_1[ii];
+					}
+					else
+					{	// Don't allow negative pressures
+						real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
+									pn[ii].rho + 0.5 * dt * Rrho_1[ii]));
+						st_2[ii].rho = rho;
+						st_2[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+						st_2[ii].Rrho = fmax(0.0,Rrho_1[ii]);
+					}
 				}
+				break;
 			}
 		}
 	}
@@ -178,7 +184,9 @@ real Get_First_RK(SIM& svar, FLUID const& fvar, AERO const& avar,
 			/* Do the buffer particles */
 			if(limits[block].block_type == inletZone)
 			{
-				if(limits[block].fixed_vel_or_dynamic)
+				switch(limits[block].fixed_vel_or_dynamic)
+				{
+				case 1:
 				{
 					StateVecD unorm = limits[block].insert_norm.normalized();
 					#pragma omp for schedule(static) nowait
@@ -199,8 +207,9 @@ real Get_First_RK(SIM& svar, FLUID const& fvar, AERO const& avar,
 							st_2[buffID].p = st_2[backID].p; 
 						}	
 					}
+					break;
 				}
-				else
+				case 0:
 				{
 					#pragma omp for schedule(static) nowait
 					for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
@@ -220,6 +229,8 @@ real Get_First_RK(SIM& svar, FLUID const& fvar, AERO const& avar,
 							st_2[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
 						}	
 					}
+					break;
+				}
 				}
 			}
         }
@@ -295,51 +306,57 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 		if(limits[block].no_slip)
 			Set_No_Slip(fvar,limits[block].index.first,limits[block].index.second,outlist,st_2);
 
-		if(limits[block].bound_solver == DBC)
+		switch (limits[block].bound_solver)
 		{
-			Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
-							outlist,st_2,res_2);
+			case DBC:
+			{
+				Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
+								outlist,st_2,res_2);
 
-			#pragma omp for schedule(static) nowait
-			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-			{	/****** BOUNDARY PARTICLES ***********/
-				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
-							pn[ii].rho + 0.5 * dt * Rrho_2[ii]));
-				st_2[ii].rho = rho;
-				st_2[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-				st_2[ii].Rrho = Rrho_2[ii];
-			}
-		}
-		else if (limits[block].bound_solver == pressure_G)
-		{
-			Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
-							limits[block].index.second,outlist,st_2);
-		}
-		else if (limits[block].bound_solver == ghost)
-		{
-			vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
-			Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
-							outlist,st_2,Rrho_2,near_inlet);
-
-			#pragma omp for schedule(static) nowait
-			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-			{	/****** BOUNDARY PARTICLES ***********/
-				if(!near_inlet[ii - limits[block].index.first])
-				{
+				#pragma omp for schedule(static) nowait
+				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+				{	/****** BOUNDARY PARTICLES ***********/
 					real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
 								pn[ii].rho + 0.5 * dt * Rrho_2[ii]));
-					st_3[ii].rho = rho;
-					st_3[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-					st_3[ii].Rrho = Rrho_2[ii];
+					st_2[ii].rho = rho;
+					st_2[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+					st_2[ii].Rrho = Rrho_2[ii];
 				}
-				else
-				{	// Don't allow negative pressures
-					real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
-								pn[ii].rho + 0.5 * dt * Rrho_2[ii]));
-					st_3[ii].rho = rho;
-					st_3[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-					st_3[ii].Rrho = fmax(0.0,Rrho_2[ii]);
+				break;
+			}
+			case pressure_G:
+			{
+				Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
+								limits[block].index.second,outlist,st_2);
+				break;
+			}
+			case ghost:
+			{
+				vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
+				Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
+								outlist,st_2,Rrho_2,near_inlet);
+
+				#pragma omp for schedule(static) nowait
+				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+				{	/****** BOUNDARY PARTICLES ***********/
+					if(!near_inlet[ii - limits[block].index.first])
+					{
+						real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+									pn[ii].rho + 0.5 * dt * Rrho_2[ii]));
+						st_3[ii].rho = rho;
+						st_3[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+						st_3[ii].Rrho = Rrho_2[ii];
+					}
+					else
+					{	// Don't allow negative pressures
+						real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
+									pn[ii].rho + 0.5 * dt * Rrho_2[ii]));
+						st_3[ii].rho = rho;
+						st_3[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+						st_3[ii].Rrho = fmax(0.0,Rrho_2[ii]);
+					}
 				}
+				break;
 			}
 		}
 	}
@@ -376,48 +393,53 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 			/* Do the buffer particles */
 			if(limits[block].block_type == inletZone)
 			{
-				if(limits[block].fixed_vel_or_dynamic)
+				switch (limits[block].fixed_vel_or_dynamic)
 				{
-					StateVecD unorm = limits[block].insert_norm.normalized();
-					#pragma omp for schedule(static) nowait
-					for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
-					{	
-						size_t const& backID = limits[block].back[ii];
-						StateVecD const& xi = st_3[backID].xi;
+					case 1:
+					{
+						StateVecD unorm = limits[block].insert_norm.normalized();
+						#pragma omp for schedule(static) nowait
+						for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
+						{	
+							size_t const& backID = limits[block].back[ii];
+							StateVecD const& xi = st_3[backID].xi;
 
-						for(size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
-						{	/* Define buffer off the back particle */
-							size_t const& buffID = limits[block].buffer[ii][jj];
-							// Set position as related to the previous particle.
-							st_3[buffID].xi = xi - svar.dx * (jj + 1.0) * unorm;
+							for(size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
+							{	/* Define buffer off the back particle */
+								size_t const& buffID = limits[block].buffer[ii][jj];
+								// Set position as related to the previous particle.
+								st_3[buffID].xi = xi - svar.dx * (jj + 1.0) * unorm;
 
-							// How to set density and pressure though?
-							st_3[buffID].v = st_3[backID].v;
-							st_3[buffID].rho = st_3[backID].rho;
-							st_3[buffID].p = st_3[backID].p; 
-						}	
+								// How to set density and pressure though?
+								st_3[buffID].v = st_3[backID].v;
+								st_3[buffID].rho = st_3[backID].rho;
+								st_3[buffID].p = st_3[backID].p; 
+							}	
+						}
+						break;
 					}
-				}
-				else
-				{
-					#pragma omp for schedule(static) nowait
-					for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
-					{	
-						// size_t const& backID = svar.back[ii];
-						for(size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
-						{	/* Define buffer off the back particle */
+					case 0:
+					{
+						#pragma omp for schedule(static) nowait
+						for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
+						{	
+							// size_t const& backID = svar.back[ii];
+							for(size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
+							{	/* Define buffer off the back particle */
 
-							size_t const& buffID = limits[jj].buffer[ii][jj];
+								size_t const& buffID = limits[jj].buffer[ii][jj];
 
-							st_3[buffID].Rrho = Rrho_2[buffID];
-							
-							real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
-								 pn[buffID].rho + 0.5 * dt * Rrho_2[buffID]));
-							st_3[buffID].rho = rho;
-							st_3[buffID].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+								st_3[buffID].Rrho = Rrho_2[buffID];
+								
+								real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+									pn[buffID].rho + 0.5 * dt * Rrho_2[buffID]));
+								st_3[buffID].rho = rho;
+								st_3[buffID].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
 
-							st_3[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
-						}	
+								st_3[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
+							}	
+						}
+						break;
 					}
 				}
 			}
@@ -469,52 +491,57 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 		if(limits[block].no_slip)
 			Set_No_Slip(fvar,limits[block].index.first,limits[block].index.second,outlist,st_3);
 
-		
-		if(limits[block].bound_solver == DBC)
+		switch (limits[block].bound_solver)
 		{
-			Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
-							outlist,st_3,res_3);
+			case DBC:
+			{
+				Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
+								outlist,st_3,res_3);
 
-			#pragma omp for schedule(static) nowait
-			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-			{	/****** BOUNDARY PARTICLES ***********/
-				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
-							pn[ii].rho + 0.5 * dt * Rrho_3[ii]));
-				st_4[ii].rho = rho;
-				st_4[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-				st_4[ii].Rrho = Rrho_3[ii];
-			}
-		}
-		else if (limits[block].bound_solver == pressure_G)
-		{
-			Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
-							limits[block].index.second,outlist,st_3);
-		}
-		else if (limits[block].bound_solver == ghost)
-		{
-			vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
-			Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
-							outlist,st_3,Rrho_3,near_inlet);
-
-			#pragma omp for schedule(static) nowait
-			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-			{	/****** BOUNDARY PARTICLES ***********/
-				if(!near_inlet[ii - limits[block].index.first])
-				{
+				#pragma omp for schedule(static) nowait
+				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+				{	/****** BOUNDARY PARTICLES ***********/
 					real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
 								pn[ii].rho + 0.5 * dt * Rrho_3[ii]));
 					st_4[ii].rho = rho;
 					st_4[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
 					st_4[ii].Rrho = Rrho_3[ii];
 				}
-				else
-				{	// Don't allow negative pressures
-					real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
-								pn[ii].rho + 0.5 * dt * Rrho_3[ii]));
-					st_4[ii].rho = rho;
-					st_4[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-					st_4[ii].Rrho = fmax(0.0,Rrho_3[ii]);
+				break;
+			}
+			case pressure_G:
+			{
+				Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
+								limits[block].index.second,outlist,st_3);
+				break;
+			}
+			case ghost:
+			{
+				vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
+				Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
+								outlist,st_3,Rrho_3,near_inlet);
+
+				#pragma omp for schedule(static) nowait
+				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+				{	/****** BOUNDARY PARTICLES ***********/
+					if(!near_inlet[ii - limits[block].index.first])
+					{
+						real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+									pn[ii].rho + 0.5 * dt * Rrho_3[ii]));
+						st_4[ii].rho = rho;
+						st_4[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+						st_4[ii].Rrho = Rrho_3[ii];
+					}
+					else
+					{	// Don't allow negative pressures
+						real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
+									pn[ii].rho + 0.5 * dt * Rrho_3[ii]));
+						st_4[ii].rho = rho;
+						st_4[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+						st_4[ii].Rrho = fmax(0.0,Rrho_3[ii]);
+					}
 				}
+				break;
 			}
 		}
 	}
@@ -547,48 +574,53 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 			/* Do the buffer particles */
 			if(limits[block].block_type == inletZone)
 			{
-				if(limits[block].fixed_vel_or_dynamic)
+				switch (limits[block].fixed_vel_or_dynamic)
 				{
-					StateVecD unorm = limits[block].insert_norm.normalized();
-					#pragma omp for schedule(static) nowait
-					for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
-					{	
-						size_t const& backID = limits[block].back[ii];
-						StateVecD const& xi = st_4[backID].xi;
+					case 1:
+					{
+						StateVecD unorm = limits[block].insert_norm.normalized();
+						#pragma omp for schedule(static) nowait
+						for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
+						{	
+							size_t const& backID = limits[block].back[ii];
+							StateVecD const& xi = st_4[backID].xi;
 
-						for(size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
-						{	/* Define buffer off the back particle */
-							size_t const& buffID = limits[block].buffer[ii][jj];
-							// Set position as related to the previous particle.
-							st_4[buffID].xi = xi - svar.dx * (jj + 1.0) * unorm;
+							for(size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
+							{	/* Define buffer off the back particle */
+								size_t const& buffID = limits[block].buffer[ii][jj];
+								// Set position as related to the previous particle.
+								st_4[buffID].xi = xi - svar.dx * (jj + 1.0) * unorm;
 
-							// How to set density and pressure though?
-							st_4[buffID].v = st_4[backID].v;
-							st_4[buffID].rho = st_4[backID].rho;
-							st_4[buffID].p = st_4[backID].p; 
-						}	
+								// How to set density and pressure though?
+								st_4[buffID].v = st_4[backID].v;
+								st_4[buffID].rho = st_4[backID].rho;
+								st_4[buffID].p = st_4[backID].p; 
+							}	
+						}
+						break;
 					}
-				}
-				else
-				{
-					#pragma omp for schedule(static) nowait
-					for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
-					{	
-						// size_t const& backID = svar.back[ii];
-						for(size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
-						{	/* Define buffer off the back particle */
+					case 0:
+					{
+						#pragma omp for schedule(static) nowait
+						for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
+						{	
+							// size_t const& backID = svar.back[ii];
+							for(size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
+							{	/* Define buffer off the back particle */
 
-							size_t const& buffID = limits[jj].buffer[ii][jj];
+								size_t const& buffID = limits[jj].buffer[ii][jj];
 
-							st_4[buffID].Rrho = Rrho_3[buffID];
-							
-							real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
-								 pn[buffID].rho + 0.5 * dt * Rrho_3[buffID]));
-							st_4[buffID].rho = rho;
-							st_4[buffID].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+								st_4[buffID].Rrho = Rrho_3[buffID];
+								
+								real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+									pn[buffID].rho + 0.5 * dt * Rrho_3[buffID]));
+								st_4[buffID].rho = rho;
+								st_4[buffID].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
 
-							st_4[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
-						}	
+								st_4[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
+							}	
+						}
+						break;
 					}
 				}
 			}
@@ -641,51 +673,57 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 		if(limits[block].no_slip)
 			Set_No_Slip(fvar,limits[block].index.first,limits[block].index.second,outlist,st_4);
 
-		if(limits[block].bound_solver == DBC)
+		switch (limits[block].bound_solver)
 		{
-			Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
-							outlist,st_4,res_4);
+			case DBC:
+			{
+				Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
+								outlist,st_4,res_4);
 
-			#pragma omp for schedule(static) nowait
-			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-			{	/****** BOUNDARY PARTICLES ***********/
-				real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
-							pn[ii].rho + (dt / 6.0) * (st_2[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii])));
-				pnp1[ii].rho = rho;
-				pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-				pnp1[ii].Rrho = Rrho_2[ii];
-			}
-		}
-		else if (limits[block].bound_solver == pressure_G)
-		{
-			Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
-							limits[block].index.second,outlist,st_4);
-		}
-		else if (limits[block].bound_solver == ghost)
-		{
-			vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
-			Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
-							outlist,st_4,Rrho_4,near_inlet);
-
-			#pragma omp for schedule(static) nowait
-			for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-			{	/****** BOUNDARY PARTICLES ***********/
-				if(!near_inlet[ii - limits[block].index.first])
-				{
+				#pragma omp for schedule(static) nowait
+				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+				{	/****** BOUNDARY PARTICLES ***********/
 					real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
 								pn[ii].rho + (dt / 6.0) * (st_2[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii])));
 					pnp1[ii].rho = rho;
 					pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-					pnp1[ii].Rrho = Rrho_4[ii];
+					pnp1[ii].Rrho = Rrho_2[ii];
 				}
-				else
-				{	// Don't allow negative pressures
-					real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
-							pn[ii].rho + (dt / 6.0) * (st_2[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii])));
-					pnp1[ii].rho = rho;
-					pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-					pnp1[ii].Rrho = fmax(0.0,Rrho_4[ii]);
+				break;
+			}
+			case pressure_G:
+			{
+				Get_Boundary_Pressure(svar.grav,fvar,limits[block].index.first,
+								limits[block].index.second,outlist,st_4);
+				break;
+			}
+			case ghost:
+			{
+				vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
+				Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
+								outlist,st_4,Rrho_4,near_inlet);
+
+				#pragma omp for schedule(static) nowait
+				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+				{	/****** BOUNDARY PARTICLES ***********/
+					if(!near_inlet[ii - limits[block].index.first])
+					{
+						real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+									pn[ii].rho + (dt / 6.0) * (st_2[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii])));
+						pnp1[ii].rho = rho;
+						pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+						pnp1[ii].Rrho = Rrho_4[ii];
+					}
+					else
+					{	// Don't allow negative pressures
+						real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
+								pn[ii].rho + (dt / 6.0) * (st_2[ii].Rrho + 2.0 * Rrho_2[ii] + 2.0 * Rrho_3[ii] + Rrho_4[ii])));
+						pnp1[ii].rho = rho;
+						pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+						pnp1[ii].Rrho = fmax(0.0,Rrho_4[ii]);
+					}
 				}
+				break;
 			}
 		}
 
@@ -725,20 +763,6 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 					pnp1[ii].acc = res_4[ii];
 					pnp1[ii].Af = Af[ii];
 					pnp1[ii].Rrho = Rrho_4[ii];
-
-					if(svar.Asource == 2 && pnp1[ii].b == FREE)
-					{
-						#pragma omp atomic
-							cells.fNum[pnp1[ii].cellID]++;
-						#pragma omp atomic
-							cells.fMass[pnp1[ii].cellID] += pnp1[ii].m;
-
-						#pragma omp critical
-						{
-							cells.vFn[pnp1[ii].cellID] += pn[ii].v;
-							cells.vFnp1[pnp1[ii].cellID] += pnp1[ii].v;
-						}	
-					}
 				}
 				else if (pnp1[ii].b == OUTLET)
 				{	/* For the outlet zone, just perform euler integration of last info */
@@ -749,47 +773,52 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 			/* Do the buffer particles */
 			if(limits[block].block_type == inletZone)
 			{
-				if(limits[block].fixed_vel_or_dynamic)
+				switch (limits[block].fixed_vel_or_dynamic)
 				{
-					StateVecD unorm = limits[block].insert_norm.normalized();
-					#pragma omp for schedule(static) nowait
-					for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
-					{	
-						size_t const& backID = limits[block].back[ii];
-						StateVecD const& xi = pnp1[backID].xi;
+					case 1:
+					{
+						StateVecD unorm = limits[block].insert_norm.normalized();
+						#pragma omp for schedule(static) nowait
+						for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
+						{	
+							size_t const& backID = limits[block].back[ii];
+							StateVecD const& xi = pnp1[backID].xi;
 
-						for(size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
-						{	/* Define buffer off the back particle */
-							size_t const& buffID = limits[block].buffer[ii][jj];
-							// Set position as related to the previous particle.
-							pnp1[buffID].xi = xi - svar.dx * (jj + 1.0) * unorm;
+							for(size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
+							{	/* Define buffer off the back particle */
+								size_t const& buffID = limits[block].buffer[ii][jj];
+								// Set position as related to the previous particle.
+								pnp1[buffID].xi = xi - svar.dx * (jj + 1.0) * unorm;
 
-							// How to set density and pressure though?
-							pnp1[buffID].v = pnp1[backID].v;
-							pnp1[buffID].rho = pnp1[backID].rho;
-							pnp1[buffID].p = pnp1[backID].p; 
-						}	
+								// How to set density and pressure though?
+								pnp1[buffID].v = pnp1[backID].v;
+								pnp1[buffID].rho = pnp1[backID].rho;
+								pnp1[buffID].p = pnp1[backID].p; 
+							}	
+						}
+						break;
 					}
-				}
-				else
-				{
-					#pragma omp for schedule(static) nowait
-					for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
-					{	
-						// size_t const& backID = svar.back[ii];
-						for(size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
-						{	/* Define buffer off the back particle */
+					case 0:
+					{
+						#pragma omp for schedule(static) nowait
+						for(size_t ii = 0; ii < limits[block].back.size(); ++ii)
+						{	
+							// size_t const& backID = svar.back[ii];
+							for(size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
+							{	/* Define buffer off the back particle */
 
-							size_t const& buffID = limits[jj].buffer[ii][jj];
+								size_t const& buffID = limits[jj].buffer[ii][jj];
 
-							st_4[buffID].Rrho = Rrho_4[buffID];
-							
-							real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, pn[buffID].rho + (dt / 6.0) * 
-								(st_2[buffID].Rrho + 2.0 * Rrho_2[buffID] + 2.0 * Rrho_3[buffID] + Rrho_4[buffID])));
-							pnp1[buffID].rho = rho;
-							pnp1[buffID].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-							pnp1[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
-						}	
+								st_4[buffID].Rrho = Rrho_4[buffID];
+								
+								real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, pn[buffID].rho + (dt / 6.0) * 
+									(st_2[buffID].Rrho + 2.0 * Rrho_2[buffID] + 2.0 * Rrho_3[buffID] + Rrho_4[buffID])));
+								pnp1[buffID].rho = rho;
+								pnp1[buffID].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+								pnp1[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
+							}	
+						}
+						break;
 					}
 				}
 			}

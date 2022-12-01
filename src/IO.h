@@ -14,7 +14,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 
 void Write_Headers(FILE* f1, FILE* fb, FILE* fg, SIM& svar);
 
-void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limits,
+void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, real const& rho0, LIMITS const& limits,
 				 SPHState const& pnp1/* , DELTAP const& dp *//* , SPHState const& airP */);
 
 void Append_Restart_Prefix(SIM const& svar);

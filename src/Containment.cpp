@@ -597,7 +597,7 @@ vector<size_t> FindCell(SIM& svar, AERO const& avar, Vec_Tree const& CELL_TREE, 
         {
             if (pnp1[ii].b != FREE || pnp1[ii].lam_ng > avar.cutoff)
             {
-                pnp1[ii].cellID = 0;
+                pnp1[ii].cellID = -1;
                 continue;   
             }
 
@@ -837,7 +837,7 @@ void Check_Pipe_Outlet(Vec_Tree const& CELL_TREE, SIM& svar, AERO const& avar, M
                 if(pnp1[ii].xi.dot(limits[block].pipe_norm) > limits[block].pipeconst)	
                 {
                     pnp1[ii].b = FREE;
-                    if(pnp1[ii].lam_ng < avar.cutoff && (svar.Asource == 1 || svar.Asource == 2))
+                    if(pnp1[ii].lam_ng < avar.cutoff && svar.Asource == meshInfl)
                     {   /* Retrieve the cell it's in */
                         uint to_del = 0;
                         FirstCell(svar,CELL_TREE, cells, pnp1[ii], to_del);

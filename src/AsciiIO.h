@@ -17,7 +17,7 @@ void ASCII_Restart(SIM& svar, FLUID const& fvar, SPHState& pn);
 /*************************************************************************/
 void Write_ASCII_header(FILE* fp, SIM const& svar, char const* title);
 
-void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, */
+void Write_ASCII_Timestep(SIM& svar, real const& rho0, SPHState const& pnp1,
 	size_t const& start, size_t const& end, char const* name, uint const& strandID, FILE* fp);
 
 void Write_Cell_Data(MESH const& cdata);

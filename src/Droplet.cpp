@@ -663,8 +663,6 @@ void Droplet_Drag_Sweep(SIM& svar, FLUID& fvar, AERO& avar)
         cells.fMass.emplace_back();
         cells.vFn.emplace_back();
         cells.vFnp1.emplace_back();
-        cells.cVol.emplace_back();
-        cells.cMass.emplace_back();
         cells.cRho.emplace_back();
         cells.cPertn.emplace_back();
         cells.cPertnp1.emplace_back();

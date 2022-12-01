@@ -228,90 +228,52 @@ inline StateVecD CalcAeroAcc(AERO const& avar, SPHPart const& pi, StateVecD cons
 	StateVecD acc = StateVecD::Zero();
 
 	// cout << avar.acase << endl;
-	if( avar.acase == 1)
-	{	/* Original Gissler */
-		acc = GisslerForce(avar,Vdiff,norm,pi.cellRho,pi.cellP,pi.m,lam,pi.woccl);
-	}
-	else if(avar.acase == 2)
-	{	/* Induced pressure based model */	
-		acc = InducedPressure(avar,Vdiff,norm,Pbasei,lam,dx,pi);
-	}
-	else if (avar.acase == 3)
-	{	/*Skin Friction Method*/
-		/*Calculate the component of velocity in the surface normal direction (scalar projection)*/
-		real Vnorm = Vdiff.dot(norm.normalized());
-
-		if(Vnorm > 0.001)
-		{
-			real const Re = avar.rhog*Vdiff.norm()*avar.L/avar.mug;
-
-			/*Consider that pressure force is the stagnation of a velocity normal to the surface*/
-			/*i.e. enforcing no parallel flow pressure and Cp = 1. */
-			StateVecD acc_press = 0.5*avar.rhog*Vnorm*Vnorm*avar.aPlate * norm.normalized()/pi.m;
-
-			/*Next, consider a skin friction force acting parallel to the surface*/
-			StateVecD Vpar = Vdiff - abs(Vnorm)*norm.normalized();
-			real Cf = 0.027/pow(Re,1.0/7.0); /*Prandtl seventh power law for turbulent BL*/
-
-			StateVecD acc_skin = 0.5*avar.rhog* Vpar.norm() * Cf * avar.aPlate * Vpar/pi.m;
-
-			real const frac2 = std::min(1.5 * lam, 1.0);
-			real const frac1 = (1.0 - frac2);
-
-			/*Droplet force*/
-			real const Cdi = GetCd(Re);
-			StateVecD const acc_drop = 0.5*avar.rhog*Vdiff.norm()*Vdiff*(M_PI*avar.L*avar.L/4)*Cdi/pi.m;
-
-			// cout << Fpress(0) << "  " << Fpress(1) << "  " << Fskin(0) << "  " << Fskin(1) << endl;
-
-			acc = frac2*(acc_press + acc_skin) + frac1*acc_drop;
-		}
-
-	}
-	else if(avar.acase == 4)
+	switch (avar.acase)
 	{
-		// real ymax = Vdiff.squaredNorm()*avar.ycoef;
-
-		// acc = AeroForce(Vdiff, avar, pi.m);
-		// real correc = 1.0;
-		// real Acorrect = 1.0-woccl;
-
-		// /*Correction based on surface normal*/
-		real theta = norm.normalized().dot(Vdiff.normalized());
-		// real denom = norm.norm()*(Vdiff).norm();
-		// real theta = num/denom;
-
-		real Cp = 0.0;
-		if(theta < 2.4435)
+		case Gissler: /* Original Gissler */
 		{
-			Cp = 1.1*cos(theta*2.03)-0.1;
+			acc = GisslerForce(avar,Vdiff,norm,pi.cellRho,pi.cellP,pi.m,lam,pi.woccl);
+			break;
 		}
-		else
+		case Induced_Pressure: /* Induced pressure based model */	
 		{
-			Cp = 0.075;
+			acc = InducedPressure(avar,Vdiff,norm,Pbasei,lam,dx,pi);
+			break;
 		}
+		case SkinFric: /*Skin Friction Method*/
+		{
+			/*Calculate the component of velocity in the surface normal direction (scalar projection)*/
+			real Vnorm = Vdiff.dot(norm.normalized());
 
-		real const frac2 = std::min(1.5 * lam, 1.0);
-		real const frac1 = (1.0 - frac2);
+			if(Vnorm > 0.001)
+			{
+				real const Re = avar.rhog*Vdiff.norm()*avar.L/avar.mug;
 
+				/*Consider that pressure force is the stagnation of a velocity normal to the surface*/
+				/*i.e. enforcing no parallel flow pressure and Cp = 1. */
+				StateVecD acc_press = 0.5*avar.rhog*Vnorm*Vnorm*avar.aPlate * norm.normalized()/pi.m;
 
-		#if SIMDIM == 3 
-			// real const Adrop = M_PI*pow((avar.L + avar.Cb*avar.L*ymax),2);
-			real const Adrop = M_PI*pow(avar.L,2);
-		#else
-			// real const Adrop = 2*(avar.L + avar.Cb*avar.L*ymax);
-			real const Adrop = 2*avar.L;
-		#endif
+				/*Next, consider a skin friction force acting parallel to the surface*/
+				StateVecD Vpar = Vdiff - abs(Vnorm)*norm.normalized();
+				real Cf = 0.027/pow(Re,1.0/7.0); /*Prandtl seventh power law for turbulent BL*/
 
-		real const Aunocc = frac1*Adrop + frac2*avar.aPlate;
+				StateVecD acc_skin = 0.5*avar.rhog* Vpar.norm() * Cf * avar.aPlate * Vpar/pi.m;
 
-		real press = 0.5*avar.rhog*Vdiff.squaredNorm()*Cp;
+				real const frac2 = std::min(1.5 * lam, 1.0);
+				real const frac1 = (1.0 - frac2);
 
-		#if SIMDIM == 3
-			acc = -7.5*norm.normalized()*Aunocc*press;
-		#else
-			acc = -norm.normalized()*Aunocc*press;
-		#endif
+				/*Droplet force*/
+				real const Cdi = GetCd(Re);
+				StateVecD const acc_drop = 0.5*avar.rhog*Vdiff.norm()*Vdiff*(M_PI*avar.L*avar.L/4)*Cdi/pi.m;
+
+				// cout << Fpress(0) << "  " << Fpress(1) << "  " << Fskin(0) << "  " << Fskin(1) << endl;
+
+				acc = frac2*(acc_press + acc_skin) + frac1*acc_drop;
+			}
+			break;
+		}
+		default:
+			break;
 	}
 
 	return acc;

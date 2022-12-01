@@ -92,7 +92,7 @@ inline void Write_ASCII_Vector(FILE* fp, vector<StateVecD> const& vec, size_t co
 	}
 }
 
-void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, */
+void Write_ASCII_Timestep(SIM& svar, real const& rho0, SPHState const& pnp1, 
 	size_t const& start, size_t const& end, char const* name, uint const& strandID, FILE* fp)
 {
 	// if(bwrite == 1)
@@ -236,8 +236,27 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 	  	}
 		fprintf(fp,"\n");  
 	}
+
 	
-	if(svar.outvar[9])	// Velocity magnitude
+	if(svar.outvar[9])	// Density Variation
+	{
+		size_t newl = 0;
+		for (size_t ii = start; ii < end; ++ii)
+		{
+			fprintf(fp,"%3.7e",100.0*(pnp1[ii].rho/rho0-1.0));
+			if(newl > 4)
+			{
+				fprintf(fp,"\n");
+				newl=0;
+			}
+			else
+				newl++;  
+	  	}
+		fprintf(fp,"\n");  
+	}
+	
+	
+	if(svar.outvar[10])	// Velocity magnitude
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -254,7 +273,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 
-	if(svar.outvar[10])	// Surface flag
+	if(svar.outvar[11])	// Surface flag
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -271,7 +290,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 	
-	if(svar.outvar[11])	// Surface zone flag
+	if(svar.outvar[12])	// Surface zone flag
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -288,7 +307,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 	
-	if(svar.outvar[12])	// Aerodynamic force magnitude
+	if(svar.outvar[13])	// Aerodynamic force magnitude
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -305,7 +324,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 	
-	if(svar.outvar[13])	// Aerodynamic force vector
+	if(svar.outvar[14])	// Aerodynamic force vector
 	{
 		for (size_t ii = start; ii < end; ++ii)
 		{
@@ -315,7 +334,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 	  	}
 	}
 	
-	if(svar.outvar[14])	// Curvature scalar
+	if(svar.outvar[15])	// Curvature scalar
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -332,7 +351,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 	
-	if(svar.outvar[15])	// Occlusion factor
+	if(svar.outvar[16])	// Occlusion factor
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -349,7 +368,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 	
-	if(svar.outvar[16])	// Cell pressure
+	if(svar.outvar[17])	// Cell pressure
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -366,7 +385,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 	
-	if(svar.outvar[17])	// Cell density
+	if(svar.outvar[18])	// Cell density
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -383,7 +402,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 	
-	if(svar.outvar[18])	// Cell velocity magnitude
+	if(svar.outvar[19])	// Cell velocity magnitude
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -400,7 +419,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 	
-	if(svar.outvar[19])	// Cell velocity vector
+	if(svar.outvar[20])	// Cell velocity vector
 	{
 		for (size_t ii = start; ii < end; ++ii)
 		{
@@ -410,7 +429,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 	  	} 
 	}
 	
-	if(svar.outvar[20]) // dSPH density gradient
+	if(svar.outvar[21]) // dSPH density gradient
 	{
 		for (size_t ii = start; ii < end; ++ii)
 		{
@@ -420,7 +439,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 	  	} 
 	}
 		
-	if(svar.outvar[21]) // Lambda eigenvalue of L matrix
+	if(svar.outvar[22]) // Lambda eigenvalue of L matrix
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -437,7 +456,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 			
-	if(svar.outvar[22]) // Lambda eigenvalue without boundary
+	if(svar.outvar[23]) // Lambda eigenvalue without boundary
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -454,7 +473,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 			
-	if(svar.outvar[23]) // Surface colour function
+	if(svar.outvar[24]) // Surface colour function
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -471,7 +490,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 
-	if(svar.outvar[24]) // Surface colour gradient
+	if(svar.outvar[25]) // Surface colour gradient
 	{
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -488,7 +507,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 		
-	if(svar.outvar[25]) // Surface normal
+	if(svar.outvar[26]) // Surface normal
 	{	// Cell velocity vector
 		for (size_t ii = start; ii < end; ++ii)
 		{
@@ -498,7 +517,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 	  	} 
 	}
 		
-	if(svar.outvar[26])
+	if(svar.outvar[27])
 	{	// Shifting velocity magnitude
 		size_t newl = 0;
 		for (size_t ii = start; ii < end; ++ii)
@@ -515,7 +534,7 @@ void Write_ASCII_Timestep(SIM& svar, SPHState const& pnp1, /* DELTAP const& dp, 
 		fprintf(fp,"\n");  
 	}
 		
-	if(svar.outvar[27])
+	if(svar.outvar[28])
 	{	// Shifting velocity vector
 		for (size_t ii = start; ii < end; ++ii)
 		{

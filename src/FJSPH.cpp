@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	if(svar.Asource == 1)
+	if(svar.Asource == meshInfl)
 	{
 		#if SIMDIM == 3
 			if(svar.CDForFOAM == 0)
@@ -152,7 +152,7 @@ int main(int argc, char *argv[])
   		// Redefine the mass and spacing to make sure the required mass is conserved
   		// if(svar.Scase == SPHERE || svar.Scase == JET)
 	  	// 	Set_Mass(svar,fvar,avar,pn,pnp1);
-		if(svar.Asource == 0)
+		if(svar.Asource != meshInfl)
 		{
 			for(size_t ii = 0; ii < pnp1.size(); ++ii)
 			{
@@ -195,8 +195,6 @@ int main(int argc, char *argv[])
 		cells.fMass.emplace_back();
 		cells.vFn.emplace_back();
 		cells.vFnp1.emplace_back();
-		cells.cVol.emplace_back();
-		cells.cMass.emplace_back();
 		cells.cRho.emplace_back();
 		cells.cPertn.emplace_back();
 		cells.cPertnp1.emplace_back();
@@ -232,7 +230,7 @@ int main(int argc, char *argv[])
 		real npd = 1.0;
 		dSPH_PreStep(fvar,end,pnp1,outlist,npd);
 
-		if (svar.Asource == 1)
+		if (svar.Asource == meshInfl)
 		{
 			// cout << "Finding cells" << endl;
 			FindCell(svar,avar,CELL_TREE,cells,pn,pnp1);
@@ -285,7 +283,7 @@ int main(int argc, char *argv[])
 
 	if(!svar.restart)
 	{
-		Write_Timestep(ff,fb,fg,svar,limits,pnp1);
+		Write_Timestep(ff,fb,fg,svar,fvar.rho0,limits,pnp1);
 	}
 
 	Append_Restart_Prefix(svar);
@@ -378,13 +376,12 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		Write_Timestep(ff,fb,fg,svar,limits,pnp1);
+		Write_Timestep(ff,fb,fg,svar,fvar.rho0,limits,pnp1);
 		if(svar.using_ipt)
 			IPT::Write_Data(svar,cells,iptdata);
 
 		svar.tframem1 += svar.framet; /* March frame time forward */
 	}
-	
 
 	/*Wrap up simulation files and close them*/
 	if (f2 != NULL)

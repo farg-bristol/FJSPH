@@ -145,24 +145,23 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
             StateVecD Vdiff = StateVecD::Zero();
             
             SPHPart& pi = pnp1[ii];
-            if (svar.Asource == 1)
+            if (pi.cellID != -1 && pi.b == FREE && (avar.acase == 4 || avar.acase == 1))
             {
-                Vdiff = (pi.cellV) - pi.v/* dp.avgV[ii]*/;
-            }
-            else if (svar.Asource == 2)
-            {
-                Vdiff = (pi.cellV+cells.cPertnp1[pi.cellID]) - pi.v /*dp.avgV[ii]*/;
-            }
-            #if SIMDIM == 3
-            else if(svar.Asource == 3)
-            {   
-                StateVecD Vel = vortex.getVelocity(pi.xi);
-                Vdiff = Vel - pi.v /*dp.avgV[ii]*/;
-            }
-            #endif
-            else 
-            {
-                Vdiff = avar.vInf - pi.v /*dp.avgV[ii]*/;
+                if (svar.Asource == meshInfl)
+                {
+                    Vdiff = (pi.cellV) - pi.v;
+                }
+                #if SIMDIM == 3
+                else if(svar.Asource == VLMInfl)
+                {   
+                    StateVecD Vel = vortex.getVelocity(pi.xi);
+                    Vdiff = Vel - pi.v;
+                }
+                #endif
+                else 
+                {
+                    Vdiff = avar.vInf - pi.v;
+                }
             }    
 
             real curve = 0.0;
@@ -208,7 +207,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
                 //         (/* dp.L[ii]* */GradK(Rij,r,fvar.H,fvar.correc));
             
                 /*Occlusion for Gissler Aero Method*/
-                if (pi.b >= FREE && (avar.acase == 4 || avar.acase == 1))
+                if (pi.b == FREE && (avar.acase == 4 || avar.acase == 1))
                 {
                     real const frac = Rij.dot(Vdiff)/(Vdiff.norm()*r);
                     
@@ -879,14 +878,12 @@ void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
 	cells.cP.emplace_back(avar.pRef);
 	// cells.SPHRho.emplace_back(fvar.rho0 * pow((fvar.gasPress/fvar.B + 1),1/fvar.gam));
 
-	cells.cVol.emplace_back(1.0);
 	cells.fNum.emplace_back(0);
 	cells.fMass.emplace_back(fvar.simM);
 	cells.vFn.emplace_back(StateVecD::Zero());
 	cells.vFnp1.emplace_back(StateVecD::Zero());
 
 	cells.cRho.emplace_back(avar.rhog);
-	cells.cMass.emplace_back(avar.rhog); //Since volume = 1 for this cell
 
 	cells.cPertn.emplace_back(StateVecD::Zero());
 	cells.cPertnp1.emplace_back(StateVecD::Zero());
@@ -896,14 +893,12 @@ void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
     cells.cP.emplace_back(avar.pRef);
     // cells.SPHRho.emplace_back(fvar.rho0 * pow((fvar.gasPress/fvar.B + 1),1/fvar.gam));
 
-    cells.cVol.emplace_back(1.0);
     cells.fNum.emplace_back(0);
     cells.fMass.emplace_back(fvar.simM);
     cells.vFn.emplace_back(StateVecD::Zero());
     cells.vFnp1.emplace_back(StateVecD::Zero());
 
     cells.cRho.emplace_back(avar.rhog);
-    cells.cMass.emplace_back(avar.rhog); //Since volume = 1 for this cell
 
     cells.cPertn.emplace_back(StateVecD::Zero());
     cells.cPertnp1.emplace_back(StateVecD::Zero());

@@ -458,7 +458,7 @@ void LatticeGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& ce
 
 			/* Velocity of the air particle */
 			StateVecD vel; 
-			if(svar.Asource == 0)
+			if(svar.Asource == constVel)
 				vel = (avar.gasM/ pnp1[ii].m) * avar.vInf;
 			else
 				vel = (avar.gasM/ pnp1[ii].m) * pnp1[ii].cellV;

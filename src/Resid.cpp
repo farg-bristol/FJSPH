@@ -275,7 +275,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
 			#endif
 			#endif
 
-			if( pi.lam_ng < avar.cutoff /* pi.surf == 1 */ && pi.b == FREE )
+			if( pi.cellID != -1 /* pi.lam_ng < avar.cutoff && pi.b == FREE */ )
 			{
 				Vdiff = pi.cellV - pi.v;
 								
@@ -442,6 +442,4 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
 		} /*End of sim parts*/		
 
 	}	/*End of declare parallel */
- 
-    // cout << RV.size() << "  " << Rrho.size() << "  " << Af.size() << "  " << curv.size() << endl;
 }
