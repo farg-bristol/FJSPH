@@ -217,7 +217,7 @@ void Make_Mesh(SIM& svar, AERO const& avar, MESH& cells, size_t const& ni)
     vector<real> pP;
     vector<real> pRho;
 
-    cells.alloc(ni*nj, (ni-1)*(nj-1),2*ni*nj - ni - nj,0,1);
+    cells.alloc(ni*nj, (ni-1)*(nj-1),2*ni*nj - ni - nj,0);
     cells.faces = vector<vector<size_t>>(cells.nFace,vector<size_t>(2));
     cells.leftright = vector<std::pair<int,int>>(cells.nFace);
 

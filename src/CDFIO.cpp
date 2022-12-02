@@ -157,7 +157,7 @@ namespace TAU
 		int dimID_;
 		if ((retval = nc_inq_dimid(meshID, dim.c_str(), &dimID_)))
 		{
-			ERR(retval);
+			printf("Failed to get the dimension ID of \"%s\"\n", dim.c_str());
 			exit(-1);
 		}
 		dimID = dimID_;
@@ -169,7 +169,7 @@ namespace TAU
 		size_t dimLen_;
 		if ((retval = nc_inq_dimlen(meshID, dimID, &dimLen_)))
 		{
-			ERR(retval);
+			printf("Failed to get the dimension length of ID %d\n", dimID);
 			exit(-1);
 		}
 		dimLen = dimLen_;
@@ -181,8 +181,8 @@ namespace TAU
 		int varID_;
 		if ((retval = nc_inq_varid(meshID, var.c_str(), &varID_)))
 		{
-			cout << "Failed to get the variable ID of \"" << var << "\"" << endl;
-			ERR(retval);
+			printf("Failed to get the variable ID of \"%s\"\n", var.c_str());
+			exit(-1);
 		}
 		varID = varID_;
 	}
@@ -328,8 +328,8 @@ namespace TAU
 
 		if ((retval = nc_get_var_double(fin, varID, &array[0])))
 		{
-			printf("Failed to get variable id for: %s\n", variable.c_str());
-			ERR(retval);
+			printf("Failed to get variable data for \"%s\"\n", variable.c_str());
+			exit(-1);
 		}
 
 		/*Convert it to a vector to store*/
@@ -365,8 +365,8 @@ namespace TAU
 
 		if ((retval = nc_get_var_int(fin, varID, &array[0])))
 		{
-			cout << "Failed to get variable data for: " << variable << endl;
-			ERR(retval);
+			printf("Failed to get the variable data of \"%s\"\n",variable.c_str());
+			exit(-1);
 		}
 
 		/*Convert it to a vector to store*/
@@ -391,8 +391,7 @@ namespace TAU
 
 		if ((retval = nc_inq_varid(fin, variable.c_str(), &varID)))
 		{
-			cout << "Failed to get the variable ID of \"" << variable << "\"" << endl;
-			ERR(retval);
+			printf("Failed to get the variable ID of \"%s\"\n",variable.c_str());
 			exit(-1);
 		}
 
@@ -414,8 +413,7 @@ namespace TAU
 			/*Get the actual data from the file*/
 			if ((retval = nc_get_vara_int(fin, varID, start,end, &elemArray[0])))
 			{
-				cout << "Failed to get the variable data of \"" << variable << "\"" << endl;
-				ERR(retval);
+				printf("Failed to get the variable data of \"%s\"\n",variable.c_str());
 				exit(-1);
 			}
 
@@ -542,23 +540,41 @@ namespace TAU
 			if (ignore == 1)
 			{
 				if ((retval = nc_get_var_double(fin, ycID, &coordX[0])))
-					ERR(retval);
+				{		
+					printf("Failed to get the variable data of y-coordinate\n");
+					exit(-1);
+				}
 				if ((retval = nc_get_var_double(fin, zcID, &coordY[0])))
-					ERR(retval);
+				{		
+					printf("Failed to get the variable data of z-coordinate\n");
+					exit(-1);
+				}
 			}
 			else if (ignore == 2)
 			{
 				if ((retval = nc_get_var_double(fin, xcID, &coordX[0])))
-					ERR(retval);
+				{		
+					printf("Failed to get the variable data of x-coordinate\n");
+					exit(-1);
+				}
 				if ((retval = nc_get_var_double(fin, zcID, &coordY[0])))
-					ERR(retval);
+				{		
+					printf("Failed to get the variable data of z-coordinate\n");
+					exit(-1);
+				}
 			}
 			else if (ignore == 3)
 			{
 				if ((retval = nc_get_var_double(fin, xcID, &coordX[0])))
-					ERR(retval);
+				{		
+					printf("Failed to get the variable data of x-coordinate\n");
+					exit(-1);
+				}
 				if ((retval = nc_get_var_double(fin, ycID, &coordY[0])))
-					ERR(retval);
+				{		
+					printf("Failed to get the variable data of y-coordinate\n");
+					exit(-1);
+				}
 			}
 			else
 			{
@@ -574,11 +590,20 @@ namespace TAU
 		#else
 			real *coordZ = new real[nPnts];
 			if ((retval = nc_get_var_double(fin, xcID, &coordX[0])))
-				ERR(retval);
+			{		
+				printf("Failed to get the variable data of x-coordinate\n");
+				exit(-1);
+			}
 			if ((retval = nc_get_var_double(fin, ycID, &coordY[0])))
-				ERR(retval);
+			{		
+				printf("Failed to get the variable data of y-coordinate\n");
+				exit(-1);
+			}
 			if ((retval = nc_get_var_double(fin, zcID, &coordZ[0])))
-				ERR(retval);
+			{		
+				printf("Failed to get the variable data of z-coordinate\n");
+				exit(-1);
+			}
 
 			#pragma omp parallel for
 			for (uint ii = 0; ii < nPnts; ++ii)

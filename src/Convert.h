@@ -40,12 +40,12 @@ typedef unsigned int uint;
 	std::ofstream dbout("Cell_Convert.log",std::ios::out);
 #endif
 
-uint index(uint ii, uint jj, uint nPts)
+inline uint index(uint ii, uint jj, uint nPts)
 {
 	return(ii*nPts + jj);
 }
 
-std::ifstream& GotoLine(std::ifstream& file, unsigned int num)
+inline std::ifstream& GotoLine(std::ifstream& file, unsigned int num)
 {
     file.seekg(std::ios::beg);
     for(uint ii=0; ii < num - 1; ++ii){
@@ -57,7 +57,7 @@ std::ifstream& GotoLine(std::ifstream& file, unsigned int num)
 namespace netCDF
 {
     // Functions for reading
-    void Get_Dimension(int &fin, string const& variable, int &dimID, size_t &dimVal)
+    inline void Get_Dimension(int &fin, string const& variable, int &dimID, size_t &dimVal)
     {
         int retval;
         if ((retval = nc_inq_dimid(fin, variable.c_str(), &dimID)))
@@ -81,7 +81,7 @@ namespace netCDF
         }
     }
 
-    double* Get_Real_Scalar(int &fin, string const& variable, size_t const &nPnts)
+    inline double* Get_Real_Scalar(int &fin, string const& variable, size_t const &nPnts)
     {
         int retval, varID;
         if ((retval = nc_inq_varid(fin, variable.c_str(), &varID)))
@@ -109,7 +109,7 @@ namespace netCDF
         return var;
     }
 
-    int* Get_Int_Scalar(int &fin, string const& variable, size_t const &nPnts)
+    inline int* Get_Int_Scalar(int &fin, string const& variable, size_t const &nPnts)
     {
         int retval, varID;
         if ((retval = nc_inq_varid(fin, variable.c_str(), &varID)))
@@ -138,7 +138,7 @@ namespace netCDF
     }
 
     /*To run on the mesh file*/
-    vector<vector<size_t>> Get_Element(int &fin, string const& variable, size_t &nElem, size_t &nPnts)
+    inline vector<vector<size_t>> Get_Element(int &fin, string const& variable, size_t &nElem, size_t &nPnts)
     {
         #ifdef DEBUG
             dbout << "Reading Element: " << variable << endl;
@@ -204,7 +204,7 @@ namespace netCDF
     }
         
     /*To run on the mesh file*/
-    vector<std::array<real,3>> Get_Coordinate_Vector(int &fin, size_t const &nPnts)
+    inline vector<std::array<real,3>> Get_Coordinate_Vector(int &fin, size_t const &nPnts)
     {
         #ifdef DEBUG
             dbout << "Reading coordinates." << endl;
@@ -228,7 +228,7 @@ namespace netCDF
     }
 
     // Functions for writing
-    void Define_Dimension(int& fout, string const& dim_name, int const& dim_val, int* dim_id)
+    inline void Define_Dimension(int& fout, string const& dim_name, int const& dim_val, int* dim_id)
     {
         int retval;
         if ((retval = nc_def_dim(fout, dim_name.c_str(), dim_val, dim_id)))
@@ -242,7 +242,7 @@ namespace netCDF
         }
     }
 
-    void Define_Variable(int& fout, string const& var_name, int const& var_type,
+    inline void Define_Variable(int& fout, string const& var_name, int const& var_type,
                         int const& ndims, int* dim_id, int* var_id)
     {
         int retval;
@@ -257,7 +257,7 @@ namespace netCDF
         }
     }
 
-    void Write_Variable_Array(int& fout, int const& var_id, size_t* const start,
+    inline void Write_Variable_Array(int& fout, int const& var_id, size_t* const start,
                         size_t* const end, int* const var_data, string const& var_name)
     {
         int retval;
@@ -272,7 +272,7 @@ namespace netCDF
         }	
     }
 
-    void Write_Variable_Array(int& fout, int const& var_id, size_t* const start,
+    inline void Write_Variable_Array(int& fout, int const& var_id, size_t* const start,
                         size_t* const end, float* const var_data, string const& var_name)
     {
         int retval;
@@ -287,7 +287,7 @@ namespace netCDF
         }	
     }
 
-    void Write_Variable_Array(int& fout, int const& var_id, size_t* const start,
+    inline void Write_Variable_Array(int& fout, int const& var_id, size_t* const start,
                         size_t* const end, double* const var_data, string const& var_name)
     {
         int retval;
@@ -302,7 +302,7 @@ namespace netCDF
         }	
     }
 
-    void Write_Variable_Scalar(int& fout, int const& var_id,
+    inline void Write_Variable_Scalar(int& fout, int const& var_id,
                     int* const var_data, string const& var_name)
     {
         int retval;
@@ -317,7 +317,7 @@ namespace netCDF
         }	
     }
 
-    void Write_Variable_Scalar(int& fout, int const& var_id,
+    inline void Write_Variable_Scalar(int& fout, int const& var_id,
                     float* const var_data, string const& var_name)
     {
         int retval;
@@ -332,7 +332,7 @@ namespace netCDF
         }	
     }
 
-    void Write_Variable_Scalar(int& fout, int const& var_id, 
+    inline void Write_Variable_Scalar(int& fout, int const& var_id, 
                     double* const var_data, string const& var_name)
     {
         int retval;

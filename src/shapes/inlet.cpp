@@ -77,6 +77,7 @@ void check_inlet_input(shape_block& block, real& globalspacing)
         has_config = 3;
         block.start = block.centre;
         block.start[1] -= block.radius;
+        block.end = block.centre;
         block.end[1] += block.radius;
     }
     #endif
@@ -112,8 +113,8 @@ void check_inlet_input(shape_block& block, real& globalspacing)
             block.rotmat = rotx*roty*rotz;
         #else
             StateMatD rotmat;
-            rotmat << cos(block.angles(0)), sin(block.angles(0)),
-                -sin(block.angles(0)),  cos(block.angles(0));
+            rotmat << cos(block.angles(0)), -sin(block.angles(0)),
+                      sin(block.angles(0)),  cos(block.angles(0));
 
             block.rotmat = rotmat;
         #endif
@@ -148,7 +149,6 @@ void check_inlet_input(shape_block& block, real& globalspacing)
         #else
         // Find rotation matrix
         block.angles[0] = atan2(block.normal[1],block.normal[0]);
-        StateMatD rotmat;
         rotmat << cos(block.angles(0)), sin(block.angles(0)),
             -sin(block.angles(0)),  cos(block.angles(0));
         #endif
@@ -183,7 +183,6 @@ void check_inlet_input(shape_block& block, real& globalspacing)
         #else
         // Find rotation matrix
         block.angles[0] = atan2(block.normal[1],block.normal[0]) - M_PI/2.0;
-        StateMatD rotmat;
         rotmat << cos(block.angles(0)), sin(block.angles(0)),
             -sin(block.angles(0)),  cos(block.angles(0));
         #endif
@@ -194,16 +193,15 @@ void check_inlet_input(shape_block& block, real& globalspacing)
     {
         //Have three points to define the plane. Override any normal and rotation matrix def
         StateVecD ab = (block.end - block.start).normalized();
+        StateMatD rotmat;
         #if SIMDIM == 3
         StateVecD ac = (block.right - block.start).normalized();
         block.normal = (ab.cross(ac)).normalized();
-        StateMatD rotmat;
         rotmat << ab[0]          , ab[1]          , ab[2]          ,
                 ac[0]          , ac[1]          , ac[2]          , 
                 block.normal[0], block.normal[1], block.normal[2];
         #else
         block.angles[0] = atan2(ab[1],ab[0]);
-        StateMatD rotmat;
         rotmat << cos(block.angles(0)), sin(block.angles(0)),
             -sin(block.angles(0)),  cos(block.angles(0));
         block.normal = rotmat * StateVecD(0.0,1.0);

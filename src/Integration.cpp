@@ -223,19 +223,26 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	}
 	
 	/*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
-	if(svar.solver_type == runge_kutta)
-		error1 = Get_First_RK(svar, fvar, avar, start, end, B, gam, npd, cells, 
-								 limits,outlist, logbase, pn, pnp1, error1);
-	else if (svar.solver_type == newmark_beta)
-	{
-		Do_NB_Iter(CELL_TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,npd,
-			cells,limits,outlist,pn,pnp1,Force,dropVel);
-	
-		uint nUnstab = 0;
+	switch(svar.solver_type)
+	{ 
+		case runge_kutta:
+		{
+			error1 = Get_First_RK(svar, fvar, avar, start, end, B, gam, npd, cells, 
+									limits,outlist, logbase, pn, pnp1, error1);
+			break;
+		}
+		case newmark_beta:
+		{
+			Do_NB_Iter(CELL_TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,npd,
+				cells,limits,outlist,pn,pnp1,Force,dropVel);
+		
+			uint nUnstab = 0;
 
-		void(Check_Error(SPH_TREE,svar,fvar,start,end,error1,error2,logbase,
-								outlist,xih,pn,pnp1,k,nUnstab));
-		k++; //Update iteration count
+			void(Check_Error(SPH_TREE,svar,fvar,start,end,error1,error2,logbase,
+									outlist,xih,pn,pnp1,k,nUnstab));
+			k++; //Update iteration count
+			break;
+		}
 	}
 
 	// cout << "Error: " << error1 << endl;
@@ -306,17 +313,22 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	dropVel = StateVecD::Zero();
 
 	/*Do time integration*/
-	if(svar.solver_type == runge_kutta)
+	switch (svar.solver_type)
 	{
-		SPHState st_2 = pnp1;
+		case runge_kutta:
+		{
+			SPHState st_2 = pnp1;
 
-		error1 = Runge_Kutta4(CELL_TREE,svar,fvar,avar,start,end,B,gam,npd,cells,
-					limits,outlist,logbase,pn,st_2,pnp1,Force,dropVel);
-	}
-	else if(svar.solver_type == newmark_beta)
-	{
-		Newmark_Beta(SPH_TREE,CELL_TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,npd,cells,
-			limits,outlist,logbase,k,error1,error2,xih,pn,pnp1,Force,dropVel);
+			error1 = Runge_Kutta4(CELL_TREE,svar,fvar,avar,start,end,B,gam,npd,cells,
+						limits,outlist,logbase,pn,st_2,pnp1,Force,dropVel);
+			break;
+		}
+		case newmark_beta:
+		{
+			Newmark_Beta(SPH_TREE,CELL_TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,npd,cells,
+				limits,outlist,logbase,k,error1,error2,xih,pn,pnp1,Force,dropVel);
+			break;
+		}
 	}
 
 	if(svar.ghost != 0)
@@ -632,21 +644,27 @@ void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID 
 	}
 
 	/*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
-	if(svar.solver_type == runge_kutta)
-		error1 = Get_First_RK(svar, fvar, avar, start, end, B, gam, npd, cells, 
-								 limits,outlist, logbase, pn, pnp1, error1);
-	else if (svar.solver_type == newmark_beta)
-	{
-		Do_NB_Iter(CELL_TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,npd,
-			cells,limits,outlist,pn,pnp1,Force,dropVel);
-	
-		uint nUnstab = 0;
+	switch(svar.solver_type)
+	{ 
+		case runge_kutta:
+		{
+			error1 = Get_First_RK(svar, fvar, avar, start, end, B, gam, npd, cells, 
+									limits,outlist, logbase, pn, pnp1, error1);
+			break;
+		}
+		case newmark_beta:
+		{
+			Do_NB_Iter(CELL_TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,npd,
+				cells,limits,outlist,pn,pnp1,Force,dropVel);
+		
+			uint nUnstab = 0;
 
-		void(Check_Error(SPH_TREE,svar,fvar,start,end,error1,error2,logbase,
-								outlist,xih,pn,pnp1,k,nUnstab));
-		k++; //Update iteration count
+			void(Check_Error(SPH_TREE,svar,fvar,start,end,error1,error2,logbase,
+									outlist,xih,pn,pnp1,k,nUnstab));
+			k++; //Update iteration count
+			break;
+		}
 	}
-
 
 	/*Find maximum safe timestep*/
 	// maxUi = std::max_element(pnp1.begin(),pnp1.end(),
@@ -705,17 +723,22 @@ void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID 
 	#endif
 	
 	/*Do time integration*/
-	if(svar.solver_type == runge_kutta)
+	switch (svar.solver_type)
 	{
-		SPHState st_2 = pnp1;
+		case runge_kutta:
+		{
+			SPHState st_2 = pnp1;
 
-		error1 = Runge_Kutta4(CELL_TREE,svar,fvar,avar,start,end,B,gam,npd,cells,
-					limits,outlist,logbase,pn,st_2,pnp1,Force,dropVel);
-	}
-	else if(svar.solver_type == newmark_beta)
-	{
-		Newmark_Beta(SPH_TREE,CELL_TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,npd,cells,
-			limits,outlist,logbase,k,error1,error2,xih,pn,pnp1,Force,dropVel);
+			error1 = Runge_Kutta4(CELL_TREE,svar,fvar,avar,start,end,B,gam,npd,cells,
+						limits,outlist,logbase,pn,st_2,pnp1,Force,dropVel);
+			break;
+		}
+		case newmark_beta:
+		{
+			Newmark_Beta(SPH_TREE,CELL_TREE,svar,fvar,avar,start,end,a,b,c,d,B,gam,npd,cells,
+				limits,outlist,logbase,k,error1,error2,xih,pn,pnp1,Force,dropVel);
+			break;
+		}
 	}
 
 	Check_If_Ghost_Needs_Removing(svar,fvar,SPH_TREE,pn,pnp1);

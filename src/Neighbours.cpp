@@ -10,16 +10,15 @@ void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, SPHState const
 	const nanoflann::SearchParams params(0,0,false);
 	const real search_radius = fvar.sr;
 	outlist.clear();
-	outlist.reserve(pnp1.size());
+	outlist.resize(pnp1.size());
 	
 	// vector<vector<std::pair<size_t,real>>> plist;
 	// plist.reserve(pnp1.size());
 
 	#pragma omp parallel default(shared)
 	{	/*Find neighbour list*/
-		OUTL local; /*Local processor copy*/
+		// OUTL local; /*Local processor copy*/
 		// vector<vector<std::pair<size_t,real>>> plocal;
-		local.reserve(pnp1.size());
 		// plocal.reserve(pnp1.size());
 		#pragma omp for schedule(static) nowait 
 		for(size_t ii=0; ii < pnp1.size(); ++ii)
@@ -34,7 +33,8 @@ void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, SPHState const
 
 			NP1_INDEX.index->radiusSearch(&pnp1[ii].xi[0], search_radius, matches, params);
 			
-			local.emplace_back(matches);
+			outlist[ii] = matches;
+			// local.emplace_back(matches);
 			// plocal.emplace_back(vector<std::pair<size_t,real>>(matches.size()-1));
 			// for (size_t jj = 1; jj < matches.size(); ++jj)
 			// {
@@ -45,15 +45,15 @@ void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, SPHState const
 			// std::cout << "  " << pnp1[i].list.size() << std::endl;
 		}
 
-		#pragma omp for schedule(static) ordered
-    	for(int ii=0; ii<omp_get_num_threads(); ii++)
-    	{
-    		#pragma omp ordered
-    		{
-    			outlist.insert(outlist.end(),local.begin(),local.end());
-    			// plist.insert(plist.end(),plocal.begin(),plocal.end());
-			}
-    	}
+		// #pragma omp for schedule(static) ordered
+    	// for(int ii=0; ii<omp_get_num_threads(); ii++)
+    	// {
+    	// 	#pragma omp ordered
+    	// 	{
+    	// 		outlist.insert(outlist.end(),local.begin(),local.end());
+    	// 		// plist.insert(plist.end(),plocal.begin(),plocal.end());
+		// 	}
+    	// }
 	}
 
 

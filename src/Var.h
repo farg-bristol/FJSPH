@@ -126,7 +126,7 @@ enum shapeType{NONE=0,BOX,CYLINDER,SPHERE,JET,CONVJET};
 
 // Shapes for new intitialisation
 enum shape_type {fineLine = 0, linePlane, squareCube, circleSphere, cylinder, arcSection, coordDef,
-                inletZone};
+                inletZone, hollow, solid};
 
 enum solve_type {newmark_beta = 0, runge_kutta, DBC, pressure_G, ghost};
 

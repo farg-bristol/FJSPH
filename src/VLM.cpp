@@ -13,7 +13,7 @@
 #ifndef M_PI
 #define M_PI (4.0*atan(1.0))
 #endif
-
+#if SIMDIM == 3
 void VLM::Init(std::string input)
 {
     // input.append("VLM.dat");
@@ -490,3 +490,4 @@ void VLM::Plot_Streamlines(std::string& prefix)
     }
     fclose(streams);
 }
+#endif

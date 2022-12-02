@@ -13,16 +13,16 @@
 #include <string.h>
 #include <sstream>
 
-
-
 /*A structure for the coordinates to define a panel.*/
 typedef struct Panel
 { /*A and B are 1/4 chord bounds for the vortex.
 	C is the control Point location*/
+#if SIMDIM == 3
 	Panel(StateVecD A, StateVecD B, StateVecD C,
 			StateVecD p1, StateVecD p2, StateVecD p3, StateVecD p4)
 	: A(A), B(B), C(C), p1(p1), p2(p2), p3(p3), p4(p4) 
 	{norm =  (C-A).cross(C-B).normalized();}
+#endif
 
 	StateVecD A, B, C;
 	StateVecD p1, p2, p3, p4;
@@ -82,7 +82,7 @@ typedef class VLM
 		Eigen::Matrix<real,Eigen::Dynamic,1> gamma;
 		Eigen::Matrix<real,Eigen::Dynamic,1> RHS;
 
-		StateVecD Freestream;
+		Eigen::Matrix<real,3,1> Freestream;
 		Eigen::Matrix<real,2,1> coords;
 		Eigen::Vector2i panels;
 		Eigen::Vector3i flap;

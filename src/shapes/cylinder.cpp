@@ -9,7 +9,7 @@ void check_cylinder_input(shape_block& block, real& globalspacing)
 
     if(block.subshape == "Hollow")
     {
-        block.sub_bound_type = 0;
+        block.sub_bound_type = hollow;
 
         // Need wall thickness defining, and length of cylinder. Both 2D and 3D
         if(block.thickness < 0 && block.nk < 0)
@@ -74,7 +74,7 @@ void check_cylinder_input(shape_block& block, real& globalspacing)
     }
     else if (block.subshape == "Solid")
     {
-        block.sub_bound_type = 1;
+        block.sub_bound_type = solid;
 
         if(block.length < 0 || block.nk < 0)
         {
@@ -164,8 +164,8 @@ void check_cylinder_input(shape_block& block, real& globalspacing)
             block.rotmat = rotx*roty*rotz;
         #else
             StateMatD rotmat;
-            rotmat << cos(block.angles(0)), sin(block.angles(0)),
-                -sin(block.angles(0)),  cos(block.angles(0));
+            rotmat << cos(block.angles(0)), -sin(block.angles(0)),
+                      sin(block.angles(0)),  cos(block.angles(0));
 
             block.rotmat = rotmat;
         #endif
@@ -199,7 +199,6 @@ void check_cylinder_input(shape_block& block, real& globalspacing)
         #else
         // Find rotation matrix
         block.angles[0] = atan2(block.normal[1],block.normal[0]);
-        StateMatD rotmat;
         rotmat << cos(block.angles(0)), sin(block.angles(0)),
             -sin(block.angles(0)),  cos(block.angles(0));
         #endif
@@ -210,16 +209,15 @@ void check_cylinder_input(shape_block& block, real& globalspacing)
     {
         //Have three points to define the plane. Override any normal and rotation matrix def
         StateVecD ab = (block.end - block.start).normalized();
+        StateMatD rotmat;
         #if SIMDIM == 3
         StateVecD ac = (block.right - block.start).normalized();
         block.normal = (ab.cross(ac)).normalized();
-        StateMatD rotmat;
         rotmat << ab[0]          , ab[1]          , ab[2]          ,
                   ac[0]          , ac[1]          , ac[2]          , 
                   block.normal[0], block.normal[1], block.normal[2];
         #else
         block.angles[0] = atan2(ab[1],ab[0]);
-        StateMatD rotmat;
         rotmat << cos(block.angles(0)), sin(block.angles(0)),
             -sin(block.angles(0)),  cos(block.angles(0));
         block.normal = rotmat * StateVecD(1.0,0.0);
@@ -284,7 +282,7 @@ void check_cylinder_input(shape_block& block, real& globalspacing)
     //     }
     // }
     
-    if(block.sub_bound_type == 0)
+    if(block.sub_bound_type == hollow)
     {
         if(block.thickness < 0)
         {
@@ -321,7 +319,7 @@ void check_cylinder_input(shape_block& block, real& globalspacing)
         block.npts *= 2;
         #endif
     }
-    else if (block.sub_bound_type == 1)
+    else if (block.sub_bound_type == solid)
     {
         block.ni = ceil(2.0*block.radius/globalspacing);
         block.nj = ceil(block.length/globalspacing);
@@ -405,8 +403,6 @@ std::vector<StateVecD> create_solid_cylinder(shape_block const& block, real cons
 
     StateVecD norm = -block.normal.normalized();
     StateVecD left(-norm[1],norm[0]);
-    real r = block.radius;
-    StateVecD start = block.centre - r * left;
 
     for (int jj = 0; jj < block.nj; ++jj)
     {
@@ -522,11 +518,11 @@ std::vector<StateVecD> create_solid_cylinder(shape_block const& block, real cons
 
 std::vector<StateVecD> create_cylinder(shape_block const& block, real const& globalspacing)
 {
-    if(block.sub_bound_type == 0)
+    if(block.sub_bound_type == hollow)
     {
         return create_hollow_cylinder(block,globalspacing);
     }
-    else if (block.sub_bound_type == 1)
+    else if (block.sub_bound_type == solid)
     {
         return create_solid_cylinder(block,globalspacing);
     }

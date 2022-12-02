@@ -208,6 +208,28 @@ int main(int argc, char *argv[])
 	Vec_Tree CELL_TREE(SIMDIM,cells.cCentre,10);
 	FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
 
+	
+	///*************** Open simulation files ***************/
+	FILE* ff = NULL;
+	FILE* f2 = NULL;
+	FILE* f3 = NULL;
+	FILE* fb = NULL;
+	FILE* fg = NULL;
+	string framef = svar.output_prefix;
+	framef.append("_frame.info");
+	if(svar.restart == 1)
+		f2 = fopen(framef.c_str(), "a");
+	else
+		f2 = fopen(framef.c_str(), "w");
+
+	if(svar.single_file)
+		Write_Headers(ff,fb,fg,svar);
+
+	if(!svar.restart)
+	{
+		Write_Timestep(ff,fb,fg,svar,fvar.rho0,limits,pnp1);
+	}
+
 	///*** Perform an iteration to populate the vectors *****/
 	if(!svar.restart)
 	{
@@ -265,26 +287,6 @@ int main(int argc, char *argv[])
 		// pn = SPHState(first,last);
 	}
 
-	///*************** Open simulation files ***************/
-	FILE* ff = NULL;
-	FILE* f2 = NULL;
-	FILE* f3 = NULL;
-	FILE* fb = NULL;
-	FILE* fg = NULL;
-	string framef = svar.output_prefix;
-	framef.append("_frame.info");
-	if(svar.restart == 1)
-		f2 = fopen(framef.c_str(), "a");
-	else
-		f2 = fopen(framef.c_str(), "w");
-
-	if(svar.single_file)
-		Write_Headers(ff,fb,fg,svar);
-
-	if(!svar.restart)
-	{
-		Write_Timestep(ff,fb,fg,svar,fvar.rho0,limits,pnp1);
-	}
 
 	Append_Restart_Prefix(svar);
 
