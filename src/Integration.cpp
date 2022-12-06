@@ -496,6 +496,20 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 
 	/*Add time to global*/
 	svar.t+=svar.dt;
+	/* Check the error and adjust the CFL to try and keep convergence */
+	if(error1 > svar.minRes)
+	{
+		// How to adjust? Just reduce by 0.1?
+		if(svar.cfl > 0.1)
+			svar.cfl -= 0.1;
+		else
+			svar.cfl *= 0.9;
+	}
+	else if (k < 0.5 * svar.subits)
+	{
+		// Try boosting the CFL if it does converge nicely?
+		svar.cfl += 0.1;
+	}
 
 	#ifdef DAMBREAK
 	/* Find max x and y coordinates of the fluid */

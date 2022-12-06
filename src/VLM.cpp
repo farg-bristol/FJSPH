@@ -113,20 +113,20 @@ const StateVecD VLM::getVelocity(StateVecD const& pos)
 {	/*Find velocity for a particle at its position*/
     // Use a Kahan sum to avoid truncation errors in the accumulation
     StateVecD vel = StateVecD::Zero();
-    StateVecD c = StateVecD::Zero();// A running compensation for lost low-order bits.
 
-    for (int ii = 0; ii < npanels; ++ii)  
-    {
-        // StateVecD y = gamma(ii)*FindInfluence(panelData[ii].A,panelData[ii].B,pos) - c; 
-        StateVecD y = gamma(ii)*FindInfluenceConditioned(panelData[ii].A,panelData[ii].B,pos) - c;         // c is zero the first time around.
-        StateVecD t = vel + y;              // Alas, sum is big, y small, so low-order digits of y are lost.
-        c = (t - vel) - y;            // (t - sum) cancels the high-order part of y; subtracting y recovers negative (low part of y)
-        vel = t;                      // Algebraically, c should always be zero. Beware overly-aggressive optimizing compilers!
-        // Next time around, the lost low part will be added to y in a fresh attempt.
-    }
+    // StateVecD c = StateVecD::Zero();// A running compensation for lost low-order bits.
+    // for (int ii = 0; ii < npanels; ++ii)  
+    // {
+    //     // StateVecD y = gamma(ii)*FindInfluence(panelData[ii].A,panelData[ii].B,pos) - c; 
+    //     StateVecD y = gamma(ii)*FindInfluenceConditioned(panelData[ii].A,panelData[ii].B,pos) - c;         // c is zero the first time around.
+    //     StateVecD t = vel + y;              // Alas, sum is big, y small, so low-order digits of y are lost.
+    //     c = (t - vel) - y;            // (t - sum) cancels the high-order part of y; subtracting y recovers negative (low part of y)
+    //     vel = t;                      // Algebraically, c should always be zero. Beware overly-aggressive optimizing compilers!
+    //     // Next time around, the lost low part will be added to y in a fresh attempt.
+    // }
 
-    // for(int i = 0; i<npanels; ++i)
-    // 	vel += gamma(i)*FindInfluenceConditioned(panelData[i].A,panelData[i].B,pos);
+    for(int ii = 0; ii < npanels; ++ii)
+    	vel += gamma(ii)*FindInfluenceConditioned(panelData[ii].A,panelData[ii].B,pos);
     
     return vel+Freestream;
 }
