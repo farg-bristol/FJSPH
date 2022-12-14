@@ -32,6 +32,3 @@
                         SPH maximum shifting velocity: 20
                     SPH surface tension contact angle: 150.0
                             SPH restart fit tolerance: 0.5
-
-    solver at Wed Oct 26 21:57:07 2022
-                                               SPH restart prefix: Couette_Validation3
