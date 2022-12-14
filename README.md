@@ -47,15 +47,24 @@ In the makefile are four primary options: `2D`, `debug2`, `3D`, and `debug3`.
 These are build options for two and three dimensions, and with or without debug flags. 
 Additionally are options to build associated programs Cell2Edge (`c2e`), for building 2D Edge based mesh files from TAU files, and Cell2Face (`c2f`) for 3D TAU meshes to face based data. This does not need to be run for OpenFOAM meshes, as it is already a face based file format.
 
-Lastly are some options that can be passed to the compiler, using the `FLAGS` option, e.g. `make 2D FLAGS='-DNOALE'`. 
-Currently the accepted flags are `-DALE`, `-DDSPH`, `-DRK`, and `-DCUBIC`. 
-DSPH turns on delta-SPH continuity contribution.
-The ALE flag turns on the particle shifting and ALE momentum and continuity equations. 
-The RK flag switches the integration method from a Newmark-Beta semi-implicit scheme to an explicit Runge-Kutta 4th order scheme, with frozen diffusive terms.
-It is debatable which method is faster or more stable, however it is known that Newmark-Beta is more conserving of energy, and remains the default integration method.
-Lastly, the cubic flag changes the kernel to the cubic spline, instead of the Wendland C2. While provided, it is not recommended, as in the tests I've done it quickly becomes unstable.
+Lastly are some options that can be passed to the compiler, using the `FLAGS` option, e.g. `make 2D FLAGS='-DNOFROZEN'`. 
+Currently the accepted flags are:
+`-DCUBIC` - Use the cubic spline kernel (not recommended).
+`-DCSF` - Vernaud et al. surface tension model.
+`-DHEST` - He et al. surface tension model.
+`-DPAIRWISE` - Use the pairwise surface tension model. Current default.
+`-DNOST` - No surface tension model at all.
+`-DISOEOS` - use Isothermal equation of state.
+`-DCOLEEOS` - Use cole equation of state. Current default.
+`-DTIC` - Engage tensile instability control. Can help for certain things but does slow computation down.
+`-DLINEAR` - Use the Marrone et al. linearised pressure momentum relationship.
+`-DNOFROZEN` - Don't use frozen dissipation terms.
+`-DNODSPH` - Turn delta-SPH off.
+`-DFOD=0` - Turns the real data type from double to float.
+
 
 ## C++ Standards
+A minimum of c++17 is required for filesystem header.
 The NanoFLANN code requires C++11 standard support, and so will not build on Visual Studio 13, due to an incomplete support of the C++11 standard. If you are on windows and don't have access to VS15, then MinGW is the next best bet (unless you are on windows 10, and have WSL enabled).
 
 Syntax has been used that requires **g++ 9 or later**, so the code will not compile with g++ 8 or older. 
