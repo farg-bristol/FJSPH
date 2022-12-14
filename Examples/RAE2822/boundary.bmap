@@ -1,0 +1,22 @@
+ -----------------------------------------------------
+ BOUNDARY MAPPING
+ -----------------------------------------------------
+
+                       Name: Pipe
+                      Shape: Cylinder
+                  Sub-shape: Hollow
+   Write surface data (0/1): 1
+
+            Boundary solver: Ghost
+      Wall is no slip (0/1): 0
+
+            Rotation angle: -12
+
+          Centre coordinate: 1,-0.014805
+                     Radius: 0.03043
+                     Length: 0.08
+ Wall radial particle count: 4
+
+ block end
+ ---------------------------
+

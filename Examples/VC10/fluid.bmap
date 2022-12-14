@@ -1,0 +1,33 @@
+ -----------------------------------------------------
+ FLUID MAPPING
+ -----------------------------------------------------
+
+                       Name: Fluid
+                      Shape: Inlet
+                  Sub-shape: Circle
+   Write surface data (0/1): 1
+
+ Particle ordering (0=grid,1=HCP): 0
+ Fixed velocity or dynamic inlet BC (0/1): 0
+ 
+           Particle spacing: 0.004
+          Starting pressure: 0
+           Starting density: 1000
+          Starting velocity: 5.414,0.0,0.0
+
+           Centre coordinate: 16.0,15.0,-0.13
+                      Radius: 0.04
+                      Length: 0.1
+                   
+                   Rotation angles: 0,0,0
+
+          Aerodynamic entry normal: 1,0,0
+  Aerodynamic entry plane constant: 16.105
+
+                  Insertion normal: 1,0,0
+          Insertion plane constant: 16.004
+
+
+
+ block end
+ ---------------------------

@@ -1,0 +1,28 @@
+ -----------------------------------------------------
+ FLUID MAPPING
+ -----------------------------------------------------
+
+                       Name: Fluid
+                      Shape: Inlet
+                  Sub-shape: Circle
+   Write surface data (0/1): 1
+
+ Fixed velocity or dynamic inlet BC (0/1): 0
+ 
+          Starting pressure: 0
+           Starting density: 1000
+      Starting jet velocity: 1.0998
+
+           Centre coordinate: 0,0
+                      Radius: 0.5
+                      Length: 0.7
+                   
+                    Rotation angle: 0
+
+          Aerodynamic entry normal: 1,0
+  Aerodynamic entry plane constant: 0.001
+
+          Insertion plane constant: -0.699
+
+ block end
+ ---------------------------

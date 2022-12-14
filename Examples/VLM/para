@@ -1,0 +1,55 @@
+
+                      Input fluid definition filename: fluid.bmap
+                   Input boundary definition filename: boundary.bmap
+
+                                           Grid scale: 1
+                                      Reynolds length: 8.491
+                                   Reference velocity: 90.03
+                                Reference temperature: 278.24
+                                   Reference pressure: 84310
+                                    Reference density: 1.0555
+
+                          Reference dispersed density: 810
+                        Reference dispersed viscosity: 0.00142
+                            Reference surface tension: 0.0256
+
+                                  Output files prefix: VLM
+                                       # Variable list: cellV-vec_densVar
+
+# SPH parameters ------------------------------------: -
+                              SPH frame time interval: 0.0005
+                                      SPH frame count: 5000
+               SPH output encoding (0=ascii/1=binary): 1
+                               SPH ghost output (0/1): 0
+
+                                 SPH maximum timestep: 5e-4
+                                 SPH minimum timestep: 1e-9
+                                    SPH CFL condition: 0.85
+                                  SPH initial spacing: 0.004
+                          SPH boundary spacing factor: 1.0
+                          SPH smoothing length factor: 2
+                                 SPH aerodynamic case: Induced_pressure
+                         SPH aerodynamic cutoff value: 0.75
+                        SPH use ghost particles (0/1): 0
+
+                                SPH starting pressure: 0
+                                   SPH speed of sound: 400
+                            SPH density variation (%): 30
+                      SPH artificial viscosity factor: 0.05
+                    SPH surface tension contact angle: 150.0
+                            SPH restart fit tolerance: 0.05
+                        SPH maximum shifting velocity: 20
+
+                              SPH freestream velocity: 89.69,0,7.8466
+
+                              VLM definition filename: (thisfile)
+                                  VLM wing dimensions: 22.275,8.491
+                                     VLM panel counts: 50,14
+                             VLM angle alpha (degree): 5
+                             VLM sweep angle (degree): 32.5
+                                      VLM taper ratio: 0.6
+                              VLM flap start (panels): 3
+                              VLM flap width (panels): 24
+                              VLM flap depth (panels): 6
+                              VLM flap angle (degree): 20
+

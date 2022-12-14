@@ -1,0 +1,51 @@
+
+                      Input fluid definition filename: fluid.bmap
+                   Input boundary definition filename: boundary.bmap
+
+                          Reference dispersed density: 810
+                        Reference dispersed viscosity: 0.00142
+                            Reference surface tension: 0.0256
+
+                                  Output files prefix: VC10
+                                        Variable list: cellV-vec_densVar
+
+# SPH parameters ------------------------------------: -
+                              SPH frame time interval: 0.0005
+                                      SPH frame count: 500
+               SPH output encoding (0=ascii/1=binary): 1
+
+                                 SPH maximum timestep: 1.0
+                                 SPH minimum timestep: 1e-9
+                                    SPH CFL condition: 1.0
+                                  SPH initial spacing: 0.004
+                          SPH boundary spacing factor: 1.0
+                          SPH smoothing length factor: 2
+                                 SPH aerodynamic case: Induced_pressure
+                                   SPH gravity vector: 0.0,-9.81,0
+                                SPH starting pressure: 0.0
+
+                                   SPH speed of sound: 500
+                            SPH density variation (%): 20
+                      SPH artificial viscosity factor: 0.05
+                        SPH maximum shifting velocity: 20
+                    SPH surface tension contact angle: 150.0
+                            SPH restart fit tolerance: 0.5
+                                SPH delta coefficient: 0.1
+
+                              SPH freestream velocity: 89.91,0,3.926
+                              
+                              VLM definition filename: (thisfile)
+                                  VLM wing dimensions: 22.275,8.941
+                                     VLM panel counts: 50,14
+                             VLM angle alpha (degree): 5
+                             VLM sweep angle (degree): 32.5
+                                      VLM taper ratio: 0.5
+                              VLM flap start (panels): 3
+                              VLM flap width (panels): 30
+                              VLM flap depth (panels): 6
+                              VLM flap angle (degree): 25
+
+                         VLM write trajectories (0/1): 0
+                  VLM trajectory maximum x coordinate: 50
+                    VLM trajectory maximum iterations: 10000
+                             VLM trajectory target dx: 0.1
