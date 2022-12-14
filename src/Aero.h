@@ -113,31 +113,19 @@ inline StateVecD InducedPressure(AERO const& avar, StateVecD const& Vdiff,
 
 	/*Spherical Cp*/
 	if(theta < 2.4455)
-	{
 		Cp_s = 1.0 - (2.25) * pow(sin(theta),2.0);
-	}
 	else
-	{
 		Cp_s = 0.075;
-	}
 
 	/*Plate Cp*/
 	if(theta < 1.570797)
-	{
 		Cp_p = cos(theta);
-	}
 	else if (theta < 1.9918)
-	{
 		Cp_p = -pow(cos(6.0*theta+0.5*M_PI),1.5);
-	}
 	else if (theta < 2.0838)
-	{
 		Cp_p = 5.5836*theta-11.5601;
-	}
 	else
-	{
 		Cp_p = 0.075;
-	}
 
 	/* Bowl Cp */
 	if(theta < 0.7854)
@@ -168,9 +156,7 @@ inline StateVecD InducedPressure(AERO const& avar, StateVecD const& Vdiff,
 		Cp_tot = frac*Cp_p + (1.0-frac)*Cp_s;
 	}
 	else
-	{	
 		Cp_tot = Cp_s;
-	}
 
 	// real Plocali = 0.5*avar.rhog*Vdiff.squaredNorm()*Cp_tot;
 
@@ -180,44 +166,28 @@ inline StateVecD InducedPressure(AERO const& avar, StateVecD const& Vdiff,
 
 	real const Pi = (Plocali/* + Pbasei */);
 	
-	// #pragma omp critical
-	// cout << Cp_s << "  " << Cp_p << "  " << Cp_tot << "  " << theta << "  " << pi.curve << "  " << Pi <<  endl;
-
 	real const Re = pi.cellRho*Vdiff.norm()*avar.L/avar.mug;
 	real const Cdi  = GetCd(Re);
 
 	/* Pure droplet force */
 	StateVecD const acc_drop = 0.5*Vdiff*Vdiff.norm()/(avar.sos*avar.sos) * avar.gamma * pi.cellP
 					* (M_PI*avar.L*avar.L*0.25) * Cdi/pi.m;
-	// aeroD = -Pi * avar.aPlate * norm[ii].normalized();
 
 	/* Induce pressure force */
-	// StateVecD const acc_kern = StateVecD::Zero();
 	StateVecD const acc_kern =  -/*0.5 **/ Pi * avar.aPlate * norm.normalized()/pi.m;
-	// StateVecD const F_kern = -(Pi/(pi.rho)) * norm;
 
 	/*Next, consider a skin friction force acting parallel to the surface*/
 	real const Vnorm = Vdiff.dot(norm.normalized());
+
+	/*Prandtl seventh power law for turbulent BL*/
 	StateVecD const Vpar = Vdiff - Vnorm*norm.normalized();
-
 	real const Re_par = pi.cellRho*Vpar.norm()*avar.L/avar.mug;
-	real const Cf = 0.027/pow(Re_par+1e-6,1.0/7.0); /*Prandtl seventh power law for turbulent BL*/
-	// real const Cf = 0;
-
-	// StateVecD const acc_skin = StateVecD::Zero();
-	// StateVecD const acc_skin = 0.5*avar.rhog* Vpar.norm() * Cf * avar.aPlate * Vpar/pi.m;
+	real const Cf = 0.027/pow(Re_par+1e-6,1.0/7.0); 
 	StateVecD const acc_skin = 0.5 * Vpar.norm() * 	Vpar / (avar.sos*avar.sos) *
 			 avar.gamma * pi.cellP * Cf * avar.aPlate / pi.m;
 
 	real const frac1 = std::min(2.0 * lam, 1.0);
 	// real const frac2 = std::min(exp(pi.curve*0.001+200),1.0);
-
-	// #pragma omp critical
-	// {
-	// 	cout << acc_kern[0] << "  " << acc_kern[1] << "  " << acc_kern[2] << "  " 
-	// 		<< acc_skin[0] << "  " << acc_skin[1] << "  " << acc_skin[2] << "  "
-	// 		<< acc_drop[0] << "  " << acc_drop[1] << "  " << acc_drop[2] << endl;
-	// }
 
 	return (frac1 * /*frac2**/ (acc_kern+acc_skin) + (1.0-frac1) * acc_drop);
 }

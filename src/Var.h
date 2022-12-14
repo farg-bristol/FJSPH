@@ -136,12 +136,6 @@ enum aero_source {constVel = 0, meshInfl, VLMInfl};
 
 real const static default_val = 9999999.0;
 
-#if SIMDIM == 3
-StateVecD const static default_norm(1.0,0.0,0.0);
-#else
-StateVecD const static default_norm(1.0,0.0);
-#endif
-
 inline bool check_vector(StateVecD const& v)
 {
     return (v[0] != default_val && v[1] != default_val 
@@ -233,8 +227,16 @@ struct SIM
         Nframe = -1;
         frame = 0;
         bound_solver = 0;
+        nStable = 0;
+        nStable_Limit = 3;
+        nUnstable = 0;
+        nUnstable_Limit = 3;
+        subits_factor = 0.5;
         minRes = -7.0;
         cfl = 1.0;
+        cfl_step = 0.05;
+        cfl_max = 2.0;
+        cfl_min = 0.1;
         t = 0.0;
         tframem1 = 0.0;
         dt = 2e-10;
@@ -359,7 +361,15 @@ struct SIM
     uint Nframe; 			        /* Max number of frames to output */
     uint frame;						/* Current frame number */
     uint bound_solver;              /* Use boundary pressure or ghost particles */
+    uint nStable;                   /* Count for number of overly stable timesteps to alter CFL */
+    uint nStable_Limit;             /* Limit before changing CFL */
+    uint nUnstable;                 /* Count for number of unstable timestep to alter CFL */
+    uint nUnstable_Limit;           /* Limit before changing CFL */
+    real subits_factor;             /* How many less than the limit to try a higher CFL */
     double cfl;                     /* CFL criterion number */
+    double cfl_step;                /* CFL step to perform if unstable */
+    double cfl_max;                 /* Maximum CFL for the simulation */
+    double cfl_min;                 /* Minimum CFL for the simulation */
     double t;                       /* Simulation time */
     double tframem1;				/* Last written frame time */
     real minRes;                    /* Minimum solver residual */
@@ -955,8 +965,8 @@ struct bound_block
         delconst = default_val;
         insert_norm = StateVecD::Constant(default_val);
         insconst = default_val;
-        pipe_norm = StateVecD::Constant(default_val);
-        pipeconst = default_val;
+        aero_norm = StateVecD::Constant(default_val);
+        aeroconst = default_val;
         nTimes = 0;
         fixed_vel_or_dynamic = 0;
         hcpl = 0;
@@ -974,8 +984,8 @@ struct bound_block
         delconst = default_val;
         insert_norm = StateVecD::Constant(default_val);
         insconst = default_val;
-        pipe_norm = StateVecD::Constant(default_val);
-        pipeconst = default_val;
+        aero_norm = StateVecD::Constant(default_val);
+        aeroconst = default_val;
         nTimes = 0;
         fixed_vel_or_dynamic = 0;
         hcpl = 0;
@@ -991,8 +1001,8 @@ struct bound_block
     real delconst;
     StateVecD insert_norm; // Insertion plane
     real insconst;
-    StateVecD pipe_norm;
-    real pipeconst;
+    StateVecD aero_norm;
+    real aeroconst;
 
     vector<size_t> back;            /* Particles at the back of the pipe */
     vector<vector<size_t>> buffer;  /* ID of particles inside the buffer zone */

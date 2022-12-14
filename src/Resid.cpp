@@ -80,8 +80,6 @@ void Boundary_DBC( FLUID const& fvar, size_t const& start, size_t const& end,
 	for (size_t ii=start; ii < end; ++ii)
 	{
 		SPHPart const& pi = pnp1[ii];
-		
-
 		for (std::pair<size_t,real> const& jj : outlist[ii])
 		{	/* Neighbour list loop. */
 			SPHPart const& pj = pnp1[jj.first];
@@ -95,10 +93,10 @@ void Boundary_DBC( FLUID const& fvar, size_t const& start, size_t const& end,
 			real const idist2 = 1.0/(rr + 0.001*fvar.HSQ);
 			// real const volj = pj.m/pj.rho;
 			real const kern = Kernel(r,fvar.H,fvar.correc);
-			StateVecD const gradK = /*dp.L[ii] * */GradK(Rji, r,fvar.H, fvar.correc);
+			StateVecD const gradK = GradK(Rji, r,fvar.H, fvar.correc);
 			StateVecD artViscI = pj.m*ArtVisc(fvar.nu,pi,pj,fvar,Rji,Vji,idist2,gradK);
 			/*Base WCSPH continuity drho/dt*/
-			RV[jj.first] -= 2.0*c2* kern / pow(kern + fvar.correc,2)*gradK + artViscI;
+			RV[jj.first] -= 2.0*c2* kern / pow(kern + fvar.correc,2.0)*gradK + artViscI;
 		}/*End of neighbours*/
 	} /*End of boundary parts*/
 }
@@ -114,22 +112,22 @@ void Boundary_Ghost( FLUID const& fvar, size_t const& start, size_t const& end,
 	{
 		SPHPart const& pi = pnp1[ii];
 		real Rrhoi = 0.0;
-		near_inlet[ii-start] = 0;
+		near_inlet[ii] = 1;
 		for (std::pair<size_t,real> const& jj : outlist[ii])
 		{	/* Neighbour list loop. */
 			SPHPart const& pj = pnp1[jj.first];
-			if(ii == jj.first)
+			if(ii == jj.first /* || pj.b == BOUND */)
 				continue;
-			
-			if (pj.b == BACK || pj.b == BUFFER)
-				near_inlet[ii-start] = 1;
+			// Only do if for boundary particles that only interact with the buffer region
+			if (pj.b == PIPE || pj.b == FREE)
+				near_inlet[ii] = 0;
 
 			StateVecD const Rji = pj.xi-pi.xi;
 			StateVecD const Vji = pj.v-pi.v;
 			real const rr = jj.second;
 			real const r = sqrt(rr);
 			real const volj = pj.m/pj.rho;
-			StateVecD const gradK = /*dp.L[ii] * */GradK(Rji, r,fvar.H, fvar.correc);
+			StateVecD const gradK = GradK(Rji, r,fvar.H, fvar.correc);
 
 			/*Base WCSPH continuity drho/dt*/
 			Rrhoi -= volj*Vji.dot(gradK);
@@ -210,16 +208,16 @@ inline StateVecD SurfTenContrib(SPHPart const& pi, SPHPart const& pj, real const
 		(void) volj;
 		(void) gradK;
 		#ifdef ALE
-		// if(pi.surfzone == 1)	
+		if(pi.surfzone == 1)	
 		#endif
-			// surfT += SurfaceTens(Rji, r, fvar.H, fvar.sig, lam, npdm2, pi3o4, pi.b, pj.b, voli, volj);
-			return SurfaceTens(Rji, r, h, npdm2, pi3o4, pi.b, pj.b);
-		#endif	
+			return pairwise_ST(Rji, r, h, npdm2, pi3o4, pi.b, pj.b);
+		#endif
+		return StateVecD::Zero();	
 }
 
 ///**************** RESID calculation **************
 void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, 
-	SPHState const& pnp1, OUTL const& outlist,/*  DELTAP const& dp, */ real const& npd,
+	SPHState const& pnp1, OUTL const& outlist, real const& npd,
 	 vector<StateVecD>& RV, vector<real>& Rrho, std::vector<StateVecD>& Af, StateVecD& Force)
 {
 
@@ -229,15 +227,15 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
 	#ifdef PAIRWISE
 
 	/*Surface tension factor*/
-	// real const lam = (6.0/81.0*pow((2.0*fvar.H),3.0)/pow(M_PI,4.0)*
-	// 						(9.0/4.0*pow(M_PI,3.0)-6.0*M_PI-4.0));
-	#if SIMDIM==2
-	real const lam = 8.0/81.0*pow(fvar.H,4)/pow(M_PI,4)*(9.0/4.0*pow(M_PI,3)-6.0*M_PI-4.0);
+	real const lam = (6.0/81.0*pow((2.0*fvar.H),3.0)/pow(M_PI,4.0)*
+							(9.0/4.0*pow(M_PI,3.0)-6.0*M_PI-4.0));
+	// #if SIMDIM==2
+	// real const lam = 8.0/81.0*pow(fvar.H,4)/pow(M_PI,4)*(9.0/4.0*pow(M_PI,3)-6.0*M_PI-4.0);
 	
-	#else
-	real const lam = 3.0 / (4.0 * pow(M_PI, 4.0)) * (pow(2.0, 7) - 9.0 * pow(2.0, 4) 
-					* M_PI * M_PI + 9.0 * 3.0 * pow(M_PI, 4)) * pow(fvar.H / 3.0, 5);
-	#endif
+	// #else
+	// real const lam = 3.0 / (4.0 * pow(M_PI, 4.0)) * (pow(2.0, 7) - 9.0 * pow(2.0, 4) 
+	// 				* M_PI * M_PI + 9.0 * 3.0 * pow(M_PI, 4)) * pow(fvar.H / 3.0, 5);
+	// #endif
 	
 	real const npdm2 = (0.5 * fvar.sig / lam )/(npd*npd);
 	real const pi3o4 = 3.0*M_PI/4.0;

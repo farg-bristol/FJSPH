@@ -2,8 +2,8 @@
 CC:=gcc
 CXX:=g++-10
 
-NPROCS = $(shell grep -c 'processor' /proc/cpuinfo)
-MAKEFLAGS += -j$(NPROCS)
+# NPROCS = $(shell grep -c 'processor' /proc/cpuinfo)
+# MAKEFLAGS += -j$(NPROCS)
 
 # Libraries to include
 TECLIB:=-ltecio -lopenblas
@@ -134,6 +134,18 @@ cleanALE:
 	$(RM) $(TARGETDIR)/2DSPH.$(ALEEXT)
 	$(RM) $(TARGETDIR)/3DSPH.$(ALEEXT)
 	
+cleanOBJ: 
+	$(RM) $(2DOBJ)
+	$(RM) $(3DOBJ)
+	$(RM) $(2DALEOBJ)
+	$(RM) $(3DALEOBJ)
+
+build: 2D 3D cleanOBJ
+
+build2D: 2D cleanOBJ
+
+build3D: 3D cleanOBJ
+
 2D: 2ddirs 2DDSPH 2DALE
 
 3D: 3ddirs 3DDSPH 3DALE
@@ -155,15 +167,19 @@ cleanALE:
 	$(CXX) -DSIMDIM=3 -DALE $(FLAGS) $(CXXFLAGS) $(TECINC) $(EIGENINC) $(TECLINK) -o $(TARGETDIR)/3DSPH.$(ALEEXT) $^ $(TECLIB) $(NETLIB)
 
 
+-include $(2DDEP)
 $(2DDSPHDIR)/%.o : $(SRCDIR)/%.cpp
 	$(CXX) -DSIMDIM=2 $(FLAGS) $(CXXFLAGS) $(TECINC) $(EIGENINC) $(TECLINK) -MMD -MP -c $< -o $@ $(TECLIB) $(NETLIB)	
 
+-include $(2DDEPA)
 $(2DALEDIR)/%.o : $(SRCDIR)/%.cpp
 	$(CXX) -DSIMDIM=2 -DALE $(FLAGS) $(CXXFLAGS) $(TECINC) $(EIGENINC) $(TECLINK) -MMD -MP -c $< -o $@ $(TECLIB) $(NETLIB)
 
+-include $(3DDEP)
 $(3DDSPHDIR)/%.o : $(SRCDIR)/%.cpp
 	$(CXX) -DSIMDIM=3 $(FLAGS) $(CXXFLAGS) $(TECINC) $(EIGENINC) $(TECLINK) -MMD -MP -c $< -o $@ $(TECLIB) $(NETLIB)	
 
+-include $(3DDEPA)
 $(3DALEDIR)/%.o : $(SRCDIR)/%.cpp
 	$(CXX) -DSIMDIM=3 -DALE $(FLAGS) $(CXXFLAGS) $(TECINC) $(EIGENINC) $(TECLINK) -MMD -MP -c $< -o $@ $(TECLIB) $(NETLIB)
 

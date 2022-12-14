@@ -134,7 +134,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
 
                 norm = pi.L * norm;
                 if(norm.norm() > 0.1 * pi.lam/fvar.H)
-                    norms[ii] = -norm.normalized();
+                    norms[ii] = norm.normalized();
             // }
         }
 
@@ -145,7 +145,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
             StateVecD Vdiff = StateVecD::Zero();
             
             SPHPart& pi = pnp1[ii];
-            if (pi.cellID != -1 && pi.b == FREE && (avar.acase == 4 || avar.acase == 1))
+            if (pi.cellID != -1 && pi.b == FREE && (avar.acase == Gissler))
             {
                 if (svar.Asource == meshInfl)
                 {
@@ -177,27 +177,45 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
                 /* Needed for induced pressure model and CSF surface tension */
                 real volj = pj.m/pj.rho;
 
-                if(pi.lam > 0.7)
+                // if(pi.lam > 0.7)
+                // {
+                //     curve += volj * (pi.L*(norms[jj.first] - norms[ii])).dot
+                //                 (GradK(Rij,r,fvar.H,fvar.correc));     
+                //     // curve += volj * (dp.L[ii]*(dp.norm[jj.first].normalized() - pi.norm.normalized())).dot
+                //     //         (GradK(Rij,r,fvar.H,fvar.correc));
+                // }
+                // else
+                // {
+                //     #if SIMDIM == 2
+                //     if(/* norms[ii].dot(norms[jj.first]) < 0.5 && */ norms[ii].norm() > 0 && norms[jj.first].norm() > 0) 
+                //     #else
+                //     if(norms[ii].dot(norms[jj.first]) > -0.333 && norms[ii].norm() > 0 && norms[jj.first].norm() > 0) 
+                //     #endif 
+                //     // if(norms[ii].norm() > 0 && norms[jj.first].norm() > 0)
+                //     {
+                //         // curve += volj * (dp.L[ii]*(dp.norm[jj.first].normalized() - pi.norm.normalized())).dot
+                //         //     (GradK(Rij,r,fvar.H,fvar.correc));
+                //         curve += volj * (pi.L*(norms[jj.first] - norms[ii])).dot
+                //                 (GradK(Rij,r,fvar.H,fvar.correc));    
+                //         // curve += volj * ((norms[jj.first] - norms[ii])).dot
+                //         //         (pi.L*GradK(Rij,r,fvar.H,fvar.correc));
+                //     }
+                // }
+
+                /* Just do the check for all particles. Getting discontinuity in curvature */
+                #if SIMDIM == 2
+                if(/* norms[ii].dot(norms[jj.first]) < 0.5 && */ norms[ii].norm() > 0 && norms[jj.first].norm() > 0) 
+                #else
+                if(/* norms[ii].dot(norms[jj.first]) > -0.333 && */ norms[ii].norm() > 0 && norms[jj.first].norm() > 0) 
+                #endif 
+                // if(norms[ii].norm() > 0 && norms[jj.first].norm() > 0)
                 {
-                    curve -= volj * (pi.L*(norms[jj.first] - norms[ii])).dot
-                                (GradK(Rij,r,fvar.H,fvar.correc));     
                     // curve += volj * (dp.L[ii]*(dp.norm[jj.first].normalized() - pi.norm.normalized())).dot
-                    //         (GradK(Rij,r,fvar.H,fvar.correc));
-                }
-                else
-                {
-                    #if SIMDIM == 2
-                    if(norms[ii].dot(norms[jj.first]) > -0.5 && norms[ii].norm() > 0 && norms[jj.first].norm() > 0) 
-                    #else
-                    if(norms[ii].dot(norms[jj.first]) > -0.333 && norms[ii].norm() > 0 && norms[jj.first].norm() > 0) 
-                    #endif 
-                    // if(norms[ii].norm() > 0 && norms[jj.first].norm() > 0)
-                    {
-                        // curve += volj * (dp.L[ii]*(dp.norm[jj.first].normalized() - pi.norm.normalized())).dot
-                        //     (GradK(Rij,r,fvar.H,fvar.correc));
-                        curve -= volj * ((norms[jj.first] - norms[ii])).dot
-                                (pi.L*GradK(Rij,r,fvar.H,fvar.correc));
-                    }
+                    //     (GradK(Rij,r,fvar.H,fvar.correc));
+                    curve += volj * (pi.L*(norms[jj.first] - norms[ii])).dot
+                            (GradK(Rij,r,fvar.H,fvar.correc));    
+                    // curve += volj * ((norms[jj.first] - norms[ii])).dot
+                    //         (pi.L*GradK(Rij,r,fvar.H,fvar.correc));
                 }
 
                 // curve += volj * ((dp.norm[jj.first].normalized() - pi.norm.normalized())).dot
@@ -207,9 +225,9 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
                 //         (/* dp.L[ii]* */GradK(Rij,r,fvar.H,fvar.correc));
             
                 /*Occlusion for Gissler Aero Method*/
-                if (pi.b == FREE && (avar.acase == 4 || avar.acase == 1))
+                if (pi.b == FREE && avar.acase == Gissler)
                 {
-                    real const frac = Rij.dot(Vdiff)/(Vdiff.norm()*r);
+                    real const frac = -Rij.dot(Vdiff)/(Vdiff.norm()*r);
                     
                     if (frac > woccl_)
                     {
@@ -225,7 +243,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
             }
             else
             {
-                pi.woccl = 1;
+                pi.woccl = 1.0;
             }
 
             pi.norm = norms[ii];

@@ -1,7 +1,6 @@
 
 #include "cylinder.h"
-#include <Eigen/Geometry>
-
+#include "../Geometry.h"
 void check_cylinder_input(shape_block& block, real& globalspacing)
 {
     int has_config = 0;
@@ -147,33 +146,33 @@ void check_cylinder_input(shape_block& block, real& globalspacing)
         block.angles *= M_PI/180.0; // Convert to radians
 
         // Find the rotation matrix
-        #if SIMDIM == 3
-            StateMatD rotx, roty, rotz;
-            rotx << 1.0 , 0.0                   , 0.0                  ,
-                    0.0 , cos(block.angles(0))  , sin(block.angles(0)) ,
-                    0.0 , -sin(block.angles(0)) , cos(block.angles(0)) ;
+        // #if SIMDIM == 3
+        //     StateMatD rotx, roty, rotz;
+        //     rotx << 1.0 , 0.0                   , 0.0                  ,
+        //             0.0 , cos(block.angles(0))  , sin(block.angles(0)) ,
+        //             0.0 , -sin(block.angles(0)) , cos(block.angles(0)) ;
 
-            roty << cos(block.angles(1)) , 0.0 , -sin(block.angles(1)) ,
-                    0.0                  , 1.0 , 0.0                   ,
-                    sin(block.angles(1)) , 0.0 , cos(block.angles(1))  ;
+        //     roty << cos(block.angles(1)) , 0.0 , -sin(block.angles(1)) ,
+        //             0.0                  , 1.0 , 0.0                   ,
+        //             sin(block.angles(1)) , 0.0 , cos(block.angles(1))  ;
 
-            rotz << cos(block.angles(2)) , -sin(block.angles(2)) , 0.0 ,
-                    sin(block.angles(2)) , cos(block.angles(2))  , 0.0 ,
-                    0.0                  , 0.0                   , 1.0 ;
+        //     rotz << cos(block.angles(2)) , -sin(block.angles(2)) , 0.0 ,
+        //             sin(block.angles(2)) , cos(block.angles(2))  , 0.0 ,
+        //             0.0                  , 0.0                   , 1.0 ;
 
-            block.rotmat = rotx*roty*rotz;
-        #else
-            StateMatD rotmat;
-            rotmat << cos(block.angles(0)), -sin(block.angles(0)),
-                      sin(block.angles(0)),  cos(block.angles(0));
+        //     block.rotmat = rotx*roty*rotz;
+        // #else
+        //     StateMatD rotmat;
+        //     rotmat << cos(block.angles(0)), -sin(block.angles(0)),
+        //               sin(block.angles(0)),  cos(block.angles(0));
 
-            block.rotmat = rotmat;
-        #endif
-        block.normal = StateVecD::Zero();
-        block.normal[0] = 1.0;
+        //     block.rotmat = rotmat;
+        // #endif
+        block.rotmat = GetRotationMat(block.angles);
+        block.normal = StateVecD::UnitX();
         block.normal = block.rotmat * block.normal;
     }   
-    else if(block.normal != default_norm)
+    else if(block.normal != StateVecD::UnitX())
     {
         StateMatD rotmat = StateMatD::Identity();
         // Need to find the rotation matrix now 
@@ -181,7 +180,7 @@ void check_cylinder_input(shape_block& block, real& globalspacing)
         block.normal.normalize();
 
         #if SIMDIM == 3
-        StateVecD origin = default_norm;
+        StateVecD origin = StateVecD::UnitX();
         StateVecD v = origin.cross(block.normal);
         // If magnitude of the cross is small, normal is essentially parallel
         if(v.norm() > 1e-10)
@@ -364,10 +363,10 @@ std::vector<StateVecD> create_hollow_cylinder(shape_block const& block, real con
         {   //Thickness
             StateVecD newPoint;
             if (block.hcpl == 1)
-                newPoint = globalspacing * (norm * real(ii + 0.5*(kk % 2)) + 0.5 * left * sqrt(3.0) * real(kk))
+                newPoint = globalspacing * (norm * real(-ii + 0.5*(kk % 2)) + 0.5 * left * sqrt(3.0) * real(kk))
                     + r * left;
             else
-                newPoint = globalspacing * (norm * real(ii) + left * real(kk)) + r * left;
+                newPoint = globalspacing * (norm * real(-ii) + left * real(kk)) + r * left;
 
             newPoint += StateVecD(unif(re),unif(re));
             newPoint += block.centre;
@@ -381,10 +380,10 @@ std::vector<StateVecD> create_hollow_cylinder(shape_block const& block, real con
         {   //Thickness
             StateVecD newPoint;
             if (block.hcpl == 1)
-                newPoint = globalspacing * (norm * real(ii + 0.5*(kk % 2)) - 0.5 * left * sqrt(3.0) * real(kk))
+                newPoint = globalspacing * (norm * real(-ii + 0.5*(kk % 2)) - 0.5 * left * sqrt(3.0) * real(kk))
                     - r * left;
             else
-                newPoint = globalspacing * (norm * real(ii) - left * real(kk)) - r * left;
+                newPoint = globalspacing * (norm * real(-ii) - left * real(kk)) - r * left;
 
             newPoint += StateVecD(unif(re),unif(re));
             newPoint += block.centre;
@@ -410,9 +409,9 @@ std::vector<StateVecD> create_solid_cylinder(shape_block const& block, real cons
         {
             StateVecD newPoint;
             if (block.hcpl == 1)
-                newPoint = norm * real(ii + 0.5*(jj % 2)) + left * sqrt(3.0) * real(jj);
+                newPoint = norm * real(-ii + 0.5*(jj % 2)) + left * sqrt(3.0) * real(jj);
             else
-                newPoint = norm * real(jj) + left * real(ii);
+                newPoint = norm * real(-ii) + left * real(jj);
 
             newPoint += StateVecD::Constant(unif(re));
             newPoint += block.start;
@@ -440,7 +439,7 @@ std::vector<StateVecD> create_hollow_cylinder(shape_block const& block, real con
         for(int kk = 0; kk < block.nk; kk++)
         {   //Thickness
             real r = block.radius;
-            real l = -real(jj)*globalspacing;
+            real l = real(jj)*globalspacing;
             real doffset = 0;
             if(block.hcpl == 1)
             {
@@ -461,7 +460,7 @@ std::vector<StateVecD> create_hollow_cylinder(shape_block const& block, real con
                 }
 
                 real a = cos(theta)*r; real b = sin(theta)*r;
-                StateVecD newPoint(l,a,b);
+                StateVecD newPoint(-l,a,b);
                 newPoint += StateVecD(unif(re),unif(re),unif(re));
                 newPoint = block.rotmat * newPoint;
                 newPoint += block.centre;
@@ -490,11 +489,11 @@ std::vector<StateVecD> create_solid_cylinder(shape_block const& block, real cons
             {
                 StateVecD newPoint;
                 if (block.hcpl == 1)
-                    newPoint = 0.5 * StateVecD(sqrt(3.0) * (real(kk) + real((jj % 2)) / 3.0),
+                    newPoint = 0.5 * StateVecD(-sqrt(3.0) * (real(kk) + real((jj % 2)) / 3.0),
                          real(2 * ii + ((kk + jj) % 2)),                         
                         2.0 / 3.0 * sqrt(6.0) * real(kk));
                 else
-                    newPoint = StateVecD(real(ii), real(kk), real(jj));
+                    newPoint = StateVecD(-real(ii), real(kk), real(jj));
 
                 newPoint *= globalspacing;
                 newPoint += StateVecD(unif(re),unif(re),unif(re));

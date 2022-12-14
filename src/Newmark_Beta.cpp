@@ -73,11 +73,10 @@ void Do_NB_Iter(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO co
 	vector<StateVecD> res(end,StateVecD::Zero());
 	vector<StateVecD> Af(end,StateVecD::Zero());
 	vector<real> Rrho(end,0.0);
+	vector<int> near_inlet(svar.bndPts, 0);
 
 	Force = StateVecD::Zero();
 	svar.AForce = StateVecD::Zero();
-
-	const real dt = svar.dt;
 
 	for(size_t block = 0; block < svar.nbound; block++)
 	{
@@ -117,16 +116,6 @@ void Do_NB_Iter(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO co
 			{
 				Boundary_DBC(fvar,limits[block].index.first,limits[block].index.second,
 								outlist,pnp1,res);
-
-				#pragma omp for schedule(static) nowait
-				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-				{	/****** BOUNDARY PARTICLES ***********/
-					real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
-									pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
-					pnp1[ii].rho = rho;
-					pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-					pnp1[ii].Rrho = Rrho[ii];
-				}
 				break;
 			}
 			case pressure_G:
@@ -137,30 +126,8 @@ void Do_NB_Iter(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO co
 			}
 			case ghost:
 			{
-				vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
 				Boundary_Ghost(fvar,limits[block].index.first,limits[block].index.second,
 								outlist,pnp1,Rrho,near_inlet);
-
-				#pragma omp for schedule(static) nowait
-				for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
-				{	/****** BOUNDARY PARTICLES ***********/
-					if(near_inlet[ii - limits[block].index.first])
-					{// Don't allow negative pressures
-						real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
-									pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
-						pnp1[ii].rho = rho;
-						pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-						pnp1[ii].Rrho = fmax(0.0,Rrho[ii]);
-					}
-					else
-					{	
-						real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
-									pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
-						pnp1[ii].rho = rho;
-						pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
-						pnp1[ii].Rrho = Rrho[ii];
-					}
-				}
 				break;
 			}
 			default:
@@ -174,6 +141,50 @@ void Do_NB_Iter(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO co
 	{
 		const real dt = svar.dt;
 		const real dt2 = dt*dt;
+
+		for(size_t block = 0; block < svar.nbound; block++)
+		{
+			switch (limits[block].bound_solver)
+			{
+				case DBC:
+				{
+					#pragma omp for schedule(static) nowait
+					for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+					{	/****** BOUNDARY PARTICLES ***********/
+						real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+										pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
+						pnp1[ii].rho = rho;
+						pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+						pnp1[ii].Rrho = Rrho[ii];
+					}
+					break;
+				}
+				case ghost:
+				{
+					#pragma omp for schedule(static) nowait
+					for (size_t ii=limits[block].index.first; ii < limits[block].index.second; ++ii)
+					{	/****** BOUNDARY PARTICLES ***********/
+						if(near_inlet[ii])
+						{// Don't allow negative pressures
+							real const rho = std::max(fvar.rho0, std::min(fvar.rhoMax, 
+										pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
+							pnp1[ii].rho = rho;
+							pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+							pnp1[ii].Rrho = fmax(0.0,Rrho[ii]);
+						}
+						else
+						{	
+							real const rho = std::max(fvar.rhoMin, std::min(fvar.rhoMax, 
+										pn[ii].rho+dt*(a*pn[ii].Rrho+b*Rrho[ii])));
+							pnp1[ii].rho = rho;
+							pnp1[ii].p = pressure_equation(rho,fvar.B,fvar.gam,fvar.Cs,fvar.rho0,fvar.backP);
+							pnp1[ii].Rrho = Rrho[ii];
+						}
+					}
+					break;
+				}
+			}
+		}
 
 		for(size_t block = svar.nbound; block < svar.nfluid + svar.nbound; block++)
 		{

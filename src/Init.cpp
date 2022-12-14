@@ -77,10 +77,10 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
 		Get_Number(line, "Fixed velocity or dynamic inlet BC (0/1)",shapes[block].fixed_vel_or_dynamic);
 
 		// Pipe exit plane.
-		Get_Vector(line, "Aerodynamic entry normal", shapes[block].pipe_norm);
+		Get_Vector(line, "Aerodynamic entry normal", shapes[block].aero_norm);
 		Get_Vector(line, "Deletion normal", shapes[block].delete_norm);
 		Get_Vector(line, "Insertion normal", shapes[block].insert_norm);
-		Get_Number(line, "Aerodynamic entry plane constant", shapes[block].pipeconst);
+		Get_Number(line, "Aerodynamic entry plane constant", shapes[block].aeroconst);
 		Get_Number(line, "Deletion plane constant", shapes[block].delconst);
 		Get_Number(line, "Insertion plane constant", shapes[block].insconst);
         Get_Number(line, "Pipe depth", shapes[block].thickness);
@@ -140,6 +140,7 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
         }
 
         Get_Vector(line, "Starting velocity", shapes[block].vel);
+        Get_Number(line, "Starting jet velocity", shapes[block].vmag);
 		Get_Number(line, "Starting pressure", shapes[block].press);
         Get_Number(line, "Starting density", shapes[block].dens);
         // Get_Number(line, "Starting mass", shapes[block].mass);
@@ -213,6 +214,34 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
     size_t count = 0;
     for(shape_block& bound:shapes)
     {
+        // Scale things first before doing checks and distances
+        if(svar.scale != 1.0 )
+        {
+            if(check_vector(bound.start))
+                bound.start *= svar.scale;
+
+            if(check_vector(bound.end))
+                bound.end *= svar.scale;
+                
+            if(check_vector(bound.right))
+                bound.right *= svar.scale;
+
+            if(check_vector(bound.mid))
+                bound.mid *= svar.scale;
+            
+            if(check_vector(bound.centre))
+                bound.centre *= svar.scale;
+
+            if(bound.aeroconst != default_val)
+                bound.aeroconst *= svar.scale;
+                
+            if(bound.insconst != default_val)
+                bound.insconst *= svar.scale;
+
+            if(bound.delconst != default_val)
+                bound.delconst *= svar.scale;
+        }
+        
         #if SIMDIM == 2
         if (bound.shape == "Line")
         #else
@@ -568,8 +597,7 @@ size_t Generate_Points(SIM const& svar, FLUID const& fvar, double const& globals
             }
             case circleSphere:
             {
-                bound.coords = 
-                create_circle(bound.centre,bound.radius, globalspacing, bound.hcpl);
+                bound.coords = create_circle(bound, globalspacing);
                 break;
             }
             case cylinder:
@@ -603,7 +631,7 @@ size_t Generate_Points(SIM const& svar, FLUID const& fvar, double const& globals
 
         if (bound.coords.size() != bound.npts)
 		{
-			std::cerr << std::endl << "Number of boundary points generated for boundary \"" << 
+			std::cerr << std::endl << "Number of boundary points generated for block \"" << 
                 bound.name << "\" differs from expected amount by "
 			 << static_cast<int>(bound.npts) - static_cast<int>(bound.coords.size()) << std::endl;
              diff += bound.coords.size() - bound.npts;
@@ -620,6 +648,8 @@ size_t Generate_Points(SIM const& svar, FLUID const& fvar, double const& globals
             bound.speedOfSound = fvar.Cs;
             bound.backgroundP = fvar.pPress;
         }
+
+
     }
     var.totPts = totPts;
     // var.totPts = boundary_intersection(globalspacing, var);
@@ -809,10 +839,10 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
         limits.back().name = fluvar.block[block].name;
 		limits.back().insert_norm = fluvar.block[block].insert_norm;
 		limits.back().delete_norm = fluvar.block[block].delete_norm;
-		limits.back().pipe_norm = fluvar.block[block].pipe_norm;
+		limits.back().aero_norm = fluvar.block[block].aero_norm;
 		limits.back().insconst = fluvar.block[block].insconst;
 		limits.back().delconst = fluvar.block[block].delconst;
-		limits.back().pipeconst = fluvar.block[block].pipeconst;
+		limits.back().aeroconst = fluvar.block[block].aeroconst;
 		
 		limits.back().fixed_vel_or_dynamic = fluvar.block[block].fixed_vel_or_dynamic;
 		limits.back().hcpl = fluvar.block[block].hcpl;

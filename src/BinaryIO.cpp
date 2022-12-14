@@ -525,22 +525,22 @@ void Write_Binary_Timestep(SIM const& svar, real const& rho0, SPHState const& pn
 	
 	// Write some auxiliary data, such as mass
 	add_zone_aux_data(fileHandle,outputZone,"Particle mass",pnp1[start].m);
-	// Add information about the insertion, pipe, and deletion planes.
+	// Add information about the insertion, aero, and deletion planes.
 	add_zone_aux_data(fileHandle,outputZone,"Insertion normal x",limits.insert_norm[0]);
 	add_zone_aux_data(fileHandle,outputZone,"Insertion normal y",limits.insert_norm[1]);
 	add_zone_aux_data(fileHandle,outputZone,"Deletion normal x",limits.delete_norm[0]);
 	add_zone_aux_data(fileHandle,outputZone,"Deletion normal y",limits.delete_norm[1]);
-	add_zone_aux_data(fileHandle,outputZone,"Aerodynamic normal x",limits.pipe_norm[0]);
-	add_zone_aux_data(fileHandle,outputZone,"Aerodynamic normal y",limits.pipe_norm[1]);
+	add_zone_aux_data(fileHandle,outputZone,"Aerodynamic normal x",limits.aero_norm[0]);
+	add_zone_aux_data(fileHandle,outputZone,"Aerodynamic normal y",limits.aero_norm[1]);
 	#if SIMDIM == 3
 	add_zone_aux_data(fileHandle,outputZone,"Insertion normal z",limits.insert_norm[2]);
 	add_zone_aux_data(fileHandle,outputZone,"Deletion normal z",limits.delete_norm[2]);
-	add_zone_aux_data(fileHandle,outputZone,"Aerodynamic normal z",limits.pipe_norm[2]);
+	add_zone_aux_data(fileHandle,outputZone,"Aerodynamic normal z",limits.aero_norm[2]);
 	#endif
 	
 	add_zone_aux_data(fileHandle,outputZone,"Insertion plane constant",limits.insconst);
 	add_zone_aux_data(fileHandle,outputZone,"Deletion plane constant",limits.delconst);
-	add_zone_aux_data(fileHandle,outputZone,"Aerodynamic plane constant",limits.pipeconst);
+	add_zone_aux_data(fileHandle,outputZone,"Aerodynamic plane constant",limits.aeroconst);
 
 	// Add boundary time information
 	if(limits.nTimes != 0)
@@ -833,13 +833,13 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, FLUID const& fvar, int32
 			limits.delete_norm[2] = data;
 			
 		if(auxname == space2underscore("Aerodynamic normal x"))
-			limits.pipe_norm[0] = data;
+			limits.aero_norm[0] = data;
 			
 		if(auxname == space2underscore("Aerodynamic normal y"))
-			limits.pipe_norm[1] = data;
+			limits.aero_norm[1] = data;
 			
 		if(auxname == space2underscore("Aerodynamic normal z"))
-			limits.pipe_norm[2] = data;
+			limits.aero_norm[2] = data;
 			
 		if(auxname == space2underscore("Insertion plane constant"))
 			limits.insconst = data;
@@ -848,7 +848,7 @@ void Read_Binary_Timestep(void* inputHandle, SIM& svar, FLUID const& fvar, int32
 			limits.delconst = data;
 			
 		if(auxname == space2underscore("Aerodynamic plane constant"))
-			limits.pipeconst = data;
+			limits.aeroconst = data;
 
 		if(auxname == space2underscore("Times count"))
 			limits.nTimes = data;
@@ -1036,6 +1036,29 @@ void CheckContents_Binary(void* const& inputHandle, SIM& svar, int32_t& numZones
 	
 	cout << "Number of variables in output file: " << numVars << endl;
 
+	string axis1 = "X"; string axis1s = "x";
+	string axis2 = "Y"; string axis2s = "y";
+	#if SIMDIM == 2
+	if(svar.offset_axis != 0)
+	{
+		if(svar.offset_axis == 1)
+		{
+			axis1 = "Y"; axis1s = "y";
+			axis2 = "Z"; axis2s = "z";
+		}
+		else if(svar.offset_axis == 2)
+		{
+			axis1 = "X"; axis1s = "x";
+			axis2 = "Z"; axis2s = "z";
+		}
+		else if(svar.offset_axis == 3)
+		{
+			axis1 = "X"; axis1s = "x";
+			axis2 = "Y"; axis2s = "y";
+		}
+	}
+	#endif
+
 	// Check the restart data exists
 	vecIndex = vector<int32_t>(3*SIMDIM + 5, 0);
 	vector<uint> hasVar(3*SIMDIM + 5, 0);
@@ -1049,32 +1072,32 @@ void CheckContents_Binary(void* const& inputHandle, SIM& svar, int32_t& numZones
 		}
 		string sname(name);
 
-		if(sname == "X")
+		if(sname == axis1)
 		{
 			vecIndex[0] = var;
 			hasVar[0] = realType;
 		}
-		if(sname == "Y")
+		if(sname == axis2)
 		{
 			vecIndex[1] = var;
 			hasVar[1] = realType;
 		}
-		if(sname == "Ax")
+		if(sname == "A" + axis1s)
 		{
 			vecIndex[2] = var;
 			hasVar[2] = realType;
 		}
-		if(sname == "Ay")
+		if(sname == "A" + axis2s)
 		{
 			vecIndex[3] = var;
 			hasVar[3] = realType;
 		}
-		if(sname == "Vx")
+		if(sname == "V" + axis1s)
 		{
 			vecIndex[4] = var;
 			hasVar[4] = realType;
 		}
-		if(sname == "Vy")
+		if(sname == "V" + axis2s)
 		{
 			vecIndex[5] = var;
 			hasVar[5] = realType;

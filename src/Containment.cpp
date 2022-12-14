@@ -834,7 +834,7 @@ void Check_Pipe_Outlet(Vec_Tree const& CELL_TREE, SIM& svar, AERO const& avar, M
             // Check if pipe vector is defined?
             if(pnp1[ii].b == PIPE)
             {	/*Do a check to see if it needs to be given an aero force*/
-                if(pnp1[ii].xi.dot(limits[block].pipe_norm) > limits[block].pipeconst)	
+                if(pnp1[ii].xi.dot(limits[block].aero_norm) > limits[block].aeroconst)	
                 {
                     pnp1[ii].b = FREE;
                     if(pnp1[ii].lam_ng < avar.cutoff && svar.Asource == meshInfl)

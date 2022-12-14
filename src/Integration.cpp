@@ -499,17 +499,30 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	/* Check the error and adjust the CFL to try and keep convergence */
 	if(error1 > svar.minRes)
 	{
-		// How to adjust? Just reduce by 0.1?
-		if(svar.cfl > 0.1)
-			svar.cfl -= 0.1;
+		if(svar.nUnstable > svar.nUnstable_Limit)
+		{
+			svar.cfl = std::max(svar.cfl_min, svar.cfl - svar.cfl_step);
+			svar.nUnstable = 0;
+		}
 		else
-			svar.cfl *= 0.9;
+			svar.nUnstable++;
+		
 	}
-	else if (k < 0.5 * svar.subits)
+	else
+		svar.nUnstable = 0;
+
+	if (k < svar.subits_factor * svar.subits && svar.nUnstable == 0)
 	{
-		// Try boosting the CFL if it does converge nicely?
-		svar.cfl += 0.1;
+		if(svar.nStable > svar.nStable_Limit)
+		{	// Try boosting the CFL if it does converge nicely
+			svar.cfl = std::min(svar.cfl_max, svar.cfl + svar.cfl_step);
+			svar.nStable = 0;
+		}
+		else
+			svar.nStable++;
 	}
+	else
+		svar.nStable = 0;
 
 	#ifdef DAMBREAK
 	/* Find max x and y coordinates of the fluid */

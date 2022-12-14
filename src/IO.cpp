@@ -379,7 +379,13 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 		Get_Number(line, "SPH solver minimum residual", svar.minRes);
 		Get_Number(line, "SPH maximum timestep", svar.dt_max);
 		Get_Number(line, "SPH minimum timestep", svar.dt_min);
+        Get_Number(line, "SPH maximum CFL", svar.cfl_max);
+        Get_Number(line, "SPH minimum CFL", svar.cfl_min);
         Get_Number(line, "SPH CFL condition", svar.cfl);
+        Get_Number(line, "SPH unstable CFL step", svar.cfl_step);
+        Get_Number(line, "SPH unstable CFL count limit", svar.nUnstable_Limit);
+        Get_Number(line, "SPH stable CFL count limit", svar.nStable_Limit);
+        Get_Number(line, "SPH stable CFL count iteration factor", svar.subits_factor);
         Get_Number(line, "SPH maximum shifting velocity", svar.maxshift);
 
 		Get_Number(line, "SPH background pressure", fvar.backP);
@@ -933,13 +939,36 @@ void Check_Output_Variables(SIM& svar)
 	svar.var_types.resize(nVars+nOptVars,0);
 
 	// Define the variable names
+	string axis1 = "X"; string axis1s = "x";
+	string axis2 = "Y"; string axis2s = "y";
+	#if SIMDIM == 2
+	if(svar.offset_axis != 0)
+	{
+		if(svar.offset_axis == 1)
+		{
+			axis1 = "Y"; axis1s = "y";
+			axis2 = "Z"; axis2s = "z";
+		}
+		else if(svar.offset_axis == 2)
+		{
+			axis1 = "X"; axis1s = "x";
+			axis2 = "Z"; axis2s = "z";
+		}
+		else if(svar.offset_axis == 3)
+		{
+			axis1 = "X"; axis1s = "x";
+			axis2 = "Y"; axis2s = "y";
+		}
+	}
+	#endif
+
 	size_t varCount = 0;
 	svar.var_names.clear();
 	if(svar.outvar[0])
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
-		svar.var_names += "X,Y";
+		svar.var_names += axis1 + "," + axis2;
 		#if SIMDIM == 3
 			svar.var_types[varCount] = realType; varCount++;
 			svar.var_names += ",Z";
@@ -950,7 +979,7 @@ void Check_Output_Variables(SIM& svar)
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
-		svar.var_names += ",Ax,Ay";
+		svar.var_names += ",A" + axis1s + ",A" + axis2s;
 		#if SIMDIM == 3
 			svar.var_types[varCount] = realType; varCount++;
 			svar.var_names += ",Az";
@@ -961,7 +990,7 @@ void Check_Output_Variables(SIM& svar)
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
-		svar.var_names += ",Vx,Vy";
+		svar.var_names += ",V" + axis1s + ",V" + axis2s;
 		#if SIMDIM == 3
 			svar.var_types[varCount] = realType; varCount++;
 			svar.var_names += ",Vz";
@@ -1039,7 +1068,7 @@ void Check_Output_Variables(SIM& svar)
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
-		svar.var_names += ",Afx,Afy";
+		svar.var_names += ",Af" + axis1s + ",Af" + axis2s;
 		#if SIMDIM == 3
 			svar.var_types[varCount] = realType; varCount++;
 			svar.var_names += ",Afz";
@@ -1080,7 +1109,7 @@ void Check_Output_Variables(SIM& svar)
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
-		svar.var_names += ",cellVx,cellVy";
+		svar.var_names += ",cellV" + axis1s + ",cellV" + axis2s;
 		#if SIMDIM == 3
 			svar.var_types[varCount] = realType; varCount++;
 			svar.var_names += ",cellVz";
@@ -1091,7 +1120,7 @@ void Check_Output_Variables(SIM& svar)
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
-		svar.var_names += ",dsphGx,dsphGy";
+		svar.var_names += ",dsphG" + axis1s + ",dsphG" + axis2s;
 		#if SIMDIM == 3
 			svar.var_types[varCount] = realType; varCount++;
 			svar.var_names += ",dsphGz";
@@ -1126,7 +1155,7 @@ void Check_Output_Variables(SIM& svar)
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
-		svar.var_names += ",surf-normx,surf-normy";
+		svar.var_names += ",surf-norm" + axis1s + ",surf-norm" + axis2s;
 		#if SIMDIM == 3
 			svar.var_types[varCount] = realType; varCount++;
 			svar.var_names += ",surf-normz";
@@ -1143,7 +1172,7 @@ void Check_Output_Variables(SIM& svar)
 	{
 		svar.var_types[varCount] = realType; varCount++;
 		svar.var_types[varCount] = realType; varCount++;
-		svar.var_names += ",shiftVx,shiftVy";
+		svar.var_names += ",shiftV" + axis1s + ",shiftV" + axis2s;
 		#if SIMDIM == 3
 			svar.var_types[varCount] = realType; varCount++;
 			svar.var_names += ",shiftVz";

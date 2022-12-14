@@ -3,6 +3,7 @@
 
 #include "Var.h"
 #include "VLM.h"
+#include <Eigen/Geometry>
 
 #define PERTURB(i,j) pow(MEPSILON,pow(2,i*SIMDIM-j))
 
@@ -12,20 +13,24 @@
 inline StateMatD GetRotationMat(StateVecD& angles)
 {
     #if SIMDIM == 3
-        StateMatD rotx, roty, rotz;
-        rotx << 1.0, 0.0            , 0.0           ,
-                0.0, cos(angles(0)) , sin(angles(0)),
-                0.0, -sin(angles(0)), cos(angles(0));
+        // StateMatD rotx, roty, rotz;
+        // rotx << 1.0, 0.0            , 0.0           ,
+        //         0.0, cos(angles(0)) , sin(angles(0)),
+        //         0.0, -sin(angles(0)), cos(angles(0));
 
-        roty << cos(angles(1)) , 0.0 , -sin(angles(1)),
-                0.0            , 1.0 , 0.0            ,
-                sin(angles(1)) , 0.0 , cos(angles(1));
+        // roty << cos(angles(1)) , 0.0 , -sin(angles(1)),
+        //         0.0            , 1.0 , 0.0            ,
+        //         sin(angles(1)) , 0.0 , cos(angles(1));
 
-        rotz << cos(angles(2)) , sin(angles(2)) , 0.0 ,
-                -sin(angles(2)), cos(angles(2)) , 0.0 ,
-                0.0            , 0.0            , 1.0 ;
+        // rotz << cos(angles(2)) , sin(angles(2)) , 0.0 ,
+        //         -sin(angles(2)), cos(angles(2)) , 0.0 ,
+        //         0.0            , 0.0            , 1.0 ;
 
-        return rotx*roty*rotz;
+        // return rotx*roty*rotz;
+        StateMatD m(Eigen::AngleAxis<real>(angles[0], StateVecD::UnitX())
+                    * Eigen::AngleAxis<real>(-angles[1], StateVecD::UnitY())
+                    * Eigen::AngleAxis<real>(angles[2], StateVecD::UnitZ()));
+        return m;
     #else
         StateMatD rot;
         rot << cos(angles(0)), -sin(angles(0)),

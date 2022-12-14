@@ -10,7 +10,7 @@
 
 /*L matrix for delta-SPH calculation*/
 void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, 
-				 OUTL const& outlist, real& npd/* , DELTAP& dp */)
+				 OUTL const& outlist, real& npd)
 {
 	/************   RENORMALISATION MATRIX CALCULATION    ************/
 	#ifdef PAIRWISE
@@ -137,8 +137,8 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1,
 }
 
 /* Calculate dissipation terms before freezing. */
-void dissipation_terms(FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
-/* DELTAP const& dp, */ SPHState& pnp1)
+void dissipation_terms(FLUID const& fvar, size_t const& start, size_t const& end, 
+				OUTL const& outlist, SPHState& pnp1)
 {
 
 	for(size_t ii = start; ii < end; ++ii )

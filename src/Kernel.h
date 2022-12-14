@@ -117,7 +117,7 @@ inline StateVecD HeST(StateVecD const& cgradi, StateVecD const& cgradj, StateVec
 
 // /*Surface Tension - Nair & Poeschel (2017)*/
 #ifdef PAIRWISE
-inline real surface_tension_fac(int const bA, int const bB)
+inline real pairwise_ST_fac(int const bA, int const bB)
 {
 	if(bA == BOUND || bB == BOUND )
 	{
@@ -129,10 +129,10 @@ inline real surface_tension_fac(int const bA, int const bB)
 
 // inline StateVecD SurfaceTens(StateVecD const& Rji, real const& r, real const& h, real const& sig,  real const& lam, 
 // 					real const& npdm2, real const& pi3o4, int const& bA, int const& bB, real const& voli, real const& volj)
-inline StateVecD SurfaceTens(StateVecD const& Rji, real const& r, real const& h, 
+inline StateVecD pairwise_ST(StateVecD const& Rji, real const& r, real const& h, 
 					real const& npdm2, real const& pi3o4, int const& bA, int const& bB)
 {
-	real const fac = surface_tension_fac(bA, bB); 
+	real const fac = pairwise_ST_fac(bA, bB); 
 
 	/*npd = numerical particle density (see code above) */
 	// return -0.5*npdm2*(sig/lam)*fac*cos(pi3o4*r/h)*(Rji/r) * voli * volj;
