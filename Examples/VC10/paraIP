@@ -1,0 +1,64 @@
+ 
+
+                                           Grid scale: 1
+                                      Reynolds length: 8.491
+                                   Reference velocity: 90.03
+                                Reference temperature: 278.24
+                                   Reference pressure: 84310
+                                    Reference density: 1.0555
+
+
+                          Reference dispersed density: 810
+                        Reference dispersed viscosity: 0.00142
+                            Reference surface tension: 0.0256
+
+                                  Output files prefix: sol_VC10_IP_Nov22
+
+# SPH parameters ------------------------------------: -
+                              SPH frame time interval: 0.0025
+                                      SPH frame count: 5000
+                 SPH output information (0/1/2/3/4/5): 3
+               SPH output encoding (0=ascii/1=binary): 1
+                               SPH ghost output (0/1): 0
+
+                                 SPH maximum timestep: 5e-4
+                                 SPH minimum timestep: 1e-9
+                                    SPH CFL condition: 0.5
+                                  SPH initial spacing: 0.004
+                          SPH boundary spacing factor: 1.0
+                          SPH smoothing length factor: 2
+                                 SPH aerodynamic case: Induced_pressure
+                        SPH use ghost particles (0/1): 0
+                                SPH start coordinates: 15.2,15,-0.08
+                       SPH boundary start coordinates: 15.2,15,-0.08
+                              SPH start geometry type: jet
+                           SPH boundary geometry type: jet
+             SPH boundary solver (0=pressure/1=ghost): 1
+                                     SPH jet diameter: 0.08
+                                        SPH jet depth: 0.1
+                                     SPH jet velocity: 5.414
+                            SPH rotation angles (deg): 0,0,90
+                              SPH freestream velocity: 89.91,0,3.926
+
+                                SPH starting pressure: 0
+                                   SPH speed of sound: 200
+                            SPH density variation (%): 20
+                      SPH artificial viscosity factor: 0.1
+                    SPH surface tension contact angle: 150.0
+                            SPH restart fit tolerance: 0.05
+                        SPH maximum shifting velocity: 25
+
+
+                              VLM definition filename: (thisfile)
+                                  VLM wing dimensions: 22.275,8.491
+                                     VLM panel counts: 50,14
+                             VLM angle alpha (degree): 5
+                             VLM sweep angle (degree): 32.5
+                                      VLM taper ratio: 0.5
+                              VLM flap start (panels): 3
+                              VLM flap width (panels): 30
+                              VLM flap depth (panels): 6
+                              VLM flap angle (degree): 25
+
+    solver at Thu Nov 24 18:39:30 2022
+                                               SPH restart prefix: sol_VC10_IP_Nov22

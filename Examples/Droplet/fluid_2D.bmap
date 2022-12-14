@@ -1,0 +1,18 @@
+ -----------------------------------------------------
+ FLUID MAPPING
+ -----------------------------------------------------
+
+                       Name: Droplet
+                      Shape: Circle
+   Write surface data (0/1): 1
+
+ Fixed velocity or dynamic inlet BC (0/1): 0
+ 
+          Starting pressure: 0
+           Starting density: 810
+
+           Centre coordinate: 0,0
+                      Radius: 0.005
+                   
+ block end
+ ---------------------------

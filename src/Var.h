@@ -4,21 +4,20 @@
 #ifndef VAR_H
 #define VAR_H
 
-
 #include <limits>
 #include <vector>
 #include <fstream>
 #include <iostream>
+#include <stdio.h>
 #include <iomanip>
 #include <string.h>
 #include <sstream>
 #include <omp.h>
 
+#define EIGEN_USE_BLAS
 // Third party includes
-#include "Third_Party/Eigen/Core"
-#include "Third_Party/Eigen/StdVector"
-#include "Third_Party/NanoFLANN/nanoflann.hpp"
-#include "Third_Party/NanoFLANN/utils.h"
+#include <Eigen/Core>
+#include <Eigen/StdVector>
 #include "Third_Party/NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 
 using std::vector;
@@ -31,8 +30,8 @@ using std::string;
 using std::setw;
 
 #ifdef DEBUG
-	/*Open debug file to write to*/	
-	std::ofstream dbout("WCSPH.log",std::ios::out);
+    /*Open debug file to write to*/
+    extern FILE* dbout;
 #endif
 
 #ifdef DAMBREAK
@@ -48,6 +47,7 @@ std::ofstream dambreak("Dam_Data.log",std::ios::out);
 // Define pi
 #ifndef M_PI
 #define M_PI (4.0*atan(1.0))
+#define M_PI_4 M_PI/4.0
 #endif
 
 /* Define data type. */
@@ -57,9 +57,22 @@ std::ofstream dambreak("Dam_Data.log",std::ios::out);
 
 #if FOD == 1
 typedef double real;
+int32_t const static realType = 2;
 #else
 typedef float real;
+int32_t const static realType = 1;
 #endif
+
+/* Define the default surface tension model */
+#if !defined(HESF) && !defined(CSF) && !defined(PAIRWISE) && !defined(NOST) 
+#define PAIRWISE
+#endif
+
+#if !defined(ISOEOS) && !defined(COLEEOS)
+#define COLEEOS
+#endif
+
+
 
 typedef unsigned int uint;
 
@@ -83,34 +96,54 @@ typedef Eigen::Matrix<real, SIMDIM+1, SIMDIM+1> StateP1MatD;
 
 const std::string WHITESPACE = " \n\r\t\f\v";
 
-#if SIMDIM == 3
-	#include "VLM.h"
-#endif
-
 #pragma omp declare reduction(+: std::vector<StateVecD> : \
         std::transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), \
-        	[](StateVecD lhs, StateVecD rhs){return lhs + rhs;})) \
+            [](StateVecD lhs, StateVecD rhs){return lhs + rhs;})) \
                     initializer(omp_priv = omp_orig)
 
 #pragma omp declare reduction(+: std::vector<real> : \
         std::transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), \
-        	[](real lhs, real rhs){return lhs + rhs;})) \
+            [](real lhs, real rhs){return lhs + rhs;})) \
                     initializer(omp_priv = omp_orig)                  
 
 #pragma omp declare reduction(+:StateVecD : omp_out=omp_out+omp_in)\
                     initializer(omp_priv = omp_orig) 
 
 #pragma omp declare reduction(min: StateVecD : omp_out = \
-			omp_out.norm() < omp_in.norm() ? omp_in : omp_out)\
+            omp_out.norm() < omp_in.norm() ? omp_in : omp_out)\
                     initializer(omp_priv = omp_orig) 
 
 #pragma omp declare reduction(max: StateVecD : omp_out = \
-			omp_out.norm() > omp_in.norm() ? omp_in : omp_out)\
+            omp_out.norm() > omp_in.norm() ? omp_in : omp_out)\
                     initializer(omp_priv = omp_orig) 
 
 
 /*Define particle type indexes*/
-enum partType{BOUND=0,PISTON,BUFFER,BACK,PIPE,FREE,GHOST};
+enum partType{BOUND=0,PISTON,BUFFER,BACK,PIPE,GHOST,FREE,OUTLET,LOST};
+
+/* Define shapes for boundary and fluid initialisation */
+enum shapeType{NONE=0,BOX,CYLINDER,SPHERE,JET,CONVJET};
+
+// Shapes for new intitialisation
+enum shape_type {fineLine = 0, linePlane, squareCube, circleSphere, cylinder, arcSection, coordDef,
+                inletZone, hollow, solid};
+
+enum solve_type {newmark_beta = 0, runge_kutta, DBC, pressure_G, ghost};
+
+enum aero_force {none = 0, Gissler, Induced_Pressure, SkinFric};
+
+enum aero_source {constVel = 0, meshInfl, VLMInfl};
+
+real const static default_val = 9999999.0;
+
+inline bool check_vector(StateVecD const& v)
+{
+    return (v[0] != default_val && v[1] != default_val 
+            #if SIMDIM == 3
+            && v[2] != default_val 
+            #endif
+            );
+}
 
 #ifndef TRUE
 #define TRUE  1
@@ -121,792 +154,871 @@ enum partType{BOUND=0,PISTON,BUFFER,BACK,PIPE,FREE,GHOST};
 
 inline real random(int const& interval)
 {
-	return real(rand() % interval - interval / 2) * MERROR;
+    return real(rand() % interval - interval / 2) * MERROR;
 }
 
 struct SIM 
 {
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-	SIM()
-	{
-		/* Input files */
-		CDForFOAM = 0;
-		isBinary = 0; labelSize = 32; scalarSize = 64;
-		#if SIMDIM == 3
-		offset_axis = 0;
-		#else
-		offset_axis = 2; /* Default to XZ plane in 2D */
-		#endif 
-		
-		angle_alpha = 0;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    SIM()
+    {
+        /* Input files */
+        CDForFOAM = 0;
+        isBinary = 0; buoyantSim = 0; incomp = 0;
+        labelSize = 32; scalarSize = 64;
+        #if SIMDIM == 3
+        offset_axis = 0;
+        #else
+        offset_axis = 2; /* Default to XZ plane in 2D */
+        #endif 
+        
+        angle_alpha = 0;
 
-		out_encoding = 1; /* default to binary */
-		outform = 5; gout = 0; /* Default to restartable data */
+        boundFile = NULL;
+        fluidFile = NULL;
 
-		restart = 0;
-		scale = 1.0;
+        out_encoding = 1; /* default to binary */
+        gout = 0; /* Default to restartable data */
+        single_file = 1;
 
-		partID = 0;
-		simPts = 0; bndPts = 0; totPts = 0;
-		gstPts = 0;  psnPts = 0; delNum = 0; 
-		intNum = 0;	nrefresh = 0; addcount = 0;
-		finPts = 9999999; /* Default to basically no particle limit */
-		
-		Pstep = -1.0; dx = -1.0; Bstep = 0.7;
+        restart = 0;
+        scale = 1.0;
 
-		bound_type = "(none)"; /* Default to no boundary */
-		Scase = 0; Bcase = 0;
-		Bclosed = 0; ghost = 0;
-		Asource = 0;
-		init_hydro_pressure = 0;
-		hydro_height = -1;
+        nbound = 0; nfluid = 0;
+        partID = 0;
+        simPts = 0; bndPts = 0; totPts = 0;
+        gstPts = 0;  psnPts = 0; delNum = 0; 
+        intNum = 0;	nrefresh = 0; addcount = 0;
+        finPts = 9999999; /* Default to basically no particle limit */
+        
+        Pstep = -1.0; Bstep = 0.7; dx = -1.0;
 
-		/* Universal geometry parameters */
-		sim_start.setConstant(-1);
-		bound_start.setConstant(-1);
-		Angle = StateVecD::Zero();
-		Rotate = StateMatD::Zero();
-		Transp = StateMatD::Zero();
+        bound_type = "(none)"; /* Default to no boundary */
+        Scase = 0; Bcase = 0;
+        Bclosed = 0; ghost = 0;
+        Asource = constVel;
+        init_hydro_pressure = 0;
+        use_global_gas_law = 1;
+        hydro_height = -1;
 
+        /* Universal geometry parameters */
+        sim_start.setConstant(-1);
+        bound_start.setConstant(-1);
 
-		/* Jet geometry parameters */
-		jet_diam = -1;
-		jet_depth = -1;
-		nrad = 0;
-		
-		/* Droplet geometry parameters */
-		diam = -1.0;
-		
-		/* Rectangle */
-		xyPART.setConstant(-1);
-		sim_box.setConstant(-1);
-		bound_box.setConstant(-1);
-	
-		/* Integration parameters */
-		subits = 20;
-		Nframe = -1;
-		frame = 0;
-		bound_solver = 0;
-		cfl = 1.0;
-		t = 0.0;
-		dt = 2e-10;
-		framet = -1;
-		dt_max = 1;
-		dt_min = 0.0;
-		beta = 0.25; gamma = 0.5;
-		maxmu = 0;
+        /* Jet geometry parameters */
+        jet_diam = -1;
+        jet_depth = -1;
+        Angle = StateVecD::Zero();
+        Rotate = StateMatD::Zero();
+        Transp = StateMatD::Zero();
+        nrad = 0;
+        
+        /* Droplet geometry parameters */
+        diam = -1.0;
+        
+        /* Rectangle */
+        xyPART.setConstant(-1);
+        sim_box.setConstant(-1);
+        bound_box.setConstant(-1);
+    
+        /* Integration parameters */
+        solver_type = newmark_beta;
+        subits = 20;
+        Nframe = -1;
+        frame = 0;
+        bound_solver = 0;
+        nStable = 0;
+        nStable_Limit = 3;
+        nUnstable = 0;
+        nUnstable_Limit = 3;
+        subits_factor = 0.5;
+        minRes = -7.0;
+        cfl = 1.0;
+        cfl_step = 0.05;
+        cfl_max = 2.0;
+        cfl_min = 0.1;
+        t = 0.0;
+        tframem1 = 0.0;
+        dt = 2e-10;
+        framet = -1;
+        dt_max = 1;
+        dt_min = 0.0;
+        beta = 0.25; gamma = 0.5;
+        maxmu = 0;
+        maxshift = 9999999;
 
-		/*Gravity Vector*/
-		#if SIMDIM == 3
-			grav = StateVecD(0.0,0.0,-9.81);
-		#else
-			grav = StateVecD(0.0,-9.81);
-		#endif
+        /*Gravity Vector*/
+        #if SIMDIM == 3
+            grav = StateVecD(0.0,0.0,-9.81);
+        #else
+            grav = StateVecD(0.0,-9.81);
+        #endif
 
-		framecount = 0;
-		Force = StateVecD::Zero(); AForce = StateVecD::Zero();					/*Total Force*/
-		mass = 0;
-		tMom = 0; aMom = 0;
-	
-		/* SPHPart tracking settings */
-		using_ipt = 0;
-		eqOrder = 2;
-		max_x_sph = 9999999;
-		max_x = 9999999;
-		nSuccess = 0; nFailed = 0;
-		IPT_diam = 0.0; IPT_area = 0.0;
-		cellsout = 0; streakout = 1; partout = 0;
+        framecount = 0;
+        restart_tol = 0.001;
+        Force = StateVecD::Zero(); AForce = StateVecD::Zero();					/*Total Force*/
+        mass = 0;
+        tMom = 0; aMom = 0;
+    
+        /* SPHPart tracking settings */
+        using_ipt = 0;
+        eqOrder = 2;
+        max_x_sph = 9999999;
+        max_x = 9999999;
+        nSuccess = 0; nFailed = 0;
+        IPT_diam = 0.0; IPT_area = 0.0;
+        relax = 0.6; nrelax = 5;
+        cellsout = 0; streakout = 1; partout = 0;
 
-		dropDragSweep = 0;
-	}
+        dropDragSweep = 0;
+        speedTest = 0;
+        nRuns = 1;
+    }
 
-	/* File input parameters */
-	uint CDForFOAM;
-	std::string infile, output_prefix, outdir;
-	std::string restart_prefix;
+    /* File input parameters */
+    uint CDForFOAM;
+    std::string infile, output_prefix, outdir;
+    std::string fluidfile, boundfile;
+    std::string restart_prefix;
 
-	/* OpenFOAM files */
-	std::string foamdir, foamsol;
-	int isBinary, labelSize, scalarSize;
-	
-	/* TAU files */
-	std::string taumesh, taubmap, tausol;
-	int offset_axis;
-	real angle_alpha;
-	vector<int> markers;
-	vector<string> bnames;
-	vector<int> bwrite; /* If surface wants data writing */
+    /* OpenFOAM files */
+    std::string foamdir, foamsol;
+    int isBinary, buoyantSim, incomp, labelSize, scalarSize;
+    
+    /* TAU files */
+    std::string taumesh, taubmap, tausol;
+    int offset_axis;
+    real angle_alpha;
+    vector<int> markers;
+    vector<string> bnames;
+    vector<int> bwrite; /* If surface wants data writing */
 
-	/* TECIO File outputs */
-	void* boundFile; /*TECIO file handles*/
-	void* fuelFile;
-	void* ghostFile;
-	vector<int32_t> varTypes;
+    /* TECIO File outputs */
+    void* boundFile; /*TECIO file handles*/
+    void* fluidFile;
+    void* ghostFile;
+    vector<int32_t> varTypes;
+    std::string output_names;   	/**< Names of variables to output */
+    std::vector<uint> outvar; 	/**< Variables to output */
+    std::vector<int32_t> var_types; /**< Data types for output */
+    std::string var_names;      /**< Variable names for tecplot output */
 
-	ofstream surfacefile; /* Surface impact file */
-	void* surfaceHandle;
+    ofstream surfacefile; /* Surface impact file */
+    void* surfaceHandle;
 
-	/* Output type */
-	uint out_encoding;              /*ASCII or binary output*/
-	uint outform, gout;   			/*Output type.*/
+    /* Output type */
+    uint out_encoding;              /* ASCII or binary output*/
+    uint gout;                      /* Output type.*/
+    uint single_file;               /* Use single file or not for output */
 
-	uint restart;					/* If starting from existing solution */
-	real scale;						/* Simulation scale */
+    uint restart;					/* If starting from existing solution */
+    real scale;						/* Simulation scale */
 
-	/* SPHPart counts */
-	size_t partID;                   /* Track the particle ID separately */
-	size_t totPts;					 /* Total count */
-	size_t simPts;					 /* Fluid count */
-	size_t bndPts;			 		 /* Boundary count */
-	size_t gstPts;                   /* Ghost count */
-	size_t finPts;					 /* End count */
-	size_t psnPts;					 /* Piston count */
-	size_t delNum;                   /* Number of deleted particles */
-	size_t intNum;                   /* Number of internal particles */
-	size_t nrefresh; 				 /* last add call particle number */
-	uint addcount;					 /* Current Number of add-particle calls */
+    /* SPHPart counts */
+    size_t nbound;					 /* Number of boundary blocks */ 
+    size_t nfluid;					 /* Number of fluid blocks */
+    size_t partID;                   /* Track the particle ID separately */
+    size_t totPts;					 /* Total count */
+    size_t simPts;					 /* Fluid count */
+    size_t bndPts;			 		 /* Boundary count */
+    size_t gstPts;                   /* Ghost count */
+    size_t finPts;					 /* End count */
+    size_t psnPts;					 /* Piston count */
+    size_t delNum;                   /* Number of deleted particles */
+    size_t intNum;                   /* Number of internal particles */
+    size_t nrefresh; 				 /* last add call particle number */
+    uint addcount;					 /* Current Number of add-particle calls */
 
-	/* Particle size value */
-	real Pstep, Bstep, dx;			 /* Initial spacings for particles and boundary */
+    /* Particle size value */
+    real Pstep, Bstep, dx;			 /* Initial spacings for particles and boundary */
 
-	/* Geometry parameters */
-	string start_type, bound_type;
-	int Scase, Bcase;				  /* What initial shape to take */
-	StateVecD sim_start, bound_start; /* Starting coordinates (For box, bottom left) */
-	int Bclosed, ghost;		  		  /* If the jet is closed or not */
-	int Asource;                      /* Source of aerodynamic solution */
-	int init_hydro_pressure;          /* Initialise fluid with hydrostatic pressure? */
-	real hydro_height;                /* Hydrostatic height to initialise using */
+    /* Geometry parameters */
+    string start_type, bound_type;
+    int Scase, Bcase;				  /* What initial shape to take */
+    StateVecD sim_start, bound_start; /* Starting coordinates (For box, bottom left) */
+    int Bclosed, ghost;		  		  /* If the jet is closed or not */
+    int Asource;                      /* Source of aerodynamic solution */
+    int init_hydro_pressure;          /* Initialise fluid with hydrostatic pressure? */
+    int use_global_gas_law;			  /* Whether to use block specific gas laws (Currently not active) */
+    real hydro_height;                /* Hydrostatic height to initialise using */
 
-	/* Jet geometry parameters */
-	real jet_diam;			        /* Jet diameter */
-	real jet_depth;					/* Jet depth down - recommended > diam */
-	StateVecD Angle;				/* Rotations in degrees */
-	StateMatD Rotate;				/* Starting rotation matrix */ 
-	StateMatD Transp;               /* Transpose of rotation matrix */
-	real diam;                      /* Droplet diameter */
-	uint nrad;                      /* Points along the radius of the jet/droplet */
-	/* Box geometry parameters */
-	StateVecI xyPART; 				/* Starting sim particles in x and y box */
-	StateVecD sim_box, bound_box;	/* Box dimensions */
-	
-	/* Integration parameters */	
-	uint subits;                    /* Max number of sub-iterations */
-	uint Nframe; 			        /* Max number of frames to output */
-	uint frame;						/* Current frame number */
-	uint bound_solver;              /* Use boundary pressure or ghost particles */
-	double cfl;                     /* CFL criterion number */
-	double t;                       /* Simulation time */
-	real dt, framet;			    /* Timestep, frame times */
-	real dt_max;					/* Maximum timestep */
-	real dt_min;					/* Minimum timestep */
-	real beta, gamma;				/* Newmark-Beta Parameters */
-	real maxmu;                     /* Maximum viscosity component (CFL) */
-	StateVecD grav;                 /* Gravity vector (assumed to be on z-axis) */
+    /* Jet geometry parameters */
+    real jet_diam;			        /* Jet diameter */
+    real jet_depth;					/* Jet depth down - recommended > diam */
+    StateVecD Angle;				/* Rotations in degrees */
+    StateMatD Rotate;				/* Starting rotation matrix */ 
+    StateMatD Transp;               /* Transpose of rotation matrix */
+    real diam;                      /* Droplet diameter */
+    uint nrad;                      /* Points along the radius of the jet/droplet */
+    /* Box geometry parameters */
+    StateVecI xyPART; 				/* Starting sim particles in x and y box */
+    StateVecD sim_box, bound_box;	/* Box dimensions */
+    
+    /* Integration parameters */	
+    string solver_name;             /* Name of solver */
+    uint solver_type;               /* Use Runge-Kutta or Newmark-Beta */
+    uint subits;                    /* Max number of sub-iterations */
+    uint Nframe; 			        /* Max number of frames to output */
+    uint frame;						/* Current frame number */
+    uint bound_solver;              /* Use boundary pressure or ghost particles */
+    uint nStable;                   /* Count for number of overly stable timesteps to alter CFL */
+    uint nStable_Limit;             /* Limit before changing CFL */
+    uint nUnstable;                 /* Count for number of unstable timestep to alter CFL */
+    uint nUnstable_Limit;           /* Limit before changing CFL */
+    real subits_factor;             /* How many less than the limit to try a higher CFL */
+    double cfl;                     /* CFL criterion number */
+    double cfl_step;                /* CFL step to perform if unstable */
+    double cfl_max;                 /* Maximum CFL for the simulation */
+    double cfl_min;                 /* Minimum CFL for the simulation */
+    double t;                       /* Simulation time */
+    double tframem1;				/* Last written frame time */
+    real minRes;                    /* Minimum solver residual */
+    real dt, framet;			    /* Timestep, frame times */
+    real dt_max;					/* Maximum timestep */
+    real dt_min;					/* Minimum timestep */
+    real beta, gamma;				/* Newmark-Beta Parameters */
+    real maxmu;                     /* Maximum viscosity component (CFL) */
+    real maxshift;					/* Maximum shifting velocity */
+    StateVecD grav;                 /* Gravity vector (assumed to be on z-axis) */
 
-	uint framecount;                /* How many frames have been output */
-	vector<size_t> back;            /* Particles at the back of the pipe */
-	vector<vector<size_t>> buffer;  /* ID of particles inside the buffer zone */
+    uint framecount;                /* How many frames have been output */
+    real restart_tol;               /* Tolerance on buffer particles fitting*/
 
-	#if SIMDIM == 3
-		string vlm_file;
-		VLM vortex;
-	#endif
-	StateVecD Force, AForce;					/*Total Force*/
-	real mass;
-	real tMom, aMom;
-	
-	/* Particle tracking settings */
-	int using_ipt;
-	int eqOrder;
-	real max_x_sph, max_x; /* Transition distance for sph (naive assumption) and termination for IPT */
-	size_t nSuccess, nFailed;
-	real IPT_diam, IPT_area;
-	uint cellsout, streakout, partout; /* Whether to output for particle tracking */
-	ofstream cellfile, streakfile, partfile; /* File handles for particle tracking */
-	void* cellHandle; /*TECIO file handles*/
-	void* streakHandle;
-	void* partHandle;
+    string vlm_file;
 
-	/* Droplet sweep parameters */
-	int dropDragSweep;
-	vector<size_t> nacross;
-	vector<real> diameters;
-	vector<real> velocities;
-	vector<real> Reynolds;
+    StateVecD Force, AForce;		/*Total Force*/
+    real mass;
+    real tMom, aMom;
+    
+    /* Particle tracking settings */
+    int using_ipt;
+    int eqOrder;
+    real max_x_sph, max_x; /* Transition distance for sph (naive assumption) and termination for IPT */
+    size_t nSuccess, nFailed;
+    real IPT_diam, IPT_area;
+    real relax, nrelax; // Relaxation parameters
+    uint cellsout, streakout, partout; /* Whether to output for particle tracking */
+    FILE* cellfile; 
+    FILE* streakfile;
+    FILE* partfile; /* File handles for particle tracking */
+    void* cellHandle; /*TECIO file handles*/
+    void* streakHandle;
+    void* partHandle;
 
-	/*Post Processessing settings*/
-	uint afterSim;
-	uint sliceOrSet;
-	StateVecD planeOrigin, planeNorm; /* Plane conditions if in 3D */
-	real cellSize;				      /* Size of each cell to make */
-	StateVecD maxC, minC;			  /* Max and min coords to make grid */
-	uint numVars, wrongDim;
-	real postRadius;
+    /* Droplet sweep parameters */
+    int dropDragSweep;
+    vector<size_t> nacross;
+    vector<real> diameters;
+    vector<real> velocities;
+    vector<real> Reynolds;
+
+    /* Speed test options */
+    int speedTest;
+    int nRuns;
+
+    /*Post Processessing settings*/
+    uint afterSim;
+    uint sliceOrSet;
+    StateVecD planeOrigin, planeNorm; /* Plane conditions if in 3D */
+    real cellSize;				      /* Size of each cell to make */
+    StateVecD maxC, minC;			  /* Max and min coords to make grid */
+    uint numVars, wrongDim;
+    real postRadius;
 };
 
 /*Fluid and smoothing parameters*/
 struct FLUID 
 {
-	// EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-	/* Add default values */
-	FLUID()
-	{
-		H = -1;
-		HSQ = -1;
-		sr = -1;
-		Hfac = 2;
-		Wdx = -1;
+    // EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    /* Add default values */
+    FLUID()
+    {
+        H = -1.0;
+        HSQ = -1.0;
+        sr = -1.0;
+        Hfac = 2.0;
+        Wdx = -1.0;
 
-		rho0 = 1000;
-		rhoJ = 1000;
-		pPress = 0;
-		rhoMax = 1500;	/* Allow a large variation by default */
-		rhoMin = 500;	/* making it essentially unbounded other */
-		rhoVar = 50.0;	/* than truly unphysical pressures */
+        rho0 = 1000.0;
+        rhoJ = 1000.0;
+        pPress = 0.0;
+        backP = 0.0;
+        rhoMax = 1500;	/* Allow a large variation by default */
+        rhoMin = 500;	/* making it essentially unbounded other */
+        rhoVar = 50.0;	/* than truly unphysical pressures */
 
-		alpha = 0.1;
-		Cs = 300;
-		mu = 8.94e-4;
-		nu = mu/rho0;
-		sig = 0.0708;
-		gam = 7; B = -1;
-		contangb = 150;
-		delta = 0.1;
-	}
-	real H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
-	real Hfac;
-	real Wdx;                   /*Kernel value at the initial particle spacing distance.*/
-	real rho0, rhoJ; 			/*Resting Fluid density*/
-	real pPress;				/*Starting pressure in pipe*/
-	real rhoMax, rhoMin;			/* Minimum and maximum pressure */
-	real rhoVar;				/* Maximum density variation allowed (in %) */
-	
-	real simM, bndM;			/*SPHPart and boundary masses*/
-	real correc;				/*Smoothing Kernel Correction*/
-	real alpha,Cs,mu,nu;		/*}*/
-	real sig;					/* Fluid properties*/
-	real gam, B; 				/*}*/
-	
-	real contangb;				/*Boundary contact angle*/
-	real resVel;				/*Reservoir velocity*/
-	//real front, height, height0;		/*Dam Break validation parameters*/
+        simM = -1.0;
+        bndM = -1.0;
+        correc = -1.0;
+        alpha = 0.1;
+        Cs = 300.0;
+        mu = 8.94e-4;
+        nu = mu/rho0;
+        sig = 0.0708;
+        gam = 7.0; B = -1.0;
+        contangb = 150.0;
+        resVel = 0.0;
+        delta = 0.1;
+        dCont = -1.0;
+        dMom = -1.0;
+    }
 
-	/*delta SPH terms*/
-	real delta; /*delta-SPH contribution*/
-	real dCont; /*delta-SPH continuity constant term, since density and speed of sound are constant*/
-	real dMom;  /*delta-SPH momentum constant term (dCont * rho0)*/
+    real H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
+    real Hfac;
+    real Wdx;                   /*Kernel value at the initial particle spacing distance.*/
+    real rho0, rhoJ; 			/*Resting Fluid density*/
+    real pPress;				/*Starting pressure in pipe*/
+    real backP;					/* Background pressure */
+    real rhoMax, rhoMin;		/* Minimum and maximum pressure */
+    real rhoVar;				/* Maximum density variation allowed (in %) */
+    
+    real simM, bndM;			/*SPHPart and boundary masses*/
+    real correc;				/*Smoothing Kernel Correction*/
+    real alpha,Cs,mu,nu;		/*}*/
+    real sig;					/* Fluid properties*/
+    real gam, B; 				/*}*/
+    
+    real contangb;				/*Boundary contact angle*/
+    real resVel;				/*Reservoir velocity*/
+    //real front, height, height0;		/*Dam Break validation parameters*/
 
-	// real maxU; /*Maximum particle velocity shift*/ (No longer needed)
+    /*delta SPH terms*/
+    real delta; /*delta-SPH contribution*/
+    real dCont; /*delta-SPH continuity constant term, since density and speed of sound are constant*/
+    real dMom;  /*delta-SPH momentum constant term (dCont * rho0)*/
+
+    // real maxU; /*Maximum particle velocity shift*/ (No longer needed)
 };
 
 /*Aerodynamic Properties*/
 struct AERO
 {
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-	AERO()
-	{
-		useDef = 0;
-		Cf = 1.0/3.0;
-		Ck = 8.0;
-		Cd = 5.0;
-		Cb = 0.5;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    AERO()
+    {
+        useDef = 0;
+        use_dx = 0;
+        Cf = 1.0/3.0;
+        Ck = 8.0;
+        Cd = 5.0;
+        Cb = 0.5;
 
-		qInf = 0.0;
-		vRef = 0.0;
-		pRef = 101353.0;
-		rhog = 1.29251;
-		mug = 1.716e-5;
-		T = 298.0;
-		Rgas = 287.0;
-		gamma = 1.403;
-		sos = sqrt(T*Rgas*gamma);
-		isossqr = 1.0/(sos*sos);
-		MRef = -1.0;
+        qInf = 0.0;
+        vRef = 0.0;
+        pRef = 101353.0;
+        rhog = 1.29251;
+        mug = 1.716e-5;
+        T = 298.0;
+        Rgas = 287.0;
+        gamma = 1.403;
+        sos = sqrt(T*Rgas*gamma);
+        isossqr = 1.0/(sos*sos);
+        MRef = -1.0;
 
-		acase = 0;
-		vStart = StateVecD::Zero();
-		vInf = StateVecD::Zero();
-		vJetMag = -1.0;
-		cutoff = 0.75;
-	}
+        acase = 0;
+        vStart = StateVecD::Zero();
+        vInf = StateVecD::Zero();
+        vJetMag = -1.0;
+        cutoff = 0.75;
+    }
 
-	void GetYcoef(const FLUID& fvar, const real diam)
-	{
-		#if SIMDIM == 3
-			L = diam * std::cbrt(3.0/(4.0*M_PI));
-			aSphere = M_PI*L*L;
-			aPlate = diam*diam;
-		#else
-			L = diam/sqrt(M_PI);
-			aSphere = 2*L;
-			aPlate = diam;
-		#endif
+    void GetYcoef(const FLUID& fvar, const real diam)
+    {
+        #if SIMDIM == 3
+            L = diam * std::cbrt(3.0/(4.0*M_PI));
+            aSphere = M_PI*L*L;
+            aPlate = diam*diam;
+        #else
+            L = diam/sqrt(M_PI);
+            aSphere = 2*L;
+            aPlate = diam;
+        #endif
 
-		td = (2.0*fvar.rho0*pow(L,SIMDIM-1))/(Cd*fvar.mu);
+        td = (2.0*fvar.rho0*pow(L,SIMDIM-1))/(Cd*fvar.mu);
 
-		omega = sqrt((Ck*fvar.sig)/(fvar.rho0*pow(L,SIMDIM))-1.0/pow(td,2.0));
+        omega = sqrt((Ck*fvar.sig)/(fvar.rho0*pow(L,SIMDIM))-1.0/pow(td,2.0));
 
-		tmax = -2.0 *(atan(sqrt(pow(td*omega,2.0)+1)
-						+td*omega) - M_PI)/omega;
+        tmax = -2.0 *(atan(sqrt(pow(td*omega,2.0)+1)
+                        +td*omega) - M_PI)/omega;
 
-		Cdef = 1.0 - exp(-tmax/td)*(cos(omega*tmax)+
-			1/(omega*td)*sin(omega*tmax));
-		ycoef = 0.5*Cdef*(Cf/(Ck*Cb))*(rhog*L)/fvar.sig;
+        Cdef = 1.0 - exp(-tmax/td)*(cos(omega*tmax)+
+            1/(omega*td)*sin(omega*tmax));
+        ycoef = 0.5*Cdef*(Cf/(Ck*Cb))*(rhog*L)/fvar.sig;
 
-		//cout << ycoef << "  " << Cdef << "  " << tmax << "  " << endl;
-	}
-	
-	/*Gissler Parameters*/
-	int useDef;
-	real L;
-	real td;
-	real omega;
-	real tmax;
-	real ycoef;
-	real Cf, Ck, Cd, Cb, Cdef;
+        //cout << ycoef << "  " << Cdef << "  " << tmax << "  " << endl;
+    }
+    
+    /*Gissler Parameters*/
+    int useDef;
+    int use_dx;
+    real L;
+    real td;
+    real omega;
+    real tmax;
+    real ycoef;
+    real Cf, Ck, Cd, Cb, Cdef;
 
-	real pVol;                     /* Volume of a particle */
-	real aSphere;				   /* Area of a sphere/cylinder */
-	real aPlate;                   /* Area of a plate*/
+    real pVol;                     /* Volume of a particle */
+    real aSphere;				   /* Area of a sphere/cylinder */
+    real aPlate;                   /* Area of a plate*/
 
-	/* Gas Properties*/
-	real qInf, vRef, pRef;         /* Reference gas values*/
-	
-	real rhog, mug;
-	real gasM;					   /* A gas particle mass*/
-	real T;						   /* Temperature*/
-	real Rgas;                     /* Specific gas constant*/
-	real gamma;                    /* Ratio of specific heats */
-	real sos;                      /* Speed of sound */
-	real isossqr;				   /* Inverse speed of sound squared */
-	real MRef;    
-	
-	string aero_case;
-	int acase;	                   /* Aerodynamic force case*/
-	StateVecD vStart, vInf;        /* Jet & Freestream velocity*/
-	real vJetMag;
-	real cutoff;				   /* Lambda value cutoff */
+    /* Gas Properties*/
+    real qInf, vRef, pRef;         /* Reference gas values*/
+    
+    real rhog, mug;
+    real gasM;					   /* A gas particle mass*/
+    real T;						   /* Temperature*/
+    real Rgas;                     /* Specific gas constant*/
+    real gamma;                    /* Ratio of specific heats */
+    real sos;                      /* Speed of sound */
+    real isossqr;				   /* Inverse speed of sound squared */
+    real MRef;    
+    
+    string aero_case;
+    int acase;	                   /* Aerodynamic force case*/
+    StateVecD vStart, vInf;        /* Jet & Freestream velocity*/
+    real vJetMag;
+    real cutoff;				   /* Lambda value cutoff */
 };
 
 struct MESH
 {
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-	/*Standard contructor*/
-	MESH():scale(1.0),maxlength(9999999){}
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    /*Standard contructor*/
+    MESH():nPnts(0), nElem(0), nFace(0), nSurf(0), scale(1.0), maxlength(0.0),minlength(9999999.9){}
 
-	inline size_t size()
-	{
-		return nElem;
-	}
+    inline size_t size()
+    {
+        return nElem;
+    }
 
-	inline void alloc(size_t nPnts_, size_t nElem_, size_t nFace_, size_t nSurf_, int Asource )
-	{
-		nPnts = nPnts_; nElem = nElem_; nFace = nFace_; nSurf = nSurf_;
-		verts = vector<StateVecD>(nPnts);
-		faces.reserve(nFace*2);
-		leftright.reserve(nFace);
+    inline void alloc(size_t nPnts_, size_t nElem_, size_t nFace_, size_t nSurf_)
+    {
+        nPnts = nPnts_; nElem = nElem_; nFace = nFace_; nSurf = nSurf_;
+        verts = vector<StateVecD>(nPnts);
+        faces.reserve(nFace*2);
+        leftright.reserve(nFace);
 
-		// elems = vector<vector<size_t>>(nElem);
-		cCentre = vector<StateVecD>(nElem);
-		cFaces = vector<vector<size_t>>(nElem);
+        // elems = vector<vector<size_t>>(nElem);
+        cCentre = vector<StateVecD>(nElem);
+        cFaces = vector<vector<size_t>>(nElem);
 
-		cVel = vector<StateVecD>(nElem);
-		cP = vector<real>(nElem);
-		cRho = vector<real>(nElem);
+        cVel = vector<StateVecD>(nElem);
+        cP = vector<real>(nElem);
+        cRho = vector<real>(nElem);
+    }
 
-		if(Asource == 2)
-		{
-			cVol = vector<real>(nElem);
-			cMass = vector<real>(nElem);
-		}
-	}
+    /*Zone info*/
+    std::string zone;
+    size_t nPnts, nElem, nFace, nSurf;
+    real scale;
 
-	/*Zone info*/
-	std::string zone;
-	size_t nPnts, nElem, nFace, nSurf;
-	real scale;
+    real maxlength;
+    real minlength;
 
-	real maxlength;
+    /*Point based data*/
+    vector<StateVecD> verts;
 
-	/*Point based data*/
-	vector<StateVecD> verts;
+    /*Face based data*/
+    vector<vector<size_t>> faces;
+    vector<std::pair<int,int>> leftright;
+    vector<std::pair<size_t,int>> smarkers;
 
-	/*Face based data*/
-	vector<vector<size_t>> faces;
-	vector<std::pair<int,int>> leftright;
-	vector<std::pair<size_t,int>> smarkers;
+    /*Cell based data*/
+    // vector<vector<size_t>> elems;
+    vector<StateVecD> cCentre;
+    vector<vector<size_t>> cFaces;
 
-	/*Cell based data*/
-	// vector<vector<size_t>> elems;
-	vector<StateVecD> cCentre;
-	vector<vector<size_t>> cFaces;
-
-	/*Solution vectors*/
-	vector<StateVecD> cVel;
-	vector<real> cCp;
-	vector<real> cP;
-	vector<real> cRho;
-	// vector<real> cRho_SPH;
-	
-	// Cell information for the momentum balance
-	vector<StateVecD> cPertn;
-	vector<StateVecD> cPertnp1;
-	vector<real> cVol;
-	vector<real> cMass;
+    /*Solution vectors*/
+    vector<StateVecD> cVel;
+    vector<real> cCp;
+    vector<real> cP;
+    vector<real> cRho;
+    // vector<real> cRho_SPH;
+    
+    // Cell information for the momentum balance
+    vector<StateVecD> cPertn;
+    vector<StateVecD> cPertnp1;
+    // vector<real> cVol;
+    // vector<real> cMass;
 
 
-	vector<size_t> fNum; // number of fuel particles in cell
-	vector<real> fMass;
+    vector<size_t> fNum; // number of fluid particles in cell
+    vector<real> fMass;
 
-	vector<StateVecD> vFn;
-	vector<StateVecD> vFnp1;
+    vector<StateVecD> vFn;
+    vector<StateVecD> vFnp1;
 
 };
 
 /* Structure to track impacts and data for a surface marker of the mesh */
 struct SURF
 {
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-	SURF()
-	{ 
-		marker_count = 0;
-		marker = 0;
-		output = 0;
-	}
+    SURF()
+    { 
+        marker_count = 0;
+        marker_beta = 0.0;
+        marker_area = 0.0;
+        marker = 0;
+        output = 0;
+    }
 
-	SURF(SURF const& in)
-	{
-		name = in.name;
-		marker = in.marker;
-		output = in.output;
-		marker_count = 0;
+    SURF(SURF const& in)
+    {
+        name = in.name;
+        marker = in.marker;
+        output = in.output;
+        marker_count = 0;
 
-		faceIDs = in.faceIDs;
-		face_count = vector<uint>(faceIDs.size(),0);
-	}
+        faceIDs = in.faceIDs;
+        face_count = vector<uint>(faceIDs.size(),0);
+    }
 
-	/* Marker data */
-	string name;
-	int marker;
-	int output;
-	
-	unsigned marker_count;
-	real marker_beta; /* Collision efficiency (same as collection eff) */
-	real marker_area;
-	vector<size_t> marker_pIDs; /* ID for particles that hit the surface */
-	vector<size_t> impacted_face; /* ID of the face the particle hit */
-	vector<StateVecD> end_pos;
-	vector<StateVecD> start_pos;
+    /* Marker data */
+    string name;
+    int marker;
+    int output;
+    
+    unsigned marker_count;
+    real marker_beta; /* Collision efficiency (same as collection eff) */
+    real marker_area;
+    vector<size_t> marker_pIDs; /* ID for particles that hit the surface */
+    vector<size_t> impacted_face; /* ID of the face the particle hit */
+    vector<StateVecD> end_pos;
+    vector<StateVecD> start_pos;
 
-	/* Face data */
-	vector<size_t> faceIDs;
-	vector<uint> face_count;
-	vector<real> face_beta;
-	vector<real> face_area;
-};
-
-
-/*Container for delta-plus SPH calculations*/
-class DELTAP 
-{
-	public: 
-		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-		DELTAP(size_t const& size)
-		{
-			npd = 0.0;
-			L = vector<StateMatD>(size,StateMatD::Zero());
-			gradRho = vector<StateVecD>(size,StateVecD::Zero());
-			norm = vector<StateVecD>(size,StateVecD::Zero());
-			avgV = vector<StateVecD>(size,StateVecD::Zero());
-			
-			lam = vector<real>(size,0.0);
-			lam_nb = vector<real>(size,0.0);
-			lam_ng = vector<real>(size,0.0);
-			kernsum = vector<real>(size,0.0);
-			colour = vector<real>(size,0.0);
-		}
-
-		DELTAP(){}
-
-		inline void realloc(size_t const& size)
-		{
-			if(L.size() != 0)
-				clear();
-
-			alloc(size);
-		}
-
-		inline void update(vector<StateMatD> const& L_, vector<StateVecD> const& gradRho_, 
-			vector<StateVecD> const& norm_, vector<StateVecD> const& avgV_,
-			vector<real> const& lam_, vector<real> const& lam_nb_, vector<real> const& lam_ng_,
-			vector<real> const& kernsum_, vector<real> const& colour_)
-		{
-			L = L_; gradRho = gradRho_; norm = norm_; 
-			avgV = avgV_; lam = lam_; lam_nb = lam_nb_; lam_ng = lam_ng_;
-			kernsum = kernsum_; colour = colour_;
-		}
-
-		inline void clear()
-		{
-			L.clear(); gradRho.clear(); norm.clear(); 
-			avgV.clear(); lam.clear(); lam_nb.clear(); lam_ng.clear();
-			kernsum.clear(); colour.clear();
-
-		}
-
-		inline void erase(size_t const& start, size_t const& end)
-		{
-			L.erase(L.begin()+start, L.begin()+end);
-			gradRho.erase(gradRho.begin()+start, gradRho.begin()+end);
-			norm.erase(norm.begin()+start, norm.begin()+end);
-			avgV.erase(avgV.begin()+start, avgV.begin()+end);
-			lam.erase(lam.begin()+start, lam.begin()+end);
-			lam_nb.erase(lam_nb.begin()+start, lam_nb.begin()+end);
-			lam_ng.erase(lam_ng.begin()+start, lam_ng.begin()+end);
-			kernsum.erase(kernsum.begin()+start, kernsum.begin()+end);
-			colour.erase(colour.begin()+start, colour.begin()+end);
-		}
-
-		real npd;
-
-		vector<StateMatD> L;
-		vector<StateVecD> gradRho;
-		vector<StateVecD> norm;
-		vector<StateVecD> avgV;
-
-		vector<real> lam;		/* Eigenvalues with all particles considered */
-		vector<real> lam_nb; 	/* Eigenvalues without boundary particles (and ghost particles) */
-		vector<real> lam_ng; 	/* Eigenvalues without ghost particles */
-		vector<real> kernsum;	/* Summation of the kernel */
-		vector<real> colour;    /* Kernel sum with volume considered. */
-
-
-	private:
-
-		inline void alloc(size_t const& size)
-		{
-			L = vector<StateMatD>(size);
-			gradRho = vector<StateVecD>(size);
-			norm = vector<StateVecD>(size);
-			avgV = vector<StateVecD>(size);
-			lam = vector<real>(size);
-			lam_nb = vector<real>(size);
-			lam_ng = vector<real>(size);
-			kernsum = vector<real>(size);
-			colour = vector<real>(size);
-		}
-
-
+    /* Face data */
+    vector<size_t> faceIDs;
+    vector<uint> face_count;
+    vector<real> face_beta;
+    vector<real> face_area;
 };
 
 /*SPHPart data class*/
 struct SPHPart 
 {
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-	SPHPart(StateVecD const& X, StateVecD const& Vi, real const Rhoi, real const Mi, 
-		real const press, int const bound, uint const pID)
-	{
-		partID = pID; cellID = 0; faceID = 0;
-		b = bound; surf = 0; nFailed = 0;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    SPHPart(StateVecD const& X, StateVecD const& Vi, real const Rhoi, real const Mi, 
+        real const press, int const bound, uint const pID)
+    {
+        partID = pID; faceID = 0; cellID = -1;
+        b = bound; surf = 0; surfzone = 0; nFailed = 0;
 
-		xi = X;	v = Vi; acc = StateVecD::Zero(); Af = StateVecD::Zero();
-		aVisc = StateVecD::Zero(); norm = StateVecD::Zero();
-		Rrho = 0.0; rho = Rhoi; p = press; m = Mi; 
-		curve = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0; deltaD = 0.0;
-					
-		cellV = StateVecD::Zero();
-		cellP = 0.0; cellRho = 0.0;
-		internal = 0;
+        xi = X;	v = Vi; acc = StateVecD::Zero(); Af = StateVecD::Zero();
+        aVisc = StateVecD::Zero(); norm = StateVecD::Zero();
+        Rrho = 0.0; rho = Rhoi; p = press; m = Mi; 
+        curve = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0; deltaD = 0.0;
+                    
+        cellV = StateVecD::Zero();
+        cellP = 0.0; cellRho = 0.0;
+        internal = 0;
 
-		vPert = StateVecD::Zero(); 
-	}
+        L = StateMatD::Zero(); gradRho = StateVecD::Zero(); norm = StateVecD::Zero();
+        colourG = 0.0; colour = 0.0; lam = 0.0; lam_nb = 0.0; lam_ng = 0.0; kernsum = 0.0;
+        bNorm = StateVecD::Zero(); y = 0.0;
+        vPert = StateVecD::Zero(); 
+    }
 
-	/*To add particles dynamically for fictitious particles*/
-	SPHPart(StateVecD const& X, SPHPart const& pj, int const bound, size_t const pID)
-	{
-		partID = pID; cellID = 0; faceID = 0;
-		b = bound; surf = 0; nFailed = 0;
+    /*To add particles dynamically for fictitious particles*/
+    SPHPart(StateVecD const& X, SPHPart const& pj, int const bound, size_t const pID)
+    {
+        partID = pID; faceID = 0; cellID = -1;
+        b = bound; surf = 0; surfzone = 0; nFailed = 0;
 
-		xi = X;	v = pj.v; acc = StateVecD::Zero(); Af = StateVecD::Zero();
-		aVisc = StateVecD::Zero(); norm = StateVecD::Zero();
-		Rrho = 0.0; rho = pj.rho; p = pj.p; m = pj.m;
-		curve = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0; deltaD = 0.0;
+        xi = X;	v = pj.v; acc = StateVecD::Zero(); Af = StateVecD::Zero();
+        aVisc = StateVecD::Zero(); norm = StateVecD::Zero();
+        Rrho = 0.0; rho = pj.rho; p = pj.p; m = pj.m;
+        curve = 0.0; s = 0.0; woccl = 0.0; pDist = 0.0; deltaD = 0.0;
 
-		cellV = StateVecD::Zero();
-		cellP = pj.cellP; cellRho = pj.cellRho;
-		internal = 0;
+        cellV = StateVecD::Zero();
+        cellP = pj.cellP; cellRho = pj.cellRho;
+        internal = 0;
 
-		vPert = StateVecD::Zero();
-	}
+        L = StateMatD::Zero(); gradRho = StateVecD::Zero(); norm = StateVecD::Zero();
+        colourG = 0.0; colour = 0.0; lam = 0.0; lam_nb = 0.0; lam_ng = 0.0; kernsum = 0.0;
+        bNorm = StateVecD::Zero(); y = 0.0;
+        vPert = StateVecD::Zero();
+    }
 
-	SPHPart(){};
+    SPHPart():partID(0),faceID(0),cellID(-1),b(0),surf(0),surfzone(0),nFailed(0),xi(StateVecD::Zero()),
+         v(StateVecD::Zero()), acc(StateVecD::Zero()), Af(StateVecD::Zero()), aVisc(StateVecD::Zero()),
+         Rrho(0.0),rho(0.0),p(0.0),m(0.0),curve(0.0),s(0.0),woccl(0.0),pDist(0.0),deltaD(0.0),
+         cellV(StateVecD::Zero()),cellP(0.0),cellRho(0.0),internal(0),
+         L(StateMatD::Zero()), gradRho(StateVecD::Zero()), norm(StateVecD::Zero()),  
+         colourG(0.0), colour(0.0), lam(0.0), lam_nb(0.0), lam_ng(0.0), kernsum(0.0),
+         bNorm(StateVecD::Zero()),y(0.0), vPert(StateVecD::Zero()) {};
 
-	inline int size() const
-	{	/*For neighbour search, return size of xi vector*/
-		return(xi.size());
-	}
 
-	inline real operator[](int a) const
-	{	/*For neighbour search, return index of xi vector*/
-		return(xi[a]);
-	}
+    inline int size() const
+    {	/*For neighbour search, return size of xi vector*/
+        return(xi.size());
+    }
 
-	size_t partID, cellID, faceID;
-	uint b; //What state is a particle. See PartState above for possible options
-	uint surf; /*Is a particle a surface? 1 = yes, 0 = no*/
-	uint surfzone; /* Is particle in the surface area? */
-	uint nFailed; /* How many times has the containment query failed */
-	StateVecD xi, v, acc, Af, aVisc;
-	real Rrho, rho, p, m, curve, s, woccl, pDist, deltaD;
-	StateVecD norm;
-	StateVecD cellV;
-	real cellP, cellRho;
-	uint internal; 
+    inline real operator[](int a) const
+    {	/*For neighbour search, return index of xi vector*/
+        return(xi[a]);
+    }
 
-	/*Mesh surface repulsion */
-	StateVecD bNorm;
-	real y;
-	
-	StateVecD vPert;		
+    size_t partID, faceID;
+    long int cellID; // Make it signed so that it can be used for checks.
+    uint b; //What state is a particle. See PartState above for possible options
+    uint surf; /*Is a particle a surface? 1 = yes, 0 = no*/
+    uint surfzone; /* Is particle in the surface area? */
+    uint nFailed; /* How many times has the containment query failed */
+
+    StateVecD xi, v, acc, Af, aVisc;
+    real Rrho, rho, p, m, curve, s, woccl, pDist, deltaD;
+    StateVecD cellV;
+    real cellP, cellRho;
+    uint internal; 
+
+    StateMatD L;
+    StateVecD gradRho;
+    StateVecD norm;
+
+    real colourG;
+    real colour;    /* Kernel sum with volume considered. */
+    real lam;		/* Eigenvalues with all particles considered */
+    real lam_nb; 	/* Eigenvalues without boundary particles (and ghost particles) */
+    real lam_ng; 	/* Eigenvalues without ghost particles */
+    real kernsum;	/* Summation of the kernel */
+
+    /*Mesh surface repulsion */
+    StateVecD bNorm;
+    real y;
+    
+    StateVecD vPert;		
 };
 
 struct IPTPart
 {
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-	IPTPart()
-	{
-		partID = 0;
-		going = 1;
-		nIters = 0;
-		failed = 0;
-		t = 0; dt = 0;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    IPTPart()
+    {
+        partID = 0;
+        going = 1;
+        nIters = 0;
+        failed = 0;
+        t = 0; dt = 0;
 
-		/* Set initial IDs to a nonsense value, so that they don't interfere */
-		faceID = -1; 
-		faceV = StateVecD::Zero();
-		faceRho = 0.0;
-	
-		cellID = -3;
-		cellV = StateVecD::Zero();
-		cellRho = 0.0; 
-			
-		acc = 0.0;
-		v = StateVecD::Zero();
-		xi = StateVecD::Zero();
-		
-		mass = 0.0;
-		d = 0.0;
-		A = 0.0;
-	}
+        /* Set initial IDs to a nonsense value, so that they don't interfere */
+        faceID = -1; 
+        faceV = StateVecD::Zero();
+        faceRho = 0.0;
+    
+        cellID = -3;
+        cellV = StateVecD::Zero();
+        cellRho = 0.0; 
+            
+        acc = 0.0;
+        relax = 1.0;
+        v = StateVecD::Zero();
+        xi = StateVecD::Zero();
+        
+        mass = 0.0;
+        d = 0.0;
+        A = 0.0;
+    }
 
-	IPTPart(StateVecD const xi_, real const mass_, real const d_)
-	{
-		partID = 0;
-		going = 1;
-		nIters = 0;
-		failed = 0;
-		t = 0; dt = 0;
+    IPTPart(StateVecD const xi_, real const mass_, real const d_)
+    {
+        partID = 0;
+        going = 1;
+        nIters = 0;
+        failed = 0;
+        t = 0; dt = 0;
 
-		/* Set initial IDs to a nonsense value, so that they don't interfere */
-		faceID = -1; 
-		faceV = StateVecD::Zero();
-		faceRho = 0.0;
-	
-		cellID = -3;
-		cellV = StateVecD::Zero();
-		cellRho = 0.0; 
-			
-		acc = 0.0;
-		v = StateVecD::Zero();
-		xi = xi_;
-		
-		mass = mass_;
-		d = d_;
-		A = M_PI * d_*d_/4.0; 
-	}
+        /* Set initial IDs to a nonsense value, so that they don't interfere */
+        faceID = -1; 
+        faceV = StateVecD::Zero();
+        faceRho = 0.0;
+    
+        cellID = -3;
+        cellV = StateVecD::Zero();
+        cellRho = 0.0; 
+            
+        acc = 0.0;
+        relax = 1.0;
+        v = StateVecD::Zero();
+        xi = xi_;
+        
+        mass = mass_;
+        d = d_;
+        A = M_PI * d_*d_/4.0; 
+    }
 
-	IPTPart(StateVecD const xi_, IPTPart const& pi_, size_t const& pID_)
-	{
-		partID = pID_;
-		going = 1;
-		nIters = 0;
-		failed = 0;
-		t = 0; dt = 0;
+    IPTPart(StateVecD const xi_, IPTPart const& pi_, size_t const& pID_)
+    {
+        partID = pID_;
+        going = 1;
+        nIters = 0;
+        failed = 0;
+        t = 0; dt = 0;
 
-		/* Set initial IDs to a nonsense value, so that they don't interfere */
-		faceID = -1; 
-		faceV = StateVecD::Zero();
-		faceRho = 0.0;
-	
-		cellID = pi_.cellID;
-		cellV = pi_.cellV; 
-		cellRho = pi_.cellRho; 
-			
-		acc = pi_.acc;
-		v = pi_.v;
-		xi = xi_;
-		
-		mass = pi_.mass;
-		d = pi_.d;
-		A = pi_.A; 
-	}
+        /* Set initial IDs to a nonsense value, so that they don't interfere */
+        faceID = -1; 
+        faceV = StateVecD::Zero();
+        faceRho = 0.0;
+    
+        cellID = pi_.cellID;
+        cellV = pi_.cellV; 
+        cellRho = pi_.cellRho; 
+            
+        acc = pi_.acc;
+        relax = pi_.relax;
+        v = pi_.v;
+        xi = xi_;
+        
+        mass = pi_.mass;
+        d = pi_.d;
+        A = pi_.A; 
+    }
 
-	IPTPart(SPHPart const& pi, real const& time, real const& diam, real const& area)
-	{
-		partID = pi.partID;
-		going = 1;
-		nIters = 0;
-		failed = 0;
-		t = time; dt = 0;
+    IPTPart(SPHPart const& pi, real const& time, real const& diam, real const& area)
+    {
+        partID = pi.partID;
+        going = 1;
+        nIters = 0;
+        failed = 0;
+        t = time; dt = 0;
 
-		/* Set initial IDs to a nonsense value, so that they don't interfere */
-		faceID = -1; 
-		faceV = StateVecD::Zero();
-		faceRho = 0.0;
+        /* Set initial IDs to a nonsense value, so that they don't interfere */
+        faceID = -1; 
+        faceV = StateVecD::Zero();
+        faceRho = 0.0;
 
-		/* Make the current values the same as those of the SPH particle */
-		cellID = pi.cellID;
-		cellV = pi.cellV; 
-		cellRho = pi.cellRho; 
+        /* Make the current values the same as those of the SPH particle */
+        cellID = pi.cellID;
+        cellV = pi.cellV; 
+        cellRho = pi.cellRho; 
 
-		acc = 0.0;
-		v = pi.v;
-		xi = pi.xi;
-		
-		mass = pi.m;
-		/* Derive diameter and area from the mass and resting density */
-		d = diam;
-		A = area;
-	}
+        acc = 0.0;
+        relax = 1.0;
+        v = pi.v;
+        xi = pi.xi;
+        
+        mass = pi.m;
+        /* Derive diameter and area from the mass and resting density */
+        d = diam;
+        A = area;
+    }
 
-	size_t partID;
-	uint going; /* Is particle still being integrated */
-	uint nIters; /* How many integration steps it's gone through */
-	size_t failed;
+    void reset(SPHPart const& pi, real const& time)
+    {
+        partID = pi.partID;
+        going = 1;
+        nIters = 0;
+        failed = 0;
+        t = time; dt = 0;
 
-	/* Timestep properties */
-	real t, dt;
+        /* Set initial IDs to a nonsense value, so that they don't interfere */
+        faceID = -1; 
+        faceV = StateVecD::Zero();
+        faceRho = 0.0;
 
-	/* Face properties */
-	uint faceID;
-	StateVecD faceV;
-	real faceRho;
+        /* Make the current values the same as those of the SPH particle */
+        cellID = pi.cellID;
+        cellV = pi.cellV; 
+        cellRho = pi.cellRho; 
 
-	/* Containing cell properties */
-	uint cellID;
-	StateVecD cellV;
-	real cellRho;
+        acc = 0.0;
+        relax = 1.0;
+        v = pi.v;
+        xi = pi.xi;
+    }
 
-	real acc; /* Implicit acceleration */
-	StateVecD v, xi; /* State variables */
+    size_t partID;
+    uint going; /* Is particle still being integrated */
+    uint nIters; /* How many integration steps it's gone through */
+    size_t failed;
 
-	real mass; /* SPHPart mass */
-	real d, A; /* SPHPart diameter and area */
+    /* Timestep properties */
+    real t, dt;
+
+    /* Face properties */
+    uint faceID;
+    StateVecD faceV;
+    real faceRho;
+
+    /* Containing cell properties */
+    long int cellID;
+    StateVecD cellV;
+    real cellRho;
+
+    real acc; /* Implicit acceleration */
+    real relax;
+    StateVecD v, xi; /* State variables */
+
+    real mass; /* SPHPart mass */
+    real d, A; /* SPHPart diameter and area */
 };
 
+// Structure to define the inlet and outlet conditions for either fluid or boundaries
+struct bound_block
+{
+    bound_block(size_t const& a) // Initialise starting index only first
+    {
+        index.first = a;
+        delete_norm = StateVecD::Constant(default_val);
+        delconst = default_val;
+        insert_norm = StateVecD::Constant(default_val);
+        insconst = default_val;
+        aero_norm = StateVecD::Constant(default_val);
+        aeroconst = default_val;
+        nTimes = 0;
+        fixed_vel_or_dynamic = 0;
+        hcpl = 0;
+        bound_solver = 0;
+        no_slip = 0;
+        block_type = 0;
 
+    }
+
+    bound_block(size_t const& a, size_t const& b)
+    {
+        index.first = a;
+        index.second = b;
+        delete_norm = StateVecD::Constant(default_val);
+        delconst = default_val;
+        insert_norm = StateVecD::Constant(default_val);
+        insconst = default_val;
+        aero_norm = StateVecD::Constant(default_val);
+        aeroconst = default_val;
+        nTimes = 0;
+        fixed_vel_or_dynamic = 0;
+        hcpl = 0;
+        bound_solver = 0;
+        no_slip = 0;
+        block_type = 0;
+    }
+
+    string name;
+    std::pair<size_t,size_t> index;
+    
+    StateVecD delete_norm; // Deletion plane
+    real delconst;
+    StateVecD insert_norm; // Insertion plane
+    real insconst;
+    StateVecD aero_norm;
+    real aeroconst;
+
+    vector<size_t> back;            /* Particles at the back of the pipe */
+    vector<vector<size_t>> buffer;  /* ID of particles inside the buffer zone */
+
+    vector<real> times;
+    vector<StateVecD> vels;
+
+    size_t nTimes;
+    int fixed_vel_or_dynamic; //Used for inlets, but also for boundaries to identify if moving or static
+    int hcpl;
+    int no_slip;
+    int bound_solver;
+    int block_type;
+};
+
+typedef std::vector<bound_block> LIMITS;
 typedef std::vector<SPHPart> SPHState;
 typedef std::vector<IPTPart> IPTState;
 typedef std::vector<SURF> SURFS;
@@ -917,17 +1029,17 @@ typedef std::vector<std::vector<size_t>> celll;
 typedef KDTreeVectorOfVectorsAdaptor<SPHState,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Sim_Tree;
 typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Vec_Tree;
 
-struct KDTREE
-{
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+// struct KDTREE
+// {
+// 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-	KDTREE(SPHState const& pnp1, MESH const& cells): NP1(SIMDIM,pnp1,20), 
-	CELL(SIMDIM,cells.cCentre,20)/* , BOUNDARY(SIMDIM,cells.bVerts,20) */ {}
+// 	KDTREE(SPHState const& pnp1, MESH const& cells): NP1(SIMDIM,pnp1,20), 
+// 	CELL(SIMDIM,cells.cCentre,20)/* , BOUNDARY(SIMDIM,cells.bVerts,20) */ {}
 
-	Sim_Tree NP1;
-	Vec_Tree CELL;
-	// Vec_Tree BOUNDARY;	
+// 	Sim_Tree NP1;
+// 	Vec_Tree CELL;
+// 	// Vec_Tree BOUNDARY;	
 
-};
+// };
 
 #endif /* VAR_H */

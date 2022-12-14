@@ -170,7 +170,7 @@ void generateRandomPointCloud_Orient(PointCloud_Orient<T> &point, const size_t N
 	}
 }
 
-void dump_mem_usage()
+inline void dump_mem_usage()
 {
 	FILE* f = fopen("/proc/self/statm","rt");
 	if (!f) return;

@@ -1,14 +1,17 @@
 #include "Convert.h"
-
+#include <cmath>
+#include <algorithm>
+#include <omp.h>
+#include <TECIO.h>
 
 /*Define Simulation Dimension*/
-#ifndef SIMDIM
 #define SIMDIM 2
-#endif
+
+using namespace netCDF;
 
 /****** Eigen vector definitions ************/
-typedef Eigen::Matrix<real,SIMDIM,1> StateVecD;
-typedef Eigen::Matrix<int,SIMDIM,1> StateVecI;
+typedef std::array<real,2> StateVecD;
+typedef std::array<int,2> StateVecI;
 
 typedef struct FACE
 {
@@ -101,8 +104,8 @@ int Distance(vector<StateVecD> const &verts, std::pair<size_t, size_t> const &ed
     real  ty, tx;
     StateVecD vtx0, vtx1;
 
-    tx = verts[point](0);
-    ty = verts[point](1);
+    tx = verts[point][0];
+    ty = verts[point][1];
 
     vtx0 = verts[edge.first];
     vtx1 = verts[edge.second];
@@ -235,62 +238,128 @@ vector<int> Find_Bmap_Markers(const string& bmapIn, int& symPlane1, int& symPlan
 }
 
 /*To run on the mesh file*/
-vector<StateVecD> Get_Coordinates(int& fin, size_t const& nPnts, vector<uint> const& ptIndex)
+vector<std::array<real,2>> Get_Coordinates(int& fin, size_t const& nPnts, vector<uint> const& ptIndex)
 {
 	#ifdef DEBUG
 		dbout << "Reading coordinates." << endl;
 	#endif
 
-	vector<Eigen::Matrix<real,3,1>> coords = Get_Coordinate_Vector(fin, nPnts);
+	vector<std::array<real,3>> coords = Get_Coordinate_Vector(fin, nPnts);
 	/*Need to find which coordinate to ignore*/
 	#ifdef DEBUG
 		dbout << "Checking which dimension to ignore" << endl;
 	#endif
 	double tolerance = 1e-6;
 
-	uint counts[3] = {0};
+	uint counts1[3] = {0};
+	uint counts2[3] = {0};
+	uint counts3[3] = {0};
+	std::array<real,3> point1(coords[0]);
 
 	#pragma omp parallel for
 	for(auto const ii : ptIndex)
 	{
-		if (abs(coords[ii](0)) < tolerance || 
-			(abs(coords[ii](0)) < 1 + tolerance && abs(coords[ii](0)) > 1 - tolerance))
+		/* x plane */
+		if (abs(coords[ii][0]) < tolerance) 
 		{
 			#pragma omp atomic
-			counts[0]++;
+			counts1[0]++;
 		}
 
-		if (abs(coords[ii](1)) < tolerance || 
-			(abs(coords[ii](1)) < 1 + tolerance && abs(coords[ii](1)) > 1 - tolerance))
+		if(abs(abs(coords[ii][0])-1.0) < tolerance)
 		{
 			#pragma omp atomic
-			counts[1]++;
+			counts2[0]++;
 		}
 
-		if (abs(coords[ii](2)) < tolerance || 
-			(abs(coords[ii](2)) < 1 + tolerance && abs(coords[ii](2)) > 1 - tolerance))
+		if(abs(coords[ii][0]-point1[0]) < tolerance)
 		{
 			#pragma omp atomic
-			counts[2]++;
+			counts3[0]++;
+		}
+
+		/*  y plane */
+		if (abs(coords[ii][1]) < tolerance)
+		{
+			#pragma omp atomic
+			counts1[1]++;
+		}
+
+		if(abs(abs(coords[ii][1])-1.0) < tolerance)
+		{
+			#pragma omp atomic
+			counts2[1]++;
+		}
+
+		if(abs(coords[ii][1]-point1[1]) < tolerance)
+		{
+			#pragma omp atomic
+			counts3[1]++;
+		}		
+
+		/* z plane */
+		if (abs(coords[ii][2]) < tolerance)
+		{
+			#pragma omp atomic
+			counts1[2]++;
+		}
+
+		if(abs(abs(coords[ii][2])-1.0) < tolerance)
+		{
+			#pragma omp atomic
+			counts2[2]++;
+		}
+
+		if(abs(coords[ii][2]-point1[2]) < tolerance)
+		{
+			#pragma omp atomic
+			counts3[2]++;
 		}
 
 	}
 
-	uint ignore=0;
+	uint ignore1 = 0;
+	uint ignore2 = 0;
+	uint ignore3 = 0;
 
-	if (counts[0] == nPnts/2)
-		ignore = 1;
-	else if (counts[1] == nPnts/2)
-		ignore = 2;
-	else if (counts[2] == nPnts/2)
-		ignore = 3;
+	if (counts1[0] == nPnts/2)
+		ignore1 = 1;
+	else if (counts1[1] == nPnts/2)
+		ignore1 = 2;
+	else if (counts1[2] == nPnts/2)
+		ignore1 = 3;
+
+	if(counts2[0] == nPnts/2)
+		ignore2 = 1;
+	else if (counts2[1] == nPnts/2)
+		ignore2 = 2;
+	else if (counts2[2] == nPnts/2)
+		ignore2 = 3;
+
+	if(counts3[0] == nPnts/2)
+		ignore3 = 1;
+	else if (counts3[1] == nPnts/2)
+		ignore3 = 2;
+	else if (counts3[2] == nPnts/2)
+		ignore3 = 3;
+
 
 	// cout << counts[0] << "  " << counts[1] << "  " << counts[2] << endl;
-	if(ignore == 0)
+	if(ignore1 == 0 && ignore2 == 0 && ignore3 == 0)
 	{
 		cout << "Couldn't determine which dimension is false." << endl;
 		exit(-1);
 	}
+
+	/* Default to plane = 0, and if not then use subsequent  */
+	uint ignore = 0;
+
+	if(ignore1 != 0)
+		ignore = ignore1;
+	else if (ignore2 != 0)
+		ignore = ignore2;
+	else if (ignore3 != 0)
+		ignore = ignore3;	
 
 	#ifdef DEBUG
 		dbout << "Ignored dimension: " << ignore << endl;
@@ -302,11 +371,11 @@ vector<StateVecD> Get_Coordinates(int& fin, size_t const& nPnts, vector<uint> co
 	for (auto const& ii : ptIndex)
 	{
 		if (ignore == 1)
-			coordVec[ii] = StateVecD(coords[ii](1), coords[ii](2));
+			coordVec[ii] = StateVecD{coords[ii][1], coords[ii][2]};
 		else if (ignore == 2)
-			coordVec[ii] = StateVecD(coords[ii](0), coords[ii](2));
+			coordVec[ii] = StateVecD{coords[ii][0], coords[ii][2]};
 		else if (ignore == 3)
-			coordVec[ii] = StateVecD(coords[ii](0), coords[ii](1));
+			coordVec[ii] = StateVecD{coords[ii][0], coords[ii][1]};
 	}
 
 
@@ -444,8 +513,7 @@ void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers,
 		fdata.faces = symFace1;
 		ptIndex = index1;
 	}
-
-	if (*max2+1 == nPnts/2)
+	else // if (*max2+1 == nPnts/2)
 	{
 		cout << "Using the second symmetry plane" << endl;
 		std::sort(index2.begin(), index2.end());
@@ -1016,8 +1084,8 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 
 	for(uint ii = 0; ii < edata.nPnts; ++ii)
 	{
-		x[ii] = edata.verts[ii](0);
-		z[ii] = edata.verts[ii](1);
+		x[ii] = edata.verts[ii][0];
+		z[ii] = edata.verts[ii][1];
 	}
 
 	/*Put them in the file*/
@@ -1034,6 +1102,225 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 		ERR(retval);
 		exit(-1);
 	}
+}
+
+
+void Write_Real_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
+						vector<real> const& varVec, string const& varName)
+{
+	int retval;
+	#if FOD == 1
+		retval =  tecZoneVarWriteDoubleValues(fileHandle, outputZone, varCount, 0, size, &varVec[0]);
+	#else
+		retval =  tecZoneVarWriteFloatValues(fileHandle, outputZone, varCount, 0, size, &varVec[0]);
+	#endif	
+
+	if(retval)
+	{
+		cout << "Failed to write \"" << varName << "\". frame: " << 
+			outputZone << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	varCount++;
+}
+
+void Write_Int_Vector(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
+						vector<int32_t> const& varVec, string const& varName)
+{
+	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varCount, 0, size, &varVec[0]))
+	{
+		cout << "Failed to write \"" << varName << "\". frame: " << 
+			outputZone << ". varCount: " << varCount << endl;
+		exit(-1);
+	}
+	varCount++;
+}
+
+void Write_Edge_Tecplot_Binary(const EDGE& edata)
+{
+	int32_t debug = 0;
+	#ifdef DEBUG
+	debug = 0;
+	#endif
+	string file = "griduns.plt";
+	string varNames = "X,Z";
+	string title = "2D Edge based grid conversion output";
+	string group = "Mesh data";
+	int32_t fileType = 0;
+	int32_t fileFormat = 0;
+	int32_t fileIsDouble = 1;
+
+	if(TECINI142(title.c_str(),varNames.c_str(),file.c_str(),".",
+				&fileFormat,&fileType,&debug,&fileIsDouble))
+	{
+		cout << "Failed to open " << file << endl;
+		exit(-1);
+	}
+
+	int32_t zoneType = 6; /* FE Polygon */	
+	int32_t numNodes = edata.nPnts;
+	int32_t numElems = edata.nElem;
+	int64_t numFaces = edata.nEdge;
+
+	/* Need to find how many face nodes there are */
+	int64_t numFaceNodes = 2*edata.edges.size();
+    double  solTime = 0.0;
+    int32_t strandID = 0;     // Static Zone
+    int32_t unused = 0;       // ParentZone is no longer used
+    int32_t numBoundaryFaces = 0;
+    int32_t numBoundaryConnections = 0;
+    int32_t shareConnectivity = 0;
+
+    if(TECPOLYZNE142(
+        "Polygonal Quad Zone",
+        &zoneType,
+        &numNodes,
+        &numElems,
+        &numFaces,
+        &numFaceNodes,
+        &solTime,
+        &strandID,
+        &unused,
+        &numBoundaryFaces,
+        &numBoundaryConnections,
+        NULL,
+        NULL,  // All nodal variables
+        NULL,
+        &shareConnectivity))
+    {
+        printf("Polyquads: error calling TECPOLYZNE\n");
+        exit(-1);
+    }
+
+	real* x  = new real[edata.nPnts];
+	int32_t nPnts = edata.nPnts;
+	for(uint dim = 0; dim < SIMDIM; ++dim)
+	{
+		#pragma omp parallel for
+		for(size_t ii = 0; ii < edata.nPnts; ++ii)
+			x[ii] = edata.verts[ii][dim];
+
+		string name = "position coordinate " + std::to_string(dim);
+
+		TECDAT142(&nPnts, x, &fileIsDouble);
+	}
+
+	delete[] x;
+
+	int32_t* faceNodes = new int32_t[2*numFaces];
+	int32_t* left = new int32_t[numFaces];
+	int32_t* right = new int32_t[numFaces];
+
+	/*Inform of how many vertices in each face*/
+	for (size_t ii = 0; ii < edata.nEdge; ++ii)
+	{
+		faceNodes[ii*2] = edata.edges[ii].first+1; /*Write face vertex indexes*/
+		faceNodes[ii*2+1] = edata.edges[ii].second+1;
+		left[ii] = edata.celllr[ii].first+1;
+		right[ii] = edata.celllr[ii].second > -1 ? edata.celllr[ii].second+1 : 0;
+	}
+	int32_t faceOffset = edata.nEdge;
+	if(TECPOLYFACE142(
+                &faceOffset,
+                NULL,
+                &faceNodes[0],
+                &left[0],
+                &right[0]))
+	{
+		printf("Error calling TECPOLYFACE\n");
+        exit(-1);
+	}
+
+	delete [] faceNodes;
+	delete [] left;
+	delete [] right;
+
+	if(TECEND142())
+	{
+		printf("Polyquads: error calling TECEND\n");
+        exit(-1);
+	}
+
+}
+
+void Write_Edge_szplt(const EDGE& edata)
+{
+	#if FOD == 1
+		int32_t realType = 2;
+	#else
+		int32_t realType = 1;
+	#endif
+
+	void* fileHandle;
+	int32_t outputZone;
+
+	string file = "griduns.plt";
+	vector<int32_t> varTypes = {realType,realType};
+	string varNames = "X,Z";
+	string title = "2D Edge based grid conversion output";
+	string group = "Mesh data";
+	int32_t fileType = 0;
+	int32_t fileFormat = FILEFORMAT_SZL;
+
+	if(tecFileWriterOpen(file.c_str(),title.c_str(),varNames.c_str(),fileType,fileFormat,1,NULL,&fileHandle))
+	{
+		cout << "Failed to open " << file << endl;
+		exit(-1);
+	}
+	#ifdef DEBUG
+	if(tecFileSetDiagnosticsLevel(fileHandle, 1))
+	{
+		std::cerr << "Failed to set debug option for output file: " << file << endl;
+		exit(-1);
+	}
+	#endif
+
+	vector<int32_t> shareVarFromZone(varTypes.size(),0);
+	vector<int32_t> valueLocation(varTypes.size(),1);
+	vector<int32_t> passiveVarList(varTypes.size(),0);
+ 
+	int32_t zoneType = 6; /* FE Polygon */	
+	int64_t totalNumFaceNodes = 2*edata.edges.size();
+	if(tecZoneCreatePoly(fileHandle,group.c_str(),zoneType,edata.nPnts,edata.nEdge,edata.nElem,
+		totalNumFaceNodes,&varTypes[0],&shareVarFromZone[0],&valueLocation[0],
+		&passiveVarList[0],0,0,0,&outputZone))
+	{
+		std::cerr << "Failed to create polygonal zone." << endl;
+		exit(-1);
+	}
+
+	vector<real> x(edata.nPnts);
+	int32_t var = 1;
+
+	for(uint dim = 0; dim < SIMDIM; ++dim)
+	{
+		#pragma omp parallel for
+		for(size_t ii = 0; ii < edata.nPnts; ++ii)
+			x[ii] = edata.verts[ii][dim];
+
+		string name = "position coordinate " + std::to_string(dim);
+		Write_Real_Vector(fileHandle, outputZone, var, edata.nPnts, x, name);
+	}
+
+	vector<int32_t> faceCounts(edata.edges.size());
+	vector<int32_t> left(edata.edges.size());
+	vector<int32_t> right(edata.edges.size());
+	vector<int32_t> faceNodes(totalNumFaceNodes);
+
+	/*Inform of how many vertices in each face*/
+	for (size_t ii = 0; ii < edata.edges.size(); ++ii)
+	{
+		faceCounts[ii] =  2;
+		faceNodes[ii*2] = edata.edges[ii].first+1; /*Write face vertex indexes*/
+		faceNodes[ii*2+1] = edata.edges[ii].second+1;
+		left[ii] = edata.celllr[ii].first+1;
+		right[ii] = edata.celllr[ii].second > -1 ? edata.celllr[ii].second+1 : 0;
+	}
+
+	tecZoneWritePolyFaces32(fileHandle,outputZone,0,edata.nEdge,&faceCounts[0],
+					&faceNodes[0],&left[0],&right[0],1);
+
+	tecFileWriterClose(&fileHandle);
 }
 
 void Write_Edge_Tecplot(const EDGE& edata)
@@ -1068,7 +1355,7 @@ void Write_Edge_Tecplot(const EDGE& edata)
 	{
 		for(uint ii = 0; ii < edata.verts.size(); ++ii)
 		{
-			fout << std::setw(w) << edata.verts[ii](DIM);
+			fout << std::setw(w) << edata.verts[ii][DIM];
 			newl++;
 
 			if(newl>4)
@@ -1279,7 +1566,7 @@ void Write_griduns(const EDGE& edata)
 
 	for(size_t ii = 0 ; ii < edata.verts.size(); ++ii)
 	{
-		fout << std::setw(8) << ii+1 << std::setw(w) << edata.verts[ii](0) << std::setw(w) << edata.verts[ii](1) << endl;
+		fout << std::setw(8) << ii+1 << std::setw(w) << edata.verts[ii][0] << std::setw(w) << edata.verts[ii][1] << endl;
 	}
 
 	fout.close();
@@ -1348,6 +1635,8 @@ int main (int argc, char** argv)
 	Write_Edge_Data(meshIn,edata);
 
 	// Write_Edge_Tecplot(edata);
+	Write_Edge_Tecplot_Binary(edata);
 	// Write_griduns(edata);
+
 	return 0;
 }

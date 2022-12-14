@@ -2,7 +2,9 @@
 #include <omp.h>
 #include <chrono>
 #include <set>
+#include <unordered_set>
 #include <cmath>
+#include <numeric>
 #include <assert.h>
 #include <TECIO.h>
 #include "Convert.h"
@@ -590,6 +592,26 @@ namespace TAUtoFace
         return num_trig;
     }
 
+    void read_attribute_data(int& meshID, std::vector<std::pair<std::string,std::string>>& data)
+    {
+        int nAttr = 0;
+        nc_inq_natts(meshID,&nAttr);
+
+        for(int ii = 0; ii < nAttr; ++ii)
+        {   
+            char att_name[NC_MAX_NAME];
+            char* att_value; size_t len;
+            nc_inq_attname(meshID,NC_GLOBAL,ii,att_name);
+
+            nc_inq_attlen(meshID,NC_GLOBAL,att_name,&len);
+            att_value = (char *)malloc(len+1);
+            nc_get_att_text(meshID,NC_GLOBAL,att_name,att_value);
+            att_value[len] = '\0';
+            data.emplace_back(std::pair<std::string,std::string>(att_name,att_value));
+        }
+
+    }
+
     void write_points(int& fin, int& fout, size_t const& nPnts, 
         int& ptsxID, int& ptsyID, int& ptszID)
     {
@@ -612,9 +634,10 @@ namespace TAUtoFace
     // Face conversion for my own cell containment queries. Written in NetCDF as 
     // basically a face based TAU format.
     void Write_Face_Data(int& fin, string const& meshIn, string const& meshOut, 
+                        vector<std::pair<string,string>> const& attrdata,
                         std::vector<std::array<int,7>> const& faces,
                         size_t const& nPnts, size_t const& nElem, size_t const& nFace,
-                        size_t const& nSurf, int* faceMarkers)
+                        size_t const& nSurf)
     { 
         #ifdef DEBUG
         dbout << "Entering Write_Face_Data..." << endl;
@@ -640,15 +663,35 @@ namespace TAUtoFace
             ERR(retval);
             exit(-1);
         }
+        string typeval = "Primary Grid: Face Based Format";
+        if ((retval = nc_put_att_text(fout, NC_GLOBAL, "type", typeval.length(), typeval.c_str())))
+        {
+            cout << "Error: Failed to attach file type attribute" << endl;
+            ERR(retval);
+            exit(-1);
+        }
+
+        for(size_t ii = 0; ii < attrdata.size(); ii++)
+        {
+            if ((retval = nc_put_att_text(fout, NC_GLOBAL, attrdata[ii].first.c_str(), 
+                    attrdata[ii].second.length(), attrdata[ii].second.c_str())))
+            {
+                cout << "Error: Failed to attach file attribute: " << attrdata[ii].first << endl;
+                ERR(retval);
+                exit(-1);
+            }
+        }
 
         // Separate faces to write
         size_t ntFaces = 0;
         size_t nqFaces = 0;
+        size_t ntSurf = 0;
+        size_t nqSurf = 0;
         int* tfaces;
         int* qfaces;
         int* left;
         int* right;
-        // int* zone;
+        int* zone;
 
         // Find out how many of each face type exist
         #pragma omp parallel for
@@ -658,12 +701,34 @@ namespace TAUtoFace
             {   
                 #pragma omp atomic
                 ntFaces++;
-            }
+                if(faces[ii][2] != -1)
+                {
+                    #pragma omp atomic
+                    ntSurf++;
+                }
+            }   
             else
             {
                 #pragma omp atomic
                 nqFaces++;            
+                if(faces[ii][2] != -1)
+                {
+                    #pragma omp atomic
+                    nqSurf++;
+                }
             }
+        }
+
+        if(ntFaces + nqFaces != nFace)
+        {
+            cout << "ERROR: Mismatch of face counts when splitting into trig and quads." << endl;
+            exit(-1);
+        }
+
+        if(nqSurf + ntSurf != nSurf)
+        {
+            cout << "ERROR: Mismatch of surface face counts when splitting into trig and quads." << endl;
+            exit(-1);
         }
 
         // Now allocate face arrays to have data.
@@ -671,34 +736,48 @@ namespace TAUtoFace
         qfaces = new int[nqFaces*4];
         left = new int[nFace];
         right = new int[nFace];
+        zone = new int[nSurf];
 
         // Go back through faces, placing them in the arrays
         size_t tFace = 0;
         size_t qFace = 0;
+        size_t tSurf = 0;
+        size_t qSurf = 0;
         for(size_t ii = 0; ii < nFace; ++ii)
         {
             if(faces[ii][6] == -1)
             {   
                 left[tFace]       = faces[ii][0];
                 right[tFace]      = faces[ii][1];
-                // zone[tFace]       = faces[ii][2];
                 tfaces[tFace*3]   = faces[ii][3];
                 tfaces[tFace*3+1] = faces[ii][4];
                 tfaces[tFace*3+2] = faces[ii][5];
                 tFace++;
+
+                if(faces[ii][2] != -1)
+                {
+                    zone[tSurf] = faces[ii][2];
+                    tSurf++;
+                }
             }
             else
             { 
                 left[ntFaces + qFace]  = faces[ii][0];
                 right[ntFaces + qFace] = faces[ii][1];
-                // zone[ntFace + qFace]  = faces[ii][2];
                 qfaces[qFace*4]       = faces[ii][3];
                 qfaces[qFace*4+1]     = faces[ii][4];
                 qfaces[qFace*4+2]     = faces[ii][5];
                 qfaces[qFace*4+3]     = faces[ii][6];
-                qFace++;            
+                qFace++;    
+                     
+                if(faces[ii][2] != -1)
+                {
+                    zone[ntSurf + qSurf] = faces[ii][2];
+                    qSurf++;
+                }   
             }
         }
+
 
         /* Define the dimensions. */
         int nElemID, nFaceID, nTFaceID, nPpTFcID, nQFaceID, nPpQFcID, nMarkID, nPntsID;
@@ -784,7 +863,7 @@ namespace TAUtoFace
         cout << "Writing right elements of faces" << endl;
         Write_Variable_Scalar(fout, rightVarID, &right[0], "Right elements");
         cout << "Writing surface markers" << endl;
-        Write_Variable_Scalar(fout, markID, &faceMarkers[0], "Surface markers");
+        Write_Variable_Scalar(fout, markID, &zone[0], "Surface markers");
 
         write_points(fin,fout,nPnts,ptsxID,ptsyID,ptszID);
         
@@ -798,13 +877,17 @@ namespace TAUtoFace
     }
 
     void Write_Tecplot_Binary(int& fin, string const& meshOut, 
+                        std::vector<std::pair<std::string,std::string>> const& attrdata,
+                        std::vector<int> const& markers,
+                        std::vector<size_t> const& surfaceCount,
+                        int* const facemarkers,
                         std::vector<std::array<int,7>> const& faces,
                         size_t const& nPnts, size_t const& nElem, size_t const& nFace)
     {
         string meshOut_ = meshOut + ".plt";
         int32_t debug = 0;
         #ifdef DEBUG
-        dbout << "Entering Write_ASCII_Face_Data..." << endl;
+        dbout << "Entering Write_Tecplot_Binary..." << endl;
         cout << "Attempting write output file." << endl;
         cout << "File: " << meshOut_ << endl;
         debug = 1;
@@ -885,7 +968,7 @@ namespace TAUtoFace
         }
 
 
-        int32_t zoneType = 7; /* FE Polyhedron */	
+        int32_t zoneType = ZONETYPE_FEPOLYHEDRON; /* FE Polyhedron */	
         int32_t numNodes = nPnts;
         int32_t numElems = nElem;
         int64_t numFaces = nFace;
@@ -900,7 +983,7 @@ namespace TAUtoFace
         int32_t shareConnectivity = 0;
 
         if(TECPOLYZNE142(
-            "Polyhedral Zone",
+            "Volume data",
             &zoneType,
             &numNodes,
             &numElems,
@@ -921,16 +1004,15 @@ namespace TAUtoFace
         }
 
         int32_t nPnts_ = nPnts;
-        double *coord = Get_Real_Scalar(fin, "points_xc", nPnts);
-        TECDAT142(&nPnts_, coord, &fileIsDouble);
-        
-        coord = Get_Real_Scalar(fin, "points_yc", nPnts);
-        TECDAT142(&nPnts_, coord, &fileIsDouble);
-        
-        coord = Get_Real_Scalar(fin, "points_zc", nPnts);
-        TECDAT142(&nPnts_, coord, &fileIsDouble);
 
-        delete[] coord;
+        double *coordx = Get_Real_Scalar(fin, "points_xc", nPnts);
+        TECDAT142(&nPnts_, coordx, &fileIsDouble);
+        
+        double *coordy = Get_Real_Scalar(fin, "points_yc", nPnts);
+        TECDAT142(&nPnts_, coordy, &fileIsDouble);
+        
+        double *coordz = Get_Real_Scalar(fin, "points_zc", nPnts);
+        TECDAT142(&nPnts_, coordz, &fileIsDouble);
         
         int32_t faceOffset = nFace;
         if(TECPOLYFACE142(
@@ -949,15 +1031,146 @@ namespace TAUtoFace
         delete [] left;
         delete [] right;
 
+        size_t nSurfs = std::accumulate(surfaceCount.begin(),surfaceCount.end(),0);
+        // Try write marker data? Will help to verify markers work successfully.
+        for(size_t ii = 0; ii < surfaceCount.size(); ii++)
+        {
+            int32_t numConn = surfaceCount[ii]*4;
+            int32_t* sfaces = new int32_t[numConn];
+            std::unordered_set<int32_t> nodeIndex;
+            // Extract the faces in use for the surface
+            size_t f = 0;
+            for(size_t jj = 0; jj < nSurfs; jj++)
+            {
+                if(facemarkers[jj] == markers[ii])
+                {
+                    sfaces[f*4+0] = faces[jj][3];
+                    sfaces[f*4+1] = faces[jj][4];
+                    sfaces[f*4+2] = faces[jj][5];
+                    if(faces[jj][6] == -1)
+                        sfaces[f*4+3] = faces[jj][5]; 
+                    else
+                    {
+                        sfaces[f*4+3] = faces[jj][6];
+                        nodeIndex.insert(faces[jj][6]); 
+                    }
+                
+                    f++;
+
+                    // Also need to extract the nodes. Set?
+                    nodeIndex.insert(faces[jj][3]);
+                    nodeIndex.insert(faces[jj][4]);
+                    nodeIndex.insert(faces[jj][5]);
+                }
+            }
+
+            // vector<int32_t> snodes(nodeIndex.begin(),nodeIndex.end()); //recast to a vector to index in
+            
+            numNodes = nodeIndex.size();
+            
+            // Create the surface coordinate data
+            double* scoordx = new double[numNodes];
+            double* scoordy = new double[numNodes];
+            double* scoordz = new double[numNodes];
+            
+            // #pragma omp parallel for
+            for(std::unordered_set<int32_t>::iterator it = nodeIndex.begin(); it != nodeIndex.end(); it++)
+            {
+                size_t ind = std::distance(nodeIndex.begin(),it);
+                scoordx[ind] = coordx[*it];
+                scoordy[ind] = coordy[*it];
+                scoordz[ind] = coordz[*it];
+            }
+
+            // Need to recast the face indices
+            #pragma omp parallel for
+            for(int32_t kk = 0; kk < numConn; kk++)
+            {
+                auto const ind = nodeIndex.find(sfaces[kk]);
+                if(ind != nodeIndex.end())
+                {// and add 1 for tecplot indexing
+                    sfaces[kk] = std::distance(nodeIndex.begin(),ind) + 1;
+                }
+                else
+                {
+                    cout << "Failed to find face node in the new index" << endl;
+                }
+            }
+
+            zoneType = ZONETYPE_FEQUADRILATERAL; /* FE Quad */	
+            numElems = surfaceCount[ii];
+            int32_t nFaces = 6; // Unused
+
+            int32_t iMax = 0; 
+            int32_t jMax = 0; 
+            int32_t kMax = 0;
+            int32_t isBlock = 1;
+            // int valueLocation[] = {1,1,1};
+            string zonename;
+            for(size_t jj = 0; jj < attrdata.size(); jj++)
+            {
+                if(attrdata[jj].first.find("marker") != string::npos)
+                {
+                    string substr = attrdata[jj].first.substr(attrdata[jj].first.find("_")+1);
+                    std::istringstream iss(substr);
+                    int m;
+                    iss >> m;
+                    if(m == markers[ii])
+                    {
+                        zonename = attrdata[jj].second;
+                    }
+                }
+            }
+
+            if(TECZNE142(zonename.c_str(),
+                        &zoneType,
+                        &numNodes,
+                        &numElems,
+                        &nFaces,
+                        &iMax,
+                        &jMax,
+                        &kMax,
+                        &solTime,
+                        &strandID,
+                        &unused,
+                        &isBlock,
+                        0,
+                        0,
+                        0,              /* TotalNumFaceNodes */
+                        0,              /* NumConnectedBoundaryFaces */
+                        0,              /* TotalNumBoundaryConnections */
+                        0,           /* PassiveVarList */
+                        0,           /* ValueLocation = Nodal */
+                        0,           /* SharVarFromZone */
+                        0))
+            {
+                printf("FE Brick: error calling TECZNE\n");
+                exit(-1);
+            }
+
+            /*
+            * Write out the field data.
+            */
+            TECDAT142(&numNodes, scoordx, &fileIsDouble);
+            TECDAT142(&numNodes, scoordy, &fileIsDouble);
+            TECDAT142(&numNodes, scoordz, &fileIsDouble);
+
+            TECNODE142(&numConn, sfaces);
+        }
+
         if(TECEND142())
         {
-            printf("Polyquads: error calling TECEND\n");
+            printf("ERROR: Failed to close file calling TECEND\n");
             exit(-1);
         }
 
     }
 
     void Write_ASCII_Face_Data(int& fin, string const& meshOut, 
+                        std::vector<std::pair<std::string,std::string>> const& attrdata,
+                        std::vector<int> const& markers,
+                        std::vector<size_t> const& surfaceCount,
+                        int* const facemarkers,
                         std::vector<std::array<int,7>> const& faces,
                         size_t const& nPnts, size_t const& nElem, size_t const& nFace)
     {
@@ -1034,7 +1247,7 @@ namespace TAUtoFace
         
 
         fout << "VARIABLES= \"X\" \"Y\" \"Z\" " << endl;
-        fout << "ZONE T=\"FEPOLYHEDRON Test\"" << endl;
+        fout << "ZONE T=\"3D volume data\"" << endl;
         fout << "ZONETYPE=FEPOLYHEDRON" << endl;
         fout << "NODES=" << nPnts << " ELEMENTS=" << nElem << " FACES=" << nFace << endl;
         fout << "TotalNumFaceNodes=" << TotalNumFaceNodes << endl;
@@ -1047,62 +1260,62 @@ namespace TAUtoFace
         
         /*Write vertices in block format (Each dimension in turn)*/
         /*Get the coordinate data*/
-        double *coord = Get_Real_Scalar(fin, "points_xc", nPnts);
+        double *coordx = Get_Real_Scalar(fin, "points_xc", nPnts);
         
         size_t newl = 0;
         fout << std::setw(1);
         for(size_t ii = 0; ii < nPnts; ++ii)
         {
-            fout << std::setw(w) << coord[ii];
+            fout << std::setw(w) << coordx[ii];
             newl++;
 
             if(newl>4)
             {
-                fout << endl;
+                fout << "\n";
                 fout << " ";
                 newl=0;
             }
         }
+        fout << endl;
         
-        coord = Get_Real_Scalar(fin, "points_yc", nPnts);
+        double *coordy = Get_Real_Scalar(fin, "points_yc", nPnts);
 
         newl = 0;
         for(size_t ii = 0; ii < nPnts; ++ii)
         {
-            fout << std::setw(w) << coord[ii];
+            fout << std::setw(w) << coordy[ii];
             newl++;
 
             if(newl>4)
             {
-                fout << endl;
+                fout << "\n";
                 fout << " ";
                 newl=0;
             }
         }
-                
-        coord = Get_Real_Scalar(fin, "points_zc", nPnts);
+        fout << endl;
+
+        double *coordz = Get_Real_Scalar(fin, "points_zc", nPnts);
 
         newl = 0;
         for(size_t ii = 0; ii < nPnts; ++ii)
         {
-            fout << std::setw(w) << coord[ii];
+            fout << std::setw(w) << coordz[ii];
             newl++;
 
             if(newl>4)
             {
-                fout << endl;
+                fout << "\n";
                 fout << " ";
                 newl=0;
             }
         }
         
         fout << endl;
-        
-
         fout << std::left << std::fixed;
         w = 9;
         /*Inform of how many vertices in each face*/
-        fout << "#node count per face" << endl;
+        fout << "#node count per face\n";
         newl = 0;
         for (size_t ii = 0; ii < ntFaces; ++ii)
         {
@@ -1111,7 +1324,7 @@ namespace TAUtoFace
 
             if(newl>4)
             {
-                fout << endl;
+                fout << "\n";
                 newl=0;
             }
         }
@@ -1123,14 +1336,14 @@ namespace TAUtoFace
 
             if(newl>4)
             {
-                fout << endl;
+                fout << "\n";
                 newl=0;
             }
         }
         fout << endl;
 
         /*Write the face data*/
-        fout << "#face nodes" << endl;
+        fout << "#face nodes\n";
         for (size_t ii = 0; ii < ntFaces; ++ii)
         {
             for(size_t jj = 0; jj < 3; ++jj)
@@ -1141,7 +1354,7 @@ namespace TAUtoFace
                 // 	cout << "Trying to write a vertex outside of the number of points." << endl;
                 // }
             }
-            fout << endl;
+            fout << "\n";
         }
 
         for (size_t ii = 0; ii < nqFaces; ++ii)
@@ -1154,7 +1367,7 @@ namespace TAUtoFace
                 // 	cout << "Trying to write a vertex outside of the number of points." << endl;
                 // }
             }
-            fout << endl;
+            fout << "\n";
         }
 
         /*Write face left and right*/
@@ -1167,7 +1380,7 @@ namespace TAUtoFace
 
             if(newl>4)
             {
-                fout << endl;
+                fout << "\n";
                 newl=0;
             }
         }
@@ -1186,11 +1399,167 @@ namespace TAUtoFace
 
             if(newl>4)
             {
-                fout << endl;
+                fout << "\n";
                 newl=0;
             }
         }
         fout << endl;
+        
+        size_t nSurfs = std::accumulate(surfaceCount.begin(),surfaceCount.end(),0);
+        // Try write marker data? Will help to verify markers work successfully.
+        for(size_t ii = 0; ii < surfaceCount.size(); ii++)
+        {
+            size_t numConn = surfaceCount[ii]*4;
+            int32_t* sfaces = new int32_t[numConn];
+            std::set<int32_t> nodeIndex;
+            // Extract the faces in use for the surface
+            size_t f = 0;
+            for(size_t jj = 0; jj < nSurfs; jj++)
+            {
+                if(faces[jj][2] == markers[ii])
+                {
+                    sfaces[f*4+0] = faces[jj][3];
+                    sfaces[f*4+1] = faces[jj][4];
+                    sfaces[f*4+2] = faces[jj][5];
+                    if(faces[jj][6] == -1)
+                        sfaces[f*4+3] = faces[jj][5]; 
+                    else
+                    {
+                        sfaces[f*4+3] = faces[jj][6];
+                        nodeIndex.insert(faces[jj][6]); 
+                    }
+                
+                    f++;
+
+                    // Also need to extract the nodes. Set?
+                    nodeIndex.insert(faces[jj][3]);
+                    nodeIndex.insert(faces[jj][4]);
+                    nodeIndex.insert(faces[jj][5]);
+                }
+            }
+
+            if(f != surfaceCount[ii])
+            {
+                cout << "WARNING: Not all faces of the surface were found" << endl;
+            }
+
+            // vector<int32_t> snodes(nodeIndex.begin(),nodeIndex.end()); //recast to a vector to index in
+
+            size_t nSPnts = nodeIndex.size();
+            // Create the surface coordinate data
+            double* scoordx = new double[nSPnts];
+            double* scoordy = new double[nSPnts];
+            double* scoordz = new double[nSPnts];
+            
+            for(auto it = nodeIndex.begin(); it != nodeIndex.end(); it++)
+            {
+                size_t ind = std::distance(nodeIndex.begin(),it);
+                scoordx[ind] = coordx[*it];
+                scoordy[ind] = coordy[*it];
+                scoordz[ind] = coordz[*it];
+            }
+
+            // Need to recast the face indices
+            #pragma omp parallel for
+            for(size_t kk = 0; kk < numConn; kk++)
+            {
+                auto const ind = nodeIndex.find(sfaces[kk]);
+                if(ind != nodeIndex.end())
+                {// and add 1 for tecplot indexing
+                    sfaces[kk] = std::distance(nodeIndex.begin(),ind) + 1;
+                }
+                else
+                {
+                    cout << "Failed to find face node in the new index" << endl;
+                }
+                
+            }
+
+            size_t nSElem = surfaceCount[ii];
+
+            string zonename;
+            for(size_t jj = 0; jj < attrdata.size(); jj++)
+            {
+                if(attrdata[jj].first.find("marker") != string::npos)
+                {
+                    string substr = attrdata[jj].first.substr(attrdata[jj].first.find("_")+1);
+                    std::istringstream iss(substr);
+                    int m;
+                    iss >> m;
+                    if(m == markers[ii])
+                    {
+                        zonename = attrdata[jj].second;
+                    }
+                }
+            }
+
+            fout << "ZONE T=\"" << zonename << "\"" << endl;
+            fout << "ZONETYPE=FEQUADRILATERAL" << endl;
+            fout << "NODES=" << nSPnts << ", ELEMENTS=" << nSElem << ", DATAPACKING=BLOCK" << "\n";
+            
+            /*
+            * Write out the field data.
+            */
+            size_t w = 15;
+            size_t preci = 6;
+            fout << std::left << std::scientific << std::setprecision(preci);
+            newl = 0;
+            fout << std::setw(1);
+            for(size_t jj = 0; jj < nSPnts; ++jj)
+            {
+                fout << std::setw(w) << scoordx[jj];
+                newl++;
+
+                if(newl>4)
+                {
+                    fout << "\n";
+                    fout << " ";
+                    newl=0;
+                }
+            }
+            fout << endl;
+            newl = 0;
+            for(size_t jj = 0; jj < nSPnts; ++jj)
+            {
+                fout << std::setw(w) << scoordy[jj];
+                newl++;
+
+                if(newl>4)
+                {
+                    fout << "\n";
+                    fout << " ";
+                    newl=0;
+                }
+            }
+
+            fout << endl;
+            newl = 0;
+            for(size_t jj = 0; jj < nSPnts; ++jj)
+            {
+                fout << std::setw(w) << scoordz[jj];
+                newl++;
+
+                if(newl>4)
+                {
+                    fout << "\n";
+                    fout << " ";
+                    newl=0;
+                }
+            }
+
+            fout << endl;
+            fout << std::left << std::fixed;
+            w = 9;
+            /*Write the face data*/
+            fout << "#face nodes" << endl;
+            for (size_t kk = 0; kk < nSElem; ++kk)
+            {
+                fout << std::setw(w) << sfaces[kk*4+0] << std::setw(w) << sfaces[kk*4+1] 
+                    << std::setw(w) << sfaces[kk*4+2] << std::setw(w) << sfaces[kk*4+3] << "\n";
+            }
+            fout << endl;
+        }
+
         fout.close();
 
         #ifdef DEBUG
@@ -1246,14 +1615,16 @@ int main(int argc, char *argv[])
 	}
 
 	cout << "Mesh file open. Reading cell data..." << endl;
+    std::vector<std::pair<std::string,std::string>> attrdata;
+    TAUtoFace::read_attribute_data(meshID,attrdata);
 
-    int ptDimID, elemDimID, surfElemDimID;
-	size_t nPnts, nElem, nSurfElem;
+    int ptDimID, elemDimID, surfElemDimID, nMarkID;
+	size_t nPnts, nElem, nSurfElem, nMarkers;
 
     // Retrieve how many elements there are.
 	Get_Dimension(meshID, "no_of_elements", elemDimID, nElem);
 	Get_Dimension(meshID, "no_of_points", ptDimID, nPnts);
-    
+	Get_Dimension(meshID, "no_of_markers", nMarkID, nMarkers);
 	Get_Dimension(meshID, "no_of_surfaceelements", surfElemDimID, nSurfElem);
 
 	cout << "nElem : " << nElem << " nPts: " << nPnts << endl;
@@ -1266,15 +1637,33 @@ int main(int argc, char *argv[])
     TAUtoFace::surface_quads(meshID,faces);
 
     // get boundary markers
+    int* markers = new int[nMarkers];
+	markers = Get_Int_Scalar(meshID, "marker", nMarkers);
+    vector<int> markvect(nMarkers);
+    for(size_t ii = 0; ii < nMarkers; ++ii)
+        markvect[ii] = markers[ii];
+
     int* faceMarkers = new int[nSurfElem];
 	faceMarkers = Get_Int_Scalar(meshID, "boundarymarker_of_surfaces", nSurfElem);
 
     // Assign boundary markers
     std::set<int> zones;
+    std::vector<size_t> surfFaceCounts(nMarkers,0);
     for(size_t ii = 0; ii < nSurfElem; ++ii)
     {
         faces[ii][2] = faceMarkers[ii];
         zones.insert(faceMarkers[ii]);
+
+        auto const index = std::find(markvect.begin(),markvect.end(),faceMarkers[ii]);
+        if(index != markvect.end())
+        {
+            size_t ind = index - markvect.begin();
+            surfFaceCounts[ind]++;
+        }
+        else
+        {
+            cout << "Failed to find surface marker in marker data" << endl;
+        }
     }
     
     ProgressBar progress;
@@ -1305,6 +1694,7 @@ int main(int argc, char *argv[])
     for(size_t ii = 0; ii < faces.size(); ++ii)
         node_to_face[faces[ii][3]].emplace_back(ii);
 
+    // internal face and boundary face lists. Just sort the boundary faces, since they're at the start of the list
     std::vector<std::array<int,7>> f_list, bf_list;
 
     int face_count = faces.size();
@@ -1399,12 +1789,12 @@ int main(int argc, char *argv[])
             // #if len(f_list)%100000 == 0:
             // #    print len(f_list)
         }
-
+        // Needs to be outside to show correct 'progress' finishing at 100%
         progress.update(float(nFace-face_count/2) / nFace);
     }
     // Add boundary faces
         
-    f_list.insert(f_list.end(),bf_list.begin(),bf_list.end());
+    f_list.insert(f_list.begin(),bf_list.begin(),bf_list.end());
         
     // Check we have extracted correct number of faces
     assert (f_list.size() == nFace);
@@ -1427,20 +1817,32 @@ int main(int argc, char *argv[])
     size_t num_faces = f_list.size();
     nFace = num_faces;
     // num_cells = nElem;
+    if(bf_list.size() != nSurfElem)
+    {
+        cout << "ERROR: Mismatch of boundary elements, not all have been found" << endl;
+    }
+
 
     high_resolution_clock::time_point t3 = high_resolution_clock::now();
 	duration = duration_cast<microseconds>(t3-t2).count()/1e6;
     cout << "\nCompleted face matching. Time taken: " << duration << endl;
     
     cout << "Writing face based mesh" << endl;
-    TAUtoFace::Write_Face_Data(meshID,meshIn,meshOut,f_list,
-                nPnts,nElem,nFace,nSurfElem,faceMarkers);
+    TAUtoFace::Write_Face_Data(meshID,meshIn,meshOut,attrdata,f_list,
+                nPnts,nElem,nFace,nSurfElem);
 
-    // TAUtoFace::Write_Tecplot_Binary(meshID,meshOut,f_list,
-    //             nPnts,nElem,nFace);
+    // TAUtoFace::Write_Tecplot_Binary(meshID,meshOut,attrdata,markvect,
+    //         surfFaceCounts,faceMarkers,f_list, nPnts,nElem,nFace);
 
-    // TAUtoFace::Write_ASCII_Face_Data(meshID,meshOut,f_list,
-    //             nPnts,nElem,nFace);
+    // TAUtoFace::Write_ASCII_Face_Data(meshID,meshOut,attrdata,markvect,
+    //         surfFaceCounts,faceMarkers,f_list,nPnts,nElem,nFace);
+
+    if ((retval = nc_close(meshID)))
+	{	
+		cout << "Failed to close mesh file \"" << meshIn << "\"" << endl;
+		ERR(retval);
+		exit(-1);
+	}
 
     high_resolution_clock::time_point t4 = high_resolution_clock::now();
 	duration = duration_cast<microseconds>(t4-t3).count()/1e6;

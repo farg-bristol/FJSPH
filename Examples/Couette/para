@@ -1,1 +1,34 @@
 
+                      Input fluid definition filename: fluid.bmap
+                   Input boundary definition filename: boundary.bmap
+
+                          Reference dispersed density: 1
+                        Reference dispersed viscosity: 1e-2
+                            Reference surface tension: 0.0
+                   2D offset vector (0 / x=1,y=2,z=3): 2
+
+                                  Output files prefix: Couette_Validation3
+
+# SPH parameters ------------------------------------: -
+                              SPH frame time interval: 1
+                                      SPH frame count: 50
+               SPH output encoding (0=ascii/1=binary): 1
+
+                                 SPH maximum timestep: 5e-1
+                                 SPH minimum timestep: 1e-9
+                                    SPH CFL condition: 1.0
+                                  SPH initial spacing: 0.02
+                          SPH boundary spacing factor: 1.0
+                          SPH smoothing length factor: 2
+                                 SPH aerodynamic case: (none)
+                                SPH start coordinates: 0,0
+                       SPH boundary start coordinates: 0,0
+                                   SPH gravity vector: 0.0,0.0
+                                SPH starting pressure: 0.0
+
+                                   SPH speed of sound: 1
+                            SPH density variation (%): 20
+                      SPH artificial viscosity factor: 0.01
+                        SPH maximum shifting velocity: 20
+                    SPH surface tension contact angle: 150.0
+                            SPH restart fit tolerance: 0.5

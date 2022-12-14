@@ -1,0 +1,42 @@
+
+                      Input fluid definition filename: fluid_2D.bmap
+                   Input boundary definition filename: pipe_2D.bmap
+
+                                   Reference velocity: 41.991
+                                   Reference pressure: 104770
+                                Reference temperature: 298
+                                    Reference density: 1.225
+#                                      Reynolds number: 3.231E+06
+                       Sutherland reference viscosity: 1.716e-05
+                     Sutherland reference temperature: 298
+
+                          Reference dispersed density: 1000
+                        Reference dispersed viscosity: 0.01
+                            Reference surface tension: 0.072
+                   2D offset vector (0 / x=1,y=2,z=3): 2
+
+                                  Output files prefix: coflow_2D
+
+# SPH parameters ------------------------------------: -
+                              SPH frame time interval: 0.025
+                                      SPH frame count: 5000
+               SPH output encoding (0=ascii/1=binary): 1
+                               SPH ghost output (0/1): 0
+
+                                 SPH maximum timestep: 1
+                                 SPH minimum timestep: 1e-9
+                                    SPH CFL condition: 0.95
+                SPH stable CFL count iteration factor: 0.75
+                                  SPH initial spacing: 0.0125
+                          SPH boundary spacing factor: 1.0
+                          SPH smoothing length factor: 2
+                                 SPH aerodynamic case: Induced_pressure
+                        SPH use ghost particles (0/1): 0
+                                   SPH gravity vector: 0,0
+
+                                SPH starting pressure: 0
+                                   SPH speed of sound: 300
+                      SPH artificial viscosity factor: 0.05
+                    SPH surface tension contact angle: 150.0
+
+                              SPH freestream velocity: 41.991,0

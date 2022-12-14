@@ -1,0 +1,21 @@
+ -----------------------------------------------------
+ FLUID MAPPING
+ -----------------------------------------------------
+
+                       Name: Fluid
+                      Shape: Square
+   Write surface data (0/1): 1
+
+ Particle ordering (0=grid,1=HCP): 0
+
+           Particle spacing: 0.01
+          Starting pressure: 0
+           Starting density: 1
+
+           Start coordinate: 0.0,0.0
+             End coordinate: 1.0,1.0
+
+         #  Volume to target: 0.9905
+
+ block end
+ ---------------------------
