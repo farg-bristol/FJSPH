@@ -42,12 +42,18 @@ inline StateVecD AeroForce(StateVecD const& Vdiff, AERO const& avar, real const 
 
 /*Sphere-Plate interpolation method - Gissler et al (2017)*/
 inline StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, 
-						real const& rho, real const& press, real const& mass, real const& lam, real const& woccl)
+					real const& rho, real const& press, real const& mass,
+					real const& lam, real const& nnieghb, real const& woccl)
 {
 	// real const nfull = avar.nfull;
 	real const Re = 2.0*rho*Vdiff.norm()*avar.L/avar.mug;
 	
-	real const frac2 = std::min(2.0 * lam, 1.0);
+	real frac2 = 0.0;
+	if(avar.use_lam)
+		frac2 = std::min(avar.interp_fac * lam, 1.0);
+	else
+		frac2 = std::min(avar.interp_fac * nnieghb * avar.infull, 1.0);
+
 	real const frac1 = (1.0 - frac2);
 
  	real const Cds  = GetCd(Re);
@@ -100,8 +106,8 @@ inline StateVecD GisslerForce(AERO const& avar, StateVecD const& Vdiff, StateVec
 }
 
 inline StateVecD InducedPressure(AERO const& avar, StateVecD const& Vdiff,
-		 StateVecD const& norm, real const& Pbasei, real const& lam, real const& dx, 
-		 SPHPart const& pi )
+		 StateVecD const& norm, real const& Pbasei, real const& lam,
+		  real const& nnieghb, real const& dx, SPHPart const& pi)
 		 
 {
 	real theta = abs(acos(-norm.normalized().dot(Vdiff.normalized())));
@@ -186,14 +192,18 @@ inline StateVecD InducedPressure(AERO const& avar, StateVecD const& Vdiff,
 	StateVecD const acc_skin = 0.5 * Vpar.norm() * 	Vpar / (avar.sos*avar.sos) *
 			 avar.gamma * pi.cellP * Cf * avar.aPlate / pi.m;
 
-	real const frac1 = std::min(2.0 * lam, 1.0);
+	real frac1= 0.0;
+	if(avar.use_lam)
+		frac1 = std::min(avar.interp_fac * lam, 1.0);
+	else
+		frac1 = std::min(avar.interp_fac * nnieghb * avar.infull, 1.0);
 	// real const frac2 = std::min(exp(pi.curve*0.001+200),1.0);
 
 	return (frac1 * /*frac2**/ (acc_kern+acc_skin) + (1.0-frac1) * acc_drop);
 }
 
 inline StateVecD CalcAeroAcc(AERO const& avar, SPHPart const& pi, StateVecD const& Vdiff,
-		StateVecD const& norm, real const& lam, real const& Pbasei, real const& dx)
+		StateVecD const& norm, real const& lam, real const& nneigh, real const& Pbasei, real const& dx)
 {
 	StateVecD acc = StateVecD::Zero();
 
@@ -202,12 +212,13 @@ inline StateVecD CalcAeroAcc(AERO const& avar, SPHPart const& pi, StateVecD cons
 	{
 		case Gissler: /* Original Gissler */
 		{
-			acc = GisslerForce(avar,Vdiff,norm,pi.cellRho,pi.cellP,pi.m,lam,pi.woccl);
+			acc = GisslerForce(avar,Vdiff,norm,pi.cellRho,pi.cellP,pi.m,
+				lam,nneigh,pi.woccl);
 			break;
 		}
 		case Induced_Pressure: /* Induced pressure based model */	
 		{
-			acc = InducedPressure(avar,Vdiff,norm,Pbasei,lam,dx,pi);
+			acc = InducedPressure(avar,Vdiff,norm,Pbasei,lam,nneigh,dx,pi);
 			break;
 		}
 		case SkinFric: /*Skin Friction Method*/

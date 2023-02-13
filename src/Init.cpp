@@ -214,6 +214,7 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
     size_t count = 0;
     for(shape_block& bound:shapes)
     {
+        int fault = 0;
         // Scale things first before doing checks and distances
         if(svar.scale != 1.0 )
         {
@@ -249,7 +250,7 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
         #endif
         {
             bound.bound_type = linePlane;
-            check_line_input(bound, globalspacing);
+            check_line_input(bound, globalspacing,fault);
         }
         #if SIMDIM == 2
         if (bound.shape == "Square")
@@ -258,7 +259,7 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
         #endif
         {
             bound.bound_type = squareCube;
-            check_square_input(bound,globalspacing);
+            check_square_input(bound,globalspacing,fault);
         }
         #if SIMDIM == 2
         else if (bound.shape == "Circle")
@@ -267,7 +268,7 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
         #endif
         {
             bound.bound_type = circleSphere;
-            check_circle_input(bound,globalspacing);
+            check_circle_input(bound,globalspacing,fault);
         }
         #if SIMDIM == 2
         else if (bound.shape == "Arc")
@@ -276,17 +277,17 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
         #endif
         {
             bound.bound_type = arcSection;
-            check_arc_input(bound,globalspacing);
+            check_arc_input(bound,globalspacing,fault);
         }
         else if (bound.shape == "Cylinder")
         {
             bound.bound_type = cylinder;
-            check_cylinder_input(bound,globalspacing);
+            check_cylinder_input(bound,globalspacing,fault);
         }
 		else if (bound.shape == "Inlet")
 		{
 			bound.bound_type = inletZone;
-			check_inlet_input(bound,globalspacing);
+			check_inlet_input(bound,globalspacing,fault);
 		}
         else if (bound.shape == "Coordinates")
         {
@@ -295,8 +296,8 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
             {
                 if(bound.npts == 0 || bound.coords.empty())
                 {
-                    std::cout << "ERROR: Block \"" << bound.name << "\" coordinates have not been ingested properly. Stopping." << std::endl;
-                    exit(1);
+                    printf("ERROR: Block \"%s\" coordinates have not been ingested properly. Stopping.\n", bound.name.c_str());
+                    fault = 1;
                 }
             }
         }
@@ -307,37 +308,50 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
             {
                 if(bound.times.empty())
                 {
-                    cout << "ERROR: Block \"" << bound.name << "\" has no time information" << endl;
-                    exit(-1);
+                    printf("ERROR: Block \"%s\" has no time information\n",bound.name.c_str());
+                    fault = 1;
                 } 
                 if(bound.pos.empty() && bound.vels.empty())
                 {
-                    std::cout << "ERROR: Block \"" << bound.name << "\" position or velocity data has not been ingested properly. Stopping." << std::endl;
-                    exit(1);
+                    printf("ERROR: Block \"%s\" position or velocity data has not been ingested properly.\n", bound.name.c_str());
+                    fault = 1;
                 }
             }
         }
 
         if(bound.bound_type == -1)
         {
-            std::cout << "ERROR: Block \"" << bound.name << "\" shape has not been correctly defined. Stopping." << std::endl;
-            std::cout << "File: " << filename << std::endl;
-            std::cout << "Block: " << bound.name << " \tID: " << count << std::endl;
-
-            exit(1);
+            printf("ERROR: Block \"%s\" shape (ID %zu) has not been correctly defined.\n", bound.name.c_str(), count);
+            printf("File: %s\n", filename.c_str());
+            fault = 1;
         }
 
-		if(bound.solver_name == "DBC")
-		{
-			bound.bound_solver = DBC;
-		}
-		else if (bound.solver_name == "Pressure-Gradient")
-		{
-			bound.bound_solver = pressure_G;
-		}
-        else if (bound.solver_name == "Ghost")
+        if(!bound.solver_name.empty())
         {
-            bound.bound_solver = ghost;
+            if(bound.solver_name == "DBC")
+            {
+                bound.bound_solver = DBC;
+            }
+            else if (bound.solver_name == "Pressure-Gradient")
+            {
+                bound.bound_solver = pressure_G;
+            }
+            else if (bound.solver_name == "Ghost")
+            {
+                bound.bound_solver = ghost;
+            }
+            else
+            {
+                printf("WARNING: Unrecognised boundary solver defined. Continuing to use the default, Pressure-Gradient\n");
+                printf("         Choose from the following options for a correct definition: \n");
+                printf("         \t1. DBC\n         \t2. Pressure-Gradient\n         \t3. Ghost\n");
+            }
+        }
+
+        if(fault)
+        {
+            printf("Check of parameters for block \"%s\" finished with errors. Stopping.\n",bound.name.c_str());
+            exit(-1);
         }
 
         globalspacing = std::max(bound.dx,globalspacing);
@@ -425,7 +439,6 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
             {
                 if(boundvar.block[ii].intersect[jj] == 0)
                 {
-                    // size_t no(Searchtree(tree, fluvar.block[blockID].coords, particle, searchDist, outlist_local));
                     std::vector<std::pair<size_t, double>> matches; /* Nearest Neighbour Search*/
                     #if SIMDIM == 3
                         matches.reserve(250);
@@ -435,7 +448,7 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
 
                     tree.index->radiusSearch(&boundvar.block[ii].coords[jj][0], searchDist, matches, params);
 
-                    // std::cout << ll << "  " << blockID << "  " << matches.size() << std::endl; 
+                    // std::printf(ll << "  " << blockID << "  " << matches.size() << std::endl; 
                     for (auto const& match : matches)
                     {
                         if (match.first != jj)
@@ -475,7 +488,6 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
 
                     tree.index->radiusSearch(&boundvar.block[ii].coords[jj][0], searchDist, matches, params);
 
-                    // std::cout << ll << "  " << blockID << "  " << matches.size() << std::endl; 
                     for (auto const& match : matches)
                         fluvar.block[blockID].intersect[match.first] = 1;
                 }
@@ -492,8 +504,6 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
             {
                 if(fluvar.block[ii].intersect[jj] == 0)
                 {
-                    // size_t no(Searchtree(tree, fluvar.block[blockID].coords, 
-                    //     fluvar.block[blockID].coords[ll], searchDist, outlist_local));
                     std::vector<std::pair<size_t, double>> matches; /* Nearest Neighbour Search*/
                     #if SIMDIM == 3
                         matches.reserve(50);
@@ -503,7 +513,7 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
 
                     tree.index->radiusSearch(&fluvar.block[ii].coords[jj][0], searchDist, matches, params);
 
-                    // std::cout << ii << "  " << blockID << "  " << matches.size() << std::endl; 
+                    // std::printf(ii << "  " << blockID << "  " << matches.size() << std::endl; 
                     for (size_t kk = 0; kk < matches.size(); kk++)
                     {          
                         fluvar.block[blockID].intersect[matches[kk].first] = 1;   
@@ -577,7 +587,7 @@ size_t Generate_Points(SIM const& svar, FLUID const& fvar, double const& globals
     size_t diff = 0;
     for(shape_block& bound:var.block)
     {
-        std::cout << "Creating boundary block: " << bound.name << "\t...\t";
+        printf("Creating boundary block: %s\t...\t", bound.name.c_str());
         switch (bound.bound_type)
         {
             case linePlane:
@@ -629,17 +639,17 @@ size_t Generate_Points(SIM const& svar, FLUID const& fvar, double const& globals
                 break;
         }
 
+        printf("npts: %zu\n", bound.coords.size());
+
         if (bound.coords.size() != bound.npts)
 		{
-			std::cerr << std::endl << "Number of boundary points generated for block \"" << 
-                bound.name << "\" differs from expected amount by "
-			 << static_cast<int>(bound.npts) - static_cast<int>(bound.coords.size()) << std::endl;
+			printf("Number of boundary points generated for block \"%s\" differs from expected amount by %d\n",
+                bound.name.c_str(), static_cast<int>(bound.npts) - static_cast<int>(bound.coords.size()));
              diff += bound.coords.size() - bound.npts;
 		}
 
         bound.npts = bound.coords.size();
         totPts += bound.npts;
-        std::cout << "npts: " << bound.npts << std::endl;
 
         if(svar.use_global_gas_law)
         {   // Set block gas law properties as the global properties
@@ -666,12 +676,12 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
 	real dx = svar.dx;
 	// Read boundary blocks
 	Shapes boundvar;
-	cout << "Reading boundary settings..." << endl;
+	printf("Reading boundary settings...\n");
 	Read_Shapes(boundvar,dx,svar,fvar,svar.boundfile);
 
 	// Read fluid
 	Shapes fluvar;
-	cout << "Reading fluid settings..." << endl;
+	printf("Reading fluid settings...\n");
 	Read_Shapes(fluvar,dx,svar,fvar,svar.fluidfile);
 
 	// Now generate points and add to indexes
@@ -704,8 +714,8 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
                 get_boundary_velocity(boundvar.block[block]);
             else if(boundvar.block[block].vels.empty())
             {
-                cout << "No velocity or position data available for boundary block " << block <<
-                    " even though times were defined." << endl;
+                printf("No velocity or position data available for boundary block %zu even though times were defined.\n", 
+                    block);
                 exit(-1);
             }
 
@@ -849,71 +859,16 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
 		limits.back().no_slip = fluvar.block[block].no_slip;
 		limits.back().bound_solver = fluvar.block[block].bound_solver;
 		limits.back().block_type = fluvar.block[block].bound_type;
-
-        if(fluvar.block[block].renorm_vol != -1)
-        {
-            /* Renormalise the volume */
-            double nfill = limits.back().index.second - limits.back().index.first;
-
-            double mass = fluvar.block[block].dens * fluvar.block[block].renorm_vol / nfill;
-            #pragma omp for nowait 
-			for (size_t ii=0; ii < pID; ++ii)
-            {
-                pn[ii].m = mass;
-            }
-
-            // Adjust the support radius and spacing. Only needed for lid driven cavity.
-            fvar.simM = mass;
-            fvar.bndM = mass;
-            svar.Pstep = pow(mass/fluvar.block[block].dens, 1.0/SIMDIM);
-            
-            fvar.H = fvar.Hfac*svar.Pstep;
-            fvar.HSQ = fvar.H*fvar.H; 
-            fvar.sr = 4*fvar.HSQ; 	/*KDtree search radius*/
-
-            fvar.dCont = 2.0 * fvar.delta * fvar.H * fvar.Cs;
-            
-            #if SIMDIM == 2
-                #ifdef CUBIC
-                    fvar.correc = 10.0 / (7.0 * M_PI * fvar.H * fvar.H);
-                #else
-                    fvar.correc = 7.0 / (4.0 * M_PI * fvar.H * fvar.H);
-                #endif
-            #endif
-            #if SIMDIM == 3
-                #ifdef CUBIC
-                    fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
-                #else
-                    fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
-                #endif
-            #endif
-                
-            fvar.Wdx = Kernel(svar.Pstep,fvar.H,fvar.correc);
-            
-            avar.GetYcoef(fvar, /*fvar.H*/ svar.Pstep);
-
-            #if SIMDIM == 3
-                avar.aPlate = svar.Pstep * svar.Pstep;
-                // avar.aPlate = fvar.H*fvar.H;
-            #else
-                avar.aPlate = svar.Pstep /**svar.Pstep*/ /** pow(avar.L,0.5)*/;
-                // avar.aPlate = fvar.H;
-            #endif	
-            
-            /* Particle tracking values */
-            svar.IPT_diam = pow((6.0*fvar.simM)/(M_PI*fvar.rho0),1.0/3.0);
-            svar.IPT_area = M_PI * svar.IPT_diam*svar.IPT_diam/4.0; 
-        }
 	}
+
 	svar.nfluid = fluvar.nblocks;
 	svar.totPts = pID;
 	svar.simPts = svar.totPts - svar.bndPts;
     svar.partID = pID;
-
     
 	if(svar.init_hydro_pressure)
 	{	/* If using hydrostatic initialisation, set pressure */
-		cout << "Initialising hydrostatic pressure..." << endl;
+		printf("Initialising hydrostatic pressure...\n");
         #pragma omp parallel for
 		for(size_t ii = 0; ii < svar.totPts; ++ii)
 		{
@@ -925,6 +880,87 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
 	}
 
 	pnp1 = pn;
+}
+
+/* Initialise the limits data for a restart, basically everything except actual points */
+void Init_Particles_Restart(SIM& svar, FLUID& fvar, LIMITS& limits)
+{
+	real dx = svar.dx;
+	// Read boundary blocks
+	Shapes boundvar;
+	printf("Reading boundary settings...\n");
+	Read_Shapes(boundvar,dx,svar,fvar,svar.boundfile);
+
+	// Read fluid
+	Shapes fluvar;
+	printf("Reading fluid settings...\n");
+	Read_Shapes(fluvar,dx,svar,fvar,svar.fluidfile);
+
+    limits.resize(boundvar.nblocks + fluvar.nblocks, bound_block(0));
+
+    for(size_t block = 0; block < boundvar.nblocks; block++)
+    {
+		if(!boundvar.block[block].times.empty())
+		{
+            if(!boundvar.block[block].pos.empty() && boundvar.block[block].vels.empty())
+                get_boundary_velocity(boundvar.block[block]);
+            else if(boundvar.block[block].vels.empty())
+            {
+                printf("No velocity or position data available for boundary block %zu even though times were defined.\n", 
+                    block);
+                exit(-1);
+            }
+
+			limits[block].times = boundvar.block[block].times;
+			limits[block].vels = boundvar.block[block].vels;
+			limits[block].nTimes = boundvar.block[block].ntimes;
+		}
+		else
+		{
+			limits[block].nTimes = 0;
+			limits[block].vels.emplace_back(boundvar.block[block].vel);
+		}
+
+        limits[block].name = boundvar.block[block].name;
+		limits[block].fixed_vel_or_dynamic = boundvar.block[block].fixed_vel_or_dynamic;
+		limits[block].hcpl = boundvar.block[block].hcpl;
+		limits[block].no_slip = boundvar.block[block].no_slip;
+		limits[block].bound_solver = boundvar.block[block].bound_solver;
+		limits[block].block_type = boundvar.block[block].bound_type;
+    }
+
+    size_t offset = boundvar.nblocks;
+    for(size_t block = 0; block < fluvar.nblocks; block++)
+    {
+		if(!fluvar.block[block].times.empty())
+		{
+			limits[block + offset].times = fluvar.block[block].times;
+			limits[block + offset].vels = fluvar.block[block].vels;
+			limits[block + offset].nTimes = fluvar.block[block].ntimes;
+		}
+        else
+        {
+            limits[block + offset].nTimes = 0;
+            limits[block + offset].vels.emplace_back(StateVecD::Zero());
+        }
+
+        limits[block + offset].name = fluvar.block[block].name;
+		limits[block + offset].insert_norm = fluvar.block[block].insert_norm;
+		limits[block + offset].delete_norm = fluvar.block[block].delete_norm;
+		limits[block + offset].aero_norm = fluvar.block[block].aero_norm;
+		limits[block + offset].insconst = fluvar.block[block].insconst;
+		limits[block + offset].delconst = fluvar.block[block].delconst;
+		limits[block + offset].aeroconst = fluvar.block[block].aeroconst;
+		
+		limits[block + offset].fixed_vel_or_dynamic = fluvar.block[block].fixed_vel_or_dynamic;
+		limits[block + offset].hcpl = fluvar.block[block].hcpl;
+		limits[block + offset].no_slip = fluvar.block[block].no_slip;
+		limits[block + offset].bound_solver = fluvar.block[block].bound_solver;
+		limits[block + offset].block_type = fluvar.block[block].bound_type;
+    }
+    
+    svar.nbound = boundvar.nblocks;
+	svar.nfluid = fluvar.nblocks;
 }
 
 void Init_Surface(SIM const& svar, MESH const& cells, vector<SURF>& surf_marks)
@@ -945,13 +981,13 @@ void Init_Surface(SIM const& svar, MESH const& cells, vector<SURF>& surf_marks)
 
 			// surf_faces[mark].back().faceID  = marker.first;
 			// if()
-			// cout << mark << "  " << markers.first << endl;
-			// cout << surf_faces[mark].back().faceID << "  " << markers.first << endl;
+			// printf(mark << "  " << markers.first << endl;
+			// printf(surf_faces[mark].back().faceID << "  " << markers.first << endl;
 			// surf_faces[mark].back().marker  = marker.second;
 		}
 		else
 		{
-			cout << "Couldn't find the marker in the index" << endl;
+			printf("Couldn't find the marker in the index\n");
 		}
 	}
 

@@ -507,7 +507,7 @@ void Write_Binary_Timestep(SIM const& svar, real const& rho0, SPHState const& pn
     vector<int32_t> valueLocation(varTypes.size(),1);
     vector<int32_t> passiveVarList(varTypes.size(),0);
 
-	if(tecZoneCreateIJK(fileHandle,group,size,1,1,&varTypes[0],
+	if(tecZoneCreateIJK(fileHandle,group, size,1,1,&varTypes[0],
 		&shareVarFromZone[0],&valueLocation[0],&passiveVarList[0],0,0,0,&outputZone))
 	{
 		cerr << "Failed to create IJK zone." << endl;
@@ -521,57 +521,57 @@ void Write_Binary_Timestep(SIM const& svar, real const& rho0, SPHState const& pn
 			exit(-1);
 		}
 
-	Write_Zone(pnp1,rho0,svar.scale,svar.outvar,start,end,fileHandle,outputZone);
+	Write_Zone(pnp1,rho0, svar.scale, svar.outvar, start,end,fileHandle,outputZone);
 	
 	// Write some auxiliary data, such as mass
-	add_zone_aux_data(fileHandle,outputZone,"Particle mass",pnp1[start].m);
+	add_zone_aux_data(fileHandle,outputZone, "Particle mass",pnp1[start].m);
 	// Add information about the insertion, aero, and deletion planes.
-	add_zone_aux_data(fileHandle,outputZone,"Insertion normal x",limits.insert_norm[0]);
-	add_zone_aux_data(fileHandle,outputZone,"Insertion normal y",limits.insert_norm[1]);
-	add_zone_aux_data(fileHandle,outputZone,"Deletion normal x",limits.delete_norm[0]);
-	add_zone_aux_data(fileHandle,outputZone,"Deletion normal y",limits.delete_norm[1]);
-	add_zone_aux_data(fileHandle,outputZone,"Aerodynamic normal x",limits.aero_norm[0]);
-	add_zone_aux_data(fileHandle,outputZone,"Aerodynamic normal y",limits.aero_norm[1]);
+	add_zone_aux_data(fileHandle,outputZone, "Insertion normal x",limits.insert_norm[0]);
+	add_zone_aux_data(fileHandle,outputZone, "Insertion normal y",limits.insert_norm[1]);
+	add_zone_aux_data(fileHandle,outputZone, "Deletion normal x",limits.delete_norm[0]);
+	add_zone_aux_data(fileHandle,outputZone, "Deletion normal y",limits.delete_norm[1]);
+	add_zone_aux_data(fileHandle,outputZone, "Aerodynamic normal x",limits.aero_norm[0]);
+	add_zone_aux_data(fileHandle,outputZone, "Aerodynamic normal y",limits.aero_norm[1]);
 	#if SIMDIM == 3
-	add_zone_aux_data(fileHandle,outputZone,"Insertion normal z",limits.insert_norm[2]);
-	add_zone_aux_data(fileHandle,outputZone,"Deletion normal z",limits.delete_norm[2]);
-	add_zone_aux_data(fileHandle,outputZone,"Aerodynamic normal z",limits.aero_norm[2]);
+	add_zone_aux_data(fileHandle,outputZone, "Insertion normal z",limits.insert_norm[2]);
+	add_zone_aux_data(fileHandle,outputZone, "Deletion normal z",limits.delete_norm[2]);
+	add_zone_aux_data(fileHandle,outputZone, "Aerodynamic normal z",limits.aero_norm[2]);
 	#endif
 	
-	add_zone_aux_data(fileHandle,outputZone,"Insertion plane constant",limits.insconst);
-	add_zone_aux_data(fileHandle,outputZone,"Deletion plane constant",limits.delconst);
-	add_zone_aux_data(fileHandle,outputZone,"Aerodynamic plane constant",limits.aeroconst);
+	add_zone_aux_data(fileHandle,outputZone, "Insertion plane constant",limits.insconst);
+	add_zone_aux_data(fileHandle,outputZone, "Deletion plane constant",limits.delconst);
+	add_zone_aux_data(fileHandle,outputZone, "Aerodynamic plane constant",limits.aeroconst);
 
 	// Add boundary time information
 	if(limits.nTimes != 0)
 	{
-		add_zone_aux_data(fileHandle,outputZone,"Times count",limits.nTimes);
+		add_zone_aux_data(fileHandle,outputZone, "Times count",limits.nTimes);
 		for(size_t time = 0; time < limits.nTimes; time++)
 		{
-			add_zone_aux_data(fileHandle,outputZone,"Time " + std::to_string(time),limits.times[time]);
-			add_zone_aux_data(fileHandle,outputZone,"Velocity " + std::to_string(time) + " x",limits.vels[time]);
-			add_zone_aux_data(fileHandle,outputZone,"Velocity " + std::to_string(time) + " y",limits.vels[time]);
+			add_zone_aux_data(fileHandle,outputZone, "Time " + std::to_string(time),limits.times[time]);
+			add_zone_aux_data(fileHandle,outputZone, "Velocity " + std::to_string(time) + " x",limits.vels[time][0]);
+			add_zone_aux_data(fileHandle,outputZone, "Velocity " + std::to_string(time) + " y",limits.vels[time][1]);
 			#if SIMDIM == 3
-			add_zone_aux_data(fileHandle,outputZone,"Velocity " + std::to_string(time) + " z",limits.vels[time]);
+			add_zone_aux_data(fileHandle,outputZone, "Velocity " + std::to_string(time) + " z",limits.vels[time][2]);
 			#endif
 		}
 	}
 	else
 	{
-		add_zone_aux_data(fileHandle,outputZone,"Times count",0);
-		add_zone_aux_data(fileHandle,outputZone,"Velocity x",limits.vels[0]);
-		add_zone_aux_data(fileHandle,outputZone,"Velocity y",limits.vels[1]);
+		add_zone_aux_data(fileHandle,outputZone, "Times count",0);
+		add_zone_aux_data(fileHandle,outputZone, "Velocity x",limits.vels[0][0]);
+		add_zone_aux_data(fileHandle,outputZone, "Velocity y",limits.vels[0][1]);
 		#if SIMDIM == 3
-		add_zone_aux_data(fileHandle,outputZone,"Velocity z",limits.vels[2]);
+		add_zone_aux_data(fileHandle,outputZone, "Velocity z",limits.vels[0][2]);
 		#endif
 
 	}
 
-	add_zone_aux_data(fileHandle,outputZone,"Fixed velocity or dynamic inlet",limits.fixed_vel_or_dynamic);
-	add_zone_aux_data(fileHandle,outputZone,"Lattice or HCPL packing",limits.hcpl);
-	add_zone_aux_data(fileHandle,outputZone,"Boundary solver type",limits.bound_solver);
-	add_zone_aux_data(fileHandle,outputZone,"Boundary is no slip",limits.no_slip);
-	add_zone_aux_data(fileHandle,outputZone,"Block type",limits.block_type);
+	add_zone_aux_data(fileHandle,outputZone, "Fixed velocity or dynamic inlet",limits.fixed_vel_or_dynamic);
+	add_zone_aux_data(fileHandle,outputZone, "Lattice or HCPL packing",limits.hcpl);
+	add_zone_aux_data(fileHandle,outputZone, "Boundary solver type",limits.bound_solver);
+	add_zone_aux_data(fileHandle,outputZone, "Boundary is no slip",limits.no_slip);
+	add_zone_aux_data(fileHandle,outputZone, "Block type",limits.block_type);
 
     // cout << "Flushing results." << endl;
     // INTEGER4 numZonesToRetain = 0;
@@ -588,14 +588,14 @@ void Write_Binary_Timestep(SIM const& svar, real const& rho0, SPHState const& pn
     }
 }
 
-void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, void* &fileHandle)
+void Init_Binary_PLT(SIM &svar, FLUID const& fvar, AERO const& avar, string const& filename, string const& zoneName, void* &fileHandle)
 {
     int32_t FileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/
     int32_t fileFormat = 1; // 0 == PLT, 1 == SZPLT
 
     string file = svar.output_prefix + filename;
 
-	if(tecFileWriterOpen(file.c_str(),zoneName.c_str(),svar.var_names.c_str(),fileFormat,FileType,1,NULL,&fileHandle))
+	if(tecFileWriterOpen(file.c_str(),zoneName.c_str(), svar.var_names.c_str(),fileFormat,FileType,1,NULL,&fileHandle))
     {
     	cout << "Failed to open " << file << endl;
     	exit(-1);
@@ -610,11 +610,150 @@ void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, 
 	#endif
 
 	// Write crucial simulation auxiliary data. Potential to expand
-	add_file_aux_data(fileHandle,"Number of boundary blocks",svar.nbound);
-	add_file_aux_data(fileHandle,"Number of fluid blocks",svar.nfluid);
-	add_file_aux_data(fileHandle,"Number of boundary points",svar.bndPts);
-	add_file_aux_data(fileHandle,"Number of fluid points",svar.simPts);
-	add_file_aux_data(fileHandle,"Current frame", svar.frame);
+	add_file_aux_data(fileHandle, "Number of boundary blocks", svar.nbound);
+	add_file_aux_data(fileHandle, "Number of fluid blocks", svar.nfluid);
+	add_file_aux_data(fileHandle, "Number of boundary points", svar.bndPts);
+	add_file_aux_data(fileHandle, "Number of fluid points", svar.simPts);
+	add_file_aux_data(fileHandle, "Current frame", svar.frame);
+
+	add_file_aux_data(fileHandle, "Input para filename", svar.infile);
+	add_file_aux_data(fileHandle, "Input fluid definition filename", svar.fluidfile);
+	add_file_aux_data(fileHandle, "Input boundary definition filename", svar.boundfile);
+
+	add_file_aux_data(fileHandle, "Primary grid face filename", svar.taumesh);
+	add_file_aux_data(fileHandle, "Boundary mapping filename", svar.taubmap);
+	add_file_aux_data(fileHandle, "Restart-data prefix", svar.tausol);
+	add_file_aux_data(fileHandle, "Dimension offset vector", svar.offset_axis);
+	add_file_aux_data(fileHandle, "Solution angle of attack", svar.angle_alpha);
+	add_file_aux_data(fileHandle, "Grid scale", svar.scale);
+
+	add_file_aux_data(fileHandle, "OpenFOAM input directory", svar.foamdir);
+	add_file_aux_data(fileHandle, "OpenFOAM solution directory", svar.foamsol);
+	add_file_aux_data(fileHandle, "OpenFOAM binary", svar.isBinary);
+	add_file_aux_data(fileHandle, "Label size", svar.labelSize);
+	add_file_aux_data(fileHandle, "Scalar size", svar.scalarSize);
+	add_file_aux_data(fileHandle, "OpenFOAM buoyant", svar.buoyantSim);
+
+	add_file_aux_data(fileHandle, "VLM definition filename", svar.vlm_file); 
+
+	add_file_aux_data(fileHandle, "Single file for output", svar.single_file);
+	add_file_aux_data(fileHandle, "Output files prefix", svar.output_prefix);
+	add_file_aux_data(fileHandle, "SPH restart prefix", svar.restart_prefix);
+	add_file_aux_data(fileHandle, "SPH frame time interval", svar.framet);
+	add_file_aux_data(fileHandle, "SPH frame count", svar.Nframe);
+	add_file_aux_data(fileHandle, "SPH output encoding", svar.out_encoding);
+	add_file_aux_data(fileHandle, "SPH ghost output", svar.gout);
+	add_file_aux_data(fileHandle, "Variable list", svar.output_names);
+
+	
+	/* Fluid data */
+	add_file_aux_data(fileHandle, "Reference density", avar.rhog);
+	add_file_aux_data(fileHandle, "Reference dispersed density", fvar.rho0);
+	add_file_aux_data(fileHandle, "Sutherland reference viscosity", avar.mug);
+	add_file_aux_data(fileHandle, "Reference dispersed viscosity", fvar.mu);
+	add_file_aux_data(fileHandle, "Reference surface tension", fvar.sig);
+	add_file_aux_data(fileHandle, "SPH surface tension contact angle", fvar.contangb);
+	add_file_aux_data(fileHandle, "Init hydrostatic pressure", svar.init_hydro_pressure);
+	add_file_aux_data(fileHandle, "Hydrostatic height", svar.hydro_height);
+
+	/* Aerodynamic data */
+	add_file_aux_data(fileHandle, "Reference velocity", avar.vRef);
+	add_file_aux_data(fileHandle, "Reference pressure", avar.pRef);
+	add_file_aux_data(fileHandle, "Reference Mach number", avar.MRef);
+	add_file_aux_data(fileHandle, "Reference temperature", avar.T);
+	add_file_aux_data(fileHandle, "Gas constant gamma", avar.gamma);
+
+	/* Simulation settings */
+	add_file_aux_data(fileHandle, "SPH integration solver", svar.solver_name);
+	add_file_aux_data(fileHandle, "SPH boundary solver", svar.bound_solver);
+	add_file_aux_data(fileHandle, "SPH solver minimum residual", svar.minRes);
+	add_file_aux_data(fileHandle, "SPH maximum timestep", svar.dt_max);
+	add_file_aux_data(fileHandle, "SPH minimum timestep", svar.dt_min);
+	add_file_aux_data(fileHandle, "SPH maximum CFL", svar.cfl_max);
+	add_file_aux_data(fileHandle, "SPH minimum CFL", svar.cfl_min);
+	add_file_aux_data(fileHandle, "SPH CFL condition", svar.cfl);
+	add_file_aux_data(fileHandle, "SPH unstable CFL step", svar.cfl_step);
+	add_file_aux_data(fileHandle, "SPH unstable CFL count limit", svar.nUnstable_Limit);
+	add_file_aux_data(fileHandle, "SPH stable CFL count limit", svar.nStable_Limit);
+	add_file_aux_data(fileHandle, "SPH stable CFL count iteration factor", svar.subits_factor);
+	add_file_aux_data(fileHandle, "SPH maximum shifting velocity", svar.maxshift);
+
+	add_file_aux_data(fileHandle, "SPH background pressure", fvar.backP);
+	add_file_aux_data(fileHandle, "SPH starting pressure", fvar.pPress);
+	add_file_aux_data(fileHandle, "SPH density variation", fvar.rhoVar);
+	add_file_aux_data(fileHandle, "SPH maximum density", fvar.rhoMax);
+	add_file_aux_data(fileHandle, "SPH minimum density", fvar.rhoMin);
+	add_file_aux_data(fileHandle, "SPH delta coefficient", fvar.delta);
+
+	add_file_aux_data(fileHandle, "SPH artificial viscosity factor", fvar.alpha);
+	add_file_aux_data(fileHandle, "SPH speed of sound", fvar.Cs);
+	add_file_aux_data(fileHandle, "SPH Newmark Beta iteration limit", svar.subits);
+	add_file_aux_data(fileHandle, "SPH gravity vector", svar.grav);
+
+	add_file_aux_data(fileHandle, "SPH initial spacing", svar.Pstep);
+	add_file_aux_data(fileHandle, "SPH boundary spacing factor", svar.Bstep);
+	add_file_aux_data(fileHandle, "SPH smoothing length factor", fvar.Hfac);
+	add_file_aux_data(fileHandle, "SPH aerodynamic case", avar.aero_case);
+	add_file_aux_data(fileHandle, "SPH SP diameter definition", avar.use_dx);
+	add_file_aux_data(fileHandle, "SPH use TAB deformation", avar.useDef);
+	add_file_aux_data(fileHandle, "SPH use ghost particles", svar.ghost);
+	add_file_aux_data(fileHandle, "SPH global offset coordinate", svar.offset_vec);
+	add_file_aux_data(fileHandle, "SPH maximum particle count",svar.finPts);
+	add_file_aux_data(fileHandle, "SPH aerodynamic cutoff value", avar.cutoff);
+	add_file_aux_data(fileHandle, "SPH freestream velocity", avar.vInf);
+	add_file_aux_data(fileHandle, "SPH restart fit tolerance", svar.restart_tol);
+
+	/* Particle tracking settings */
+	add_file_aux_data(fileHandle, "Transition to IPT", svar.using_ipt);
+	add_file_aux_data(fileHandle, "Velocity equation order", svar.eqOrder);
+	add_file_aux_data(fileHandle, "SPH tracking conversion x coordinate", svar.max_x_sph);
+	add_file_aux_data(fileHandle, "Maximum x trajectory coordinate", svar.max_x);
+	add_file_aux_data(fileHandle, "Particle scatter output", svar.partout);
+	add_file_aux_data(fileHandle, "Particle streak output", svar.streakout);
+	add_file_aux_data(fileHandle, "Particle cell intersection output", svar.cellsout);
+
+	/* Droplet drag sweep settings */
+	add_file_aux_data(fileHandle, "Do droplet drag sweep", svar.dropDragSweep);
+	add_file_aux_data(fileHandle, "Do speed test", svar.speedTest);
+	add_file_aux_data(fileHandle, "Speed test run count", svar.nRuns);
+
+	string str;
+	if(!svar.nacross.empty())
+	{
+		for(auto const& x:svar.nacross)
+			str.append(std::to_string(x) + ",");
+		str.pop_back(); //Remove the last comma
+		add_file_aux_data(fileHandle, "Droplet resolutions",str);
+		str.clear();
+	}
+
+	if(!svar.diameters.empty())
+	{
+		for(auto const& x:svar.diameters)
+			str.append(std::to_string(x) + ",");
+		str.pop_back(); //Remove the last comma
+		add_file_aux_data(fileHandle, "Droplet diameters", str);
+		str.clear();
+	}
+	
+	if(!svar.velocities.empty())
+	{
+		for(auto const& x:svar.velocities)
+			str.append(std::to_string(x) + ",");
+		str.pop_back(); //Remove the last comma
+		add_file_aux_data(fileHandle, "Droplet velocities", str);
+		str.clear();
+	}
+
+	
+	if(!svar.Reynolds.empty())
+	{
+		for(auto const& x:svar.Reynolds)
+			str.append(std::to_string(x) + ",");
+		str.pop_back(); //Remove the last comma
+		add_file_aux_data(fileHandle, "Droplet Reynolds numbers", str);
+		str.clear();
+	}
 	
 }
 
@@ -1214,7 +1353,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 {	
 	// Read the values from the solution folder, then check. 
 	#ifdef DEBUG
-		fprintf(dbout,"Reading binary files for restart information.\n");
+		fprintf(dbout, "Reading binary files for restart information.\n");
 	#endif
 
 	void* fluidHandle = NULL;
@@ -1223,7 +1362,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 	string dir;
 	string prefix = svar.restart_prefix;
 	if(svar.restart_prefix.find_last_of("/\\") != string::npos)
-		dir = svar.restart_prefix.substr(0,svar.restart_prefix.find_last_of("/\\"));
+		dir = svar.restart_prefix.substr(0, svar.restart_prefix.find_last_of("/\\"));
 	else
 	{
 		dir = ".";
@@ -1383,7 +1522,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 		{
 			if(dat_write_time_single > plt_write_time_single)
 			{	// More recent, so combine it
-				string name = single_dat_file.substr(0,single_dat_file.size()-6);
+				string name = single_dat_file.substr(0, single_dat_file.size()-6);
 				if(Combine_SZPLT(name) == -1)
 					exit(-1);
 				fluid_restart_file = name;
@@ -1398,7 +1537,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 		}
 		else if (!single_dat_file.empty())
 		{	// szplt file doesnt exist yet, so create it
-			string name = single_dat_file.substr(0,single_dat_file.size()-6);
+			string name = single_dat_file.substr(0, single_dat_file.size()-6);
 			if(Combine_SZPLT(name) == -1)
 				exit(-1);
 			fluid_restart_file = name;
@@ -1452,7 +1591,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 		// Check how many frames are in the fluid file.
 		cout << "Checking Fuel file..." << endl;
 		vector<int32_t> varIndex_fluid, varIndex_bound;
-		CheckContents_Binary(fluidHandle,svar,fluidFrames,fluidTime,varIndex_fluid);
+		CheckContents_Binary(fluidHandle, svar,fluidFrames,fluidTime,varIndex_fluid);
 
 		if(fluidFrames % svar.nfluid != 0)
 		{
@@ -1477,7 +1616,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 			}
 
 			cout << "Checking Boundary file..." << endl;
-			CheckContents_Binary(boundHandle,svar,boundFrames,boundTime,varIndex_bound);
+			CheckContents_Binary(boundHandle, svar,boundFrames,boundTime,varIndex_bound);
 			
 			if(boundFrames % svar.nbound != 0)
 			{
@@ -1542,7 +1681,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 			{
 				int32_t frame = boundFrames - svar.nbound + ii + 1;
 				SPHState block;
-				Read_Binary_Timestep(boundHandle,svar,fvar,frame,varIndex_bound,block,limits[ii]);
+				Read_Binary_Timestep(boundHandle, svar,fvar,frame,varIndex_bound,block,limits[ii]);
 				pn.insert(pn.end(),block.begin(),block.end());
 				nBnd += block.size();
 			}
@@ -1558,7 +1697,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 		{
 			int32_t frame = fluidFrames - svar.nfluid + ii + 1;
 			SPHState block;
-			Read_Binary_Timestep(fluidHandle,svar,fvar,frame,varIndex_fluid,block,limits[ii+svar.nbound]);
+			Read_Binary_Timestep(fluidHandle, svar,fvar,frame,varIndex_fluid,block,limits[ii+svar.nbound]);
 			pn.insert(pn.end(),block.begin(),block.end());
 			nFlu += block.size();
 		}
@@ -1643,7 +1782,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 		// Check how many frames are in the fluid file.
 		cout << "Checking Fuel file..." << endl;
 		vector<int32_t> varIndex_fluid, varIndex_bound;
-		CheckContents_Binary(fluidHandle,svar,fluidFrames,fluidTime,varIndex_fluid);
+		CheckContents_Binary(fluidHandle, svar,fluidFrames,fluidTime,varIndex_fluid);
 
 		if(static_cast<int>(svar.nfluid) != fluidFrames)
 		{
@@ -1669,7 +1808,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 			}
 
 			cout << "Checking Boundary file..." << endl;
-			CheckContents_Binary(boundHandle,svar,boundFrames,boundTime,varIndex_bound);
+			CheckContents_Binary(boundHandle, svar,boundFrames,boundTime,varIndex_bound);
 			
 			if(static_cast<int>(svar.nbound) != boundFrames)
 			{
@@ -1688,7 +1827,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 			{
 				int32_t frame = ii + 1;
 				SPHState block;
-				Read_Binary_Timestep(boundHandle,svar,fvar,frame,varIndex_bound,block,limits[ii]);
+				Read_Binary_Timestep(boundHandle, svar,fvar,frame,varIndex_bound,block,limits[ii]);
 				pn.insert(pn.end(),block.begin(),block.end());
 				nBnd += block.size();
 			}
@@ -1703,7 +1842,7 @@ void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits)
 		{
 			int32_t frame = ii + 1;
 			SPHState block;
-			Read_Binary_Timestep(fluidHandle,svar,fvar,frame,varIndex_fluid,block,limits[ii+svar.nbound]);
+			Read_Binary_Timestep(fluidHandle, svar,fvar,frame,varIndex_fluid,block,limits[ii+svar.nbound]);
 			pn.insert(pn.end(),block.begin(),block.end());
 			nFlu += block.size();
 		}
@@ -1789,7 +1928,7 @@ void Write_Cell_Centres(MESH const& cells)
 		Write_Real_Vector(fileHandle, outputZone, var, 0, cells.nElem, x, name);
 	}
 
-	if(tecZoneCreateIJK(fileHandle,"Node coordinates",cells.nPnts,1,1,&varTypes[0],
+	if(tecZoneCreateIJK(fileHandle, "Node coordinates",cells.nPnts,1,1,&varTypes[0],
 		&shareVarFromZone[0],&valueLocation[0],&passiveVarList[0],0,0,0,&outputZone))
 	{
 		cerr << "Failed to create IJK zone." << endl;

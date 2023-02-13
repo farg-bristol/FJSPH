@@ -29,8 +29,8 @@ real Check_RK_Error(SIM const& svar, size_t const& start, size_t const& end,
 /* <summary> Peform the first stage of the Runge-Kutta integration
 	to get the first guess of time n+1 (regarded here as time n+1/4)
 	to perform neighbour search and dissipation terms before freezing </summary */
-real Get_First_RK(SIM& svar, FLUID const& fvar, AERO const& avar, 
-	size_t const& start, size_t const& end, real const& B, real const& gam, real const& npd, MESH& cells,
+real Get_First_RK(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start,
+	 size_t const& end, real const& B, real const& gam, real const& npd, MESH const& cells,
 	LIMITS const& limits, OUTL const& outlist, real& logbase, SPHState& pn, SPHState& st_2, real& error1)
 {
 	const real dt = svar.dt;
@@ -242,8 +242,8 @@ real Get_First_RK(SIM& svar, FLUID const& fvar, AERO const& avar,
 /* <summary> Perform the rest of the Runge-Kutta integration, assuming frozen 
 	dissipation terms. This will do step 2 to 4 (n+1/4 to n+1) </summary> */
 void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	size_t const& start, size_t& end, real const& B, real const& gam, real const& npd, MESH& cells, 
-	LIMITS const& limits, OUTL const& outlist, /* DELTAP const& dp,*/ real& logbase,
+	size_t const& start, size_t& end, real const& B, real const& gam, real const& npd, MESH const& cells, 
+	LIMITS const& limits, OUTL const& outlist, real& logbase,
 	SPHState& pn, SPHState& st_2, SPHState& pnp1, StateVecD& Force, StateVecD& dropVel, real& error1)
 {
 	/*Create the vectors*/		
@@ -829,7 +829,7 @@ void Perform_RK4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO c
 }
 
 real Runge_Kutta4(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	size_t const& start, size_t& end, real const& B, real const& gam, real const& npd, MESH& cells,
+	size_t const& start, size_t& end, real const& B, real const& gam, real const& npd, MESH const& cells,
 	LIMITS const& limits, OUTL const& outlist, real& logbase,
 	SPHState& pn, SPHState& st_2, SPHState& pnp1, StateVecD& Force, StateVecD& dropVel)
 {

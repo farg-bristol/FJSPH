@@ -89,7 +89,10 @@ inline int LessThanREError(StateP1MatD const& A)
 
 /*Surface detection as described by Marrone, Colagrossi, Le Touze, Graziani - (2010)*/
 void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start, size_t const& end,
-                OUTL const& outlist, MESH const& cells, VLM& vortex, SPHState& pnp1);
+                OUTL const& outlist, MESH const& cells, VLM const& vortex, SPHState& pnp1);
+
+/* Find the 2/3 full neighbour count for the original Gissler et al. (2019) model */
+real get_n_full(real const& dx, real const& H);
 
 // Returns 1 if the lines intersect, otherwise 0. In addition, if the lines 
 // intersect the intersection point may be stored in the floats i_x and i_y.

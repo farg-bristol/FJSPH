@@ -14,7 +14,9 @@
 #include <sstream>
 #include <omp.h>
 
+#if defined(HAS_BLAS)
 #define EIGEN_USE_BLAS
+#endif
 // Third party includes
 #include <Eigen/Core>
 #include <Eigen/StdVector>
@@ -56,9 +58,11 @@ std::ofstream dambreak("Dam_Data.log",std::ios::out);
 #endif
 
 #if FOD == 1
+// #define real double
 typedef double real;
 int32_t const static realType = 2;
 #else
+// #define real float
 typedef float real;
 int32_t const static realType = 1;
 #endif
@@ -177,50 +181,38 @@ struct SIM
         boundFile = NULL;
         fluidFile = NULL;
 
+        write_tecio = 1;
+        write_h5part = 0;
         out_encoding = 1; /* default to binary */
         gout = 0; /* Default to restartable data */
         single_file = 1;
-
+        restart_header_written = 0;
         restart = 0;
         scale = 1.0;
 
         nbound = 0; nfluid = 0;
         partID = 0;
         simPts = 0; bndPts = 0; totPts = 0;
-        gstPts = 0;  psnPts = 0; delNum = 0; 
+        gstPts = 0; delNum = 0; 
         intNum = 0;	nrefresh = 0; addcount = 0;
         finPts = 9999999; /* Default to basically no particle limit */
-        
+    
         Pstep = -1.0; Bstep = 0.7; dx = -1.0;
 
         bound_type = "(none)"; /* Default to no boundary */
-        Scase = 0; Bcase = 0;
-        Bclosed = 0; ghost = 0;
+        Scase = 0; Bcase = 0; ghost = 0;
         Asource = constVel;
         init_hydro_pressure = 0;
         use_global_gas_law = 1;
         hydro_height = -1;
 
         /* Universal geometry parameters */
-        sim_start.setConstant(-1);
-        bound_start.setConstant(-1);
-
-        /* Jet geometry parameters */
-        jet_diam = -1;
-        jet_depth = -1;
-        Angle = StateVecD::Zero();
-        Rotate = StateMatD::Zero();
-        Transp = StateMatD::Zero();
-        nrad = 0;
+        offset_vec = StateVecD::Zero();
         
         /* Droplet geometry parameters */
+        nrad = 0;
         diam = -1.0;
         
-        /* Rectangle */
-        xyPART.setConstant(-1);
-        sim_box.setConstant(-1);
-        bound_box.setConstant(-1);
-    
         /* Integration parameters */
         solver_type = newmark_beta;
         subits = 20;
@@ -228,10 +220,10 @@ struct SIM
         frame = 0;
         bound_solver = 0;
         nStable = 0;
-        nStable_Limit = 3;
+        nStable_Limit = 10;
         nUnstable = 0;
         nUnstable_Limit = 3;
-        subits_factor = 0.5;
+        subits_factor = 0.333;
         minRes = -7.0;
         cfl = 1.0;
         cfl_step = 0.05;
@@ -280,6 +272,7 @@ struct SIM
     std::string infile, output_prefix, outdir;
     std::string fluidfile, boundfile;
     std::string restart_prefix;
+    std::string vlm_file;
 
     /* OpenFOAM files */
     std::string foamdir, foamsol;
@@ -303,6 +296,11 @@ struct SIM
     std::vector<int32_t> var_types; /**< Data types for output */
     std::string var_names;      /**< Variable names for tecplot output */
 
+    /* H5Part file outputs */
+    int64_t ffile, bfile;
+	uint write_tecio;			/**< Write Tecplot file (this or write_h5part needs to be true) */
+	uint write_h5part;			/**< Write H5part file (this or write_tecio needs to be true) */
+
     ofstream surfacefile; /* Surface impact file */
     void* surfaceHandle;
 
@@ -310,7 +308,7 @@ struct SIM
     uint out_encoding;              /* ASCII or binary output*/
     uint gout;                      /* Output type.*/
     uint single_file;               /* Use single file or not for output */
-
+    uint restart_header_written;    /* Whether the restart header has been written yet */
     uint restart;					/* If starting from existing solution */
     real scale;						/* Simulation scale */
 
@@ -323,7 +321,6 @@ struct SIM
     size_t bndPts;			 		 /* Boundary count */
     size_t gstPts;                   /* Ghost count */
     size_t finPts;					 /* End count */
-    size_t psnPts;					 /* Piston count */
     size_t delNum;                   /* Number of deleted particles */
     size_t intNum;                   /* Number of internal particles */
     size_t nrefresh; 				 /* last add call particle number */
@@ -335,25 +332,17 @@ struct SIM
     /* Geometry parameters */
     string start_type, bound_type;
     int Scase, Bcase;				  /* What initial shape to take */
-    StateVecD sim_start, bound_start; /* Starting coordinates (For box, bottom left) */
-    int Bclosed, ghost;		  		  /* If the jet is closed or not */
+    StateVecD offset_vec;             /* Global offset coordinate */
+    int ghost;		  		          /* If the jet is closed or not */
     int Asource;                      /* Source of aerodynamic solution */
     int init_hydro_pressure;          /* Initialise fluid with hydrostatic pressure? */
     int use_global_gas_law;			  /* Whether to use block specific gas laws (Currently not active) */
     real hydro_height;                /* Hydrostatic height to initialise using */
 
     /* Jet geometry parameters */
-    real jet_diam;			        /* Jet diameter */
-    real jet_depth;					/* Jet depth down - recommended > diam */
-    StateVecD Angle;				/* Rotations in degrees */
-    StateMatD Rotate;				/* Starting rotation matrix */ 
-    StateMatD Transp;               /* Transpose of rotation matrix */
     real diam;                      /* Droplet diameter */
     uint nrad;                      /* Points along the radius of the jet/droplet */
-    /* Box geometry parameters */
-    StateVecI xyPART; 				/* Starting sim particles in x and y box */
-    StateVecD sim_box, bound_box;	/* Box dimensions */
-    
+
     /* Integration parameters */	
     string solver_name;             /* Name of solver */
     uint solver_type;               /* Use Runge-Kutta or Newmark-Beta */
@@ -383,8 +372,6 @@ struct SIM
 
     uint framecount;                /* How many frames have been output */
     real restart_tol;               /* Tolerance on buffer particles fitting*/
-
-    string vlm_file;
 
     StateVecD Force, AForce;		/*Total Force*/
     real mass;
@@ -496,14 +483,13 @@ struct AERO
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     AERO()
     {
-        useDef = 0;
-        use_dx = 0;
+        vInf = StateVecD::Zero();
+
         Cf = 1.0/3.0;
         Ck = 8.0;
         Cd = 5.0;
         Cb = 0.5;
 
-        qInf = 0.0;
         vRef = 0.0;
         pRef = 101353.0;
         rhog = 1.29251;
@@ -515,11 +501,21 @@ struct AERO
         isossqr = 1.0/(sos*sos);
         MRef = -1.0;
 
-        acase = 0;
-        vStart = StateVecD::Zero();
-        vInf = StateVecD::Zero();
         vJetMag = -1.0;
         cutoff = 0.75;
+        interp_fac = 2.0;
+        iinterp_fac = 0.5;
+        #if SIMDIM == 2
+        nfull = 30;
+        #else
+        nfull = 200;
+        #endif
+        infull = 1.0/nfull;
+        incount = 1.0/(iinterp_fac * nfull);
+        acase = 0;
+        use_lam = 1;
+        useDef = 0;
+        use_dx = 0;
     }
 
     void GetYcoef(const FLUID& fvar, const real diam)
@@ -547,10 +543,10 @@ struct AERO
 
         //cout << ycoef << "  " << Cdef << "  " << tmax << "  " << endl;
     }
+
+    StateVecD vInf;        /* Freestream velocity*/
     
     /*Gissler Parameters*/
-    int useDef;
-    int use_dx;
     real L;
     real td;
     real omega;
@@ -563,8 +559,7 @@ struct AERO
     real aPlate;                   /* Area of a plate*/
 
     /* Gas Properties*/
-    real qInf, vRef, pRef;         /* Reference gas values*/
-    
+    real vRef, pRef;               /* Reference gas values*/
     real rhog, mug;
     real gasM;					   /* A gas particle mass*/
     real T;						   /* Temperature*/
@@ -574,11 +569,19 @@ struct AERO
     real isossqr;				   /* Inverse speed of sound squared */
     real MRef;    
     
-    string aero_case;
-    int acase;	                   /* Aerodynamic force case*/
-    StateVecD vStart, vInf;        /* Jet & Freestream velocity*/
     real vJetMag;
     real cutoff;				   /* Lambda value cutoff */
+    real interp_fac;               /* Factor for the interpolation value */
+    real iinterp_fac;              /* Inverse factor for the interpolation */
+    real nfull;                    /* 2/3ds full neighbourhood count */
+    real infull;                   /* inverse of nfull */
+    real incount;                  /* inverse nfull * factor */
+
+    string aero_case;
+    int acase;	                   /* Aerodynamic force case*/
+    int use_lam;                    
+    int useDef;
+    int use_dx;
 };
 
 struct MESH
@@ -961,6 +964,7 @@ struct bound_block
     bound_block(size_t const& a) // Initialise starting index only first
     {
         index.first = a;
+        index.second = a;
         delete_norm = StateVecD::Constant(default_val);
         delconst = default_val;
         insert_norm = StateVecD::Constant(default_val);

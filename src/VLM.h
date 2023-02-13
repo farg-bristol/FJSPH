@@ -50,13 +50,15 @@ typedef class VLM
 			streamDx = 0.1;
 			maxIters = 10000;
 			minDx = 1e-5;
+			maxVelFac = 2.0;
+			maxVel = maxVelFac * Freestream.norm();
 		}
 
 		void Init(std::string input);
 
 		void GetGamma(StateVecD inf);
 
-		const StateVecD getVelocity(StateVecD const& pos);
+		StateVecD getVelocity(StateVecD const& pos) const;
 
 		void write_VLM_Panels(string &prefix);
 
@@ -68,12 +70,12 @@ typedef class VLM
 		void MakeMatrix(void);
 
 		/* May need some conditioning for points that are nearly colinear */
-		const StateVecD FindInfluence(StateVecD const& A, StateVecD const& B, StateVecD const& C);
+		StateVecD FindInfluence(StateVecD const& A, StateVecD const& B, StateVecD const& C) const;
 
 		/* May need some conditioning for points that are nearly colinear */
 		/* Current test - If any vortex is ill conditioned, ignore the entire horseshoe */
 		/* Feels more appropriate to do this, but could be excessive. */
-		const StateVecD FindInfluenceConditioned(StateVecD const& A, StateVecD const& B, StateVecD const& C);
+		StateVecD FindInfluenceConditioned(StateVecD const& A, StateVecD const& B, StateVecD const& C) const;
 
  		std::vector<Panel> panelData;
 
@@ -89,6 +91,7 @@ typedef class VLM
 
 		real AoA, sweep, taper, beta;
 		real maxX, streamDx, minDx;
+		real maxVelFac, maxVel;
 		size_t maxIters;
 		int npanels, nverts;
 }VLM;

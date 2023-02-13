@@ -8,10 +8,10 @@
 #include "VLM.h"
 ///**************** Integration loop **************///
 real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	VLM& vortex, MESH& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist,
+	VLM const& vortex, MESH const& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist,
 	SPHState& pn, SPHState& pnp1, vector<IPTState>& iptdata);
 
 void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	VLM& vortex, MESH& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn, vector<IPTState>& iptdata);
+	VLM const& vortex, MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn, vector<IPTState>& iptdata);
 
 #endif

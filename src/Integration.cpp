@@ -15,10 +15,156 @@
 #include "Runge_Kutta.h"
 #include "Newmark_Beta.h"
 #include <chrono>
+#include <set>
 using namespace std::chrono;
+
+void Get_Aero_Velocity(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, 
+	AERO const& avar, MESH const& cells, VLM const& vortex, size_t const& start, size_t& end_ng, 
+		OUTL& outlist, LIMITS& limits, SPHState& pn, SPHState& pnp1, real& npd)
+{
+// Check if the particle has moved to a new cell
+	switch(svar.Asource)
+	{
+		case meshInfl:
+		{
+			// cout << "Finding cells" << endl;
+			vector<size_t> toDelete = FindCell(svar,avar,CELL_TREE,cells,pn,pnp1);
+				
+			if(!toDelete.empty())
+			{	
+				size_t nDel = toDelete.size();
+				std::sort(toDelete.begin(),toDelete.end());
+				vector<size_t> nshift(limits.size(),0);
+				for(vector<size_t>::reverse_iterator index = toDelete.rbegin(); 
+					index!=toDelete.rend(); ++index)
+				{
+					pnp1.erase(pnp1.begin()+ *index);
+					pn.erase(pn.begin() + *index);
+					for(size_t block = 0; block < limits.size(); ++block)
+					{
+						if(*index < limits[block].index.second)
+						{
+							nshift[block]++;
+						}
+					}
+				}
+
+				for(size_t block = 0; block < limits.size(); ++block)
+				{
+					for(auto& back:limits[block].back)
+						back -= nDel;
+
+					for(auto& buffer:limits[block].buffer)
+						for(auto& p:buffer)
+							p -= nDel;
+				}
+				//Rebuild the neighbour list
+				// cout << "Updating neighbour list" << endl;
+				// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
+				svar.delNum += nDel;
+				svar.simPts -= nDel;
+				svar.totPts -= nDel;
+				end_ng -= nDel;
+				SPH_TREE.index->buildIndex();
+				FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
+				dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,npd);
+			}	
+			break;
+		}
+		#if SIMDIM == 3
+		case VLMInfl:
+		{
+			switch(avar.use_lam)
+			{
+				case true:
+				{
+					#pragma omp parallel for
+					for(size_t ii = start; ii < end_ng ; ii++)
+					{
+						if(pnp1[ii].lam_ng < avar.cutoff  && pnp1[ii].b == FREE)
+						{
+							pnp1[ii].cellV = vortex.getVelocity(pnp1[ii].xi);
+							pnp1[ii].cellID = 1;
+						}
+						else
+						{
+							pnp1[ii].cellV = StateVecD::Zero();
+							pnp1[ii].cellID = -1;
+						}
+					}
+					break;
+				}
+				case false:
+				{
+					#pragma omp parallel for
+					for(size_t ii = start; ii < end_ng ; ii++)
+					{
+						if(outlist[ii].size() * avar.infull < avar.cutoff && pnp1[ii].b == FREE)
+						{
+							pnp1[ii].cellV = vortex.getVelocity(pnp1[ii].xi);
+							pnp1[ii].cellID = 1;
+						}
+						else
+						{
+							pnp1[ii].cellV = StateVecD::Zero();
+							pnp1[ii].cellID = -1;
+						}
+					}
+					break;
+				}
+			}
+			break;
+		}
+		#endif
+		case constVel:
+		{
+			switch(avar.use_lam)
+			{
+				case true:
+				{
+					#pragma omp parallel for
+					for(size_t ii = start; ii < end_ng ; ii++)
+					{
+						if(pnp1[ii].lam_ng < avar.cutoff  && pnp1[ii].b == FREE)
+						{
+							pnp1[ii].cellV = avar.vInf;
+							pnp1[ii].cellID = 1;
+						}
+						else
+						{
+							pnp1[ii].cellV = StateVecD::Zero();
+							pnp1[ii].cellID = -1;
+						}
+					}
+					break;
+				}
+				case false:
+				{
+					#pragma omp parallel for
+					for(size_t ii = start; ii < end_ng ; ii++)
+					{
+						if(outlist[ii].size() * avar.infull < avar.cutoff  && pnp1[ii].b == FREE)
+						{
+							pnp1[ii].cellV = avar.vInf;
+							pnp1[ii].cellID = 1;
+						}
+						else
+						{
+							pnp1[ii].cellV = StateVecD::Zero();
+							pnp1[ii].cellID = -1;
+						}
+					}
+					break;
+				}
+			}
+			break;
+		}
+	}
+}
+
 ///**************** Integration loop **************///
 real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	VLM& vortex, MESH& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist, 
+	VLM const& vortex, MESH const& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist, 
 	SPHState& pn, SPHState& pnp1, vector<IPTState>& iptdata)
 {
 	high_resolution_clock::time_point t1 = high_resolution_clock::now();
@@ -36,22 +182,25 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 
 	// Find maximum safe timestep
 	real maxf = 0.0;
+	real maxdrho = 0.0;
 	real maxU = 0.0;
 	real minST = 9999999.0;
-	#pragma omp parallel for reduction(max: maxf, maxU) reduction(min: minST)
+	#pragma omp parallel for reduction(max: maxf, maxU, maxdrho) reduction(min: minST)
 	for(size_t ii = start; ii < end_ng; ++ii)
 	{
 		maxf = std::max(maxf, pnp1[ii].acc.norm());
+		maxdrho = std::max(maxdrho, abs(pnp1[ii].Rrho));
 		maxU = std::max(maxU, pnp1[ii].v.norm());
 		minST = std::min(minST, sqrt(pnp1[ii].rho*svar.dx*svar.dx/(2.0*M_PI*fvar.sig*fabs(pnp1[ii].curve))));
 	}
 
-	real dtv = 0.125 * fvar.HSQ * fvar.rho0/fvar.mu; /*Viscosity timestep constraint*/
-	real dtf = 0.25 * sqrt(fvar.H/maxf); 			 /*Force timestep constraint*/
-	real dtc = 2 * fvar.H/(maxU);					 /*Velocity constraint*/
+	real dtf = 0.25 * sqrt(fvar.H/maxf); 			 /* Force timestep constraint */
+	real dtc = 2 * fvar.H/(maxU);					 /* Velocity constraint */
+	real dtv = 0.125 * fvar.HSQ * fvar.rho0/fvar.mu; /* Viscosity timestep constraint */
+	real dtst = 0.067 * minST;						 /* Surface tension constraint */
+	real dtr = 0.5 * sqrt(fvar.H/maxdrho);			 /* Density gradient constraint */
 	real dtc2 = 1.5 * fvar.H/fvar.Cs; /* Acoustic constraint */ /* 2* can't be used without delta-SPH it seems. Divergent in tensile instability */
 
-	real dtst = 0.067 * minST;
 
 	// Only use if -fno-finite-math-only is on
 	// if (std::isinf(maxf))
@@ -63,7 +212,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	/***********************************************************************************/
 	/***********************************************************************************/
 	/***********************************************************************************/
-		real safe_dt = 0.75*std::min(std::min(dtf,dtc2),std::min(dtc,std::min(dtv,dtst)));
+		real safe_dt = 0.75*std::min(dtf,std::min(dtc,std::min(dtv,std::min(dtst,std::min(dtr,dtc2)))));
 		svar.dt = svar.cfl*safe_dt;
 	/***********************************************************************************/
 	/***********************************************************************************/
@@ -92,89 +241,8 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 
 	dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,npd);
 
-	// Check if the particle has moved to a new cell
-	if (svar.Asource == meshInfl)
-	{
-		// cout << "Finding cells" << endl;
-		vector<size_t> toDelete = FindCell(svar,avar,CELL_TREE,cells,pn,pnp1);
-		    
-		if(!toDelete.empty())
-		{	
-			size_t nDel = toDelete.size();
-			std::sort(toDelete.begin(),toDelete.end());
-			vector<size_t> nshift(limits.size(),0);
-			for(vector<size_t>::reverse_iterator index = toDelete.rbegin(); 
-				index!=toDelete.rend(); ++index)
-			{
-				pnp1.erase(pnp1.begin()+ *index);
-				pn.erase(pn.begin() + *index);
-				for(size_t block = 0; block < limits.size(); ++block)
-				{
-					if(*index < limits[block].index.second)
-					{
-						nshift[block]++;
-					}
-				}
-			}
-
-			for(size_t block = 0; block < limits.size(); ++block)
-			{
-				for(auto& back:limits[block].back)
-					back -= nDel;
-
-				for(auto& buffer:limits[block].buffer)
-					for(auto& p:buffer)
-						p -= nDel;
-			}
-			//Rebuild the neighbour list
-			// cout << "Updating neighbour list" << endl;
-			// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
-			svar.delNum += nDel;
-			svar.simPts -= nDel;
-			svar.totPts -= nDel;
-			end_ng -= nDel;
-			SPH_TREE.index->buildIndex();
-			FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
-			dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,npd);
-		}	
-	}
-	#if SIMDIM == 3
-	else if (svar.Asource == VLMInfl)
-	{
-		/* Find the VLM influence for the particles */
-		#pragma omp parallel for
-		for(size_t ii = start; ii < end_ng ; ii++)
-		{
-			if(pnp1[ii].lam_ng < avar.cutoff  && pnp1[ii].b == FREE)
-			{
-				pnp1[ii].cellV = vortex.getVelocity(pnp1[ii].xi);
-				pnp1[ii].cellID = 1;
-			}
-			else
-			{
-				pnp1[ii].cellV = StateVecD::Zero();
-				pnp1[ii].cellID = -1;
-			}
-		}
-	}
-	#endif
-	else
-	{
-		#pragma omp parallel for
-		for(size_t ii = start; ii < end_ng ; ii++)
-		{
-			if(pnp1[ii].lam_ng < avar.cutoff  && pnp1[ii].b == FREE)
-			{
-				pnp1[ii].cellV = avar.vInf;
-				pnp1[ii].cellID = 1;
-			}
-			else
-			{
-				pnp1[ii].cellV = StateVecD::Zero();
-				pnp1[ii].cellID = -1;
-			}
-		}
-	}
+	Get_Aero_Velocity(SPH_TREE,CELL_TREE,svar,fvar,avar,cells,vortex,start, end_ng, 
+			outlist,limits, pn, pnp1, npd);	
 
 	Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,vortex,pnp1);
 
@@ -185,7 +253,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	}
 	else if (svar.ghost == 2)
 	{	/* Lattice points */
-		LatticeGhost(svar,fvar,avar,cells,SPH_TREE,outlist,pn,pnp1);
+		LatticeGhost(svar,fvar,avar,cells,SPH_TREE,outlist,pn,pnp1,limits);
 		dSPH_PreStep(fvar,end_ng,pnp1,outlist,npd);
 	}
 
@@ -253,45 +321,8 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 
 	dSPH_PreStep(fvar,end,pnp1,outlist,npd);
 
-	if (svar.Asource == meshInfl)
-	{
-		// cout << "Finding cells" << endl;
-		FindCell(svar,avar,CELL_TREE,cells,pn,pnp1);
-		if (svar.totPts != pnp1.size())
-		{	//Rebuild the neighbour list
-			// cout << "Updating neighbour list" << endl;
-			// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
-			svar.delNum += svar.totPts-pnp1.size();
-			svar.simPts -= svar.totPts-pnp1.size();
-			svar.totPts = pnp1.size();
-			end = svar.totPts;
-			end_ng = svar.bndPts + svar.simPts;
-			SPH_TREE.index->buildIndex();
-			FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
-			dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,npd);
-			
-		}	
-	}
-	#if SIMDIM == 3
-	else if (svar.Asource == VLMInfl)
-	{
-		/* Find the VLM influence for the particles */
-		#pragma omp parallel for
-		for(size_t ii = start; ii < end_ng ; ii++)
-		{
-			if(pnp1[ii].lam_ng < avar.cutoff  && pnp1[ii].b == FREE)
-			{
-				pnp1[ii].cellV = vortex.getVelocity(pnp1[ii].xi);
-				pnp1[ii].cellID = 1;
-			}
-			else
-			{
-				pnp1[ii].cellV = StateVecD::Zero();
-				pnp1[ii].cellID = -1;
-			}
-		}
-	}
-	#endif
+	Get_Aero_Velocity(SPH_TREE,CELL_TREE,svar,fvar,avar,cells,vortex,start, end_ng, 
+			outlist,limits, pn, pnp1, npd);	
 
 	Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,vortex,pnp1);
 
@@ -337,8 +368,8 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	uint nAdd = update_buffer_region(svar, limits, pnp1, end, end_ng);
 
 	/* Check if any particles need to be deleted, and turned to particle tracking */
-	vector<size_t> to_del;
-	vector<size_t> ndel(limits.size(),0);
+	std::set<size_t> to_del;
+	vector<size_t> ndelperblock(limits.size(),0);
 	for(size_t block = svar.nbound; block < svar.nbound + svar.nfluid; block++)
 	{
 		// Need to check if the delete plane is active.
@@ -357,10 +388,10 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 					/* SPHPart is downstream enough to convert to IPT */
 					#pragma omp critical
 					{
-						to_del.emplace_back(ii);
+						to_del.insert(ii);
 					}
 					#pragma omp atomic
-					ndel[block]++;
+					ndelperblock[block]++;
 				}
 			// }
 
@@ -394,8 +425,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	uint nDel = 0;
 	if(!to_del.empty())
 	{
-		std::sort(to_del.begin(), to_del.end());
-		for(vector<size_t>::reverse_iterator itr = to_del.rbegin(); itr!=to_del.rend(); ++itr)
+		for(std::set<size_t>::reverse_iterator itr = to_del.rbegin(); itr!=to_del.rend(); ++itr)
 		{
 			pnp1.erase(pnp1.begin() + *itr);
 			svar.totPts--;
@@ -411,14 +441,12 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		{
 			// Shift the blocks, which will happen cumulatively
 			limits[block].index.first -= delshift;
-			delshift += ndel[block];
+			delshift += ndelperblock[block];
 			limits[block].index.second -= delshift;
 
 			/* Need to shift back vector and buffer vector for correct inlet */
 			for(size_t& back:limits[block].back)
-			{
 				back -= delshift;
-			}
 
 			for(vector<size_t>& buffer:limits[block].buffer)
 				for(size_t& part:buffer)
@@ -428,10 +456,11 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		}
 	}
 
+	real maxRho = 0.0;
 	#ifndef DEBUG
 	if(svar.speedTest == 0)
-	{
 	#endif
+	{
 		real maxAf = 0.0;
 		real maxRhoi = 0.0;
 		#ifdef ALE
@@ -446,7 +475,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 			maxShift = std::max(maxShift,pnp1[ii].vPert.norm());
 			#endif
 		}
-		real maxRho = 100*maxRhoi/fvar.rho0;
+		maxRho = 100*maxRhoi/fvar.rho0;
 		real cfl = svar.dt/safe_dt;
 		high_resolution_clock::time_point t2 = high_resolution_clock::now();
 		auto duration = duration_cast<milliseconds>(t2-t1).count();
@@ -464,9 +493,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		// 	<< " MaxdU: " << maxShift
 		// 	#endif
 		// 	 << endl;
-	#ifndef DEBUG
 	}
-	#endif
 
 	if(pnp1.size() == 0 || svar.simPts == 0)
 	{ 
@@ -474,12 +501,30 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		return 0;
 	}
 
+	// if(maxRho > 1.0)
+	// {
+	// 	for(size_t ii = svar.bndPts; ii < svar.simPts; ii++)
+	// 	{
+	// 		if(100.0 * abs(pnp1[ii].rho-fvar.rho0) / fvar.rho0 > 1.0)
+	// 		{
+	// 			if(outlist[ii].size() == 2)
+	// 			{
+	// 				// Do something?
+	// 				printf("Particle violating density limit is sitting in a dual particle system\n");
+	// 			}
+	// 			else
+	// 			{
+	// 				printf("Particle violating density limit is out of a dual particle system \n");
+	// 			}
+	// 		}
+	// 	}
+	// }
+
 	if(nAdd != 0 || nDel != 0)
 	{
 		SPH_TREE.index->buildIndex();
 		FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
 	}
-
 
 	/****** UPDATE TIME N ***********/
 	if(svar.totPts != pnp1.size())
@@ -496,8 +541,9 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 
 	/*Add time to global*/
 	svar.t+=svar.dt;
+
 	/* Check the error and adjust the CFL to try and keep convergence */
-	if(error1 > svar.minRes)
+	if(error1 > svar.minRes || maxRho > 1.0)
 	{
 		if(svar.nUnstable > svar.nUnstable_Limit)
 		{
@@ -543,7 +589,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 }
 
 void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
-	VLM& vortex, MESH& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn, vector<IPTState>& iptdata)
+	VLM const& vortex, MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn, vector<IPTState>& iptdata)
 {
 	size_t const start = svar.bndPts;
 	size_t end = svar.totPts;
@@ -583,7 +629,7 @@ void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID 
 	}
 	else if (svar.ghost == 2)
 	{	/* Lattice points */
-		LatticeGhost(svar,fvar,avar,cells,SPH_TREE,outlist,pn,pnp1);
+		LatticeGhost(svar,fvar,avar,cells,SPH_TREE,outlist,pn,pnp1,limits);
 		dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,npd);
 		// Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,pnp1);
 	}

@@ -4,8 +4,9 @@
 #include "Var.h"
 #include "Kernel.h"
 #include "Helper_Functions.h"
-#include "Eigen/LU"
-#include "Eigen/Eigenvalues"
+
+#include <Eigen/LU>
+#include <Eigen/Eigenvalues>
 
 
 /*L matrix for delta-SPH calculation*/

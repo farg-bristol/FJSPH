@@ -4,6 +4,7 @@
 #include "AsciiIO.h"
 #include "BinaryIO.h"
 #include "Geometry.h"
+#include "H5IO.h"
 #include "IO.h"
 #include "IOFunctions.h"
 #include "Kernel.h"
@@ -17,21 +18,21 @@
 void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex)
 {
 	/*Universal parameters based on input values*/
-	svar.Angle *= M_PI/180.0;
-	svar.Rotate = GetRotationMat(svar.Angle);
-	svar.Transp = svar.Rotate.transpose();
+	// StateVecD angle = svar.Angle;
+	// angle *= M_PI/180.0;
+	// svar.Rotate = GetRotationMat(angle);
+	// svar.Transp = svar.Rotate.transpose();
 	
-	svar.sim_start *= svar.scale;
-	svar.bound_start *= svar.scale;
+	svar.offset_vec *= svar.scale;
 	svar.max_x *= svar.scale;
 	svar.max_x_sph *= svar.scale;
 
-	if(avar.vJetMag != -1)
-	{
-		avar.vStart = StateVecD::Zero();
-		avar.vStart[1] = avar.vJetMag;
-		avar.vStart = svar.Rotate*avar.vStart;
-	}
+	// if(avar.vJetMag != -1)
+	// {
+	// 	avar.vStart = StateVecD::Zero();
+	// 	avar.vStart[1] = avar.vJetMag;
+	// 	avar.vStart = svar.Rotate*avar.vStart;
+	// }
 
 	fvar.B = fvar.rho0*pow(fvar.Cs,2)/fvar.gam;  /*Factor for Cole's Eq*/
 
@@ -116,8 +117,6 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex)
 		avar.MRef = avar.vRef/avar.sos;
 	}
 		
-	avar.qInf = 0.5*avar.MRef*avar.MRef*avar.gamma*avar.pRef;
-
 	svar.addcount = 0;
 	
 	if(svar.dt_min > 0)
@@ -133,15 +132,6 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex)
   	// fvar.dMom = fvar.alpha * fvar.H * fvar.Cs * fvar.rho0;
   	fvar.dMom = 2.0*(SIMDIM + 2.0);
     fvar.nu = fvar.mu/fvar.rho0;
-
-	// if(svar.Scase == BOX)
-	// {
-	// 	#if SIMDIM == 2
-	// 	svar.simPts = svar.xyPART[0]*svar.xyPART[1];
-	// 	#else
-	// 	svar.simPts = svar.xyPART[0]*svar.xyPART[1]*svar.xyPART[2]; /*total sim particles*/
-	// 	#endif
-	// }
 
 	#if SIMDIM == 2
 		#ifdef CUBIC
@@ -172,6 +162,10 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex)
 	#endif
 
 	avar.GetYcoef(fvar, /*fvar.H*/ svar.Pstep);
+	real nfull = get_n_full(svar.Pstep, fvar.H);
+	avar.nfull = nfull;
+	avar.infull = 1.0/avar.nfull;
+	avar.interp_fac = 1.0/avar.iinterp_fac;
 
 	#if SIMDIM == 3
 		avar.aPlate = svar.Pstep * svar.Pstep;
@@ -195,93 +189,168 @@ void print_vector(string const& pretext, StateVecD const& vec)
 	#endif
 }
 
-void Print_Settings(char** argv, SIM const& svar, FLUID const& fvar, AERO const& avar)
+void Print_Settings(FILE* out, SIM const& svar, FLUID const& fvar, AERO const& avar)
 {
-	#ifdef DEBUG
-		fprintf(dbout,"Tait Gamma: %f Tait B: %f\n", fvar.gam, fvar.B);
-		fprintf(dbout,"Pipe rho: %f\n", fvar.rhoJ);
-		fprintf(dbout,"Number of fluid particles along diameter: %d\n", 2*svar.nrad+1);
-		fprintf(dbout,"Pipe step (dx): %f\n", svar.dx);
-		fprintf(dbout,"Particle mass: %f\n", fvar.simM);
-		fprintf(dbout,"Freestream initial spacing: %f\n", svar.Pstep);
-		fprintf(dbout,"Support Radius: %f\n", fvar.H);
-		fprintf(dbout,"Gas Dynamic pressure: %f\n", avar.qInf);
-	#endif
+    fprintf(out, "Input values, after modification and interpretation, are: \n\n");
 
-	printf("****** SIMULATION SETTINGS *******\n");
-	#pragma omp parallel
-	{
-		#pragma omp single
-		printf("Number of threads: %d\n", omp_get_num_threads());
-	}
+    #pragma omp parallel
+    {
+        #pragma omp single
+        fprintf(out, "                         Number of threads: %d\n", omp_get_num_threads());
+    }
+    
+    /* File Inputs */
+    fprintf(out, " Input files --------------------------------: -\n");
+    fprintf(out, "              Input fluid definition filename: %s\n", svar.fluidfile.c_str());
+    fprintf(out, "           Input boundary definition filename: %s\n", svar.boundfile.c_str());
+    fprintf(out, "                           SPH restart prefix: %s\n", svar.restart_prefix.c_str());
+    fprintf(out, "                      VLM definition filename: %s\n\n", svar.vlm_file.c_str());
+    
+    /* TAU files */
+    fprintf(out, " TAU files ----------------------------------: -\n");
+    fprintf(out, "                   Primary grid face filename: %s\n", svar.taumesh.c_str());
+    fprintf(out, "                    Boundary mapping filename: %s\n", svar.taubmap.c_str());
+    fprintf(out, "                          Restart-data prefix: %s\n", svar.tausol.c_str());
+    fprintf(out, "                                   Grid scale: %f\n", svar.scale);
+    fprintf(out, "                         Angle alpha (degree): %f\n", svar.angle_alpha);
+    fprintf(out, "           2D offset vector (0 / x=1,y=2,z=3): %d\n\n", svar.offset_axis);
+
+    /* OpenFOAM files */
+    fprintf(out, " OpenFOAM files -----------------------------: -\n");
+    fprintf(out, "                     OpenFOAM input directory: %s\n", svar.foamdir.c_str());
+    fprintf(out, "                  OpenFOAM solution directory: %s\n", svar.foamsol.c_str());
+    fprintf(out, "                        OpenFOAM binary (0/1): %d\n", svar.isBinary);
+    fprintf(out, "                           Label size (32/64): %d\n", svar.labelSize);
+    fprintf(out, "                          Scalar size (32/64): %d\n", svar.scalarSize);
+    fprintf(out, "                       OpenFOAM buoyant (0/1): %d\n\n", svar.buoyantSim);
+
+    /* File outputs */
+    fprintf(out, " Output parameters --------------------------: -\n");
+    fprintf(out, "                 Single file for output (0/1): %u\n", svar.single_file);
+    fprintf(out, "                          Output files prefix: %s\n", svar.output_prefix.c_str());
+    fprintf(out, "                      SPH frame time interval: %f\n", svar.framet);
+    fprintf(out, "                              SPH frame count: %u\n", svar.Nframe);
+    fprintf(out, "       SPH output encoding (0=ascii/1=binary): %u\n", svar.out_encoding);
+    fprintf(out, "                       SPH ghost output (0/1): %u\n", svar.gout);
+    fprintf(out, "                                Variable list: %s\n\n", svar.output_names.c_str());
+    
+    /* Fluid data */
+    fprintf(out, " Fluid parameters ---------------------------: -\n");
+    fprintf(out, "                            Reference density: %g\n", avar.rhog);
+    fprintf(out, "                  Reference dispersed density: %g\n", fvar.rho0);
+    fprintf(out, "                Reference dispersed viscosity: %g\n", fvar.mu);
+    fprintf(out, "                    Reference surface tension: %g\n", fvar.sig);
+    fprintf(out, "            SPH surface tension contact angle: %g\n", fvar.contangb);
+    fprintf(out, "              SPH artificial viscosity factor: %g\n", fvar.alpha);
+    fprintf(out, "                        SPH delta coefficient: %g\n", fvar.delta);
+    fprintf(out, "                SPH maximum shifting velocity: %g\n", svar.maxshift);
+    fprintf(out, "                           SPH speed of sound: %g\n", fvar.Cs);
+    fprintf(out, "                      SPH background pressure: %g\n", fvar.backP);
+    fprintf(out, "                        SPH starting pressure: %g\n", fvar.pPress);
+    fprintf(out, "                    SPH density variation (%%): %g\n", fvar.rhoVar);
+    fprintf(out, "                          SPH maximum density: %g\n", fvar.rhoMax);
+    fprintf(out, "                          SPH minimum density: %g\n", fvar.rhoMin);
+    fprintf(out, "              Init hydrostatic pressure (0/1): %d\n", svar.init_hydro_pressure);
+    fprintf(out, "                           Hydrostatic height: %g\n\n", svar.hydro_height);
+
+    /* Simulation settings */
+    fprintf(out, " Time integration settings ------------------: -\n");
+    fprintf(out, "                       SPH integration solver: %s\n", svar.solver_name.c_str());
+    fprintf(out, "     SPH boundary solver (0=pressure/1=ghost): %u\n", svar.bound_solver);
+    fprintf(out, "                  SPH solver minimum residual: %g\n", svar.minRes);
+    fprintf(out, "                         SPH maximum timestep: %g\n", svar.dt_max);
+    fprintf(out, "                         SPH minimum timestep: %g\n", svar.dt_min);
+    fprintf(out, "                              SPH maximum CFL: %g\n", svar.cfl_max);
+    fprintf(out, "                              SPH minimum CFL: %g\n", svar.cfl_min);
+    fprintf(out, "                            SPH CFL condition: %g\n", svar.cfl);
+    fprintf(out, "                        SPH unstable CFL step: %g\n", svar.cfl_step);
+    fprintf(out, "             SPH Newmark-Beta iteration limit: %u\n", svar.subits);
+    fprintf(out, "                 SPH unstable CFL count limit: %u\n", svar.nUnstable_Limit);
+    fprintf(out, "                   SPH stable CFL count limit: %u\n", svar.nStable_Limit);
+    fprintf(out, "        SPH stable CFL count iteration factor: %g\n", svar.subits_factor);
+    fprintf(out, "                   SPH maximum particle count: %zu\n\n", svar.finPts);
+    
+    fprintf(out, " Geometric parameters -----------------------: -\n");
+    #if SIMDIM == 3
+    fprintf(out, "                           SPH gravity vector: %g, %g, %g\n", svar.grav[0],svar.grav[1],svar.grav[2]);
+    #else
+    fprintf(out, "                           SPH gravity vector: %g, %g\n", svar.grav[0],svar.grav[1]);
+    #endif
+    fprintf(out, "                          SPH initial spacing: %g\n", svar.Pstep);
+    fprintf(out, "                  SPH boundary spacing factor: %g\n", svar.Bstep);
+    fprintf(out, "                    SPH restart fit tolerance: %f\n", svar.restart_tol);
+    fprintf(out, "                  SPH smoothing length factor: %g\n", fvar.Hfac);
+    #if SIMDIM == 3
+    fprintf(out, "                 SPH global offset coordinate: %g, %g, %g\n\n", svar.offset_vec[0],svar.offset_vec[1],svar.offset_vec[2]);
+    #else
+    fprintf(out, "                 SPH global offset coordinate: %g, %g\n\n", svar.offset_vec[0],svar.offset_vec[1]);
+    #endif
+
+    fprintf(out, " Aerodynamic coupling parameters ------------: -\n");
+    fprintf(out, "                         SPH aerodynamic case: %s\n", avar.aero_case.c_str());
+    fprintf(out, "                 SPH aerodynamic cutoff value: %f\n", avar.cutoff);
+	fprintf(out, "          SPH aerodynamic iterpolation factor: %f\n", avar.iinterp_fac);
+	fprintf(out, "           SPH aerodynamic full neighbourhood: %f\n", avar.nfull);
+    fprintf(out, " SPH interpolation factor (0=ncount/1=lambda): %d\n", avar.use_lam);
+    fprintf(out, "        SPH SP diameter definition (0=dx/1=h): %d\n", avar.use_dx);
+    fprintf(out, "                SPH use TAB deformation (0/1): %d\n", avar.useDef);
+    fprintf(out, "                SPH use ghost particles (0/1): %d\n", svar.ghost);
+    #if SIMDIM == 3
+    fprintf(out, "                      SPH freestream velocity: %g, %g, %g\n", avar.vInf[0],avar.vInf[1],avar.vInf[2]);
+    #else
+    fprintf(out, "                      SPH freestream velocity: %g, %g\n\n", avar.vInf[0],avar.vInf[1]);
+    #endif
 	
-	printf("Frame time interval: %f\n", svar.framet);
-	printf("Number of frames: %d\n",svar.Nframe);
-	printf("Output variables: %s\n",svar.output_names.c_str());
-	printf("Tait gamma: %.1f  Tait B: %g\n",fvar.gam,fvar.B);
-	printf("Newmark-Beta parameters: %.2f, %.2f\n",svar.beta,svar.gamma);
-	printf("Boundary case: %d\n", svar.Bcase);
-	printf("Aerodynamic source: %d\n", svar.Asource);
-	printf("Aerodynamic case: %d\n\n", avar.acase);
+    /* Aerodynamic data */
+    fprintf(out, " Carrier phase parameters -------------------: -\n");
+    fprintf(out, "                           Reference velocity: %g\n", avar.vRef);
+    fprintf(out, "                           Reference pressure: %g\n", avar.pRef);
+    fprintf(out, "                        Reference Mach number: %g\n", avar.MRef);
+    fprintf(out, "                            Reference density: %g\n", avar.rhog);
+    fprintf(out, "                        Reference temperature: %g\n", avar.T);
+    fprintf(out, "                           Gas constant gamma: %g\n", avar.gamma);
+    fprintf(out, "               Sutherland reference viscosity: %g\n\n", avar.mug);
 
-	printf("****** PIPE SETTINGS *******\n");
-	printf("Pipe pressure: %f\n", fvar.pPress);
-	printf("Pipe density: %f\n", fvar.rhoJ);
-	printf("Pipe step (dx): %f\n", svar.dx);
-	printf("Pipe diameter: %f\n", svar.jet_diam);
-	printf("Number of fluid particles along diameter: %d\n", 2*svar.nrad+1);
-	print_vector("Pipe start position", svar.sim_start);
-	print_vector("Pipe start rotation", svar.Angle);
-	printf("Jet velocity: %f\n\n", avar.vJetMag);
-	
-	printf("****** RESTING FUEL SETTINGS *******\n");
-	printf("Resting density: %f\n", fvar.rho0);
-	printf("Maxmimum density: %f\n", fvar.rhoMax);
-	printf("Minimum density: %f\n", fvar.rhoMin);
-	printf("Particle spacing: %f\n", svar.Pstep);
-	printf("Support radius: %f\n", fvar.H);
-	printf("Particle mass: %f\n", fvar.simM);
-	printf("Liquid viscosity: %f\n", fvar.mu);
-	printf("Speed of sound: %f\n\n", fvar.Cs);
+    /* Particle tracking settings */
+    fprintf(out, " Particle tracking parameters ---------------: -\n");
+    fprintf(out, "                      Transition to IPT (0/1): %d\n", svar.using_ipt);
+    fprintf(out, "                Velocity equation order (1/2): %d\n", svar.eqOrder);
+    fprintf(out, "         SPH tracking conversion x coordinate: %g\n", svar.max_x_sph);
+    fprintf(out, "              Maximum x trajectory coordinate: %g\n", svar.max_x);
+    fprintf(out, "              Particle scatter output (0/1/2): %u\n", svar.partout);
+    fprintf(out, "               Particle streak output (0/1/2): %u\n", svar.streakout);
+    fprintf(out, "    Particle cell intersection output (0/1/2): %u\n\n", svar.cellsout);
 
-	printf("****** FREESTREAM SETTINGS ******\n");
-	if(svar.Asource != meshInfl)
-	{
-		print_vector("Gas velocity", avar.vInf);
-	}
+    /* Droplet drag sweep settings */
+    fprintf(out, " Droplet drag parameters --------------------: -\n");
+    fprintf(out, "                  Do droplet drag sweep (0/1): %d\n", svar.dropDragSweep);
+    fprintf(out, "                          Do speed test (0/1): %d\n", svar.speedTest);
+    fprintf(out, "                         Speed test run count: %d\n", svar.nRuns);
 
-	printf("Gas density: %f\n", avar.rhog);
-	printf("Gas viscosity: %f\n", avar.mug);
-	printf("Aerodynamic length: %f\n", avar.L);
+    string str;
+    for(auto const& x : svar.nacross)
+    str.append(std::to_string(x) + ",");
+    str.pop_back(); //Remove the last comma
+    fprintf(out, "                          Droplet resolutions: %s\n", str.c_str());
 
-	if(svar.Asource == meshInfl)
-	{
-		printf("Reference velocity: %f\n", avar.vRef);
-		printf("Reference pressure: %f\n", avar.pRef);
-		printf("Reference temperature: %f\n", avar.T);
-		printf("Gas dynamic pressure: %f\n", avar.qInf);
-	}
-	printf("\n");
-	
-	printf("******** FILE SETTINGS ********\n");	
-	// printf("Working directory: ", cCurrentPath);
-	printf("Input file: %s\n", argv[1]);
-	if(svar.Asource == meshInfl)
-	{
-		if(svar.CDForFOAM == 0)
-		{
-			printf("Mesh filename: %s\n", svar.taumesh.c_str());
-			printf("Solution filename: %s\n", svar.tausol.c_str());
-		}
-		else
-		{
-			printf("OpenFOAM root directory: %s\n", svar.foamdir.c_str());
-			printf("OpenFOAM solution time: %s\n", svar.foamsol.c_str());
-		}
-	}
+    str.clear();
+    for(auto const& x : svar.diameters)
+    str.append(std::to_string(x) + ",");
+    str.pop_back(); //Remove the last comma
+    fprintf(out, "                            Droplet diameters: %s\n", str.c_str());
 
-	printf("Output prefix: %s\n", svar.output_prefix.c_str());
-
+        str.clear();
+    for(auto const& x : svar.velocities)
+    str.append(std::to_string(x) + ",");
+    str.pop_back(); //Remove the last comma
+    fprintf(out, "                           Droplet velocities: %s\n", str.c_str());
+    
+    str.clear();
+    for(auto const& x : svar.Reynolds)
+    str.append(std::to_string(x) + ",");
+    str.pop_back(); //Remove the last comma
+    fprintf(out, "                     Droplet Reynolds numbers: %s\n\n", str.c_str());
+	fflush(out);
 }
 
 
@@ -306,20 +375,23 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 	    	
 	svar.infile = file;
 
-	ifstream fin(argv[1]);
-	if(!fin.is_open())
+	FILE* fin = fopen(argv[1], "r");
+	if(fin == NULL)
 	{
 		printf("ERROR: Failed to open parameter file: %s\n", argv[1]);
 		exit(-1);
 	}
 	else
 	{
-		printf("para file open, reading contents...\n");
+		printf("Para file open, reading contents...\n");
 	}
 
-    string line;
-    while (getline(fin,line))
+    char* cline = NULL;
+	size_t cline_buf_size = 0;
+	ssize_t cline_size = getline(&cline, &cline_buf_size, fin);
+    while (cline_size >= 0)
     {
+		string line(cline); // Recast as a string to manipulate.
 		line = ltrim(line);
         size_t end = line.find_first_of('#');
 		if(end != std::string::npos)
@@ -333,9 +405,10 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
         Get_String(line, "Restart-data prefix", svar.tausol);
         Get_String(line, "SPH restart prefix", svar.restart_prefix);
         Get_Number(line, "Grid scale", svar.scale);
+		Get_Number(line, "Angle alpha (degree)", svar.angle_alpha);
         Get_Number(line, "2D offset vector (0 / x=1,y=2,z=3)",svar.offset_axis);
-        Get_String(line, "OpenFOAM folder", svar.foamdir);
-        Get_String(line, "OpenFOAM solution folder", svar.foamsol);
+        Get_String(line, "OpenFOAM input directory", svar.foamdir);
+        Get_String(line, "OpenFOAM solution directory", svar.foamsol);
         Get_Number(line, "OpenFOAM binary (0/1)", svar.isBinary);
         Get_Number(line, "Label size (32/64)", svar.labelSize);
         Get_Number(line, "Scalar size (32/64)", svar.scalarSize);
@@ -345,6 +418,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 		#endif 
 
         /* File outputs */
+		Get_Number(line, "Write Tecplot output (0/1)", svar.write_tecio);
+		Get_Number(line, "Write H5Part output (0/1)", svar.write_h5part);
 		Get_Number(line, "Single file for output (0/1)",svar.single_file);
 		Get_String(line, "Output files prefix", svar.output_prefix);
         Get_Number(line, "SPH frame time interval", svar.framet);
@@ -356,7 +431,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
         // Get_String(line, "Particle surface impact filename", svar.surfacefile);
 
         /* Fluid data */
-        Get_Number(line, "Reference density", avar.rhog);
         Get_Number(line, "Reference dispersed density", fvar.rho0);
         Get_Number(line, "Sutherland reference viscosity", avar.mug);
         Get_Number(line, "Reference dispersed viscosity", fvar.mu);
@@ -366,12 +440,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 		Get_Number(line, "Hydrostatic height", svar.hydro_height);
 
 		/* Aerodynamic data */
-        Get_Number(line, "Reference velocity", avar.vRef);
-        Get_Number(line, "Reference pressure", avar.pRef);
-        Get_Number(line, "Reference Mach number", avar.MRef);
-        Get_Number(line, "Reference density", avar.qInf);
-        Get_Number(line, "Reference temperature", avar.T);
-		Get_Number(line, "Gas constant gamma", avar.gamma);
 
 		/* Simulation settings */
 		Get_String(line, "SPH integration solver", svar.solver_name);
@@ -403,29 +471,25 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
         Get_Number(line, "SPH initial spacing", svar.Pstep);
         Get_Number(line, "SPH boundary spacing factor", svar.Bstep);
         Get_Number(line, "SPH smoothing length factor", fvar.Hfac);
+        Get_Number(line, "SPH use ghost particles (0/1)", svar.ghost);
+        Get_Vector(line, "SPH global offset coordinate", svar.offset_vec);
+		Get_Number(line, "SPH maximum particle count",svar.finPts);
+        Get_Number(line, "SPH restart fit tolerance", svar.restart_tol);
+
+		/* Aerodynamic coupling settings */
         Get_String(line, "SPH aerodynamic case", avar.aero_case);
         Get_Number(line, "SPH SP diameter definition (0=dx/1=h)", avar.use_dx);
         Get_Number(line, "SPH use TAB deformation (0/1)", avar.useDef);
-        Get_Number(line, "SPH use ghost particles (0/1)", svar.ghost);
-        Get_Vector(line, "SPH start coordinates", svar.sim_start);
-		Get_Vector(line, "SPH boundary start coordinates", svar.bound_start);
-		Get_Number(line, "SPH maximum particle count",svar.finPts);
+        Get_Number(line, "SPH interpolation factor (0=ncount/1=lambda)", avar.use_lam);
         Get_Number(line, "SPH aerodynamic cutoff value", avar.cutoff);
-
-        /* Starting area conditions */
-        Get_String(line, "SPH start geometry type", svar.start_type);
-		Get_String(line, "SPH boundary geometry type", svar.bound_type);
-        Get_Vector(line, "SPH box resolution", svar.xyPART);
-        Get_Vector(line, "SPH box lengths", svar.sim_box);
-		Get_Vector(line, "SPH boundary box lengths", svar.bound_box);
-        Get_Vector(line, "SPH rotation angles (deg)", svar.Angle);
-        Get_Number(line, "SPH jet diameter", svar.jet_diam);
-        Get_Number(line, "SPH jet depth", svar.jet_depth);
-        Get_Number(line, "SPH jet velocity", avar.vJetMag);
-        Get_Number(line, "SPH sphere diameter", svar.diam);
-		Get_Vector(line, "SPH starting velocity", avar.vStart);
+        Get_Number(line, "SPH aerodynamic interpolation factor", avar.iinterp_fac);
         Get_Vector(line, "SPH freestream velocity", avar.vInf);
-        Get_Number(line, "SPH restart fit tolerance", svar.restart_tol);
+        Get_Number(line, "Reference velocity", avar.vRef);
+        Get_Number(line, "Reference pressure", avar.pRef);
+        Get_Number(line, "Reference Mach number", avar.MRef);
+        Get_Number(line, "Reference density", avar.rhog);
+        Get_Number(line, "Reference temperature", avar.T);
+		Get_Number(line, "Gas constant gamma", avar.gamma);
 
         /* Particle tracking settings */
 		Get_Number(line, "Transition to IPT (0/1)", svar.using_ipt);
@@ -443,11 +507,16 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 		Get_Array(line,  "Droplet velocities", svar.velocities);
 		Get_Array(line,  "Droplet Reynolds numbers", svar.Reynolds);
 
+		/* Speed test settings */
 		Get_Number(line, "Do speed test (0/1)", svar.speedTest);
 		Get_Number(line, "Speed test run count", svar.nRuns);
+
+		cline_size = getline(&cline, &cline_buf_size, fin);
     }
 
-    fin.close();
+	free(cline);
+	cline = NULL;
+    fclose(fin);
 
 	int fault = 0;
 
@@ -506,17 +575,6 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 
 	}
 	
-	/* Check starting geometry conditions */
-	if (svar.sim_start[0] == 999999 || svar.sim_start[1] == 999999
-		#if SIMDIM == 3
-			|| svar.sim_start[2] == 999999
-		#endif
-	)
-	{
-		printf("Some or all of the SPH start coordinates have not been defined.\n");
-		fault = 1;
-	}
-
 	/* Check for restart data now boundary case is known */	
 	if(!svar.restart_prefix.empty())
 	{
@@ -598,6 +656,12 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 		svar.dt = svar.dt_min;
 	}
 
+	if(avar.iinterp_fac < 0 || avar.iinterp_fac > 1.0)
+	{
+		printf("ERROR: SPH aerodynamic interpolation factor must be between 0 < x < 1.\n");
+		fault = 1;
+	}
+
 	if(svar.dropDragSweep)
 	{
 		if(svar.nacross.empty())
@@ -636,23 +700,11 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 			exit(-1);
 		}
 
-		if(svar.max_x < svar.sim_start[0])
-		{
-			printf("ERROR: Maximum x coordinate for particle tracking or SPH is less than the starting position.\n");
-			exit(-1);
-		}
-
 		if(svar.max_x < svar.max_x_sph)
 		{
 			printf("WARNING: Maximum x coordinate for particle tracking is less than that for SPH.\n");
 			printf("         No particle tracking will be performed.\n");
 			svar.using_ipt = 0;
-		}
-
-		if(svar.max_x_sph < svar.sim_start[0])
-		{
-			printf("WARNING: Maximum x coordinate for SPH particles is less than the starting position.\n");
-			printf("         Particles will immediately transition to tracking.\n");
 		}
 
 		// svar.streakdir = svar.outfile;
@@ -692,84 +744,104 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 
   	Set_Values(svar,fvar,avar,vortex);
 
-	Print_Settings(argv,svar,fvar,avar);
+	Print_Settings(stdout,svar,fvar,avar);
+	#ifdef DEBUG
+	Print_Settings(dbout,svar,fvar,avar);
+	#endif
 
 } /*End of GetInput()*/
 
 
-void Write_Headers(FILE* f1, FILE* fb, FILE* fg, SIM& svar)
+void Write_Headers(FILE* f1, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar)
 {
-	if(svar.out_encoding == 1)
+	if(svar.write_tecio)
 	{
-		Init_Binary_PLT(svar,"_fluid.szplt","Simulation Particles",svar.fluidFile);
-	
-		Init_Binary_PLT(svar,"_boundary.szplt","Boundary Particles",svar.boundFile);
-	}
-	else
-	{
-		/* Write first timestep */
-		string mainfile = svar.output_prefix;
-		mainfile.append("_fluid.dat");
-		f1 = fopen(mainfile.c_str(), "a");
-		if(f1 != NULL)
-			Write_ASCII_header(f1, svar, "Simulation Particles");
-		else
+		if(svar.out_encoding == 1)
 		{
-			printf("Failed to open %s. Stopping.\n",mainfile.c_str());
-			exit(-1);
-		}
-
-		/*If the boundary exists, write it.*/
-		string bfile = svar.output_prefix;
-		bfile.append("_boundary.dat");
-		fb = fopen(bfile.c_str(), "a");
-		if(fb != NULL)
-			Write_ASCII_header(fb, svar, "Boundary Particles");
-		else
-		{
-			printf("Error opening %s file. Stopping\n", bfile.c_str());
-			exit(-1);
-		}
+			Init_Binary_PLT(svar,fvar,avar,"_fluid.szplt","Simulation Particles",svar.fluidFile);
 		
+			Init_Binary_PLT(svar,fvar,avar,"_boundary.szplt","Boundary Particles",svar.boundFile);
+		}
+		else
+		{
+			/* Write first timestep */
+			string mainfile = svar.output_prefix;
+			mainfile.append("_fluid.dat");
+			f1 = fopen(mainfile.c_str(), "a");
+			if(f1 != NULL)
+				Write_ASCII_header(f1, svar, "Simulation Particles");
+			else
+			{
+				printf("Failed to open %s. Stopping.\n",mainfile.c_str());
+				exit(-1);
+			}
+
+			/*If the boundary exists, write it.*/
+			string bfile = svar.output_prefix;
+			bfile.append("_boundary.dat");
+			fb = fopen(bfile.c_str(), "a");
+			if(fb != NULL)
+				Write_ASCII_header(fb, svar, "Boundary Particles");
+			else
+			{
+				printf("Error opening %s file. Stopping\n", bfile.c_str());
+				exit(-1);
+			}	
+		}
+	}
+
+	if(svar.write_h5part)
+	{
+		open_h5part_files(svar,fvar,avar,svar.ffile,svar.bfile);
 	}
 }
 
-void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, real const& rho0, LIMITS const& limits,
-				 SPHState const& pnp1)
+void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar, 
+			LIMITS const& limits, SPHState const& pnp1)
 {
-	if (svar.out_encoding == 1)
+	if(svar.write_tecio)
 	{
-		for(size_t bound = 0; bound < svar.nbound; bound++)
+		if (svar.out_encoding == 1)
 		{
-			string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name;
-			Write_Binary_Timestep(svar,rho0,pnp1,limits[bound],title.c_str(),
-                static_cast<int32_t>(bound+1),svar.boundFile);
-		}
+			for(size_t bound = 0; bound < svar.nbound; bound++)
+			{
+				string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name;
+				Write_Binary_Timestep(svar,fvar.rho0,pnp1,limits[bound],title.c_str(),
+					static_cast<int32_t>(bound+1),svar.boundFile);
+			}
 
-		for(size_t block = svar.nbound; block < svar.nbound + svar.nfluid; block++)
+			for(size_t block = svar.nbound; block < svar.nbound + svar.nfluid; block++)
+			{
+				string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name ;
+				Write_Binary_Timestep(svar,fvar.rho0,pnp1,limits[block],title.c_str(),
+					static_cast<int32_t>(block+1),svar.fluidFile);
+			}
+		} 
+		else
 		{
-			string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name ;
-			Write_Binary_Timestep(svar,rho0,pnp1,limits[block],title.c_str(),
-                static_cast<int32_t>(block+1),svar.fluidFile);
-		}
-	} 
-	else
-	{
-		for(size_t bound = 0; bound < svar.nbound; bound++)
-		{
-			string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name;
-			Write_ASCII_Timestep(svar,rho0,pnp1,limits[bound].index.first,
-					limits[bound].index.second,title.c_str(),bound+1,fb);
-		}
+			for(size_t bound = 0; bound < svar.nbound; bound++)
+			{
+				string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name;
+				Write_ASCII_Timestep(svar,fvar.rho0,pnp1,limits[bound].index.first,
+						limits[bound].index.second,title.c_str(),bound+1,fb);
+			}
 
-		for(size_t block = svar.nbound; block < svar.nbound + svar.nfluid; block++)
-		{
-			string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name ;
-		
-			Write_ASCII_Timestep(svar,rho0,pnp1,limits[block].index.first,
-					limits[block].index.second,title.c_str(),block+1,f1);
+			for(size_t block = svar.nbound; block < svar.nbound + svar.nfluid; block++)
+			{
+				string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name ;
+			
+				Write_ASCII_Timestep(svar,fvar.rho0,pnp1,limits[block].index.first,
+						limits[block].index.second,title.c_str(),block+1,f1);
+			}
 		}
 	}
+
+	if(svar.write_h5part)
+	{
+		write_h5part_data(svar.ffile, svar.bfile, svar, fvar, pnp1);
+	}
+	
+	Write_HDF5(svar,fvar,avar,pnp1,limits);
 }
 
 void Append_Restart_Prefix(SIM const& svar)

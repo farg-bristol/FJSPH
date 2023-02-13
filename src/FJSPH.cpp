@@ -17,6 +17,7 @@
 #include "Containment.h"
 #include "FOAMIO.h"
 #include "Geometry.h"
+#include "H5IO.h"
 #include "IPT.h"
 #include "Init.h"
 #include "Integration.h"
@@ -126,27 +127,12 @@ int main(int argc, char *argv[])
 
 	cout << std::setprecision(5);
 
-	
-	cout << "Start Coordinates: " << endl;
-	cout << svar.sim_start(0) << "  " << svar.sim_start(1);
-	#if SIMDIM == 3
-		cout << "  " << svar.sim_start(2);  
-	#endif
-	cout << endl << endl;
-	/*Make a guess of how many there will be...*/
-	// int partCount = ParticleCount(svar);
-    
-	cout << "Maximuim particle count:  " << svar.finPts << endl;
-	
-
 	pn.reserve(svar.finPts);
   	pnp1.reserve(svar.finPts);
-	// dp.reserve(svar.finPts);
-
+	
 	if(!svar.restart)
 	{
 	  	svar.t = 0.0;				/*Total simulation time*/
-  		// InitSPH(svar,fvar,avar,pn,pnp1);
 		Init_Particles(svar,fvar,avar,pn,pnp1,limits);
 
   		// Redefine the mass and spacing to make sure the required mass is conserved
@@ -181,8 +167,9 @@ int main(int argc, char *argv[])
   	}
 	else
 	{
+		Init_Particles_Restart(svar,fvar,limits);
 		/* Read the files */
-		Restart_Simulation(svar,fvar,avar,cells,pn,pnp1,limits);
+		Read_HDF5(svar,fvar,avar,vortex,pn,pnp1,limits);
 	}
 
 	// Check if cells have been initialsed before making a tree off it
@@ -206,6 +193,8 @@ int main(int argc, char *argv[])
 	///********* Tree algorithm stuff ************/
 	Sim_Tree SPH_TREE(SIMDIM,pnp1,20);
 	Vec_Tree CELL_TREE(SIMDIM,cells.cCentre,10);
+	SPH_TREE.index->buildIndex();
+	CELL_TREE.index->buildIndex();
 	FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
 
 	
@@ -223,11 +212,11 @@ int main(int argc, char *argv[])
 		f2 = fopen(framef.c_str(), "w");
 
 	if(svar.single_file)
-		Write_Headers(ff,fb,fg,svar);
+		Write_Headers(ff,fb,fg,svar,fvar,avar);
 
 	if(!svar.restart)
 	{
-		Write_Timestep(ff,fb,fg,svar,fvar.rho0,limits,pnp1);
+		Write_Timestep(ff,fb,fg,svar,fvar,avar,limits,pnp1);
 	}
 
 	///*** Perform an iteration to populate the vectors *****/
@@ -243,7 +232,7 @@ int main(int argc, char *argv[])
 		}
 		else if (svar.ghost == 2)
 		{	/* Lattice points */
-			LatticeGhost(svar,fvar,avar,cells,SPH_TREE,outlist,pn,pnp1);
+			LatticeGhost(svar,fvar,avar,cells,SPH_TREE,outlist,pn,pnp1,limits);
 		}
 
 		size_t const start = svar.bndPts;
@@ -287,8 +276,7 @@ int main(int argc, char *argv[])
 		// pn = SPHState(first,last);
 	}
 
-
-	Append_Restart_Prefix(svar);
+	// Append_Restart_Prefix(svar);
 
 	if(svar.using_ipt)
 	{
@@ -378,7 +366,7 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		Write_Timestep(ff,fb,fg,svar,fvar.rho0,limits,pnp1);
+		Write_Timestep(ff,fb,fg,svar,fvar,avar,limits,pnp1);
 		if(svar.using_ipt)
 			IPT::Write_Data(svar,cells,iptdata);
 

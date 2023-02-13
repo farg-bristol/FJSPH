@@ -12,8 +12,8 @@
 
 /*Surface detection as described by Marrone, Colagrossi, Le Touze, Graziani - (2010)*/
 void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar, 
-    size_t const& start, size_t const& end,
-                 OUTL const& outlist, MESH const& cells, VLM& vortex, SPHState& pnp1)
+                size_t const& start, size_t const& end, OUTL const& outlist,
+                MESH const& cells, VLM const& vortex, SPHState& pnp1)
 {
 
     vector<StateVecD> norms(end,StateVecD::Zero());
@@ -269,6 +269,40 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
         #endif
  
     }/* end parallel section */
+}
+
+real get_n_full(real const& dx, real const& H)
+{
+    // Create a lattice of points from -2H to 2H
+    std::vector<StateVecD> vec;
+    for(real x = -2.0 * (H+dx); x <= 2.0 * (H+dx); x += dx)
+    {
+        for(real y = -2.0 * (H+dx); y <= 2.0 * (H+dx); y += dx)
+        {
+            #if SIMDIM == 3
+            for(real z = -2.0 * (H+dx); z <= 2.0 * (H+dx); z += dx)
+                vec.emplace_back(StateVecD(x,y,z));
+            #else
+            vec.emplace_back(StateVecD(x,y));
+            #endif
+        }
+    }
+
+    // Create a tree of the vector?
+	const nanoflann::SearchParams params(0,0,false);
+	const real search_radius = 4.0 * H * H;
+    std::vector<std::pair<size_t, real>> matches; /* Nearest Neighbour Search*/
+    #if SIMDIM == 3
+        matches.reserve(250);
+    #else
+        matches.reserve(47);
+    #endif
+    Vec_Tree tree(SIMDIM,vec,10);
+    tree.index->buildIndex();
+    StateVecD test = StateVecD::Zero();
+    tree.index->radiusSearch(&test[0],search_radius,matches,params);
+
+    return real(matches.size());
 }
 
 // Returns 1 if the lines intersect, otherwise 0. In addition, if the lines 
@@ -853,7 +887,6 @@ void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
 		// cells.elems.emplace_back(vector<size_t>{0,1,2,3,4,5,6,7});
         // cells.elems.emplace_back(vector<size_t>{4,5,6,7,8,9,10,11});
 
-
 		cells.cFaces.emplace_back(vector<size_t>{0,1,2,3,4,5,6,7,8,9,10,11});
         cells.cFaces.emplace_back(vector<size_t>{10,11,12,13,14,15,16,17,18,19,20,21});
 
@@ -920,115 +953,4 @@ void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
 
     cells.cPertn.emplace_back(StateVecD::Zero());
     cells.cPertnp1.emplace_back(StateVecD::Zero());
-
-}
-
-
-void Set_Mass(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& pnp1)
-{
-
-    if(svar.Scase == SPHERE)
-    {
-        real volume = pow(svar.Pstep,SIMDIM)*real(svar.totPts);
-    #if SIMDIM == 3
-        real dvol = (4.0*M_PI/3.0)*pow(0.5*svar.diam,3.0);
-    #else
-        real dvol = M_PI*pow(0.5*svar.diam,2.0);
-    #endif
-        
-        cout << "SPH Volume: " << volume << "  Droplet expected volume: " << dvol << endl;
-        cout << std::scientific;
-        svar.mass = pnp1[0].m * svar.totPts;
-
-        cout << "SPH Mass:    " << svar.mass << "     Droplet expected mass: " << dvol*fvar.rho0;   
-
-        cout << " Error: " << std::fixed << 100.0*(dvol*fvar.rho0-svar.mass)/(dvol*fvar.rho0) << "%" << endl;   
-        cout << std::scientific;
-
-        cout << "Old SPH particle mass: " << fvar.simM << "  spacing: " << svar.Pstep << endl;
-        // Adjust mass and spacing to create the correct mass/volume for the droplet.
-
-        fvar.simM = dvol*fvar.rho0/real(svar.totPts);
-        // svar.Pstep = pow(fvar.simM/fvar.rho0,1.0/SIMDIM);
-
-
-
-    }
-    else if (svar.Scase == JET)
-    {   /*Jet flow*/
-        /*Take the height of the jet, and find the volume of the cylinder*/
-        #if SIMDIM == 3
-        real cVol = (M_PI * pow((svar.jet_diam / 2.0), 2)) * (svar.jet_depth + 6 * svar.Pstep); /* Area of circle * depth */
-        #else
-        real cVol = svar.jet_diam * (svar.jet_depth + 6 * svar.Pstep); /* diameter * depth + buffer zone */
-        #endif
-        real volume = pow(svar.Pstep,SIMDIM)*real(svar.simPts);
-
-        cout << "SPH Volume: " << volume << "  Starting jet expected volume: " << cVol << endl;
-        cout << std::scientific;
-        svar.mass = pnp1[0].m * real(svar.simPts);
-
-        cout << "SPH Mass:    " << svar.mass << "     Starting jet expected mass: " << cVol*fvar.rho0;   
-
-        cout << " Error: " << std::fixed << 100.0*(cVol*fvar.rho0-svar.mass)/(cVol*fvar.rho0) << "%" << endl;   
-        cout << std::scientific;
-
-        cout << "Old SPH particle mass: " << fvar.simM << "  spacing: " << svar.Pstep << endl;
-        // Adjust mass and spacing to create the correct mass/volume for the droplet.
-
-        fvar.simM = cVol*fvar.rho0/real(svar.simPts);
-
-    }
-
-    #if SIMDIM == 3
-    // svar.Pstep = 2*pow((3.0*fvar.simM)/(4.0*M_PI*fvar.rho0),1.0/3.0);
-    svar.Pstep = pow(fvar.simM/fvar.rho0,1.0/3.0);
-    #else
-    // svar.Pstep = 2*sqrt(fvar.simM/(fvar.rho0*M_PI));
-    svar.Pstep = pow(fvar.simM/fvar.rho0,1.0/2.0);
-    #endif
-
-    svar.dx = svar.Pstep * pow(fvar.rho0/fvar.rhoJ,1.0/SIMDIM);
-    avar.GetYcoef(fvar, svar.Pstep);
-    fvar.H = fvar.Hfac*svar.Pstep;
-    fvar.HSQ = fvar.H*fvar.H; 
-
-    fvar.sr = 4.0*fvar.HSQ;   /*KDtree search radius*/
-
-    fvar.dCont = fvar.delta * fvar.H * fvar.Cs;
-    fvar.dMom = fvar.dCont * fvar.rho0;
-
-    #if SIMDIM == 3
-        #ifdef CUBIC
-            fvar.correc = (1.0/(M_PI*fvar.H*fvar.H*fvar.H));
-        #else
-            fvar.correc = (21/(16*M_PI*fvar.H*fvar.H*fvar.H));
-        #endif
-
-        avar.pVol = 4.0/3.0 * M_PI * pow(avar.L,SIMDIM);
-        avar.aPlate = svar.Pstep*svar.Pstep;
-        // avar.aPlate = 4.0*avar.L*avar.L;
-    #else
-        #ifdef CUBIC
-            fvar.correc = 10.0/(7.0*M_PI*fvar.H*fvar.H);
-        #else
-            fvar.correc = 7.0/(4.0*M_PI*fvar.H*fvar.H);
-        #endif    
-
-        avar.pVol = M_PI* avar.L*avar.L/4.0;
-        avar.aPlate = svar.Pstep;
-        // avar.aPlate = 2.0*avar.L;
-    #endif
-
-    fvar.dCont = 2.0 * fvar.delta * fvar.H * fvar.Cs;
-    fvar.Wdx = Kernel(svar.Pstep, fvar.H, fvar.correc);
-
-    for(size_t ii = 0; ii < svar.totPts; ii++)
-    {
-        pn[ii].m = fvar.simM;
-        pnp1[ii].m = fvar.simM;
-    }
-
-    svar.mass = pnp1[0].m * svar.simPts;
-    cout << "New SPH particle mass: " << fvar.simM << "  spacing: " << svar.Pstep << endl;
 }

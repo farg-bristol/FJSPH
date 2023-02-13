@@ -4,9 +4,6 @@
 
 #include "VLM.h"
 
-#include <Eigen/LU>
-#include <Eigen/Geometry>
-// #include "IO.h"
 #include "IOFunctions.h"
 
 // Define pi
@@ -19,31 +16,31 @@ void VLM::Init(std::string input)
     // input.append("VLM.dat");
     std::ifstream fin(input, std::ios::in);
 
-    if(fin.is_open())
-    {
-        string line;
-        while (getline(fin,line))
-        {
-            Get_Vector(line,"VLM wing dimensions", coords);
-            Get_Vector(line,"VLM panel counts",panels);
-            Get_Number(line,"VLM angle alpha (degree)",AoA);
-            Get_Number(line,"VLM sweep angle (degree)",sweep);
-            Get_Number(line,"VLM taper ratio",taper);
-            Get_Number(line,"VLM flap start (panels)",flap[0]);
-            Get_Number(line,"VLM flap width (panels)",flap[1]);
-            Get_Number(line,"VLM flap depth (panels)",flap[2]);
-            Get_Number(line,"VLM flap angle (degree)",beta);
-            Get_Number(line,"VLM write trajectories (0/1)",write_traj);
-            Get_Number(line,"VLM trajectory maximum x coordinate",maxX);
-            Get_Number(line,"VLM trajectory maximum iterations",maxIters);
-            Get_Number(line,"VLM trajectory target dx",streamDx);
-            Get_Number(line,"VLM trajectory minimum dx",streamDx);
-        }
-    }
-    else 
+    if(!fin.is_open())
     {
         std::cerr << "Couldn't open " << input << " to read VLM settings. Stopping." << std::endl;
         exit(-1);
+    }
+    
+    string line;
+    while (getline(fin,line))
+    {
+        Get_Vector(line,"VLM wing dimensions", coords);
+        Get_Vector(line,"VLM panel counts",panels);
+        Get_Number(line,"VLM angle alpha (degree)",AoA);
+        Get_Number(line,"VLM sweep angle (degree)",sweep);
+        Get_Number(line,"VLM taper ratio",taper);
+        Get_Number(line,"VLM flap start (panels)",flap[0]);
+        Get_Number(line,"VLM flap width (panels)",flap[1]);
+        Get_Number(line,"VLM flap depth (panels)",flap[2]);
+        Get_Number(line,"VLM flap angle (degree)",beta);
+        Get_Number(line,"VLM write trajectories (0/1)",write_traj);
+        Get_Number(line,"VLM trajectory maximum x coordinate",maxX);
+        Get_Number(line,"VLM trajectory maximum iterations",maxIters);
+        Get_Number(line,"VLM trajectory target dx",streamDx);
+        Get_Number(line,"VLM trajectory minimum dx",streamDx);
+        Get_Number(line,"VLM maximum velocity factor",maxVelFac);
+        Get_Number(line,"VLM maximum velocity",maxVel);
     }
     fin.close();
 
@@ -56,6 +53,12 @@ void VLM::Init(std::string input)
     if(panels[0] == -1 || panels[1] == -1)
     {
         cout << "VLM panels numbers not defined." << endl;
+        exit(-1);
+    }
+
+    if(maxVelFac < 1.0)
+    {
+        printf("Velocity factor is less than 1, please define a reasonable maximum velocity factor.\n");
         exit(-1);
     }
 
@@ -78,7 +81,10 @@ void VLM::GetGamma(StateVecD inf)
 {
     printf("Finding VLM influence...\n");
     Freestream = inf;
-    /*Find the influence matrix, and invert it to find gamma*/
+
+    // Check limiters are appropriate, and use factor if maxVel not already defined
+    if(maxVel == 2.0)
+        maxVel = maxVelFac * Freestream.norm();      
 
     /*Find the influence matrix aInf*/
     for(int i=0; i < npanels; ++i)
@@ -109,10 +115,10 @@ void VLM::GetGamma(StateVecD inf)
     // }
 }
 
-const StateVecD VLM::getVelocity(StateVecD const& pos)
+StateVecD VLM::getVelocity(StateVecD const& pos) const
 {	/*Find velocity for a particle at its position*/
     // Use a Kahan sum to avoid truncation errors in the accumulation
-    StateVecD vel = StateVecD::Zero();
+    StateVecD vel = Freestream;
 
     // StateVecD c = StateVecD::Zero();// A running compensation for lost low-order bits.
     // for (int ii = 0; ii < npanels; ++ii)  
@@ -127,8 +133,8 @@ const StateVecD VLM::getVelocity(StateVecD const& pos)
 
     for(int ii = 0; ii < npanels; ++ii)
     	vel += gamma(ii)*FindInfluenceConditioned(panelData[ii].A,panelData[ii].B,pos);
-    
-    return vel+Freestream;
+    // Need to introduce a limit to the velocity returned, as possible to be too close to a trailing vortex
+    return vel.normalized() * std::min(vel.norm(),maxVel);
 }
 
 void VLM::write_VLM_Panels(string &prefix)
@@ -305,7 +311,7 @@ void VLM::MakeMatrix(void)
     /*End initialisation*/
 }
 
-const StateVecD VLM::FindInfluence(StateVecD const& A, StateVecD const& B, StateVecD const& P)
+StateVecD VLM::FindInfluence(StateVecD const& A, StateVecD const& B, StateVecD const& P) const
 {	
     StateVecD r0, r1, r2, inf;
 
@@ -351,7 +357,7 @@ const StateVecD VLM::FindInfluence(StateVecD const& A, StateVecD const& B, State
 /* May need some conditioning for points that are nearly colinear */
 /* Current test - If any vortex is ill conditioned, ignore the entire horseshoe */
 /* Feels more appropriate to do this, but could be excessive. */
-const StateVecD VLM::FindInfluenceConditioned(StateVecD const& A, StateVecD const& B, StateVecD const& P)
+StateVecD VLM::FindInfluenceConditioned(StateVecD const& A, StateVecD const& B, StateVecD const& P) const
 {	
     StateVecD r0, r1, r2, inf;
 

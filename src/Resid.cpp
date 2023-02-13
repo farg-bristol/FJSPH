@@ -277,7 +277,8 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
 			{
 				Vdiff = pi.cellV - pi.v;
 								
-				aero = CalcAeroAcc(avar,pi,Vdiff,pi.norm,pi.lam_ng,Pbasei,svar.dx);
+				aero = CalcAeroAcc(avar,pi,Vdiff,pi.norm,pi.lam_ng,
+						real(outlist[ii].size()),Pbasei,svar.dx);
 				RV[ii] += aero;
 				Af[ii] += aero;
 				Force += aero;
@@ -421,7 +422,6 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
 				#else
 				RV[ii] += (RVi + pnp1[ii].aVisc + viscI + surfT/pi.m /* + aero/pi.m */ + g);
 				#endif
-				
 
 				#ifndef NODSPH
 					#ifdef ALE

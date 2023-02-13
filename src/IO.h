@@ -10,12 +10,14 @@
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
 /*************************************************************************/
+void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex);
+
 void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex);
 
-void Write_Headers(FILE* f1, FILE* fb, FILE* fg, SIM& svar);
+void Write_Headers(FILE* f1, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar);
 
-void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, real const& rho0, LIMITS const& limits,
-				 SPHState const& pnp1/* , DELTAP const& dp *//* , SPHState const& airP */);
+void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar,
+				LIMITS const& limits, SPHState const& pnp1);
 
 void Append_Restart_Prefix(SIM const& svar);
 

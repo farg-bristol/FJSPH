@@ -64,7 +64,7 @@ int Check_Error(Sim_Tree& SPH_TREE, SIM& svar, FLUID const& fvar, size_t const& 
 void Do_NB_Iter(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
 	size_t const& start, size_t& end, 
 	real const& a, real const& b, real const& c, real const& d, real const& B, real const& gam,
-	real const& npd, MESH& cells, LIMITS const& limits, OUTL& outlist, /* DELTAP const& dp, */
+	real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist, /* DELTAP const& dp, */
 	SPHState& pn, SPHState& pnp1, StateVecD& Force, StateVecD& dropVel)
 {
 	/*Update the state at time n+1*/
@@ -287,7 +287,7 @@ void Do_NB_Iter(Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO co
 void Newmark_Beta(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, 
 	size_t const& start, size_t& end, 
 	real const& a, real const& b, real const& c, real const& d, real const& B, real const& gam,
-	real const& npd, MESH& cells, LIMITS const& limits, OUTL& outlist, /* DELTAP const& dp, */
+	real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist, /* DELTAP const& dp, */
 	real& logbase, uint& k, real& error1, real& error2, vector<StateVecD>& xih,
 	SPHState& pn, SPHState& pnp1, StateVecD& Force, StateVecD& dropVel)
 {
