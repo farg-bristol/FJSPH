@@ -71,3 +71,4 @@ src/TAUtozCFD.cpp
 src/testContainment.cpp
 src/zCFD_convert.h
 src/Vectors.h
+src/Third_Party/
