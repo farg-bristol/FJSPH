@@ -3,7 +3,7 @@
 
 #include "shapes.h"
 
-void check_inlet_input(shape_block& bound, real& globalspacing);
+void check_inlet_input(shape_block& bound, real& globalspacing, int& fault);
 
 std::vector<StateVecD> create_inlet_zone(shape_block& block, real const& globalspacing);
 

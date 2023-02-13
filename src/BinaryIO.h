@@ -44,8 +44,7 @@ inline void Write_Real_Vector(void* const& fileHandle, int32_t const& outputZone
 
 	if(retval)
 	{
-		cout << "Failed to write \"" << varName << "\". frame: " << 
-			outputZone << ". varCount: " << varCount << endl;
+		printf("Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount);
 		exit(-1);
 	}
 	varCount++;
@@ -74,8 +73,7 @@ inline void Write_Int_Vector(void* const& fileHandle, int32_t const& outputZone,
 {
 	if(tecZoneVarWriteInt32Values(fileHandle, outputZone, varCount, 0, size, &varVec[start]))
 	{
-		cout << "Failed to write \"" << varName << "\". frame: " << 
-			outputZone << ". varCount: " << varCount << endl;
+		printf("Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount);
 		exit(-1);
 	}
 	varCount++;
@@ -87,8 +85,7 @@ inline void Write_UInt_Vector(void* const& fileHandle, int32_t const& outputZone
 {
 	if(tecZoneVarWriteUInt8Values(fileHandle, outputZone, varCount, 0, size, &varVec[start]))
 	{
-		cout << "Failed to write \"" << varName << "\". frame: " << 
-			outputZone << ". varCount: " << varCount << endl;
+		printf("Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount);
 		exit(-1);
 	}
 	varCount++;
@@ -108,8 +105,7 @@ inline void Write_Real_Value(void* const& fileHandle, int32_t const& outputZone,
 
 	if(retval)
 	{
-		cout << "Failed to write \"" << varName << "\". frame: " << 
-			outputZone << ". varCount: " << varCount << endl;
+		printf("Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount);
 		exit(-1);
 	}
 	varCount++;
@@ -126,15 +122,14 @@ inline void Write_Int_Value(void* const& fileHandle, int32_t const& outputZone, 
 
 	if(retval)
 	{
-		cout << "Failed to write \"" << varName << "\". frame: " << 
-			outputZone << ". varCount: " << varCount << endl;
+		printf("Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount);
 		exit(-1);
 	}
 	varCount++;
 }
 
-inline void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
-						uint8_t const& value, string const& varName)
+inline void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone, 
+	int32_t& varCount, int32_t const& size,	uint8_t const& value, string const& varName)
 {
 	int retval;
 	vector<uint8_t> rvec(size,0.0);
@@ -144,8 +139,7 @@ inline void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone,
 
 	if(retval)
 	{
-		cout << "Failed to write \"" << varName << "\". frame: " << 
-			outputZone << ". varCount: " << varCount << endl;
+		printf("Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount);
 		exit(-1);
 	}
 	varCount++;
@@ -154,7 +148,8 @@ inline void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone,
 void Write_Binary_Timestep(SIM const& svar, real const& rho0, SPHState const& pnp1,
 	bound_block const& limits, char const* group, int32_t const& strandID, void* const& fileHandle);
 
-void Init_Binary_PLT(SIM &svar, string const& filename, string const& zoneName, void* &fileHandle);
+void Init_Binary_PLT(SIM &svar, FLUID const& fvar, AERO const& avar, string const& filename, 
+				string const& zoneName, void* &fileHandle);
 
 /*************************************************************************/
 /**************************** BINARY INPUTS ******************************/

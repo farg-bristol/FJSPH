@@ -415,10 +415,11 @@ void check_if_too_close(Sim_Tree const& NP1_INDEX, real const& sr, SPHState cons
 	}
 }
 
-void LatticeGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, Sim_Tree& SPH_TREE, OUTL& outlist, SPHState& pn, SPHState& pnp1)
+void LatticeGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, 
+			Sim_Tree& SPH_TREE, OUTL& outlist, SPHState& pn, SPHState& pnp1, LIMITS const& limits)
 {
-	size_t const& start = svar.bndPts;
-	size_t const& end = svar.bndPts+svar.simPts;
+	// size_t const& start = svar.bndPts;
+	// size_t const& end = svar.bndPts+svar.simPts;
 
 	size_t pID = svar.totPts;
 	size_t nGhost = 0;
@@ -426,122 +427,122 @@ void LatticeGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& ce
 	real const sr = 0.99*svar.dx*svar.dx;
 	int const interval = 1000;
 
-	for(size_t ii = start; ii < end; ii++)
+	for(size_t block = svar.nbound; block < svar.nbound + svar.nfluid; ++block)
 	{
-		if(pnp1[ii].surf == 1)
+		for(size_t ii = limits[block].index.first; ii < limits[block].index.second; ii++)
 		{
-			/* Check if it's neighbourhood is fully supported?  */
-			/* Find how many are within 2H+dx */
-			nanoflann::SearchParams const params(0,0,false);
-			real const search_radius = (2*fvar.H+svar.dx)*(2*fvar.H+svar.dx);
-
-			std::vector<std::pair<size_t, real>> matches; /* Nearest Neighbour Search*/
-			#if SIMDIM == 3
-				matches.reserve(250);
-			#else
-				matches.reserve(47);
-			#endif
-
-			SPH_TREE.index->radiusSearch(&pnp1[ii].xi[0], search_radius, matches, params);
-
-			// cout << matches.size() << endl;
-
-			#if SIMDIM == 3
-			if(matches.size() >  250/* ? not sure yet */)
-				continue;
-			#else
-			if(matches.size() >  90/* ? not sure yet */)
-				continue;
-			#endif
-			/* Create a lattice grid (perturbed, so its not a perfect grid) around the point. */
-			SPHState ghost_particles;
-
-			/* Velocity of the air particle */
-			StateVecD vel; 
-			if(svar.Asource == constVel)
-				vel = (avar.gasM/ pnp1[ii].m) * avar.vInf;
-			else
-				vel = (avar.gasM/ pnp1[ii].m) * pnp1[ii].cellV;
-
-			real press = pnp1[ii].cellP;
-			real rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
-			real mass = fvar.simM;
-			/* How far away does it need to be? */
-			/* The fluid surface cannot interact with a 'surface' particle */
-			/* Origin */
-			StateVecD const& origin = pnp1[ii].xi;
-
-			for(real x = 0.0; x < (2*fvar.H+svar.dx); x += svar.dx)
+			if(pnp1[ii].surf == 1)
 			{
-				for(real y = 0.0; y < (2*fvar.H+svar.dx); y += svar.dx)
+				/* Check if it's neighbourhood is fully supported?  */
+				/* Find how many are within 2H+dx */
+				nanoflann::SearchParams const params(0,0,false);
+				real const search_radius = (2*fvar.H+svar.dx)*(2*fvar.H+svar.dx);
+
+				std::vector<std::pair<size_t, real>> matches; /* Nearest Neighbour Search*/
+				#if SIMDIM == 3
+					matches.reserve(250);
+				#else
+					matches.reserve(47);
+				#endif
+
+				SPH_TREE.index->radiusSearch(&pnp1[ii].xi[0], search_radius, matches, params);
+
+				// cout << matches.size() << endl;
+
+				#if SIMDIM == 3
+				if(matches.size() >  250/* ? not sure yet */)
+					continue;
+				#else
+				if(matches.size() >  90/* ? not sure yet */)
+					continue;
+				#endif
+				/* Create a lattice grid (perturbed, so its not a perfect grid) around the point. */
+				SPHState ghost_particles;
+
+				/* Velocity of the air particle */
+				StateVecD vel; 
+				if(svar.Asource == constVel)
+					vel = (avar.gasM/ pnp1[ii].m) * avar.vInf;
+				else
+					vel = (avar.gasM/ pnp1[ii].m) * pnp1[ii].cellV;
+
+				real press = pnp1[ii].cellP;
+				real rho = fvar.rho0*pow((press/fvar.B) + 1.0, 1.0/fvar.gam);
+				real mass = fvar.simM;
+				/* How far away does it need to be? */
+				/* The fluid surface cannot interact with a 'surface' particle */
+				/* Origin */
+				StateVecD const& origin = pnp1[ii].xi;
+
+				for(real x = 0.0; x < (2*fvar.H+svar.dx); x += svar.dx)
 				{
-					#if SIMDIM == 3
-					for(real z = 0.0; z < (2*fvar.H+svar.dx); z += svar.dx)
+					for(real y = 0.0; y < (2*fvar.H+svar.dx); y += svar.dx)
 					{
-						StateVecD perturb(random(interval), random(interval), random(interval));
-						StateVecD xi = svar.Rotate * StateVecD(x,y,z)+origin+perturb;
-						check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);	
+						#if SIMDIM == 3
+						for(real z = 0.0; z < (2*fvar.H+svar.dx); z += svar.dx)
+						{
+							StateVecD perturb(random(interval), random(interval), random(interval));
+							StateVecD xi = StateVecD(x,y,z)+origin+perturb;
+							check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);	
 
-						perturb = StateVecD(random(interval),random(interval), random(interval));
-						xi = svar.Rotate * StateVecD(-x,y,z)+origin+perturb;
-						check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
+							perturb = StateVecD(random(interval),random(interval), random(interval));
+							xi = StateVecD(-x,y,z)+origin+perturb;
+							check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
-						perturb = StateVecD(random(interval),random(interval), random(interval));
-						xi = svar.Rotate * StateVecD(x,-y,z)+origin+perturb;
-						check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
+							perturb = StateVecD(random(interval),random(interval), random(interval));
+							xi = StateVecD(x,-y,z)+origin+perturb;
+							check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
-						perturb = StateVecD(random(interval),random(interval), random(interval));
-						xi = svar.Rotate * StateVecD(x,y,-z)+origin+perturb;
-						check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
+							perturb = StateVecD(random(interval),random(interval), random(interval));
+							xi = StateVecD(x,y,-z)+origin+perturb;
+							check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
-						perturb = StateVecD(random(interval),random(interval), random(interval));
-						xi = svar.Rotate * StateVecD(-x,-y,z)+origin+perturb;
-						check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
+							perturb = StateVecD(random(interval),random(interval), random(interval));
+							xi = StateVecD(-x,-y,z)+origin+perturb;
+							check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
-						perturb = StateVecD(random(interval),random(interval), random(interval));
-						xi = svar.Rotate * StateVecD(-x,y,-z)+origin+perturb;
-						check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
+							perturb = StateVecD(random(interval),random(interval), random(interval));
+							xi = StateVecD(-x,y,-z)+origin+perturb;
+							check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
-						perturb = StateVecD(random(interval),random(interval), random(interval));
-						xi = svar.Rotate * StateVecD(x,-y,-z)+origin+perturb;
-						check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
+							perturb = StateVecD(random(interval),random(interval), random(interval));
+							xi = StateVecD(x,-y,-z)+origin+perturb;
+							check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
 
-						perturb = StateVecD(random(interval),random(interval), random(interval));
-						xi = svar.Rotate * StateVecD(-x,-y,-z)+origin+perturb;
-						check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
+							perturb = StateVecD(random(interval),random(interval), random(interval));
+							xi = StateVecD(-x,-y,-z)+origin+perturb;
+							check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);	
+						}
+						#else
+							StateVecD perturb(random(interval), random(interval));
+							StateVecD xi = StateVecD(x,y)+origin+perturb;
+							check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);	
+
+							perturb = StateVecD(random(interval),random(interval));
+							xi = StateVecD(-x,y)+origin+perturb;
+							check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
+
+							perturb = StateVecD(random(interval),random(interval));
+							xi = StateVecD(x,-y)+origin+perturb;
+							check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
+
+							perturb = StateVecD(random(interval),random(interval));
+							xi = StateVecD(-x,-y)+origin+perturb;
+							check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
+						#endif
 						
-					#else
-						StateVecD perturb(random(interval), random(interval));
-						StateVecD xi = svar.Rotate * StateVecD(x,y)+origin+perturb;
-						check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);	
-
-						perturb = StateVecD(random(interval),random(interval));
-						xi = svar.Rotate * StateVecD(-x,y)+origin+perturb;
-						check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
-
-						perturb = StateVecD(random(interval),random(interval));
-						xi = svar.Rotate * StateVecD(x,-y)+origin+perturb;
-						check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
-
-						perturb = StateVecD(random(interval),random(interval));
-						xi = svar.Rotate * StateVecD(-x,-y)+origin+perturb;
-						check_if_too_close(SPH_TREE,sr,pnp1,xi,vel,rho,mass,press,pID,ghost_particles,nGhost);
-					#endif
-					
-					#if SIMDIM == 3
 					}
-					#endif
 				}
-			}
 
-			if(!ghost_particles.empty())
-			{
-				/* Add ghost particles to the vector */
-				pnp1.insert(pnp1.end(),ghost_particles.begin(),ghost_particles.end());
-				pn.insert(pn.end(),ghost_particles.begin(),ghost_particles.end());
+				if(!ghost_particles.empty())
+				{
+					/* Add ghost particles to the vector */
+					pnp1.insert(pnp1.end(),ghost_particles.begin(),ghost_particles.end());
+					pn.insert(pn.end(),ghost_particles.begin(),ghost_particles.end());
 
-				/* Rebuild the tree, including the ghost particles just made, so no overlap */
-				SPH_TREE.index->buildIndex();
+					/* Rebuild the tree, including the ghost particles just made, so no overlap */
+					SPH_TREE.index->buildIndex();
+				}
 			}
 		}
 	}

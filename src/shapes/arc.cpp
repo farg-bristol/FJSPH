@@ -3,7 +3,7 @@
 
 #include <Eigen/Dense>
 
-void check_arc_input(shape_block& bound, real& globalspacing)
+void check_arc_input(shape_block& bound, real& globalspacing, int& fault)
 {
     int has_config = 0;
     int arc_defined = 0;
@@ -94,7 +94,7 @@ void check_arc_input(shape_block& bound, real& globalspacing)
     {
         std::cout << "ERROR: Block \"" << bound.name << 
             "\" arc geometry has not been sufficiently defined. Stopping." << std::endl;
-        exit(1);
+        fault = 1;
     }
 
     if(bound.dx < 0)
@@ -118,7 +118,7 @@ void check_arc_input(shape_block& bound, real& globalspacing)
         if(bound.nk < 0)
         {
             std::cout << "ERROR: Block \"" << bound.name << "\" arc thickness has not been correctly defined. Stopping." << std::endl;
-            exit(1);
+            fault = 1;
         }
     }
     else if (bound.nk < 0)
@@ -177,7 +177,7 @@ void check_arc_input(shape_block& bound, real& globalspacing)
         if(bound.nj < 0)
         {
             std::cout << "ERROR: Block \"" << bound.name << "\" arch length has not been correctly defined. Stopping." << std::endl;
-            exit(1);
+            fault = 1;
         }
     }
     else if (bound.nj < 0)

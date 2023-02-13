@@ -1,9 +1,8 @@
 #include "inlet.h"
 #include "../Geometry.h"
 
-void check_inlet_input(shape_block& block, real& globalspacing)
+void check_inlet_input(shape_block& block, real& globalspacing, int& fault)
 {
-    int fault = 0;
     int has_config = 0;
 
     #if SIMDIM == 3
@@ -306,14 +305,6 @@ void check_inlet_input(shape_block& block, real& globalspacing)
     if(block.vmag != 0)
     {
         block.vel = block.vmag * block.insert_norm;
-    }
-
-
-    
-    if(fault)
-    {
-        cout << "Geometry check finished with errors. Stopping" << endl;
-        exit(-1);
     }
 }
 

@@ -21,7 +21,7 @@ void PoissonGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& ce
 
 
 void LatticeGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, 
-			Sim_Tree& SPH_TREE, OUTL& outlist, SPHState& pn, SPHState& pnp1);
+			Sim_Tree& SPH_TREE, OUTL& outlist, SPHState& pn, SPHState& pnp1, LIMITS const& limits);
 
 /* Function to check if a ghost particle needs to be removed from the simulation, because */
 /* it's left the support of the fluid */

@@ -348,7 +348,6 @@ void copy_svar(SIM& svar, SIM& svar_)
     svar_.bndPts = svar.bndPts; 
     svar_.totPts = svar.totPts;
     svar_.gstPts = svar.gstPts;  
-    svar_.psnPts = svar.psnPts; 
     svar_.delNum = svar.delNum; 
     svar_.intNum = svar.intNum;	
     svar_.nrefresh = svar.nrefresh;
@@ -363,24 +362,14 @@ void copy_svar(SIM& svar, SIM& svar_)
     svar_.bound_type = svar.bound_type;
     svar_.Scase = svar.Scase; 
     svar_.Bcase = svar.Bcase;
-    svar_.sim_start = svar.sim_start;
-    svar_.bound_start = svar.bound_start;
-    svar_.Bclosed = svar.Bclosed; 
+    svar_.offset_vec = svar.offset_vec;
     svar_.ghost = svar.ghost;
     svar_.Asource = svar.Asource;
     svar_.init_hydro_pressure = svar.init_hydro_pressure;
     svar_.hydro_height = svar.hydro_height ;
 
-    svar_.jet_diam = svar.jet_diam;
-    svar_.jet_depth = svar.jet_depth;
-    svar_.Angle = svar.Angle;
-    svar_.Rotate = svar.Rotate;
-    svar_.Transp = svar.Transp;
     svar_.diam = svar.diam;
     svar_.nrad = svar.nrad;
-    svar_.xyPART = svar.xyPART;
-    svar_.sim_box = svar.sim_box;
-    svar_.bound_box = svar.bound_box;
 
     /* Integration parameters */
     svar_.subits = svar.subits;
@@ -474,7 +463,7 @@ void Speed_Test_Sweep(SIM& svar, FLUID& fvar, AERO& avar)
     // InitSPH(svar,fvar,avar,pn,pnp1);
     // Only use a single particle for now
     
-    pn.emplace_back(SPHPart(svar.sim_start,StateVecD::Zero(),fvar.rho0,fvar.simM,0.0,FREE,0));
+    pn.emplace_back(SPHPart(svar.offset_vec,StateVecD::Zero(),fvar.rho0,fvar.simM,0.0,FREE,0));
     pnp1 = pn;
     limits.emplace_back(0,1);
 

@@ -1,10 +1,8 @@
 
 #include "circle.h"
 
-void check_circle_input(shape_block& block, real& globalspacing)
+void check_circle_input(shape_block& block, real& globalspacing, int& fault)
 {
-    
-    int fault = 0;
     if(!check_vector(block.centre))
     {
         printf("ERROR: Block \"%s\" centre position has not been correctly defined.\n", block.name.c_str());
@@ -84,12 +82,6 @@ void check_circle_input(shape_block& block, real& globalspacing)
     #else
     block.npts = ceil(real(block.npts)*M_PI/6.0);
     #endif
-
-    if(fault)
-    {
-        printf("Check of circle or sphere geometry finished with errors. Stopping.\n");
-        exit(-1);
-    }
 }
 
 #if SIMDIM == 2

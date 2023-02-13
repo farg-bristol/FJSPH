@@ -8,7 +8,7 @@
 struct shape_block
 {   /* Basically everything needs to be defined. Provide defaults to check against */
     shape_block() : bound_type(-1), sub_bound_type(-1), hcpl(0), fixed_vel_or_dynamic(0), 
-        bound_solver(1), no_slip(0), npts(0),
+        bound_solver(pressure_G), no_slip(0), npts(0),
         insert_norm(StateVecD::UnitX()), insconst(default_val),
         delete_norm(StateVecD::UnitX()), delconst(default_val),
         aero_norm(StateVecD::UnitX()), aeroconst(default_val),  

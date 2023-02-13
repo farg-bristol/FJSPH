@@ -452,9 +452,7 @@ void Get_Data(int& fin, size_t const& nPnts, FACE& fdata, vector<int> markers,
 		"  Number in vector: " << faceVec.size() << endl;
 	}
 
-	int *faceMarkers = new int[nMarkers];
-
-	faceMarkers = Get_Int_Scalar(fin, "boundarymarker_of_surfaces", nMarkers);
+	vector<int> faceMarkers = Get_Int_Scalar(fin, "boundarymarker_of_surfaces", nMarkers);
 
 	// cout << "symPlane: " << symPlane << endl;
 
@@ -1013,7 +1011,7 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 
 
 	/*Create the C array for the faces*/
-	int* edges = new int[edata.nEdge*2];
+	vector<int>  edges(edata.nEdge*2);
 	for(uint ii = 0; ii < edata.nEdge; ++ii)
 	{
 		edges[index(ii,0,2)] = static_cast<int>(edata.edges[ii].first);
@@ -1031,8 +1029,8 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 	}
 
 	/*Put face left and right into the file*/
-	int* left = new int[edata.nEdge];
-	int* right = new int[edata.nEdge];
+	vector<int> left(edata.nEdge);
+	vector<int> right(edata.nEdge);
 
 	for(uint ii = 0; ii < edata.nEdge; ++ii)
 	{
@@ -1064,7 +1062,7 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 	}
 
 	/*Write which vertices are in use, for reading the solution file*/
-	int* uVert = new int[edata.nPnts];
+	vector<int> uVert(edata.nPnts);
 
 	for(size_t ii = 0; ii < edata.nPnts; ++ii)
 	{
@@ -1079,8 +1077,8 @@ void Write_Edge_Data(const string& meshIn, const EDGE& edata)
 	}
 
 	/*Create the C arrays for the vertices*/
-	double* x = new double[edata.nPnts];
-	double* z = new double[edata.nPnts];
+	vector<double> x(edata.nPnts);
+	vector<double> z(edata.nPnts);
 
 	for(uint ii = 0; ii < edata.nPnts; ++ii)
 	{

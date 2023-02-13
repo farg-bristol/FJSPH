@@ -620,9 +620,9 @@ void Init_Binary_PLT(SIM &svar, FLUID const& fvar, AERO const& avar, string cons
 	add_file_aux_data(fileHandle, "Input fluid definition filename", svar.fluidfile);
 	add_file_aux_data(fileHandle, "Input boundary definition filename", svar.boundfile);
 
-	add_file_aux_data(fileHandle, "Primary grid face filename", svar.taumesh);
-	add_file_aux_data(fileHandle, "Boundary mapping filename", svar.taubmap);
-	add_file_aux_data(fileHandle, "Restart-data prefix", svar.tausol);
+	// add_file_aux_data(fileHandle, "Primary grid face filename", svar.taumesh);
+	// add_file_aux_data(fileHandle, "Boundary mapping filename", svar.taubmap);
+	// add_file_aux_data(fileHandle, "Restart-data prefix", svar.tausol);
 	add_file_aux_data(fileHandle, "Dimension offset vector", svar.offset_axis);
 	add_file_aux_data(fileHandle, "Solution angle of attack", svar.angle_alpha);
 	add_file_aux_data(fileHandle, "Grid scale", svar.scale);

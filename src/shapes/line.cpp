@@ -1,25 +1,25 @@
 #include "line.h"
 #include <Eigen/Geometry>
 
-void check_line_input(shape_block& bound, real& globalspacing)
+void check_line_input(shape_block& bound, real& globalspacing, int& fault)
 {
     if(!check_vector(bound.start))
     {
         std::cout << "ERROR: Block \"" << bound.name << "\" starting position has not been correctly defined. Stopping" << std::endl;
-        exit(1);
+        fault = 1;
     }
 
     if(!check_vector(bound.end))
     {
         std::cout << "ERROR: Block \"" << bound.name << "\" ending position has not been correctly defined. Stopping" << std::endl;
-        exit(1);
+        fault = 1;
     }
 
     #if SIMDIM == 3
     if(!check_vector(bound.right))
     {
         std::cout << "ERROR: Block \"" << bound.name << "\" ending position has not been correctly defined. Stopping" << std::endl;
-        exit(1);
+        fault = 1;
     }
     #endif
 
@@ -61,7 +61,8 @@ void check_line_input(shape_block& bound, real& globalspacing)
         if(bound.nk < 0)
         {
             std::cout << "ERROR: Block \"" << bound.name << "\" line thickness has not been correctly defined. Stopping." << std::endl;
-            exit(1);
+            fault = 1;
+            return;
         }
     }
     else if (bound.nk < 0)

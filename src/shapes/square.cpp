@@ -1,18 +1,19 @@
 
 #include "square.h"
 
-void check_square_input(shape_block& bound, real& globalspacing)
+void check_square_input(shape_block& bound, real& globalspacing, int& fault)
 {
+    
     if(!check_vector(bound.start))
     {
         std::cout << "ERROR: Block \"" << bound.name << "\" starting position has not been correctly defined. Stopping" << std::endl;
-        exit(1);
+        fault = 1;
     }
 
     if(!check_vector(bound.end))
     {
         std::cout << "ERROR: Block \"" << bound.name << "\" ending position has not been correctly defined. Stopping" << std::endl;
-        exit(1);
+        fault = 1;
     }
 
     if(bound.dx < 0)

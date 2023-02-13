@@ -619,7 +619,7 @@ namespace TAUtoFace
         cout << "Writing Points" << endl;
 
         /*Put them in the file*/
-        double *coord = Get_Real_Scalar(fin, "points_xc", nPnts);
+        vector<double> coord = Get_Real_Scalar(fin, "points_xc", nPnts);
         Write_Variable_Scalar(fout, ptsxID, coord, "x coordinate");
             
         coord = Get_Real_Scalar(fin, "points_yc", nPnts);
@@ -732,11 +732,11 @@ namespace TAUtoFace
         }
 
         // Now allocate face arrays to have data.
-        tfaces = new int[ntFaces*3];
-        qfaces = new int[nqFaces*4];
-        left = new int[nFace];
-        right = new int[nFace];
-        zone = new int[nSurf];
+        vector<int> tfaces(ntFaces*3);
+        vector<int> qfaces(nqFaces*4);
+        vector<int> left(nFace);
+        vector<int> right(nFace);
+        vector<int> zone(nSurf);
 
         // Go back through faces, placing them in the arrays
         size_t tFace = 0;
@@ -1005,14 +1005,14 @@ namespace TAUtoFace
 
         int32_t nPnts_ = nPnts;
 
-        double *coordx = Get_Real_Scalar(fin, "points_xc", nPnts);
-        TECDAT142(&nPnts_, coordx, &fileIsDouble);
+        vector<double> coordx = Get_Real_Scalar(fin, "points_xc", nPnts);
+        TECDAT142(&nPnts_, &coordx[0], &fileIsDouble);
         
-        double *coordy = Get_Real_Scalar(fin, "points_yc", nPnts);
-        TECDAT142(&nPnts_, coordy, &fileIsDouble);
+        vector<double> coordy = Get_Real_Scalar(fin, "points_yc", nPnts);
+        TECDAT142(&nPnts_, &coordy[0], &fileIsDouble);
         
-        double *coordz = Get_Real_Scalar(fin, "points_zc", nPnts);
-        TECDAT142(&nPnts_, coordz, &fileIsDouble);
+        vector<double> coordz = Get_Real_Scalar(fin, "points_zc", nPnts);
+        TECDAT142(&nPnts_, &coordz[0], &fileIsDouble);
         
         int32_t faceOffset = nFace;
         if(TECPOLYFACE142(
@@ -1260,7 +1260,7 @@ namespace TAUtoFace
         
         /*Write vertices in block format (Each dimension in turn)*/
         /*Get the coordinate data*/
-        double *coordx = Get_Real_Scalar(fin, "points_xc", nPnts);
+        vector<double> coordx = Get_Real_Scalar(fin, "points_xc", nPnts);
         
         size_t newl = 0;
         fout << std::setw(1);
@@ -1278,7 +1278,7 @@ namespace TAUtoFace
         }
         fout << endl;
         
-        double *coordy = Get_Real_Scalar(fin, "points_yc", nPnts);
+        vector<double> coordy = Get_Real_Scalar(fin, "points_yc", nPnts);
 
         newl = 0;
         for(size_t ii = 0; ii < nPnts; ++ii)
@@ -1295,7 +1295,7 @@ namespace TAUtoFace
         }
         fout << endl;
 
-        double *coordz = Get_Real_Scalar(fin, "points_zc", nPnts);
+        vector<double> coordz = Get_Real_Scalar(fin, "points_zc", nPnts);
 
         newl = 0;
         for(size_t ii = 0; ii < nPnts; ++ii)
@@ -1637,14 +1637,9 @@ int main(int argc, char *argv[])
     TAUtoFace::surface_quads(meshID,faces);
 
     // get boundary markers
-    int* markers = new int[nMarkers];
-	markers = Get_Int_Scalar(meshID, "marker", nMarkers);
-    vector<int> markvect(nMarkers);
-    for(size_t ii = 0; ii < nMarkers; ++ii)
-        markvect[ii] = markers[ii];
+	vector<int> markers = Get_Int_Scalar(meshID, "marker", nMarkers);
 
-    int* faceMarkers = new int[nSurfElem];
-	faceMarkers = Get_Int_Scalar(meshID, "boundarymarker_of_surfaces", nSurfElem);
+	vector<int> faceMarkers = Get_Int_Scalar(meshID, "boundarymarker_of_surfaces", nSurfElem);
 
     // Assign boundary markers
     std::set<int> zones;
@@ -1654,10 +1649,10 @@ int main(int argc, char *argv[])
         faces[ii][2] = faceMarkers[ii];
         zones.insert(faceMarkers[ii]);
 
-        auto const index = std::find(markvect.begin(),markvect.end(),faceMarkers[ii]);
-        if(index != markvect.end())
+        auto const index = std::find(markers.begin(),markers.end(),faceMarkers[ii]);
+        if(index != markers.end())
         {
-            size_t ind = index - markvect.begin();
+            size_t ind = index - markers.begin();
             surfFaceCounts[ind]++;
         }
         else

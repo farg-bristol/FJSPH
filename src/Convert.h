@@ -81,7 +81,35 @@ namespace netCDF
         }
     }
 
-    inline double* Get_Real_Scalar(int &fin, string const& variable, size_t const &nPnts)
+    // inline double* Get_Real_Scalar(int &fin, string const& variable, size_t const &nPnts)
+    // {
+    //     int retval, varID;
+    //     if ((retval = nc_inq_varid(fin, variable.c_str(), &varID)))
+    //     {
+    //         cout << "\n\tError: failed to get ID for variable \"" << variable << "\"" << endl;
+    //         #ifdef DEBUG
+    //             dbout << "\n\tError: failed to get ID for variable \"" << variable << "\"" << endl;
+    //         #endif
+    //         ERR(retval);
+    //         exit(-1);
+    //     }
+
+    //     double *var = new double[nPnts];
+
+    //     if ((retval = nc_get_var_double(fin, varID, &var[0])))
+    //     {
+    //         cout << "\n\tError: failed to get data for variable  \"" << variable << "\"" << endl;
+    //         #ifdef DEBUG
+    //             dbout << "\n\tError: failed to get data for variable  \"" << variable << "\"" << endl;
+    //         #endif
+    //         ERR(retval);
+    //         exit(-1);
+    //     }
+
+    //     return var;
+    // }
+
+    inline vector<double> Get_Real_Scalar(int &fin, string const& variable, size_t const &nPnts)
     {
         int retval, varID;
         if ((retval = nc_inq_varid(fin, variable.c_str(), &varID)))
@@ -94,7 +122,7 @@ namespace netCDF
             exit(-1);
         }
 
-        double *var = new double[nPnts];
+        vector<double> var(nPnts);
 
         if ((retval = nc_get_var_double(fin, varID, &var[0])))
         {
@@ -109,7 +137,7 @@ namespace netCDF
         return var;
     }
 
-    inline int* Get_Int_Scalar(int &fin, string const& variable, size_t const &nPnts)
+    inline vector<int> Get_Int_Scalar(int &fin, string const& variable, size_t const &nPnts)
     {
         int retval, varID;
         if ((retval = nc_inq_varid(fin, variable.c_str(), &varID)))
@@ -122,7 +150,7 @@ namespace netCDF
             exit(-1);
         }
 
-        int* var = new int[nPnts];
+        vector<int> var(nPnts);
 
         if ((retval = nc_get_var_int(fin, varID, &var[0])))
         {
@@ -211,9 +239,9 @@ namespace netCDF
         #endif
 
         /*Get the coordinate data*/
-        double *coordX = Get_Real_Scalar(fin, "points_xc", nPnts);
-        double *coordY = Get_Real_Scalar(fin, "points_yc", nPnts);
-        double *coordZ = Get_Real_Scalar(fin, "points_zc", nPnts);
+        vector<double> coordX = Get_Real_Scalar(fin, "points_xc", nPnts);
+        vector<double> coordY = Get_Real_Scalar(fin, "points_yc", nPnts);
+        vector<double> coordZ = Get_Real_Scalar(fin, "points_zc", nPnts);
 
         /*Convert it to a vector to store*/
         vector<std::array<real,3>> coordVec(nPnts);
@@ -258,7 +286,7 @@ namespace netCDF
     }
 
     inline void Write_Variable_Array(int& fout, int const& var_id, size_t* const start,
-                        size_t* const end, int* const var_data, string const& var_name)
+                        size_t* const end, vector<int> const& var_data, string const& var_name)
     {
         int retval;
         if ((retval = nc_put_vara_int(fout, var_id, start, end, &var_data[0])))
@@ -273,7 +301,7 @@ namespace netCDF
     }
 
     inline void Write_Variable_Array(int& fout, int const& var_id, size_t* const start,
-                        size_t* const end, float* const var_data, string const& var_name)
+                        size_t* const end, vector<float> const& var_data, string const& var_name)
     {
         int retval;
         if ((retval = nc_put_vara_float(fout, var_id, start, end, &var_data[0])))
@@ -288,7 +316,7 @@ namespace netCDF
     }
 
     inline void Write_Variable_Array(int& fout, int const& var_id, size_t* const start,
-                        size_t* const end, double* const var_data, string const& var_name)
+                        size_t* const end, vector<double> const& var_data, string const& var_name)
     {
         int retval;
         if ((retval = nc_put_vara_double(fout, var_id, start, end, &var_data[0])))
@@ -303,7 +331,7 @@ namespace netCDF
     }
 
     inline void Write_Variable_Scalar(int& fout, int const& var_id,
-                    int* const var_data, string const& var_name)
+                    vector<int> const& var_data, string const& var_name)
     {
         int retval;
         if ((retval = nc_put_var_int(fout, var_id, &var_data[0])))
@@ -318,7 +346,7 @@ namespace netCDF
     }
 
     inline void Write_Variable_Scalar(int& fout, int const& var_id,
-                    float* const var_data, string const& var_name)
+                    vector<float> const& var_data, string const& var_name)
     {
         int retval;
         if ((retval = nc_put_var_float(fout, var_id, &var_data[0])))
@@ -333,7 +361,7 @@ namespace netCDF
     }
 
     inline void Write_Variable_Scalar(int& fout, int const& var_id, 
-                    double* const var_data, string const& var_name)
+                    vector<double> const& var_data, string const& var_name)
     {
         int retval;
         if ((retval = nc_put_var_double(fout, var_id, &var_data[0])))

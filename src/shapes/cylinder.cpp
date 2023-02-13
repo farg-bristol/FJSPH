@@ -1,11 +1,9 @@
 
 #include "cylinder.h"
 #include "../Geometry.h"
-void check_cylinder_input(shape_block& block, real& globalspacing)
+void check_cylinder_input(shape_block& block, real& globalspacing, int& fault)
 {
     int has_config = 0;
-    size_t fault = 0;
-
     if(block.subshape == "Hollow")
     {
         block.sub_bound_type = hollow;
@@ -335,14 +333,6 @@ void check_cylinder_input(shape_block& block, real& globalspacing)
         #else
         block.npts = block.ni * block.nj;
         #endif
-    }
-
-    
-
-    if(fault)
-    {
-        printf("Check of cylinder block \"%s\" finished with errors. Stopping.\n",block.name.c_str());
-        exit(-1);
     }
 }
 

@@ -117,8 +117,7 @@ void CreateDroplet(SIM& svar, FLUID const& fvar, SPHState& pn)
 
 				xi = StateVecD(0.0,y,-z);
 				perturb = StateVecD(random(interval), random(interval), random(interval));
-				xi = svar.Rotate * (xi + perturb);
-				xi += svar.sim_start;
+				xi +=  perturb;
 				Place_Point(fvar, xi, v, rho, press, pState, pID, svar, pn);
 			}
 

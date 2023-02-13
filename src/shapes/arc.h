@@ -3,7 +3,7 @@
 
 #include "shapes.h"
 
-void check_arc_input(shape_block& bound, real& globalspacing);
+void check_arc_input(shape_block& bound, real& globalspacing, int& fault);
 
 #if SIMDIM == 2
 void get_arc_end(StateVecD const& start, StateVecD const& centre, real const& arclength, 

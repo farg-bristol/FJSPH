@@ -3,7 +3,7 @@
 
 #include "shapes.h"
 
-void check_line_input(shape_block& bound, real& globalspacing);
+void check_line_input(shape_block& bound, real& globalspacing, int& fault);
 
 #if SIMDIM == 2
 // Fine line of one particle thick, used in particular for fibres
