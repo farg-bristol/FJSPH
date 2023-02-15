@@ -14,17 +14,16 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex);
 
 void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex);
 
-void Write_Headers(FILE* f1, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar);
+void Write_Tec_Headers(FILE* ff, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar,
+						 AERO const& avar, std::string const& prefix);
 
-void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar,
+void Write_h5part_Headers(SIM& svar, FLUID const& fvar, AERO const& avar, std::string const& prefix);
+
+void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar,
 				LIMITS const& limits, SPHState const& pnp1);
 
-void Append_Restart_Prefix(SIM const& svar);
+void Remove_Old_Files(SIM const& svar);
 
 void Check_Output_Variables(SIM& svar);
-
-void Restart_Simulation(SIM& svar, FLUID const& fvar, AERO const& avar, 
-		MESH const& cells, SPHState& pn, SPHState& pnp1, LIMITS& limits);
-
 
 #endif

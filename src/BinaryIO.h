@@ -148,14 +148,7 @@ inline void Write_UInt_Value(void* const& fileHandle, int32_t const& outputZone,
 void Write_Binary_Timestep(SIM const& svar, real const& rho0, SPHState const& pnp1,
 	bound_block const& limits, char const* group, int32_t const& strandID, void* const& fileHandle);
 
-void Init_Binary_PLT(SIM &svar, FLUID const& fvar, AERO const& avar, string const& filename, 
-				string const& zoneName, void* &fileHandle);
-
-/*************************************************************************/
-/**************************** BINARY INPUTS ******************************/
-/*************************************************************************/
-void Restart_Binary(SIM& svar, FLUID const& fvar, SPHState& pn, LIMITS& limits);
-
-void Write_Cell_Centres(MESH const& cells);
+void Init_Binary_PLT(SIM &svar, FLUID const& fvar, AERO const& avar, string const& prefix,
+			 string const& filename, string const& zoneName, void* &fileHandle);
 
 #endif

@@ -12,46 +12,6 @@
 #endif
 
 /*************************************************************************/
-/**************************** ASCII INPUTS *******************************/
-/*************************************************************************/
-void ASCII_Restart(SIM& svar, FLUID const& fvar, SPHState& pn)
-{
-    #ifdef DEBUG
-		fprintf(dbout,"Reading ASCII files for restart information.\n");
-	#endif
-
-	string fuelf = svar.restart_prefix;
-	fuelf.append("_fuel.dat");
-
-	FILE* fin = fopen(fuelf.c_str(),"r");
-
-	if(fin == NULL)
-	{
-		cout << "Failed to open ASCII restart file: " << fuelf << endl;
-		cout << "Stopping." << endl;
-		exit(-1);
-	}
-
-	size_t const len = 200;
-	char line[len];
-	// string line;
-	
-	if(fgets(line,len,fin))
-	{
-		// Read the contents of the line
-		
-		cout << line << endl;
-	}
-	
-
-
-	#ifdef DEBUG
-		fprintf(dbout,"Exiting ASCII restart function\n");
-	#endif
-}
-
-
-/*************************************************************************/
 /**************************** ASCII OUTPUTS ******************************/
 /*************************************************************************/
 void Write_ASCII_header(FILE* fp, SIM const& svar, char const* title)

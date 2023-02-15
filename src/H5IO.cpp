@@ -1773,12 +1773,12 @@ namespace h5part
 }
 
 void open_h5part_files(SIM const& svar, FLUID const& fvar, AERO const& avar, 
-                    hid_t& ffile, hid_t& bfile)
+                    string const& prefix, hid_t& ffile, hid_t& bfile)
 {
 
     if(svar.simPts > 0)
     {
-        std::string filename = svar.output_prefix + "_fluid.h5part";
+        std::string filename = prefix + "_fluid.h5part";
 
         if(std::filesystem::exists(filename))
         {
@@ -1793,7 +1793,7 @@ void open_h5part_files(SIM const& svar, FLUID const& fvar, AERO const& avar,
 
     if(svar.bndPts > 0)
     {
-        std::string filename = svar.output_prefix + "_boundary.h5part";
+        std::string filename = prefix + "_boundary.h5part";
 
         if(std::filesystem::exists(filename))
         {
@@ -1823,7 +1823,7 @@ void open_h5part_files(SIM const& svar, FLUID const& fvar, AERO const& avar,
 void write_h5part_data(hid_t& ffile, hid_t& bfile,
     SIM const& svar, FLUID const& fvar, SPHState const& pnp1)
 {
-    std::string zoneHeader = "Step#" + std::to_string(svar.frame - 1);
+    std::string zoneHeader = "Step#" + std::to_string(svar.frame);
     if(svar.nfluid > 0)
     {
         // Create a group of the current timestep

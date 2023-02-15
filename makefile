@@ -1,6 +1,6 @@
 # Compiler to use. In C++, so g++.
 CC:=gcc
-CXX:=g++-10
+CXX:=g++-12
 
 NPROCS = ${shell grep -c 'processor' /proc/cpuinfo}
 MAKEFLAGS += -j${NPROCS}

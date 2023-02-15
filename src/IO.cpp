@@ -11,6 +11,10 @@
 #include "VLM.h"
 #include <ctime>
 #include <Eigen/LU>
+#include <filesystem>
+#include <regex>
+
+using std::filesystem::directory_iterator;
 
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
@@ -227,6 +231,8 @@ void Print_Settings(FILE* out, SIM const& svar, FLUID const& fvar, AERO const& a
     /* File outputs */
     fprintf(out, " Output parameters --------------------------: -\n");
     fprintf(out, "                 Single file for output (0/1): %u\n", svar.single_file);
+	fprintf(out, "                   Write Tecplot output (0/1): %u\n", svar.write_tecio);
+	fprintf(out, "                    Write H5Part output (0/1): %u\n", svar.write_h5part);
     fprintf(out, "                          Output files prefix: %s\n", svar.output_prefix.c_str());
     fprintf(out, "                      SPH frame time interval: %f\n", svar.framet);
     fprintf(out, "                              SPH frame count: %u\n", svar.Nframe);
@@ -566,11 +572,34 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 			/* The para file is the boundary definition file, so set it so */
 			svar.taubmap = svar.infile;
 		}
+		else
+		{
+			// Check files exist
+			if(!std::filesystem::exists(svar.taubmap))
+			{   
+				printf("Input TAU boundary file \"%s\" not found.\n",svar.taubmap.c_str());
+				fault = 1;
+			}
 
+			if(!std::filesystem::exists(svar.taumesh))
+			{   
+				printf("Input TAU mesh file \"%s\" not found.\n",svar.taumesh.c_str());
+				fault = 1;
+			}
+		}
+		
 		if(svar.tausol.empty())
 		{
 			printf("Input TAU solution file not defined.\n");
 			fault = 1;
+		}
+		else
+		{			
+			if(!std::filesystem::exists(svar.tausol))
+			{   
+				printf("Input TAU solution file \"%s\" not found.\n",svar.tausol.c_str());
+				fault = 1;
+			}
 		}
 
 	}
@@ -579,8 +608,42 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 	if(!svar.restart_prefix.empty())
 	{
 		svar.restart = 1;
+		
+		if(!std::filesystem::exists(svar.restart_prefix + "_particles.h5"))
+		{   
+			printf("SPH restart file \"%s\" not found.\n",(svar.restart_prefix + "_particles.h5").c_str());
+			fault = 1;
+		}
 		// Check_If_Restart_Possible(svar);
 		// svar.output_prefix = svar.restart_prefix;
+	}
+
+	if(svar.fluidfile.empty())
+	{
+		printf("Input SPH fluid file not defined.\n");
+		fault = 1;
+	}
+	else
+	{
+		if(!std::filesystem::exists(svar.fluidfile))
+		{   
+			printf("SPH fluid file \"%s\" not found.\n",svar.fluidfile.c_str());
+			fault = 1;
+		}
+	}
+
+	if(svar.boundfile.empty())
+	{
+		printf("Input SPH boundary file not defined.\n");
+		fault = 1;
+	}
+	else
+	{
+		if(!std::filesystem::exists(svar.boundfile))
+		{   
+			printf("SPH boundary file \"%s\" not found.\n",svar.boundfile.c_str());
+			fault = 1;
+		}
 	}
 
 	if(!svar.solver_name.empty())
@@ -752,67 +815,74 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 } /*End of GetInput()*/
 
 
-void Write_Headers(FILE* f1, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar)
+void Write_Tec_Headers(FILE* ff, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar, std::string const& prefix)
 {
-	if(svar.write_tecio)
+	if(svar.out_encoding == 1)
 	{
-		if(svar.out_encoding == 1)
-		{
-			Init_Binary_PLT(svar,fvar,avar,"_fluid.szplt","Simulation Particles",svar.fluidFile);
-		
-			Init_Binary_PLT(svar,fvar,avar,"_boundary.szplt","Boundary Particles",svar.boundFile);
-		}
+		Init_Binary_PLT(svar,fvar,avar,prefix,"_fluid.szplt","Simulation Particles",svar.fluidFile);
+	
+		Init_Binary_PLT(svar,fvar,avar,prefix,"_boundary.szplt","Boundary Particles",svar.boundFile);
+	}
+	else
+	{
+		/* Write first timestep */
+		string mainfile = prefix;
+		mainfile.append("_fluid.dat");
+		ff = fopen(mainfile.c_str(), "a");
+		if(ff != NULL)
+			Write_ASCII_header(ff, svar, "Simulation Particles");
 		else
 		{
-			/* Write first timestep */
-			string mainfile = svar.output_prefix;
-			mainfile.append("_fluid.dat");
-			f1 = fopen(mainfile.c_str(), "a");
-			if(f1 != NULL)
-				Write_ASCII_header(f1, svar, "Simulation Particles");
-			else
-			{
-				printf("Failed to open %s. Stopping.\n",mainfile.c_str());
-				exit(-1);
-			}
-
-			/*If the boundary exists, write it.*/
-			string bfile = svar.output_prefix;
-			bfile.append("_boundary.dat");
-			fb = fopen(bfile.c_str(), "a");
-			if(fb != NULL)
-				Write_ASCII_header(fb, svar, "Boundary Particles");
-			else
-			{
-				printf("Error opening %s file. Stopping\n", bfile.c_str());
-				exit(-1);
-			}	
+			printf("Failed to open %s. Stopping.\n",mainfile.c_str());
+			exit(-1);
 		}
-	}
 
-	if(svar.write_h5part)
-	{
-		open_h5part_files(svar,fvar,avar,svar.ffile,svar.bfile);
+		/*If the boundary exists, write it.*/
+		string bfile = prefix;
+		bfile.append("_boundary.dat");
+		fb = fopen(bfile.c_str(), "a");
+		if(fb != NULL)
+			Write_ASCII_header(fb, svar, "Boundary Particles");
+		else
+		{
+			printf("Error opening %s file. Stopping\n", bfile.c_str());
+			exit(-1);
+		}	
 	}
 }
 
-void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar, 
+void Write_h5part_Headers(SIM& svar, FLUID const& fvar, AERO const& avar, std::string const& prefix)
+{
+	open_h5part_files(svar,fvar,avar,prefix,svar.ffile,svar.bfile);
+}
+
+void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar, 
 			LIMITS const& limits, SPHState const& pnp1)
 {
 	if(svar.write_tecio)
 	{
+		std::ostringstream oss;
+		oss << svar.t;
+		if(!svar.single_file)
+		{
+			string prefix = svar.output_prefix + "_time_" + oss.str();
+			Write_Tec_Headers(ff,fb,fg,svar,fvar,avar,prefix);
+		}
+			
 		if (svar.out_encoding == 1)
 		{
 			for(size_t bound = 0; bound < svar.nbound; bound++)
 			{
-				string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name;
+				string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name + 
+					"_time_" + oss.str() + "s";
 				Write_Binary_Timestep(svar,fvar.rho0,pnp1,limits[bound],title.c_str(),
 					static_cast<int32_t>(bound+1),svar.boundFile);
 			}
 
 			for(size_t block = svar.nbound; block < svar.nbound + svar.nfluid; block++)
 			{
-				string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name ;
+				string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name + 
+					"_time_" + oss.str() + "s";
 				Write_Binary_Timestep(svar,fvar.rho0,pnp1,limits[block],title.c_str(),
 					static_cast<int32_t>(block+1),svar.fluidFile);
 			}
@@ -821,51 +891,150 @@ void Write_Timestep(FILE* f1, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, 
 		{
 			for(size_t bound = 0; bound < svar.nbound; bound++)
 			{
-				string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name;
+				string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name + 
+					"_time_" + oss.str() + "s";
 				Write_ASCII_Timestep(svar,fvar.rho0,pnp1,limits[bound].index.first,
 						limits[bound].index.second,title.c_str(),bound+1,fb);
 			}
 
 			for(size_t block = svar.nbound; block < svar.nbound + svar.nfluid; block++)
 			{
-				string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name ;
+				string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name + 
+					"_time_" + oss.str() + "s";
 			
 				Write_ASCII_Timestep(svar,fvar.rho0,pnp1,limits[block].index.first,
-						limits[block].index.second,title.c_str(),block+1,f1);
+						limits[block].index.second,title.c_str(),block+1,ff);
 			}
+		}
+
+		if(!svar.single_file)
+		{	// Close files after use
+			if (ff != NULL)
+				fclose(ff);
+			if (fb != NULL)
+				fclose(fb);
+			if (fg != NULL)
+				fclose(fg);
+
+			if(svar.out_encoding == 1)
+			{
+				/*Combine the szplt files*/
+				if(tecFileWriterClose(&svar.fluidFile))
+					printf("Failed to close fluid file.\n");
+					
+				if(tecFileWriterClose(&svar.boundFile))
+					printf("Failed to close boundary file.\n");
+			}
+			
 		}
 	}
 
 	if(svar.write_h5part)
 	{
+		string prefix = svar.output_prefix;
+		if(!svar.single_file)
+		{
+			std::ostringstream oss;
+			oss << svar.t;
+			prefix += "_" + std::to_string(svar.frame);
+		}
+
+		Write_h5part_Headers(svar,fvar,avar,prefix);
 		write_h5part_data(svar.ffile, svar.bfile, svar, fvar, pnp1);
+		// Files are closed in the write function
 	}
 	
-	Write_HDF5(svar,fvar,avar,pnp1,limits);
 }
 
-void Append_Restart_Prefix(SIM const& svar)
+void Remove_Old_Files(SIM const& svar)
 {
-	if(svar.restart)
+	string dir;
+	string prefix = svar.output_prefix;
+	if(svar.output_prefix.find_last_of("/\\") != string::npos)
 	{
-		if(svar.output_prefix == svar.restart_prefix)
-			return;
+		dir = svar.output_prefix.substr(0,svar.output_prefix.find_last_of("/\\"));
+		// prefix = svar.output_prefix.substr(svar.output_prefix.find_last_of("/\\")+1);
+	}
+	else
+	{
+		dir = ".";
+		prefix = dir + "/" + svar.output_prefix;
 	}
 
-	/* Append a restart prefix to the end of the para file */
-	FILE* para = fopen(svar.infile.c_str(), "a");
-	if(para == NULL)
+	for(int ii = prefix.size()-1; ii >= 0; ii--)
 	{
-		printf("Failed to reopen para file\n");
+		if(prefix[ii] == '.')
+			prefix.insert(ii,"\\");
+
+		if(prefix[ii] == '/')
+			prefix.insert(ii,"\\");
+	}
+
+	int fault = 0;
+	if(svar.write_tecio)
+	{	
+		std::regex file_expr("(" + prefix + ")(.*)(\\.szplt\\.sz)(.*)$");
+		// std::regex file_expr("(" + prefix + ")(.*)(\\.szplt)$");
+		
+		for(auto const& file : directory_iterator(dir))
+		{
+			// printf("%s: ",file.path().string().c_str());
+			// cout << file.path().string() << endl;
+			// Check it has the right prefix
+			if(std::regex_match(file.path().string(),file_expr))
+			{
+				// printf("File matches the expression \n");
+				// Remove the file
+				try{std::filesystem::remove(file.path());}
+				catch(const std::filesystem::__cxx11::filesystem_error& e)
+				{
+					printf("Could not remove tecplot file. Trying to remove other files.\n");
+					fault = 1;
+				}
+			}
+			// else
+			// 	printf("File doesn't match the expression\n");
+		}		
+	}
+
+	if(fault)
+	{
+		printf("Failed to remove some old simulation files, so cannot continue.\n");
 		exit(-1);
 	}
-	std::time_t now = std::time(0);
-	char* time = ctime(&now);
-	fprintf(para, "\n");
-	fprintf(para, "    solver at %s", time);
-	fprintf(para, "                                   ");
-	fprintf(para, "SPH restart prefix: %s\n", svar.output_prefix.c_str());
-	fclose(para);
+
+	if(svar.write_h5part)
+	{
+		std::regex fluid_expr("(" + prefix + ")(.*)(\\.h5part)");
+		
+		for(auto const& file : directory_iterator(dir))
+		{
+			// printf("%s: ",file.path().filename().string().c_str());
+			// cout << file.path().string() << endl;
+			// Check it has the right prefix
+			
+			if(std::regex_match(file.path().string(),fluid_expr))
+			{
+				// printf("File matches the expression \n");
+				// Remove the file
+				try{std::filesystem::remove(file.path());}
+				catch(const std::filesystem::__cxx11::filesystem_error& e)
+				{
+					printf("Could not remove fluid h5part file. Trying to remove other files.\n");
+					fault = 1;
+				}
+			}
+			// else
+			// 	printf("File doesn't match the expression\n");
+		
+		}	
+	}
+
+	if(fault)
+	{
+		printf("Failed to remove some files. Try closing paraview, as it doesn't correctly free the files.\n");
+		exit(-1);
+	}
 }
 
 void Check_Output_Variables(SIM& svar)
@@ -1250,174 +1419,5 @@ void Check_Output_Variables(SIM& svar)
 			svar.var_names += ",shiftVz";
 		#endif
 	}
-
 }
 
-void Restart_Simulation(SIM& svar, FLUID const& fvar, AERO const& avar, 
-		MESH const& cells, SPHState& pn, SPHState& pnp1, LIMITS& limits)
-{
-	// Now get the data from the files. Start with the boundary
-	if(svar.out_encoding == 1)
-	{
-		Restart_Binary(svar,fvar,pn,limits);
-	}
-	else
-	{
-		// TODO: ASCII Restart.
-		// Particle numbers can be found from frame file.
-		// Find EOF, then walk back from there how many particles.
-		ASCII_Restart(svar,fvar,pn);
-		printf("ASCII file restart not yet implemented.\n");
-		exit(-1);
-	}
-
-	// Go through the particles giving them the properties of the cell
-	size_t pID = 0;
-	vector<vector<size_t>> buffer(limits.size());
-	for(size_t block = 0; block < limits.size(); ++block)
-	{
-		#pragma omp parallel for reduction(max:pID)
-		for(size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
-		{
-			pn[ii].xi *= svar.scale;
-			
-			/* Set density based on pressure. More information this way since density has much less variation*/
-			pn[ii].rho = std::max(fvar.rhoMin,std::min(fvar.rhoMax, 
-				density_equation(pn[ii].p, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP)));
-
-			if(pn[ii].b == BACK)
-			{
-				#pragma omp critical
-				limits[block].back.emplace_back(ii);
-			}
-			else if(pn[ii].b == BUFFER)
-			{
-				#pragma omp critical
-				buffer[block].emplace_back(ii);
-			}
-
-			if(svar.Asource != meshInfl)
-			{
-				pn[ii].cellRho = avar.rhog;
-				pn[ii].cellP = avar.pRef;
-			}
-			
-			// Initialise the rest of the values to 0
-			pn[ii].surf = 0;
-			pn[ii].surfzone = 0;
-			pn[ii].nFailed = 0;
-
-			pn[ii].s = 0.0;
-			pn[ii].woccl = 0.0;
-			pn[ii].pDist = 0.0;
-			pn[ii].deltaD = 0.0;
-			pn[ii].internal = 0;
-
-			pn[ii].bNorm = StateVecD::Zero();
-			pn[ii].y = 0.0;
-			pn[ii].vPert = StateVecD::Zero();
-
-			pID = std::max(pID, pn[ii].partID);
-		}	
-
-		size_t nBuff = limits[block].hcpl == 1 ? 5 : 4;
-		if(buffer[block].size() != limits[block].back.size()*nBuff)
-		{
-			printf("Mismatch of back vector size and buffer vector size\n");
-			printf("Buffer vector should be 4/5x back vector size.\n");
-			printf("Sizes are:  Buffer: %zu Back: %zu\n", buffer[block].size(), limits[block].back.size());
-			exit(-1);
-		}
-
-		std::sort(limits[block].back.begin(),limits[block].back.end());
-		std::sort(buffer[block].begin(),buffer[block].end());
-		limits[block].buffer = vector<vector<size_t>>(limits[block].back.size(),
-					vector<size_t>(nBuff, 0));
-	}
-	svar.partID = pID+1;
-
-	/* Put the particles into the buffer vector */
-	real eps = svar.restart_tol*svar.dx; /* Tolerance value */
-	eps = eps*eps;
-	for(size_t block = 0; block < limits.size(); ++block)
-	{
-		size_t nBack = limits[block].back.size();
-		size_t nBuffer = buffer[block].size();
-		size_t nDeep = limits[block].hcpl == 1 ? 5 : 4;
-		size_t nFound = 0;
-		vector<vector<size_t>> found(nBack,vector<size_t>(nDeep,0));
-		for(size_t ii = 0; ii < nBack; ++ii)
-		{	
-			// Use a plane test this time. 
-			StateVecD insnorm = limits[block].insert_norm.normalized();
-			StateVecD xi = pn[limits[block].back[ii]].xi;
-			
-			for(size_t index = 0; index < nBuffer; ++index)
-			{
-				/* Check which particle in the back vector it corresponds to by checking which  */
-				/* particle it lies behind */
-				StateVecD const& test = pn[buffer[block][index]].xi;
-
-				// If point lies within a given radius tolerance of the expected position, assign.
-				if(((xi - insnorm * svar.dx)-test).squaredNorm() < eps)
-				{
-					limits[block].buffer[ii][0] = buffer[block][index];
-					found[ii][0]++;
-					nFound++;
-				}
-
-				if(((xi - 2.0 * insnorm * svar.dx)-test).squaredNorm() < eps)
-				{
-					limits[block].buffer[ii][1] = buffer[block][index];
-					found[ii][1]++;
-					nFound++;
-				}
-				
-				if(((xi - 3.0 * insnorm * svar.dx)-test).squaredNorm() < eps)
-				{
-					limits[block].buffer[ii][2] = buffer[block][index];
-					found[ii][2]++;
-					nFound++;
-				}
-				
-				if(((xi - 4.0 * insnorm * svar.dx)-test).squaredNorm() < eps)
-				{
-					limits[block].buffer[ii][3] = buffer[block][index];
-					found[ii][3]++;
-					nFound++;
-				}
-				
-				if(((xi - 5.0 * insnorm * svar.dx)-test).squaredNorm() < eps)
-				{
-					limits[block].buffer[ii][4] = buffer[block][index];
-					found[ii][4]++;
-					nFound++;
-				}
-			}
-		}	
-
-		for(size_t ii = 0; ii < nBack; ++ii)
-		{
-			for(size_t jj = 0; jj < nDeep; ++jj)
-			{
-				if(found[ii][jj] == 0)
-				{
-					printf("Buffer particle %zu, %zu has not been assigned. \n", ii, jj);
-				}
-
-				if(found[ii][jj] > 1)
-				{
-					printf("Buffer particle %zu, %zu has been assigned more than once. \n", ii, jj);
-				}
-			}
-		}
-
-		if(nFound != nBuffer)
-		{
-			printf("Some buffer particles have not been attached to a back particle. Cannot continue\n");
-			printf("Particles located: %zu  Particles failed: %zu\n", nFound, nBuffer - nFound);
-			exit(-1);
-		}
-	}
-	pnp1 = pn;
-}

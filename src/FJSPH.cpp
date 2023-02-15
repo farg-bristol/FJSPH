@@ -151,19 +151,7 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		string file = svar.output_prefix + "_boundary.szplt.sz*";
-		string cmd = "exec rm -f " + file;
-		if(system(cmd.c_str()))
-	    {
-	    	cout << "No prexisting boundary files deleted." << endl;
-	    }
-
-		file = svar.output_prefix + "_fluid.szplt.sz*";
-		cmd = "exec rm -f " + file;
-		if(system(cmd.c_str()))
-	    {
-	    	cout << "No prexisting fluid files deleted." << endl;
-	    }
+		Remove_Old_Files(svar);
   	}
 	else
 	{
@@ -212,7 +200,12 @@ int main(int argc, char *argv[])
 		f2 = fopen(framef.c_str(), "w");
 
 	if(svar.single_file)
-		Write_Headers(ff,fb,fg,svar,fvar,avar);
+	{
+		if(svar.write_tecio)
+			Write_Tec_Headers(ff,fb,fg,svar,fvar,avar,svar.output_prefix);
+		if(svar.write_h5part)
+			Write_h5part_Headers(svar,fvar,avar,svar.output_prefix);
+	}
 
 	if(!svar.restart)
 	{
@@ -275,8 +268,6 @@ int main(int argc, char *argv[])
 		// SPHState::const_iterator last = pnp1.begin() + end_ng;
 		// pn = SPHState(first,last);
 	}
-
-	// Append_Restart_Prefix(svar);
 
 	if(svar.using_ipt)
 	{
@@ -367,6 +358,7 @@ int main(int argc, char *argv[])
 		}
 
 		Write_Timestep(ff,fb,fg,svar,fvar,avar,limits,pnp1);
+		Write_HDF5(svar,fvar,avar,pnp1,limits);
 		if(svar.using_ipt)
 			IPT::Write_Data(svar,cells,iptdata);
 

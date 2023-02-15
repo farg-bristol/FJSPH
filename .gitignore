@@ -52,6 +52,7 @@
 # Output files
 *.plt
 *.szplt*
+*.h5*
 *.dat
 *.lpk
 *.sty
