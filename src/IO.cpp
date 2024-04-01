@@ -466,8 +466,8 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 
 		Get_Number(line, "SPH background pressure", fvar.backP);
 		Get_Number(line, "SPH starting pressure", fvar.pPress);
-		Get_Number(line, "SPH density variation (%)", fvar.rhoVar);
-		Get_Number(line, "SPH integration density variation (%)", fvar.rhoMaxIter);
+		Get_Number(line, "SPH maximum absolute density variation (%)", fvar.rhoVar);
+		Get_Number(line, "SPH density variation to reduce timestep (%)", fvar.rhoMaxIter);
 		Get_Number(line, "SPH maximum density", fvar.rhoMax);
 		Get_Number(line, "SPH minimum density", fvar.rhoMin);
 		Get_Number(line, "SPH delta coefficient", fvar.delta);
