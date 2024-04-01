@@ -14,9 +14,6 @@
 #include <sstream>
 #include <omp.h>
 
-#if defined(HAS_BLAS)
-#define EIGEN_USE_BLAS
-#endif
 // Third party includes
 #include <Eigen/Core>
 #include <Eigen/StdVector>
@@ -165,7 +162,15 @@ struct SIM
 {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     SIM()
-    {
+    {   
+        // If OMP_NUM_THREADS exists, use it to set the threads, 
+        // but if not, use get num threads.
+        if (std::getenv("OMP_NUM_THREADS"))
+            numThreads = std::max(atoi(std::getenv("OMP_NUM_THREADS")), 1);
+        else
+            numThreads = omp_get_num_threads();
+        
+
         /* Input files */
         CDForFOAM = 0;
         isBinary = 0; buoyantSim = 0; incomp = 0;
@@ -195,7 +200,7 @@ struct SIM
         simPts = 0; bndPts = 0; totPts = 0;
         gstPts = 0; delNum = 0; 
         intNum = 0;	nrefresh = 0; addcount = 0;
-        finPts = 9999999; /* Default to basically no particle limit */
+        finPts = 99999999; /* Default to basically no particle limit */
     
         Pstep = -1.0; Bstep = 0.7; dx = -1.0;
 
@@ -266,6 +271,8 @@ struct SIM
         speedTest = 0;
         nRuns = 1;
     }
+
+    uint numThreads;
 
     /* File input parameters */
     uint CDForFOAM;
@@ -354,7 +361,7 @@ struct SIM
     uint nStable_Limit;             /* Limit before changing CFL */
     uint nUnstable;                 /* Count for number of unstable timestep to alter CFL */
     uint nUnstable_Limit;           /* Limit before changing CFL */
-    real subits_factor;             /* How many less than the limit to try a higher CFL */
+    real subits_factor;             /* Factor * max subits, under which is considered overly stable CFL */
     double cfl;                     /* CFL criterion number */
     double cfl_step;                /* CFL step to perform if unstable */
     double cfl_max;                 /* Maximum CFL for the simulation */
@@ -433,6 +440,7 @@ struct FLUID
         rhoMax = 1500;	/* Allow a large variation by default */
         rhoMin = 500;	/* making it essentially unbounded other */
         rhoVar = 50.0;	/* than truly unphysical pressures */
+        rhoMaxIter = 1.0;
 
         simM = -1.0;
         bndM = -1.0;
@@ -450,24 +458,25 @@ struct FLUID
         dMom = -1.0;
     }
 
-    real H, HSQ, sr; 			/*Support Radius, SR squared, Search radius*/
+    real H, HSQ, sr; 			/* Support Radius, SR squared, Search radius*/
     real Hfac;
-    real Wdx;                   /*Kernel value at the initial particle spacing distance.*/
-    real rho0, rhoJ; 			/*Resting Fluid density*/
-    real pPress;				/*Starting pressure in pipe*/
+    real Wdx;                   /* Kernel value at the initial particle spacing distance.*/
+    real rho0, rhoJ; 			/* Resting Fluid density*/
+    real pPress;				/* Starting pressure in pipe*/
     real backP;					/* Background pressure */
     real rhoMax, rhoMin;		/* Minimum and maximum pressure */
     real rhoVar;				/* Maximum density variation allowed (in %) */
-    
-    real simM, bndM;			/*SPHPart and boundary masses*/
-    real correc;				/*Smoothing Kernel Correction*/
+    real rhoMaxIter;            /* Maximum value to reduce the timestep */
+
+    real simM, bndM;			/* SPHPart and boundary masses*/
+    real correc;				/* Smoothing Kernel Correction*/
     real alpha,Cs,mu,nu;		/*}*/
     real sig;					/* Fluid properties*/
     real gam, B; 				/*}*/
     
-    real contangb;				/*Boundary contact angle*/
-    real resVel;				/*Reservoir velocity*/
-    //real front, height, height0;		/*Dam Break validation parameters*/
+    real contangb;				/* Boundary contact angle*/
+    real resVel;				/* Reservoir velocity*/
+    //real front, height, height0;		/* Dam Break validation parameters*/
 
     /*delta SPH terms*/
     real delta; /*delta-SPH contribution*/
@@ -1028,10 +1037,14 @@ typedef std::vector<IPTPart> IPTState;
 typedef std::vector<SURF> SURFS;
 
 /* Neighbour search tree containers */
-typedef std::vector<std::vector<std::pair<size_t,real>>> OUTL;
+typedef nanoflann::ResultItem<size_t,real> neighbour_index;
+typedef std::vector<std::vector<neighbour_index>> OUTL;
 typedef std::vector<std::vector<size_t>> celll;
 typedef KDTreeVectorOfVectorsAdaptor<SPHState,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Sim_Tree;
 typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,real,SIMDIM,nanoflann::metric_L2_Simple,size_t> Vec_Tree;
+
+// Default to no approximate neighbours, and unsorted list.
+nanoflann::SearchParameters const flann_params(0, false); 
 
 // struct KDTREE
 // {

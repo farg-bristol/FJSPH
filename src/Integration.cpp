@@ -65,8 +65,7 @@ void Get_Aero_Velocity(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar,
 				svar.simPts -= nDel;
 				svar.totPts -= nDel;
 				end_ng -= nDel;
-				SPH_TREE.index->buildIndex();
-				FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
+				outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 				dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,npd);
 			}	
 			break;
@@ -236,8 +235,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 		}		
 	}
 
-	SPH_TREE.index->buildIndex();
-	FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
+	outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 
 	dSPH_PreStep(fvar,svar.totPts,pnp1,outlist,npd);
 
@@ -315,9 +313,8 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 
 	// cout << "Error: " << error1 << endl;
 
-	/****** UPDATE TREE ***********/
-	SPH_TREE.index->buildIndex();
-	FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
+	/****** UPDATE NEIGHBOURS AND TREE ***********/
+	outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 
 	dSPH_PreStep(fvar,end,pnp1,outlist,npd);
 
@@ -522,8 +519,7 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 
 	if(nAdd != 0 || nDel != 0)
 	{
-		SPH_TREE.index->buildIndex();
-		FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
+		outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 	}
 
 	/****** UPDATE TIME N ***********/
@@ -540,12 +536,18 @@ real Integrate(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID c
 	copy_omp(pnp1,pn);
 
 	/*Add time to global*/
-	svar.t+=svar.dt;
+	svar.t += svar.dt;
 
 	/* Check the error and adjust the CFL to try and keep convergence */
-	if(error1 > svar.minRes || maxRho > 1.0)
+	if(error1 > svar.minRes || maxRho > fvar.rhoMaxIter)
 	{
-		if(svar.nUnstable > svar.nUnstable_Limit)
+		if (error1 > 0.6 * svar.minRes)
+		{	// If really unstable, immediately reduce the timestep
+			svar.cfl = std::max(svar.cfl_min, svar.cfl - svar.cfl_step);
+			svar.nUnstable = 0;
+
+		}
+		else if(svar.nUnstable > svar.nUnstable_Limit)
 		{
 			svar.cfl = std::max(svar.cfl_min, svar.cfl - svar.cfl_step);
 			svar.nUnstable = 0;
@@ -612,8 +614,7 @@ void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID 
 			svar.simPts = svar.totPts-svar.bndPts;
 			end = svar.totPts;
 			end_ng = end;
-			SPH_TREE.index->buildIndex();
-			FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
+			outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 			dSPH_PreStep(fvar,end,pnp1,outlist,npd);
 			
 		}
@@ -764,9 +765,7 @@ void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID 
 	/***********************************************************************************/
 	/***********************************************************************************/
 
-	/****** UPDATE TREE ***********/
-	SPH_TREE.index->buildIndex();
-	FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
+	outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 
 	dSPH_PreStep(fvar,end,pnp1,outlist,npd);
 
@@ -782,8 +781,7 @@ void First_Step(Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID 
 			svar.simPts = svar.totPts-svar.bndPts;
 			end = svar.totPts;
 			end_ng = end;
-			SPH_TREE.index->buildIndex();
-			FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
+			outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 			dSPH_PreStep(fvar,end,pnp1,outlist,npd);
 			
 		}

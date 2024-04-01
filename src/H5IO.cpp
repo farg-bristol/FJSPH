@@ -19,11 +19,11 @@
 
 namespace HDF5
 {
-    void Write_Uint_Attribute(hid_t const& fout, std::string const& attr_name, size_t const& attr_data)
+    void Write_Uint_Attribute(int64_t const& fout, std::string const& attr_name, size_t const& attr_data)
     {
         herr_t retval;
-        hid_t  aid  = H5Screate(H5S_SCALAR);
-        hid_t  attr = H5Acreate(fout, (attr_name).c_str(), H5T_NATIVE_ULONG, aid, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t  aid  = H5Screate(H5S_SCALAR);
+        int64_t  attr = H5Acreate(fout, (attr_name).c_str(), H5T_NATIVE_ULONG, aid, H5P_DEFAULT, H5P_DEFAULT);
         if((retval = H5Awrite(attr, H5T_NATIVE_ULONG, &attr_data)))
         {
             printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
@@ -33,11 +33,11 @@ namespace HDF5
         retval = H5Aclose(attr);
     }
     
-    void Write_Uint_Attribute(hid_t const& fout, std::string const& attr_name, uint const& attr_data)
+    void Write_Uint_Attribute(int64_t const& fout, std::string const& attr_name, uint const& attr_data)
     {
         herr_t retval;
-        hid_t  aid  = H5Screate(H5S_SCALAR);
-        hid_t  attr = H5Acreate(fout, (attr_name).c_str(), H5T_NATIVE_UINT, aid, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t  aid  = H5Screate(H5S_SCALAR);
+        int64_t  attr = H5Acreate(fout, (attr_name).c_str(), H5T_NATIVE_UINT, aid, H5P_DEFAULT, H5P_DEFAULT);
         if((retval = H5Awrite(attr, H5T_NATIVE_UINT, &attr_data)))
         {
             printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
@@ -47,11 +47,11 @@ namespace HDF5
         retval = H5Aclose(attr);
     }
     
-    void Write_Int_Attribute(hid_t const& fout, std::string const& attr_name, int const& attr_data)
+    void Write_Int_Attribute(int64_t const& fout, std::string const& attr_name, int const& attr_data)
     {
         herr_t retval;
-        hid_t  aid  = H5Screate(H5S_SCALAR);
-        hid_t  attr = H5Acreate(fout, (attr_name).c_str(), H5T_NATIVE_INT, aid, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t  aid  = H5Screate(H5S_SCALAR);
+        int64_t  attr = H5Acreate(fout, (attr_name).c_str(), H5T_NATIVE_INT, aid, H5P_DEFAULT, H5P_DEFAULT);
         if((retval = H5Awrite(attr, H5T_NATIVE_INT, &attr_data)))
         {
             printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
@@ -61,11 +61,11 @@ namespace HDF5
         retval = H5Aclose(attr);
     }
 
-    void Write_Real_Attribute(hid_t const& fout, std::string const& attr_name, double const& attr_data)
+    void Write_Real_Attribute(int64_t const& fout, std::string const& attr_name, double const& attr_data)
     {
         herr_t retval;
-        hid_t  aid  = H5Screate(H5S_SCALAR);
-        hid_t  attr = H5Acreate(fout, (attr_name).c_str(), H5T_IEEE_F64LE, aid, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t  aid  = H5Screate(H5S_SCALAR);
+        int64_t  attr = H5Acreate(fout, (attr_name).c_str(), H5T_IEEE_F64LE, aid, H5P_DEFAULT, H5P_DEFAULT);
         if((retval = H5Awrite(attr, H5T_NATIVE_DOUBLE, &attr_data)))
         {
             printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
@@ -75,13 +75,13 @@ namespace HDF5
         retval = H5Aclose(attr);
     }
 
-    void Write_Vector_Attribute(hid_t const& fout, std::string const& attr_name, StateVecD const& attr_data)
+    void Write_Vector_Attribute(int64_t const& fout, std::string const& attr_name, StateVecD const& attr_data)
     {
         std::string name_ = attr_name /* + " x" */;
         hsize_t dims[1] = {SIMDIM};
         herr_t retval;
-        hid_t  aid  = H5Screate_simple(1,dims,NULL);
-        hid_t  attr = H5Acreate(fout, (name_).c_str(), H5T_IEEE_F64LE, aid, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t  aid  = H5Screate_simple(1,dims,NULL);
+        int64_t  attr = H5Acreate(fout, (name_).c_str(), H5T_IEEE_F64LE, aid, H5P_DEFAULT, H5P_DEFAULT);
         if((retval = H5Awrite(attr, H5T_NATIVE_DOUBLE, &attr_data[0])))
         {
             printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
@@ -93,21 +93,21 @@ namespace HDF5
     }
 
 
-    void Write_String_Attribute(hid_t const& fout, std::string const& attr_name, std::string const& attr_data)
+    void Write_String_Attribute(int64_t const& fout, std::string const& attr_name, std::string const& attr_data)
     {
         if(attr_data.length() > 0)
         {
             char data[attr_data.length()+1];
             strcpy(data, attr_data.c_str());
 
-            hid_t attr_type = H5Tcopy(H5T_FORTRAN_S1);
+            int64_t attr_type = H5Tcopy(H5T_FORTRAN_S1);
             herr_t retval = H5Tset_size(attr_type, attr_data.length());
-            hid_t memtype = H5Tcopy(H5T_C_S1);
+            int64_t memtype = H5Tcopy(H5T_C_S1);
             retval = H5Tset_size(memtype, attr_data.length()+1);
 
-            hid_t attr_space = H5Screate(H5S_SCALAR);
+            int64_t attr_space = H5Screate(H5S_SCALAR);
 
-            hid_t  attr = H5Acreate(fout, attr_name.c_str(),attr_type, attr_space, H5P_DEFAULT, H5P_DEFAULT);
+            int64_t  attr = H5Acreate(fout, attr_name.c_str(),attr_type, attr_space, H5P_DEFAULT, H5P_DEFAULT);
             if((retval = H5Awrite(attr, memtype, data)))
             {
                 printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
@@ -119,12 +119,12 @@ namespace HDF5
         }
     }
 
-    void Write_Variable_Array(hid_t const& fout, std::string const& var_name, 
+    void Write_Variable_Array(int64_t const& fout, std::string const& var_name, 
             hsize_t const* dims, size_t const& start, std::vector<std::vector<size_t>> const& var_data)
     {
         herr_t retval;
-        hid_t  dataspace = H5Screate_simple(2,dims,NULL);
-        hid_t  dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_ULONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t  dataspace = H5Screate_simple(2,dims,NULL);
+        int64_t  dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_ULONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if ((retval = 
         H5Dwrite(dataset, H5T_NATIVE_ULONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])))
         {
@@ -135,12 +135,12 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
 
-    void Write_Variable_Array(hid_t const& fout, std::string const& var_name, 
+    void Write_Variable_Array(int64_t const& fout, std::string const& var_name, 
             hsize_t const* dims, size_t const& start, std::vector<std::vector<int>> const& var_data)
     {
         herr_t retval;
-        hid_t  dataspace = H5Screate_simple(2,dims,NULL);
-        hid_t  dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_INT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t  dataspace = H5Screate_simple(2,dims,NULL);
+        int64_t  dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_INT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if ((retval = 
         H5Dwrite(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])))
         {
@@ -151,12 +151,12 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
     
-    void Write_Variable_Array(hid_t const& fout, std::string const& var_name, 
+    void Write_Variable_Array(int64_t const& fout, std::string const& var_name, 
             hsize_t const* dims, size_t const& start, std::vector<std::vector<float>> const& var_data)
     {
         herr_t retval;
-        hid_t  dataspace = H5Screate_simple(2,dims,NULL);
-        hid_t  dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_FLOAT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t  dataspace = H5Screate_simple(2,dims,NULL);
+        int64_t  dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_FLOAT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if ((retval = 
         H5Dwrite(dataset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])))
         {
@@ -168,12 +168,12 @@ namespace HDF5
     }
 
     
-    void Write_Variable_Array(hid_t const& fout, std::string const& var_name, 
+    void Write_Variable_Array(int64_t const& fout, std::string const& var_name, 
             hsize_t const* dims, size_t const& start, std::vector<std::vector<double>> const& var_data)
     {
         herr_t retval;
-        hid_t  dataspace = H5Screate_simple(2,dims,NULL);
-        hid_t  dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t  dataspace = H5Screate_simple(2,dims,NULL);
+        int64_t  dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if ((retval = 
         H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])))
         {
@@ -186,13 +186,13 @@ namespace HDF5
 
     // #if UINTPTR_MAX == 0xffffffffffffffff
     /* 64-bit pointers */
-    void Write_Variable_Scalar(hid_t const& fout, std::string const& var_name, 
+    void Write_Variable_Scalar(int64_t const& fout, std::string const& var_name, 
             hsize_t const* dims, size_t const& start, std::vector<size_t> const& var_data)
     {
         herr_t retval;
-        hid_t  dataspace = H5Screate(H5S_SIMPLE);
+        int64_t  dataspace = H5Screate(H5S_SIMPLE);
         retval = H5Sset_extent_simple(dataspace,1,dims,NULL);
-        hid_t dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_ULONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_ULONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if ((retval = 
         H5Dwrite(dataset, H5T_NATIVE_ULONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
         {
@@ -204,13 +204,13 @@ namespace HDF5
     }
     // #elif UINTPTR_MAX == 0xffffffff
     /* 32-bit pointers */
-    // void Write_Variable_Scalar(hid_t const& fout, std::string const& var_name, 
+    // void Write_Variable_Scalar(int64_t const& fout, std::string const& var_name, 
     //         hsize_t const* dims, size_t const& start, std::vector<size_t> const& var_data)
     // {
     //     herr_t retval;
-    //     hid_t  dataspace = H5Screate(H5S_SIMPLE);
+    //     int64_t  dataspace = H5Screate(H5S_SIMPLE);
     //     retval = H5Sset_extent_simple(dataspace,1,dims,NULL);
-    //     hid_t dataset = H5Dcreate2(fout, var_name.c_str(), H5T_NATIVE_UINT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    //     int64_t dataset = H5Dcreate2(fout, var_name.c_str(), H5T_NATIVE_UINT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     //     if ((retval = 
     //     H5Dwrite(dataset, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
     //     {
@@ -223,13 +223,13 @@ namespace HDF5
 
     // #endif
 
-    void Write_Variable_Scalar(hid_t const& fout, std::string const& var_name, 
+    void Write_Variable_Scalar(int64_t const& fout, std::string const& var_name, 
             hsize_t const* dims, size_t const& start, std::vector<uint> const& var_data)
     {
         herr_t retval;
-        hid_t  dataspace = H5Screate(H5S_SIMPLE);
+        int64_t  dataspace = H5Screate(H5S_SIMPLE);
         retval = H5Sset_extent_simple(dataspace,1,dims,NULL);
-        hid_t dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_UINT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_UINT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if ((retval = 
         H5Dwrite(dataset, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
         {
@@ -240,13 +240,13 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
 
-    void Write_Variable_Scalar(hid_t const& fout, std::string const& var_name, 
+    void Write_Variable_Scalar(int64_t const& fout, std::string const& var_name, 
             hsize_t const* dims, size_t const& start, std::vector<int> const& var_data)
     {
         herr_t retval;
-        hid_t  dataspace = H5Screate(H5S_SIMPLE);
+        int64_t  dataspace = H5Screate(H5S_SIMPLE);
         retval = H5Sset_extent_simple(dataspace,1,dims,NULL);
-        hid_t dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_INT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_INT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if ((retval = 
         H5Dwrite(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
         {
@@ -257,13 +257,13 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
     
-    void Write_Variable_Scalar(hid_t const& fout, std::string const& var_name, 
+    void Write_Variable_Scalar(int64_t const& fout, std::string const& var_name, 
             hsize_t const* dims, size_t const& start, std::vector<long> const& var_data)
     {
         herr_t retval;
-        hid_t  dataspace = H5Screate(H5S_SIMPLE);
+        int64_t  dataspace = H5Screate(H5S_SIMPLE);
         retval = H5Sset_extent_simple(dataspace,1,dims,NULL);
-        hid_t dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_LONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_LONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if ((retval = 
         H5Dwrite(dataset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
         {
@@ -274,13 +274,13 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
 
-    void Write_Variable_Scalar(hid_t const& fout, std::string const& var_name, 
+    void Write_Variable_Scalar(int64_t const& fout, std::string const& var_name, 
             hsize_t const* dims, size_t const& start, std::vector<float> const& var_data)
     {
         herr_t retval;
-        hid_t  dataspace = H5Screate(H5S_SIMPLE);
+        int64_t  dataspace = H5Screate(H5S_SIMPLE);
         retval = H5Sset_extent_simple(dataspace,1,dims,NULL);
-        hid_t dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_FLOAT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_FLOAT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if ((retval = 
         H5Dwrite(dataset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
         {
@@ -291,13 +291,13 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
     
-    void Write_Variable_Scalar(hid_t const& fout, std::string const& var_name, 
+    void Write_Variable_Scalar(int64_t const& fout, std::string const& var_name, 
             hsize_t const* dims, size_t const& start, std::vector<double> const& var_data)
     {
         herr_t retval;
-        hid_t  dataspace = H5Screate(H5S_SIMPLE);
+        int64_t  dataspace = H5Screate(H5S_SIMPLE);
         retval = H5Sset_extent_simple(dataspace,1,dims,NULL);
-        hid_t dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t dataset = H5Dcreate(fout, var_name.c_str(), H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if ((retval = 
         H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
         {
@@ -308,7 +308,7 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
     
-    void Write_Vector_Data(hid_t const& fout, std::string const& name, 
+    void Write_Vector_Data(int64_t const& fout, std::string const& name, 
             std::vector<StateVecD> const& data, size_t const& start, size_t const& end)
     {
         hsize_t length = end - start;
@@ -366,7 +366,7 @@ namespace HDF5
         return "x";
     }
 
-    void Write_Zone_Data(hid_t const& fout, real const& scale, SPHState const& pnp1, size_t const& start, size_t const& end)
+    void Write_Zone_Data(int64_t const& fout, real const& scale, SPHState const& pnp1, size_t const& start, size_t const& end)
     {
         /* Need to write position, velocity, acceleration, pressure, density gradient, mass, boundary flag */
         /* Write as a 2D array, or 1D arrays for vectors? 1D for now */
@@ -492,7 +492,7 @@ namespace HDF5
         lvec.clear();
     }
 
-    void Write_Inlet_Data(hid_t const& fout, bound_block const& limits)
+    void Write_Inlet_Data(int64_t const& fout, bound_block const& limits)
     {
         size_t length = limits.back.size();
         hsize_t dim[] = {length};
@@ -513,17 +513,17 @@ namespace HDF5
     /*************************************************************************/
     /*************************** READ FUNCTIONS ******************************/
     /*************************************************************************/
-    void Read_String_Attribute(hid_t const& fin, std::string const& attr_name, std::string& attr_data)
+    void Read_String_Attribute(int64_t const& fin, std::string const& attr_name, std::string& attr_data)
     {
         herr_t retval;
 
         if(H5Aexists(fin, attr_name.c_str()))
         {
-            hid_t  attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
-            hid_t attr_type = H5Aget_type(attr);
+            int64_t  attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
+            int64_t attr_type = H5Aget_type(attr);
 
             size_t sdim = H5Tget_size(attr_type) + 1;
-            hid_t memtype = H5Tcopy(H5T_C_S1);
+            int64_t memtype = H5Tcopy(H5T_C_S1);
             retval = H5Tset_size(memtype, sdim);
 
             char* data;
@@ -538,10 +538,10 @@ namespace HDF5
         }
     }
     
-    void Read_Uint_Attribute(hid_t const& fin, std::string const& attr_name, size_t& attr_data)
+    void Read_Uint_Attribute(int64_t const& fin, std::string const& attr_name, size_t& attr_data)
     {
         herr_t retval;
-        hid_t  attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
+        int64_t  attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
         size_t data;
         if ((retval = H5Aread(attr, H5T_NATIVE_ULONG, &data)))
         {
@@ -552,10 +552,10 @@ namespace HDF5
         attr_data = data;
     }
 
-    void Read_Uint_Attribute(hid_t const& fin, std::string const& attr_name, uint& attr_data)
+    void Read_Uint_Attribute(int64_t const& fin, std::string const& attr_name, uint& attr_data)
     {
         herr_t retval;
-        hid_t  attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
+        int64_t  attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
         uint data;
         if ((retval = H5Aread(attr, H5T_NATIVE_UINT, &data)))
         {
@@ -566,10 +566,10 @@ namespace HDF5
         attr_data = data;
     }
 
-    void Read_Int_Attribute(hid_t const& fin, std::string const& attr_name, int& attr_data)
+    void Read_Int_Attribute(int64_t const& fin, std::string const& attr_name, int& attr_data)
     {
         herr_t retval;
-        hid_t  attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
+        int64_t  attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
         int data;
         if ((retval = H5Aread(attr, H5T_NATIVE_INT, &data)))
         {
@@ -580,10 +580,10 @@ namespace HDF5
         attr_data = data;
     }
 
-    void Read_Real_Attribute(hid_t const& fin, std::string const& attr_name, double& attr_data)
+    void Read_Real_Attribute(int64_t const& fin, std::string const& attr_name, double& attr_data)
     {
         herr_t retval;
-        hid_t  attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
+        int64_t  attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
         double data;
         if ((retval = H5Aread(attr, H5T_NATIVE_DOUBLE, &data)))
         {
@@ -594,11 +594,11 @@ namespace HDF5
         attr_data = data;
     }
 
-    void Read_Vector_Attribute(hid_t const& fin, std::string const& attr_name, StateVecD& attr_data)
+    void Read_Vector_Attribute(int64_t const& fin, std::string const& attr_name, StateVecD& attr_data)
     {
         herr_t retval;
-        hid_t  attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
-        hid_t space = H5Aget_space(attr);
+        int64_t  attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
+        int64_t space = H5Aget_space(attr);
         hsize_t dims[1];
 
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
@@ -628,11 +628,11 @@ namespace HDF5
             attr_data[ii] = data[ii];
     }
 
-    void Read_Variable_Array(hid_t const& fin, std::string const& var_name, std::vector<std::vector<size_t>>& var_data)
+    void Read_Variable_Array(int64_t const& fin, std::string const& var_name, std::vector<std::vector<size_t>>& var_data)
     {
         herr_t retval;
-        hid_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
-        hid_t space = H5Dget_space(dset);
+        int64_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
+        int64_t space = H5Dget_space(dset);
         hsize_t dims[2];
         int ndims = H5Sget_simple_extent_dims (space, dims, NULL);
         if(ndims != 2)
@@ -649,11 +649,11 @@ namespace HDF5
         retval = H5Dclose(dset);
     }
 
-    void Read_Variable_Array(hid_t const& fin, std::string const& var_name, std::vector<std::vector<int>>& var_data)
+    void Read_Variable_Array(int64_t const& fin, std::string const& var_name, std::vector<std::vector<int>>& var_data)
     {
         herr_t retval;
-        hid_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
-        hid_t space = H5Dget_space(dset);
+        int64_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
+        int64_t space = H5Dget_space(dset);
         hsize_t dims[2];
         int ndims = H5Sget_simple_extent_dims (space, dims, NULL);
         if(ndims != 2)
@@ -671,11 +671,11 @@ namespace HDF5
     }
 
     
-    void Read_Variable_Array(hid_t const& fin, std::string const& var_name, std::vector<std::vector<float>>& var_data)
+    void Read_Variable_Array(int64_t const& fin, std::string const& var_name, std::vector<std::vector<float>>& var_data)
     {
         herr_t retval;
-        hid_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
-        hid_t space = H5Dget_space(dset);
+        int64_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
+        int64_t space = H5Dget_space(dset);
         hsize_t dims[2];
         int ndims = H5Sget_simple_extent_dims (space, dims, NULL);
         if(ndims != 2)
@@ -693,11 +693,11 @@ namespace HDF5
     }
 
     
-    void Read_Variable_Array(hid_t const& fin, std::string const& var_name, std::vector<std::vector<double>>& var_data)
+    void Read_Variable_Array(int64_t const& fin, std::string const& var_name, std::vector<std::vector<double>>& var_data)
     {
         herr_t retval;
-        hid_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
-        hid_t space = H5Dget_space(dset);
+        int64_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
+        int64_t space = H5Dget_space(dset);
         hsize_t dims[2];
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
         if(ndims != 2)
@@ -714,11 +714,11 @@ namespace HDF5
         retval = H5Dclose(dset);
     }
 
-    void Read_Variable_Scalar(hid_t const& fin, std::string const& var_name, std::vector<size_t>& var_data)
+    void Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<size_t>& var_data)
     {
         herr_t retval;
-        hid_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
-        hid_t space = H5Dget_space(dset);
+        int64_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
+        int64_t space = H5Dget_space(dset);
         hsize_t dims[1];
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
         if(ndims != 1)
@@ -734,11 +734,11 @@ namespace HDF5
         retval = H5Dclose(dset); 
     }
 
-    void Read_Variable_Scalar(hid_t const& fin, std::string const& var_name, std::vector<uint>& var_data)
+    void Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<uint>& var_data)
     {
         herr_t retval;
-        hid_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
-        hid_t space = H5Dget_space(dset);
+        int64_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
+        int64_t space = H5Dget_space(dset);
         hsize_t dims[1];
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
         if(ndims != 1)
@@ -754,11 +754,11 @@ namespace HDF5
         retval = H5Dclose(dset); 
     }
 
-    void Read_Variable_Scalar(hid_t const& fin, std::string const& var_name, std::vector<int>& var_data)
+    void Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<int>& var_data)
     {
         herr_t retval;
-        hid_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
-        hid_t space = H5Dget_space(dset);
+        int64_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
+        int64_t space = H5Dget_space(dset);
         hsize_t dims[1];
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
         if(ndims != 1)
@@ -774,11 +774,11 @@ namespace HDF5
         retval = H5Dclose(dset);
     }
     
-    void Read_Variable_Scalar(hid_t const& fin, std::string const& var_name, std::vector<long>& var_data)
+    void Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<long>& var_data)
     {
         herr_t retval;
-        hid_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
-        hid_t space = H5Dget_space(dset);
+        int64_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
+        int64_t space = H5Dget_space(dset);
         hsize_t dims[1];
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
         if(ndims != 1)
@@ -794,11 +794,11 @@ namespace HDF5
         retval = H5Dclose(dset);
     }
     
-    void Read_Variable_Scalar(hid_t const& fin, std::string const& var_name, std::vector<float>& var_data)
+    void Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<float>& var_data)
     {
         herr_t retval;
-        hid_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
-        hid_t space = H5Dget_space(dset);
+        int64_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
+        int64_t space = H5Dget_space(dset);
         hsize_t dims[1];
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
         if(ndims != 1)
@@ -814,11 +814,11 @@ namespace HDF5
         retval = H5Dclose(dset);
     }
     
-    void Read_Variable_Scalar(hid_t const& fin, std::string const& var_name, std::vector<double>& var_data)
+    void Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<double>& var_data)
     {
         herr_t retval;
-        hid_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
-        hid_t space = H5Dget_space(dset);
+        int64_t dset = H5Dopen (fin, var_name.c_str(), H5P_DEFAULT);
+        int64_t space = H5Dget_space(dset);
         hsize_t dims[1];
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
         if(ndims != 1)
@@ -834,7 +834,7 @@ namespace HDF5
         retval = H5Dclose(dset);
     }
 
-    void Read_Vector_Data(hid_t const& fin, std::string const& name, std::vector<StateVecD>& var_data)
+    void Read_Vector_Data(int64_t const& fin, std::string const& name, std::vector<StateVecD>& var_data)
     {        
         std::string name_;
 
@@ -881,7 +881,7 @@ namespace HDF5
         }
     }
     
-    void Read_Zone_Data(hid_t const& fin, real const& scale, SPHState& pnp1, size_t& length)
+    void Read_Zone_Data(int64_t const& fin, real const& scale, SPHState& pnp1, size_t& length)
     { 
         std::vector<StateVecD> avect;
         std::vector<double> dvect;
@@ -980,7 +980,7 @@ namespace HDF5
         copy_omp(temp.begin(), temp.end(), pnp1.end() - length);
     }
 
-    void Read_Inlet_Data(hid_t const& fin, bound_block& limits)
+    void Read_Inlet_Data(int64_t const& fin, bound_block& limits)
     {
         Read_Variable_Scalar(fin, "Back index", limits.back);
         
@@ -997,7 +997,7 @@ namespace HDF5
 
 
 
-void Write_HDF5_Attributes(hid_t const& file, SIM const& svar,
+void Write_HDF5_Attributes(int64_t const& file, SIM const& svar,
                     FLUID const& fvar, AERO const& avar)
 {
 
@@ -1116,7 +1116,7 @@ void Write_HDF5_Attributes(hid_t const& file, SIM const& svar,
 	HDF5::Write_Int_Attribute(file, "Speed test run count", svar.nRuns);
 }
 
-void Write_Zone_Attributes(hid_t const& zone, bound_block const& limits)
+void Write_Zone_Attributes(int64_t const& zone, bound_block const& limits)
 {
     HDF5::Write_String_Attribute(zone, "Block name", limits.name);
 	// Add information about the insertion, aero, and deletion planes.
@@ -1195,9 +1195,9 @@ void Write_HDF5(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState const& 
         std::filesystem::remove(filename);
     }
 
-    hid_t file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+    int64_t file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
     
-    // hid_t group = H5Gcreate2(file,"Particles", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    // int64_t group = H5Gcreate2(file,"Particles", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     Write_HDF5_Attributes(file,svar, fvar, avar);
 
@@ -1212,7 +1212,7 @@ void Write_HDF5(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState const& 
 			std::string zoneHeader = "Boundary " + std::to_string(ii);
 
             // Create the group
-            hid_t bdrzone = H5Gcreate2(file,(zoneHeader).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            int64_t bdrzone = H5Gcreate2(file,(zoneHeader).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
             HDF5::Write_Zone_Data(bdrzone,svar.scale,pnp1,limits[ii].index.first,limits[ii].index.second);
 
@@ -1238,7 +1238,7 @@ void Write_HDF5(SIM& svar, FLUID const& fvar, AERO const& avar, SPHState const& 
 			std::string zoneHeader = "Fluid " + std::to_string(flublock);
 
             // Create the group
-            hid_t fluzone = H5Gcreate2(file,(zoneHeader).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            int64_t fluzone = H5Gcreate2(file,(zoneHeader).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
             HDF5::Write_Zone_Data(fluzone,svar.scale,pnp1,limits[ii].index.first,limits[ii].index.second);
 
@@ -1298,7 +1298,7 @@ void Read_HDF5(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex, SPHState& pn, SP
     printf("Starting reading restart HDF5 file...\n");
 
     std::string filename = svar.restart_prefix + "_particles.h5";
-    hid_t file;
+    int64_t file;
     if(std::filesystem::exists(filename))
         file = H5Fopen(filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     else
@@ -1343,7 +1343,7 @@ void Read_HDF5(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex, SPHState& pn, SP
         for(size_t ii = 0; ii < svar.nbound; ii++)
         {
 			std::string zoneHeader = "Boundary " + std::to_string(ii);
-            hid_t group = H5Gopen(file,zoneHeader.c_str(),H5P_DEFAULT);
+            int64_t group = H5Gopen(file,zoneHeader.c_str(),H5P_DEFAULT);
             // size_t n0 = parts.grdnp1.size();
             limits[block].index.first = start;
             size_t length = 0;
@@ -1367,7 +1367,7 @@ void Read_HDF5(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex, SPHState& pn, SP
         {
             // Assume the block definition files have been read.
             std::string zoneHeader = "Fluid " + std::to_string(ii);
-            hid_t group = H5Gopen(file,zoneHeader.c_str(),H5P_DEFAULT);
+            int64_t group = H5Gopen(file,zoneHeader.c_str(),H5P_DEFAULT);
             // size_t n0 = parts.grdnp1.size();
 
             limits[block].index.first = start;
@@ -1402,7 +1402,7 @@ void Read_HDF5(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex, SPHState& pn, SP
 namespace h5part
 {
     
-    void Write_Zone_Data(hid_t const& fout, real const& scale, double const& time, SPHState const& pnp1, size_t const& start, 
+    void Write_Zone_Data(int64_t const& fout, real const& scale, double const& time, SPHState const& pnp1, size_t const& start, 
         size_t const& end, std::vector<uint> const& outvar, double const& rho0)
     {
         /* Need to write position, velocity, acceleration, pressure, density gradient, mass, boundary flag */
@@ -1773,7 +1773,7 @@ namespace h5part
 }
 
 void open_h5part_files(SIM const& svar, FLUID const& fvar, AERO const& avar, 
-                    string const& prefix, hid_t& ffile, hid_t& bfile)
+                    string const& prefix, int64_t& ffile, int64_t& bfile)
 {
 
     if(svar.simPts > 0)
@@ -1820,14 +1820,14 @@ void open_h5part_files(SIM const& svar, FLUID const& fvar, AERO const& avar,
  * @param act_time Current time for the simulation
  * @return void
  */
-void write_h5part_data(hid_t& ffile, hid_t& bfile,
+void write_h5part_data(int64_t& ffile, int64_t& bfile,
     SIM const& svar, FLUID const& fvar, SPHState const& pnp1)
 {
     std::string zoneHeader = "Step#" + std::to_string(svar.frame);
     if(svar.nfluid > 0)
     {
         // Create a group of the current timestep
-        hid_t fluzone = H5Gcreate2(ffile,zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t fluzone = H5Gcreate2(ffile,zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         h5part::Write_Zone_Data(fluzone, svar.scale, svar.t, pnp1, svar.bndPts, 
                 svar.totPts, svar.outvar, fvar.rho0);
         
@@ -1848,7 +1848,7 @@ void write_h5part_data(hid_t& ffile, hid_t& bfile,
     if(svar.nbound > 0)
     {
         // Create a group of the current timestep
-        hid_t bndzone = H5Gcreate2(bfile,zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t bndzone = H5Gcreate2(bfile,zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         h5part::Write_Zone_Data(bndzone, svar.scale, svar.t, pnp1, 0, 
                 svar.bndPts, svar.outvar, fvar.rho0);
         
@@ -1896,16 +1896,16 @@ void write_h5part_data(hid_t& ffile, hid_t& bfile,
 //     #ifdef DEBUG
 //     H5SetVerbosityLevel(H5_VERBOSE_DEBUG);
 //     #endif
-//     hid_t ffile, bfile, sfile;
+//     int64_t ffile, bfile, sfile;
 
 //     if(std::filesystem::exists(filename))
 //     {
 //         ffile = H5OpenFile(filename.c_str(), H5_O_APPENDONLY, H5_PROP_DEFAULT);
-//         hid_t file = H5Fopen(filename.c_str(), H5F_ACC_CREAT, H5P_DEFAULT, H5P_DEFAULT);
+//         int64_t file = H5Fopen(filename.c_str(), H5F_ACC_CREAT, H5P_DEFAULT, H5P_DEFAULT);
 //     }
 //     else
 //     {
-//         hid_t file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+//         int64_t file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
 //         H5Hut::Write_Attrib_Data(ffile,svar,time,nFluid,nBound,nFib,nGas);
 //     }
 

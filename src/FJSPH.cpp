@@ -75,6 +75,8 @@ int main(int argc, char *argv[])
 
 	GetInput(argc,argv,svar,fvar,avar,vortex);
 	
+	omp_set_num_threads(svar.numThreads);
+
 	// if(MakeOutputDir(argc,argv,svar))
 	// {
 	// 	cout << "Couldn't make output directory. Please check permissions." << endl;
@@ -180,10 +182,10 @@ int main(int argc, char *argv[])
 	
 	///********* Tree algorithm stuff ************/
 	Sim_Tree SPH_TREE(SIMDIM,pnp1,20);
+	outlist = update_neighbours(SPH_TREE, fvar, pnp1);
+
 	Vec_Tree CELL_TREE(SIMDIM,cells.cCentre,10);
-	SPH_TREE.index->buildIndex();
 	CELL_TREE.index->buildIndex();
-	FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
 
 	
 	///*************** Open simulation files ***************/
@@ -238,19 +240,6 @@ int main(int argc, char *argv[])
 		{
 			// cout << "Finding cells" << endl;
 			FindCell(svar,avar,CELL_TREE,cells,pn,pnp1);
-			// if (svar.totPts != pnp1.size())
-			// {	//Rebuild the neighbour list
-			// 	// cout << "Updating neighbour list" << endl;
-			// 	// cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
-			// 	svar.delNum += svar.totPts-pnp1.size();
-			// 	svar.simPts -= svar.totPts-pnp1.size();
-			// 	svar.totPts = pnp1.size();
-			// 	end = svar.totPts;
-			// 	end_ng = svar.bndPts + svar.simPts;
-			// 	SPH_TREE.index->buildIndex();
-			// 	FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
-			// 	dSPH_PreStep(svar,fvar,svar.totPts,pnp1,outlist,dp);
-			// }	
 		}
 
 		Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,vortex,pn);

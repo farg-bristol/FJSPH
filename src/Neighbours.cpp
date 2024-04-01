@@ -4,101 +4,58 @@
 #include "Neighbours.h"
 
 
-///**************** Update neighbour list **************
-void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, SPHState const& pnp1, OUTL& outlist)
+/* Update tree index and return a new neighbour list */
+OUTL update_neighbours(Sim_Tree const& tree, FLUID const& fvar, SPHState const& pnp1)
 {
-	const nanoflann::SearchParams params(0,0,false);
+	// Combine to make it impossible to forgot to update the tree index before finding neighbours.
+	tree.index->buildIndex();
+	return find_neighbours(tree, fvar, pnp1);
+}
+
+/* Find the list of neighbours for each particle and return as a 2D vector */
+OUTL find_neighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, SPHState const& pnp1)
+{
 	const real search_radius = fvar.sr;
-	outlist.clear();
-	outlist.resize(pnp1.size());
-	
-	// vector<vector<std::pair<size_t,real>>> plist;
-	// plist.reserve(pnp1.size());
+	OUTL neighbour_list(pnp1.size());
 
 	#pragma omp parallel default(shared)
 	{	/*Find neighbour list*/
-		// OUTL local; /*Local processor copy*/
-		// vector<vector<std::pair<size_t,real>>> plocal;
-		// plocal.reserve(pnp1.size());
 		#pragma omp for schedule(static) nowait 
 		for(size_t ii=0; ii < pnp1.size(); ++ii)
 		{
-			// std::cout << pnp1[i].list.size();
-			std::vector<std::pair<size_t, real>> matches; /* Nearest Neighbour Search*/
-			#if SIMDIM == 3
-				matches.reserve(250);
-			#else
-				matches.reserve(47);
-			#endif
-
-			NP1_INDEX.index->radiusSearch(&pnp1[ii].xi[0], search_radius, matches, params);
-			
-			outlist[ii] = matches;
-			// local.emplace_back(matches);
-			// plocal.emplace_back(vector<std::pair<size_t,real>>(matches.size()-1));
-			// for (size_t jj = 1; jj < matches.size(); ++jj)
-			// {
-			// 	local.back()[jj-1] = matches[jj].first;
-			// 	// plocal.back()[jj-1] = matches[jj];
-			// }
-			
-			// std::cout << "  " << pnp1[i].list.size() << std::endl;
+			neighbour_list[ii] = radius_search(NP1_INDEX, pnp1[ii].xi, search_radius); /* Nearest Neighbour Search */
 		}
-
-		// #pragma omp for schedule(static) ordered
-    	// for(int ii=0; ii<omp_get_num_threads(); ii++)
-    	// {
-    	// 	#pragma omp ordered
-    	// 	{
-    	// 		outlist.insert(outlist.end(),local.begin(),local.end());
-    	// 		// plist.insert(plist.end(),plocal.begin(),plocal.end());
-		// 	}
-    	// }
 	}
 
-
-	// std::fstream fn("Neighbours",std::ios::out);
-	// for(size_t ii = 0; ii < outlist.size(); ++ii)
-	// {
-	// 	fn << "Particle: " << ii << endl;
-
-	// 	for (size_t jj = 0; jj < outlist[ii].size(); ++jj)
-	// 	{
-	// 		fn << "\tNeighbour: " << outlist[ii][jj].first << "  Distance: " << sqrt(outlist[ii][jj].second) << endl;
-	// 	}
-	// }
-	// fn.close();
-
+	return neighbour_list;
 }
 
-void FindCellNeighbours(Vec_Tree const& CELL_INDEX, vector<StateVecD> const& cells, celll& outlist)
+/** Perform a radius search using NanoFLANN */
+std::vector<neighbour_index> radius_search(Sim_Tree const& tree, StateVecD const& test_point, real const& search_radius)
 {
-	
+	std::vector<neighbour_index> matches; /* Nearest Neighbour Search*/
 	#if SIMDIM == 3
-	const size_t num_results = 80;
+		matches.reserve(250);
 	#else
-	const size_t num_results = 80;
+		matches.reserve(47);
 	#endif
 
-	outlist = vector<vector<size_t>>(cells.size(),vector<size_t>(num_results));
+	tree.index->radiusSearch(&test_point[0], search_radius, matches, flann_params);
 
-	#pragma omp parallel default(shared)
-	{	/*Find neighbour list*/
-		
-		#pragma omp for schedule(static) nowait 
-		for(size_t ii=0; ii < cells.size(); ++ii)
-		{
-			StateVecD testp = cells[ii];
-			vector<size_t> ret_indexes(num_results);
-			vector<real> out_dists_sqr(num_results);
-
-			nanoflann::KNNResultSet<real> resultSet(num_results);
-			resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
-			
-			CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
-			
-			outlist[ii] = ret_indexes;			
-		}
-	}
+	return matches;
 }
 
+/** Perform a radius search using NanoFLANN */
+std::vector<neighbour_index> radius_search(Vec_Tree const& tree, StateVecD const& test_point, real const& search_radius)
+{
+	std::vector<neighbour_index> matches; /* Nearest Neighbour Search*/
+	#if SIMDIM == 3
+		matches.reserve(250);
+	#else
+		matches.reserve(47);
+	#endif
+
+	tree.index->radiusSearch(&test_point[0], search_radius, matches, flann_params);
+
+	return matches;
+}

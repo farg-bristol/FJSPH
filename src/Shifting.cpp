@@ -36,7 +36,7 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1,
 		
 			SPHPart const& pi = pnp1[ii];
 	
-			for(std::pair<size_t,real> const& jj:outlist[ii])
+			for(neighbour_index const& jj:outlist[ii])
 			{
 				/*Check if the position is the same, and skip the particle if yes*/
 				if(ii == jj.first)
@@ -152,7 +152,7 @@ void dissipation_terms(FLUID const& fvar, size_t const& start, size_t const& end
 		real Rrhod = 0.0;
 		#endif
 
-		for (std::pair<size_t,real> const& jj : outlist[ii])
+		for (neighbour_index const& jj : outlist[ii])
 		{	/* Neighbour list loop. */
 			
 			/*Check if the position is the same, and skip the particle if yes*/
@@ -232,7 +232,7 @@ void Particle_Shift_No_Ghost(SIM const& svar, FLUID const& fvar, size_t const& s
 
 			real woccl = 0.0;
 
-			for (std::pair<size_t,real> const& jj:outlist[ii])
+			for (neighbour_index const& jj:outlist[ii])
 			{	/* Neighbour list loop. */
 				if(ii == jj.first /*|| pj.b == PartState.BOUND_*/)
 					continue;
@@ -331,7 +331,7 @@ void Particle_Shift_Ghost(SIM const& svar, FLUID const& fvar, size_t const& star
 
 			real woccl = 0.0;
 
-			for (std::pair<size_t,real> const& jj:outlist[ii])
+			for (neighbour_index const& jj:outlist[ii])
 			{	/* Neighbour list loop. */
 				SPHPart const& pj = pnp1[jj.first];
 

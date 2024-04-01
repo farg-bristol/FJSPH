@@ -3,6 +3,7 @@
 #include "Geometry.h"
 #include "Var.h"
 #include "Kernel.h"
+#include "Neighbours.h"
 #include <Eigen/Geometry>
 
 #define PERTURB(i,j) pow(MEPSILON,pow(2,i*SIMDIM-j))
@@ -46,7 +47,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
                 StateVecD const pointT = xi + h * pi.norm.normalized();
 
                 uint surf = 1; /*Begin by assuming a surface, and proving otherwise*/
-                for(std::pair<size_t,real> const& jj:outlist[ii])
+                for(neighbour_index const& jj:outlist[ii])
                 {
                     if(jj.first == ii || pnp1[jj.first].b == GHOST)
                         continue;
@@ -105,7 +106,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
                 
                 if(pi.lam > 0.7)
                 {
-                    for(std::pair<size_t,real> const& jj:outlist[ii])
+                    for(neighbour_index const& jj:outlist[ii])
                     {   
                         SPHPart const& pj = pnp1[jj.first];
                         if(jj.first == ii || pj.b == GHOST)
@@ -119,7 +120,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
                 }
                 else
                 {
-                    for(std::pair<size_t,real> const& jj:outlist[ii])
+                    for(neighbour_index const& jj:outlist[ii])
                     {   
                         SPHPart const& pj = pnp1[jj.first];
                         if(jj.first == ii || pj.b == GHOST)
@@ -165,7 +166,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
             }    
 
             real curve = 0.0;
-            for(std::pair<size_t,real> const& jj:outlist[ii])
+            for(neighbour_index const& jj:outlist[ii])
             {
                 SPHPart const& pj = pnp1[jj.first];
                 if(jj.first == ii || pj.b == GHOST)
@@ -257,7 +258,7 @@ void Detect_Surface(SIM& svar, FLUID const& fvar, AERO const& avar,
         for(size_t ii = start; ii < end; ++ii)
         {
             pnp1[ii].surfzone = 0;
-            for(std::pair<size_t,real> const& jj:outlist[ii])
+            for(neighbour_index const& jj:outlist[ii])
             {
                 if(pnp1[jj.first].surf == 1)
                 {
@@ -289,18 +290,11 @@ real get_n_full(real const& dx, real const& H)
     }
 
     // Create a tree of the vector?
-	const nanoflann::SearchParams params(0,0,false);
 	const real search_radius = 4.0 * H * H;
-    std::vector<std::pair<size_t, real>> matches; /* Nearest Neighbour Search*/
-    #if SIMDIM == 3
-        matches.reserve(250);
-    #else
-        matches.reserve(47);
-    #endif
     Vec_Tree tree(SIMDIM,vec,10);
     tree.index->buildIndex();
     StateVecD test = StateVecD::Zero();
-    tree.index->radiusSearch(&test[0],search_radius,matches,params);
+    std::vector<neighbour_index> matches = radius_search(tree, test, search_radius); /* Nearest Neighbour Search*/
 
     return real(matches.size());
 }

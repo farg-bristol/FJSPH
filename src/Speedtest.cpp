@@ -586,7 +586,7 @@ void Speed_Test_Sweep(SIM& svar, FLUID& fvar, AERO& avar)
             sph_vect[run].pn = pnp1_orig;
             sph_vect[run].pnp1 = pnp1_orig;
             sph_vect[run].NP1.index->buildIndex();
-            FindNeighbours(sph_vect[run].NP1,fvar,sph_vect[run].pnp1,sph_vect[run].outlist);
+            sph_vect[run].outlist = update_neighbours(sph_vect[run].NP1,fvar,sph_vect[run].pnp1);
         }
 
         auto time1_sph = high_resolution_clock::now();

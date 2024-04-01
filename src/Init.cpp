@@ -5,6 +5,7 @@
 #include "IOFunctions.h"
 #include "Kernel.h"
 #include "Add.h"
+#include "Neighbours.h"
 
 #include "shapes/arc.h"
 #include "shapes/circle.h"
@@ -425,7 +426,6 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
 
     for(size_t blockID = 0; blockID < boundvar.nblocks; blockID++)
     {
-        nanoflann::SearchParams const params(0,0,false);
         Vec_Tree tree(SIMDIM,boundvar.block[blockID].coords,50);
         tree.index->buildIndex();
 
@@ -439,14 +439,7 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
             {
                 if(boundvar.block[ii].intersect[jj] == 0)
                 {
-                    std::vector<std::pair<size_t, double>> matches; /* Nearest Neighbour Search*/
-                    #if SIMDIM == 3
-                        matches.reserve(250);
-                    #else
-                        matches.reserve(47);
-                    #endif
-
-                    tree.index->radiusSearch(&boundvar.block[ii].coords[jj][0], searchDist, matches, params);
+                    std::vector<neighbour_index> matches = radius_search(tree, boundvar.block[ii].coords[jj], searchDist);
 
                     // std::printf(ll << "  " << blockID << "  " << matches.size() << std::endl; 
                     for (auto const& match : matches)
@@ -468,7 +461,6 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
     
     for(size_t blockID = 0; blockID < fluvar.nblocks; blockID++)
     {
-        nanoflann::SearchParams const params(0,0,false);
         Vec_Tree tree(SIMDIM,fluvar.block[blockID].coords,10);
         tree.index->buildIndex();
 
@@ -479,14 +471,7 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
             {
                 if(boundvar.block[ii].intersect[jj] == 0)
                 {
-                    std::vector<std::pair<size_t, double>> matches; /* Nearest Neighbour Search*/
-                    #if SIMDIM == 3
-                        matches.reserve(250);
-                    #else
-                        matches.reserve(47);
-                    #endif
-
-                    tree.index->radiusSearch(&boundvar.block[ii].coords[jj][0], searchDist, matches, params);
+                    std::vector<neighbour_index> matches = radius_search(tree, boundvar.block[ii].coords[jj], searchDist);
 
                     for (auto const& match : matches)
                         fluvar.block[blockID].intersect[match.first] = 1;
@@ -504,14 +489,7 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
             {
                 if(fluvar.block[ii].intersect[jj] == 0)
                 {
-                    std::vector<std::pair<size_t, double>> matches; /* Nearest Neighbour Search*/
-                    #if SIMDIM == 3
-                        matches.reserve(50);
-                    #else
-                        matches.reserve(10);
-                    #endif
-
-                    tree.index->radiusSearch(&fluvar.block[ii].coords[jj][0], searchDist, matches, params);
+                    std::vector<neighbour_index> matches = radius_search(tree, fluvar.block[ii].coords[jj], searchDist);
 
                     // std::printf(ii << "  " << blockID << "  " << matches.size() << std::endl; 
                     for (size_t kk = 0; kk < matches.size(); kk++)

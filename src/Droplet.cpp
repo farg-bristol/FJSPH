@@ -761,8 +761,7 @@ void Droplet_Drag_Sweep(SIM& svar, FLUID& fvar, AERO& avar)
 		Vec_Tree CELL_TREE(SIMDIM,cells.cCentre,10);
         // KDTREE TREE(pn,cells);
         
-        SPH_TREE.index->buildIndex();
-        FindNeighbours(SPH_TREE, fvar, pn, outlist);
+        outlist = update_neighbours(SPH_TREE, fvar, pn);
 		real npd = 1.0;
         dSPH_PreStep(fvar,pn.size(),pn,outlist,npd);
         Detect_Surface(svar,fvar,avar,0,pn.size(),outlist,cells,vortex,pn);

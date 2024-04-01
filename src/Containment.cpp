@@ -447,7 +447,7 @@ void FirstCell(SIM& svar, Vec_Tree const& CELL_INDEX, MESH const& cells, SPHPart
     nanoflann::KNNResultSet<real> resultSet(num_results);
     resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
     
-    CELL_INDEX.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
+    CELL_INDEX.index->findNeighbors(resultSet, &testp[0]);
 
     // cout << "Test Point: " << testp(0) << "  " << testp(1)  << "  " << testp(2) << endl;
     // cout << cells.cFaces.size() << endl;
@@ -650,7 +650,7 @@ vector<size_t> FindCell(SIM& svar, AERO const& avar, Vec_Tree const& CELL_TREE, 
                 nanoflann::KNNResultSet<real> resultSet(num_results);
                 resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
                 
-                CELL_TREE.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
+                CELL_TREE.index->findNeighbors(resultSet, &testp[0]);
                 // uint count = 0;
                 for(auto const& cell:ret_indexes)
                 {   
@@ -715,7 +715,7 @@ vector<size_t> FindCell(SIM& svar, AERO const& avar, Vec_Tree const& CELL_TREE, 
                 nanoflann::KNNResultSet<real> resultSet(num_results);
                 resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
                 
-                CELL_TREE.index->findNeighbors(resultSet, &testp[0], nanoflann::SearchParams(10));
+                CELL_TREE.index->findNeighbors(resultSet, &testp[0]);
                 // uint count = 0;
                 for(auto const& cell:ret_indexes)
                 {   

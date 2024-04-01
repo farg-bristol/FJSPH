@@ -381,7 +381,7 @@ void PoissonGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& ce
 				pn.insert(pn.end(),ghost_particles.begin(),ghost_particles.end());
 				/* Rebuild the tree, including the ghost particles just made, so no overlap */
 				NP1_INDEX.index->buildIndex();
-				FindNeighbours(NP1_INDEX, fvar, pnp1, outlist);
+				outlist = find_neighbours(NP1_INDEX, fvar, pnp1);
 				nGhost += ghost_particles.size();
 			}
 		}
@@ -397,7 +397,6 @@ void PoissonGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& ce
 void check_if_too_close(Sim_Tree const& NP1_INDEX, real const& sr, SPHState const& pnp1, StateVecD const& xi, 
 		StateVecD const& vel, real const& dens, real const& mass, real const& press, size_t const& pID, SPHState& ghost_particles, size_t& nGhost)
 {
-	nanoflann::SearchParams const params(0,0,false);
 	/* Check if point is too close to an existing point... */
 	vector<size_t> ret_indexes(1);
 	vector<real> out_dists_sqr(1);
@@ -405,7 +404,7 @@ void check_if_too_close(Sim_Tree const& NP1_INDEX, real const& sr, SPHState cons
 	nanoflann::KNNResultSet<real> resultSet(1);
 	resultSet.init(&ret_indexes[0], &out_dists_sqr[0]);
 	
-	NP1_INDEX.index->findNeighbors(resultSet, &xi[0], nanoflann::SearchParams(10));
+	NP1_INDEX.index->findNeighbors(resultSet, &xi[0], flann_params);
 
 	if(out_dists_sqr[0] > sr)
 	{
@@ -435,17 +434,9 @@ void LatticeGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& ce
 			{
 				/* Check if it's neighbourhood is fully supported?  */
 				/* Find how many are within 2H+dx */
-				nanoflann::SearchParams const params(0,0,false);
 				real const search_radius = (2*fvar.H+svar.dx)*(2*fvar.H+svar.dx);
 
-				std::vector<std::pair<size_t, real>> matches; /* Nearest Neighbour Search*/
-				#if SIMDIM == 3
-					matches.reserve(250);
-				#else
-					matches.reserve(47);
-				#endif
-
-				SPH_TREE.index->radiusSearch(&pnp1[ii].xi[0], search_radius, matches, params);
+				std::vector<neighbour_index> matches = radius_search(SPH_TREE, pnp1[ii].xi, search_radius);
 
 				// cout << matches.size() << endl;
 
@@ -550,7 +541,7 @@ void LatticeGhost(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& ce
 	svar.gstPts += nGhost;
 	svar.totPts = svar.bndPts + svar.simPts + svar.gstPts; 
 	
-	FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
+	outlist = find_neighbours(SPH_TREE, fvar, pnp1);
 
 	/* Find the aerodynamic cell the ghost particle is in, and apply its settings*/
 	// for(size_t ii = end; ii < end+svar.gstPts; ++ii)
@@ -586,23 +577,15 @@ void Check_If_Ghost_Needs_Removing(SIM& svar, FLUID const& fvar, Sim_Tree& NP1_I
 	size_t const& end = svar.totPts;
 
 	vector<size_t> to_del;
-	nanoflann::SearchParams const params(0,0,false);
 	real const search_radius = (2*fvar.H+svar.dx)*(2*fvar.H+svar.dx);
 
 	#pragma omp parallel for default(shared)
 	for(size_t ii = start; ii < end; ++ii)
 	{
 		uint has_interaction = 0;
-		std::vector<std::pair<size_t, real>> matches; /* Nearest Neighbour Search*/
-		#if SIMDIM == 3
-			matches.reserve(250);
-		#else
-			matches.reserve(47);
-		#endif
+		std::vector<neighbour_index> matches = radius_search(NP1_INDEX, pnp1[ii].xi, search_radius);
 
-		NP1_INDEX.index->radiusSearch(&pnp1[ii].xi[0], search_radius, matches, params);
-
-		for(std::pair<size_t,real> const& jj: matches)
+		for(neighbour_index const& jj: matches)
 		{
 			if(pnp1[jj.first].b == FREE || pnp1[jj.first].b == PIPE)
 			{

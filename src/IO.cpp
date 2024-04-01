@@ -200,7 +200,7 @@ void Print_Settings(FILE* out, SIM const& svar, FLUID const& fvar, AERO const& a
     #pragma omp parallel
     {
         #pragma omp single
-        fprintf(out, "                         Number of threads: %d\n", omp_get_num_threads());
+        fprintf(out, "                         Number of threads: %d\n", svar.numThreads);
     }
     
     /* File Inputs */
@@ -253,9 +253,10 @@ void Print_Settings(FILE* out, SIM const& svar, FLUID const& fvar, AERO const& a
     fprintf(out, "                           SPH speed of sound: %g\n", fvar.Cs);
     fprintf(out, "                      SPH background pressure: %g\n", fvar.backP);
     fprintf(out, "                        SPH starting pressure: %g\n", fvar.pPress);
-    fprintf(out, "                    SPH density variation (%%): %g\n", fvar.rhoVar);
+    fprintf(out, "   SPH maximum absolute density variation (%%): %g\n", fvar.rhoVar);
     fprintf(out, "                          SPH maximum density: %g\n", fvar.rhoMax);
     fprintf(out, "                          SPH minimum density: %g\n", fvar.rhoMin);
+    fprintf(out, " SPH density variation to reduce timestep (%%): %g\n", fvar.rhoMaxIter);
     fprintf(out, "              Init hydrostatic pressure (0/1): %d\n", svar.init_hydro_pressure);
     fprintf(out, "                           Hydrostatic height: %g\n\n", svar.hydro_height);
 
@@ -404,6 +405,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 			line = line.substr(0,end+1);
 
         /* File Inputs */
+		Get_Number(line, "Number of threads", svar.numThreads);
 		Get_String(line, "Input fluid definition filename", svar.fluidfile);
 		Get_String(line, "Input boundary definition filename", svar.boundfile);
         Get_String(line, "Primary grid face filename", svar.taumesh);
@@ -465,6 +467,7 @@ void GetInput(int argc, char **argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 		Get_Number(line, "SPH background pressure", fvar.backP);
 		Get_Number(line, "SPH starting pressure", fvar.pPress);
 		Get_Number(line, "SPH density variation (%)", fvar.rhoVar);
+		Get_Number(line, "SPH integration density variation (%)", fvar.rhoMaxIter);
 		Get_Number(line, "SPH maximum density", fvar.rhoMax);
 		Get_Number(line, "SPH minimum density", fvar.rhoMin);
 		Get_Number(line, "SPH delta coefficient", fvar.delta);
@@ -919,11 +922,8 @@ void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, 
 			if(svar.out_encoding == 1)
 			{
 				/*Combine the szplt files*/
-				if(tecFileWriterClose(&svar.fluidFile))
-					printf("Failed to close fluid file.\n");
-					
-				if(tecFileWriterClose(&svar.boundFile))
-					printf("Failed to close boundary file.\n");
+				close_file(&svar.fluidFile);
+				close_file(&svar.boundFile);
 			}
 			
 		}

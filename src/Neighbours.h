@@ -6,9 +6,13 @@
 
 #include "Var.h"
 
-///**************** Update neighbour list **************
-void FindNeighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, SPHState const& pnp1, OUTL& outlist);
 
-void FindCellNeighbours(Vec_Tree const& CELL_INDEX, vector<StateVecD> const& cells, celll& outlist);
+OUTL update_neighbours(Sim_Tree const& tree, FLUID const& fvar, SPHState const& pnp1);
+
+OUTL find_neighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, SPHState const& pnp1);
+
+std::vector<neighbour_index> radius_search(Sim_Tree const& tree, StateVecD const& test_point, real const& search_radius);
+
+std::vector<neighbour_index> radius_search(Vec_Tree const& tree, StateVecD const& test_point, real const& search_radius);
 
 #endif

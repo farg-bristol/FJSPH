@@ -38,8 +38,7 @@ int Check_Error(Sim_Tree& SPH_TREE, SIM& svar, FLUID const& fvar, size_t const& 
 		{
 			pnp1 = pn;
 			
-			SPH_TREE.index->buildIndex();
-			FindNeighbours(SPH_TREE, fvar, pnp1, outlist);
+			outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 
 			svar.dt = 0.5*svar.dt;
 			cout << "Unstable timestep. New dt: " << svar.dt << endl;

@@ -29,7 +29,7 @@ void Get_Boundary_Pressure(StateVecD const& grav, FLUID const& fvar,
 		real pkern = 0.0;
 		StateVecD acckern = StateVecD::Zero();
 
-		for (std::pair<size_t,real> const& jj : outlist[ii])
+		for (neighbour_index const& jj : outlist[ii])
 		{	/* Neighbour list loop. */
 			SPHPart const& pj = pnp1[jj.first];
 			/*Check if the neighbour is a fluid particle*/
@@ -80,7 +80,7 @@ void Boundary_DBC( FLUID const& fvar, size_t const& start, size_t const& end,
 	for (size_t ii=start; ii < end; ++ii)
 	{
 		SPHPart const& pi = pnp1[ii];
-		for (std::pair<size_t,real> const& jj : outlist[ii])
+		for (neighbour_index const& jj : outlist[ii])
 		{	/* Neighbour list loop. */
 			SPHPart const& pj = pnp1[jj.first];
 			if(ii == jj.first || pj.b < BUFFER)
@@ -113,7 +113,7 @@ void Boundary_Ghost( FLUID const& fvar, size_t const& start, size_t const& end,
 		SPHPart const& pi = pnp1[ii];
 		real Rrhoi = 0.0;
 		near_inlet[ii] = 1;
-		for (std::pair<size_t,real> const& jj : outlist[ii])
+		for (neighbour_index const& jj : outlist[ii])
 		{	/* Neighbour list loop. */
 			SPHPart const& pj = pnp1[jj.first];
 			if(ii == jj.first /* || pj.b == BOUND */)
@@ -146,7 +146,7 @@ void Set_No_Slip( FLUID const& fvar, size_t const& start, size_t const& end,
 	{
 		StateVecD velsum = StateVecD::Zero();
 		real kernsum = 0.0;
-		for (std::pair<size_t,real> const& jj : outlist[ii])
+		for (neighbour_index const& jj : outlist[ii])
 		{	/* Neighbour list loop. */
 			SPHPart const& pj = pnp1[jj.first];
 			if(ii == jj.first || pj.b <= PISTON)
@@ -284,7 +284,7 @@ void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
 				Force += aero;
 			}
 
-			for (std::pair<size_t,real> const& jj : outlist[ii])
+			for (neighbour_index const& jj : outlist[ii])
 			{	/* Neighbour list loop. */
 				SPHPart const& pj = pnp1[jj.first];
 				/*Check if the position is the same, and skip the particle if yes*/

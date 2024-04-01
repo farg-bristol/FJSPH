@@ -155,37 +155,73 @@ build3D: 3D cleanOBJ
 
 -include ${2DDEP}
 2DDSPH : ${2DOBJ}
-	${CXX} -DSIMDIM=2 ${FLAGS} ${CXXFLAGS} ${TECINC} ${EIGENINC} ${H5INC} -o ${TARGETDIR}/${TARGET}.2d $^  ${TECLINK} ${TECLIB} ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
+	${CXX} -DSIMDIM=2 ${FLAGS} ${CXXFLAGS} ${EIGENINC} ${TECINC} ${H5INC} -o ${TARGETDIR}/${TARGET}.2d $^ ${TECLINK} ${TECLIB} ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
 
 -include ${2DDEPA}
 2DALE : ${2DALEOBJ}
-	${CXX} -DSIMDIM=2 -DALE ${FLAGS} ${CXXFLAGS} ${TECINC} ${EIGENINC} ${H5INC} ${TECLINK} -o ${TARGETDIR}/${TARGET}.2d.${ALEEXT}  $^ ${TECLIB} ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
+	${CXX} -DSIMDIM=2 -DALE ${FLAGS} ${CXXFLAGS} ${EIGENINC} ${TECINC} ${H5INC} -o ${TARGETDIR}/${TARGET}.2d.${ALEEXT} $^ ${TECLINK} ${TECLIB} ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
 
 -include ${3DDEP}
 3DDSPH : ${3DOBJ}
-	${CXX} -DSIMDIM=3 ${FLAGS} ${CXXFLAGS} ${TECINC} ${EIGENINC} ${H5INC} ${TECLINK} -o ${TARGETDIR}/${TARGET}.3d $^ ${TECLIB} ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
+	${CXX} -DSIMDIM=3 ${FLAGS} ${CXXFLAGS} ${EIGENINC} ${TECINC} ${H5INC} -o ${TARGETDIR}/${TARGET}.3d $^ ${TECLINK} ${TECLIB} ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
 
 -include ${3DDEPA}
 3DALE : ${3DALEOBJ}
-	${CXX} -DSIMDIM=3 -DALE ${FLAGS} ${CXXFLAGS} ${TECINC} ${EIGENINC} ${H5INC} ${TECLINK} -o ${TARGETDIR}/${TARGET}.3d.${ALEEXT} $^ ${TECLIB} ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
+	${CXX} -DSIMDIM=3 -DALE ${FLAGS} ${CXXFLAGS} ${EIGENINC} ${TECINC} ${H5INC} -o ${TARGETDIR}/${TARGET}.3d.${ALEEXT} $^ ${TECLINK} ${TECLIB} ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
 
 
 -include ${2DDEP}
-${2DDSPHDIR}/%.o : ${SRCDIR}/%.cpp
-	${CXX} -DSIMDIM=2 ${FLAGS} ${CXXFLAGS} ${TECINC} ${EIGENINC} ${H5INC} ${TECLINK} -MMD -MP -c $< -o $@ ${TECLIB} ${H5LINK} ${H5LIB} ${NETLIB}	 ${LIBS}
+${2DDSPHDIR}/%.o : ${SRCDIR}/%.cpp makefile
+	${CXX} -DSIMDIM=2 ${FLAGS} ${CXXFLAGS} ${EIGENINC} -MMD -MP -c $< -o $@ ${LIBS}
+
+${2DDSPHDIR}/H5IO.o : ${SRCDIR}/H5IO.cpp makefile
+	${CXX} -DSIMDIM=2 ${FLAGS} ${CXXFLAGS} ${EIGENINC} ${H5INC} -MMD -MP -c $< -o $@ ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
+
+${2DDSPHDIR}/BinaryIO.o : ${SRCDIR}/BinaryIO.cpp makefile
+	${CXX} -DSIMDIM=2 ${FLAGS} ${CXXFLAGS} ${EIGENINC} ${TECINC} -MMD -MP -c $< -o $@ ${TECLINK} ${TECLIB} ${LIBS}
+
+${2DDSPHDIR}/CDFIO.o : ${SRCDIR}/CDFIO.cpp makefile
+	${CXX} -DSIMDIM=2 ${FLAGS} ${CXXFLAGS} ${EIGENINC} -MMD -MP -c $< -o $@ ${NETLIB} ${LIBS}
 
 -include ${2DDEPA}
 ${2DALEDIR}/%.o : ${SRCDIR}/%.cpp
-	${CXX} -DSIMDIM=2 -DALE ${FLAGS} ${CXXFLAGS} ${TECINC} ${EIGENINC} ${H5INC} ${TECLINK} -MMD -MP -c $< -o $@ ${TECLIB} ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
+	${CXX} -DSIMDIM=2 -DALE ${FLAGS} ${CXXFLAGS} ${EIGENINC} -MMD -MP -c $< -o $@ ${LIBS}
+
+${2DALEDIR}/H5IO.o : ${SRCDIR}/H5IO.cpp makefile
+	${CXX} -DSIMDIM=2 -DALE ${FLAGS} ${CXXFLAGS} ${EIGENINC} ${H5INC} -MMD -MP -c $< -o $@ ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
+
+${2DALEDIR}/BinaryIO.o : ${SRCDIR}/BinaryIO.cpp makefile
+	${CXX} -DSIMDIM=2 -DALE ${FLAGS} ${CXXFLAGS} ${EIGENINC} ${TECINC} -MMD -MP -c $< -o $@ ${TECLINK} ${TECLIB} ${LIBS}
+
+${2DALEDIR}/CDFIO.o : ${SRCDIR}/CDFIO.cpp makefile
+	${CXX} -DSIMDIM=2 -DALE ${FLAGS} ${CXXFLAGS} ${EIGENINC} -MMD -MP -c $< -o $@ ${NETLIB} ${LIBS}
 
 -include ${3DDEP}
-${3DDSPHDIR}/%.o : ${SRCDIR}/%.cpp
-	${CXX} -DSIMDIM=3 ${FLAGS} ${CXXFLAGS} ${TECINC} ${EIGENINC} ${H5INC} ${TECLINK} -MMD -MP -c $< -o $@ ${TECLIB} ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
+${3DDSPHDIR}/%.o : ${SRCDIR}/%.cpp makefile
+	${CXX} -DSIMDIM=3 ${FLAGS} ${CXXFLAGS} ${EIGENINC} -MMD -MP -c $< -o $@ ${LIBS}
+
+${3DDSPHDIR}/H5IO.o : ${SRCDIR}/H5IO.cpp makefile
+	${CXX} -DSIMDIM=3 ${FLAGS} ${CXXFLAGS} ${EIGENINC} ${H5INC} -MMD -MP -c $< -o $@ ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
+
+${3DDSPHDIR}/BinaryIO.o : ${SRCDIR}/BinaryIO.cpp makefile
+	${CXX} -DSIMDIM=3 ${FLAGS} ${CXXFLAGS} ${EIGENINC} ${TECINC} -MMD -MP -c $< -o $@ ${TECLINK} ${TECLIB} ${LIBS}
+
+${3DDSPHDIR}/CDFIO.o : ${SRCDIR}/CDFIO.cpp makefile
+	${CXX} -DSIMDIM=3 ${FLAGS} ${CXXFLAGS} ${EIGENINC} -MMD -MP -c $< -o $@ ${NETLIB} ${LIBS}
 
 -include ${3DDEPA}
-${3DALEDIR}/%.o : ${SRCDIR}/%.cpp
-	${CXX} -DSIMDIM=3 -DALE ${FLAGS} ${CXXFLAGS} ${TECINC} ${EIGENINC} ${H5INC} ${TECLINK} -MMD -MP -c $< -o $@ ${TECLIB} ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
+${3DALEDIR}/%.o : ${SRCDIR}/%.cpp makefile
+	${CXX} -DSIMDIM=3 -DALE ${FLAGS} ${CXXFLAGS} ${EIGENINC} -MMD -MP -c $< -o $@ ${LIBS}
 
+${3DALEDIR}/H5IO.o : ${SRCDIR}/H5IO.cpp makefile
+	${CXX} -DSIMDIM=3 -DALE ${FLAGS} ${CXXFLAGS} ${EIGENINC} ${H5INC} -MMD -MP -c $< -o $@ ${H5LINK} ${H5LIB} ${NETLIB} ${LIBS}
+
+${3DALEDIR}/BinaryIO.o : ${SRCDIR}/BinaryIO.cpp makefile
+	${CXX} -DSIMDIM=3 -DALE ${FLAGS} ${CXXFLAGS} ${EIGENINC} ${TECINC} -MMD -MP -c $< -o $@ ${TECLINK} ${TECLIB} ${LIBS}
+
+${3DALEDIR}/CDFIO.o : ${SRCDIR}/CDFIO.cpp makefile
+	${CXX} -DSIMDIM=3 -DALE ${FLAGS} ${CXXFLAGS} ${EIGENINC} -MMD -MP -c $< -o $@ ${NETLIB} ${LIBS}
+	
 c2f:
 	${CXX} ${FLAGS} ${CXXFLAGS} ${INC} ${LLINK} ${TECINC} ${TECLINK} -o ${TARGETDIR}/Cell2Face src/Cell2Face.cpp ${TECLIB} ${NETLIB}
 
@@ -200,6 +236,9 @@ c2eD:
 
 tau2zcfd:
 	${CXX} -g -DDEBUG ${FLAGS} ${CXXFLAGS} ${H5INC} -o ${TARGETDIR}/TAU2zCFD src/TAUtozCFD.cpp ${NETLIB} ${H5LINK} ${H5LIB}
+
+convert:
+	${CXX} ${FLAGS} ${CXXFLAGS} ${TECINC} ${H5INC} -o ${TARGETDIR}/${TARGET}_conv src/convert_tec.cpp ${TECLINK} ${TECLIB} ${H5LINK} ${H5LIB}
 
 # mesh:
 # 	${CXX} ${FLAGS} ${CXXFLAGS} ${INC} -o ${TARGETDIR}/MakeMesh src/MakeMesh.cpp -lnetcdf
