@@ -3,9 +3,11 @@
 
 #include "shapes.h"
 
-void check_square_input(shape_block& bound, real& globalspacing, int& fault);
+namespace SquareShape
+{
+    void check_input(shape_block &block, real &globalspacing, int &fault);
 
-std::vector<StateVecD> create_square(StateVecD const& start, StateVecD const& end, 
-                        real const& globalspacing, int const& hcpl);
+    std::vector<StateVecD> generate_points(shape_block const &block, real const &globalspacing);
+}
 
 #endif

@@ -37,7 +37,7 @@ SRC := src/Add.cpp src/AsciiIO.cpp src/BinaryIO.cpp src/CDFIO.cpp src/Containmen
 	 	src/Droplet.cpp src/FJSPH.cpp src/FOAMIO.cpp src/Geometry.cpp src/H5IO.cpp src/Init.cpp \
 		src/Integration.cpp src/IO.cpp src/IPT.cpp src/Neighbours.cpp \
 	    src/Newmark_Beta.cpp src/Resid.cpp src/Runge_Kutta.cpp src/Shifting.cpp \
-	    src/Speedtest.cpp src/VLM.cpp src/shapes/arc.cpp src/shapes/circle.cpp \
+	    src/Speedtest.cpp src/VLM.cpp src/shapes/shapes.cpp src/shapes/arc.cpp src/shapes/circle.cpp \
 		src/shapes/cylinder.cpp src/shapes/inlet.cpp src/shapes/line.cpp src/shapes/square.cpp
 
 SRCDIR := src

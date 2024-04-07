@@ -3,8 +3,11 @@
 
 #include "shapes.h"
 
-void check_circle_input(shape_block& bound, real& globalspacing, int& fault);
+namespace CircleShape
+{
+    void check_input(shape_block &block, real &globalspacing, int &fault);
 
-std::vector<StateVecD> create_circle(shape_block& block, real const& globalspacing);
+    std::vector<StateVecD> generate_points(shape_block const &block, real const &globalspacing);
+}
 
 #endif

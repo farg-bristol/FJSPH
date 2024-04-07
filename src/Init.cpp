@@ -1,6 +1,8 @@
 /*********     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code      *************/
 /*********        Created by Jamie MacLeod, University of Bristol               *************/
 
+// #include "Third_Party/nlohmann/json.hpp"
+
 #include "Init.h"
 #include "IOFunctions.h"
 #include "Kernel.h"
@@ -251,7 +253,6 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
         #endif
         {
             bound.bound_type = linePlane;
-            check_line_input(bound, globalspacing,fault);
         }
         #if SIMDIM == 2
         if (bound.shape == "Square")
@@ -260,7 +261,6 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
         #endif
         {
             bound.bound_type = squareCube;
-            check_square_input(bound,globalspacing,fault);
         }
         #if SIMDIM == 2
         else if (bound.shape == "Circle")
@@ -269,7 +269,6 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
         #endif
         {
             bound.bound_type = circleSphere;
-            check_circle_input(bound,globalspacing,fault);
         }
         #if SIMDIM == 2
         else if (bound.shape == "Arc")
@@ -278,17 +277,14 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
         #endif
         {
             bound.bound_type = arcSection;
-            check_arc_input(bound,globalspacing,fault);
         }
         else if (bound.shape == "Cylinder")
         {
             bound.bound_type = cylinder;
-            check_cylinder_input(bound,globalspacing,fault);
         }
 		else if (bound.shape == "Inlet")
 		{
 			bound.bound_type = inletZone;
-			check_inlet_input(bound,globalspacing,fault);
 		}
         else if (bound.shape == "Coordinates")
         {
@@ -302,6 +298,10 @@ void Read_Shapes(Shapes& var, real& globalspacing, SIM const& svar, FLUID const&
                 }
             }
         }
+
+        // Check that the input is correct for the shape defined.
+        bound.check_input(globalspacing, fault);
+
 
         if(bound.position_filename.empty())
         {
@@ -566,57 +566,8 @@ size_t Generate_Points(SIM const& svar, FLUID const& fvar, double const& globals
     for(shape_block& bound:var.block)
     {
         printf("Creating boundary block: %s\t...\t", bound.name.c_str());
-        switch (bound.bound_type)
-        {
-            case linePlane:
-            {
-                #if SIMDIM == 2
-                bound.coords = create_line(bound, globalspacing);
-                #else
-                bound.coords = create_plane(bound, globalspacing);
-                #endif
-                break;
-            }
-            case squareCube:
-            {
-                bound.coords = 
-                create_square(bound.start,bound.end, globalspacing, bound.hcpl);
-                break;
-            }
-            case circleSphere:
-            {
-                bound.coords = create_circle(bound, globalspacing);
-                break;
-            }
-            case cylinder:
-            {
-                bound.coords = create_cylinder(bound,globalspacing);
-                break;
-            }
-            case arcSection:
-            {
-                bound.coords = create_arc_segment(bound,globalspacing);
-                break;
-            }
-            case inletZone:
-            {
-                bound.coords = create_inlet_zone(bound,globalspacing);
-                break;
-            }
-            case coordDef:
-            {
-                if(!bound.filename.empty())
-                {   /* Read the file */
-                    bound.coords = Read_Geom_File(bound.filename);
-                }
-                break;
-            }
-            default:
-                printf("ERROR: Trying to create unrecognised geometry.\n");
-                exit(-1);
-                break;
-        }
-
+        bound.generate_points(globalspacing);
+        
         printf("npts: %zu\n", bound.coords.size());
 
         if (bound.coords.size() != bound.npts)
