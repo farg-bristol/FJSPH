@@ -1,3 +1,6 @@
+/******     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code ***********/
+/******          Created by Jamie MacLeod, University of Bristol        ***********/
+
 #ifndef SHAPES_H
 #define SHAPES_H
 
@@ -6,20 +9,20 @@
 
 struct shape_block
 { /* Basically everything needs to be defined. Provide defaults to check against */
-    shape_block() : bound_type(-1), sub_bound_type(-1), hcpl(0), fixed_vel_or_dynamic(0),
-                    bound_solver(pressure_G), no_slip(0), npts(0),
-                    insert_norm(StateVecD::UnitX()), insconst(default_val),
-                    delete_norm(StateVecD::UnitX()), delconst(default_val),
-                    aero_norm(StateVecD::UnitX()), aeroconst(default_val),
-                    ntimes(0), dx(-1), write_data(0),
-                    stretch(StateVecD::Constant(1.0)), ni(-1), nj(-1), nk(-1),
-                    normal(StateVecD::UnitX()),
-                    angles(StateVecD::Zero()), rotmat(StateMatD::Identity()),
-                    start(StateVecD::Constant(default_val)), end(StateVecD::Constant(default_val)),
-                    right(StateVecD::Constant(default_val)), mid(StateVecD::Constant(default_val)),
-                    centre(StateVecD::Constant(default_val)), radius(-1), arc_start(-1), arc_end(-1), arclength(default_val),
-                    thickness(-1), length(-1), sstraight(0), estraight(0), vel(StateVecD::Constant(0.0)), vmag(0.0), press(0.0),
-                    dens(1000), mass(-1), renorm_vol(-1), nu(-1), rho0(1000), gamma(7), speedOfSound(-1), backgroundP(0) {}
+    shape_block()
+        : bound_type(-1), sub_bound_type(-1), hcpl(0), fixed_vel_or_dynamic(0), bound_solver(pressure_G),
+          no_slip(0), npts(0), insert_norm(StateVecD::UnitX()), insconst(default_val),
+          delete_norm(StateVecD::UnitX()), delconst(default_val), aero_norm(StateVecD::UnitX()),
+          aeroconst(default_val), ntimes(0), dx(-1), write_data(0), stretch(StateVecD::Constant(1.0)),
+          ni(-1), nj(-1), nk(-1), normal(StateVecD::UnitX()), angles(StateVecD::Zero()),
+          rotmat(StateMatD::Identity()), start(StateVecD::Constant(default_val)),
+          end(StateVecD::Constant(default_val)), right(StateVecD::Constant(default_val)),
+          mid(StateVecD::Constant(default_val)), centre(StateVecD::Constant(default_val)), radius(-1),
+          arc_start(-1), arc_end(-1), arclength(default_val), thickness(-1), length(-1), sstraight(0),
+          estraight(0), vel(StateVecD::Constant(0.0)), vmag(0.0), press(0.0), dens(1000), mass(-1),
+          renorm_vol(-1), nu(-1), rho0(1000), gamma(7), speedOfSound(-1), backgroundP(0)
+    {
+    }
 
     std::string name;
     std::string shape;
@@ -97,8 +100,8 @@ struct shape_block
     real speedOfSound; /* Speed of sound */
     real backgroundP;  /* Background pressure */
 
-    void check_input(real &globalspacing, int &fault);
-    void generate_points(real const &globalspacing);
+    void check_input(real& globalspacing, int& fault);
+    void generate_points(real const& globalspacing);
 };
 
 struct Shapes

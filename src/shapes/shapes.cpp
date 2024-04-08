@@ -1,14 +1,22 @@
+/******     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code ***********/
+/******          Created by Jamie MacLeod, University of Bristol        ***********/
+
 #include "shapes.h"
 
 #include "arc.h"
 #include "circle.h"
+#include "cylinder.h"
 #include "inlet.h"
 #include "line.h"
 #include "square.h"
-#include "cylinder.h"
 
+void Read_Shapes(
+    Shapes& var, real& globalspacing, SIM const& svar, FLUID const& fvar, std::string const& filename
+)
+{
+}
 
-void shape_block::check_input(real &globalspacing, int &fault)
+void shape_block::check_input(real& globalspacing, int& fault)
 {
     switch (bound_type)
     {
@@ -35,7 +43,11 @@ void shape_block::check_input(real &globalspacing, int &fault)
         {
             if (npts == 0 || coords.empty())
             {
-                printf("ERROR: Block \"%s\" coordinates have not been ingested properly. Stopping.\n", name.c_str());
+                printf(
+                    "ERROR: Block \"%s\" coordinates have not been ingested "
+                    "properly. Stopping.\n",
+                    name.c_str()
+                );
                 fault = 1;
             }
         }
@@ -46,7 +58,7 @@ void shape_block::check_input(real &globalspacing, int &fault)
     }
 }
 
-void shape_block::generate_points(real const &globalspacing)
+void shape_block::generate_points(real const& globalspacing)
 {
     switch (bound_type)
     {

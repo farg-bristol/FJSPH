@@ -1,5 +1,5 @@
-/*********   WCSPH (Weakly Compressible Smoothed SPHPart Hydrodynamics) Code   *************/
-/*********        Created by Jamie MacLeod, University of Bristol               *************/
+/******     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code ***********/
+/******          Created by Jamie MacLeod, University of Bristol        ***********/
 
 #ifndef VAR_H
 #define VAR_H
@@ -1045,18 +1045,5 @@ typedef KDTreeVectorOfVectorsAdaptor<std::vector<StateVecD>,real,SIMDIM,nanoflan
 
 // Default to no approximate neighbours, and unsorted list.
 nanoflann::SearchParameters const flann_params(0, false); 
-
-// struct KDTREE
-// {
-// 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-// 	KDTREE(SPHState const& pnp1, MESH const& cells): NP1(SIMDIM,pnp1,20), 
-// 	CELL(SIMDIM,cells.cCentre,20)/* , BOUNDARY(SIMDIM,cells.bVerts,20) */ {}
-
-// 	Sim_Tree NP1;
-// 	Vec_Tree CELL;
-// 	// Vec_Tree BOUNDARY;	
-
-// };
 
 #endif /* VAR_H */

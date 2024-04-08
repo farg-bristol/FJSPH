@@ -1,7 +1,10 @@
+/******     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code ***********/
+/******          Created by Jamie MacLeod, University of Bristol        ***********/
+
 #include "inlet.h"
 #include "../Geometry.h"
 
-void InletShape::check_input(shape_block &block, real &globalspacing, int &fault)
+void InletShape::check_input(shape_block& block, real& globalspacing, int& fault)
 {
     int has_config = 0;
 
@@ -59,7 +62,10 @@ void InletShape::check_input(shape_block &block, real &globalspacing, int &fault
     }
     else
     {
-        printf("ERROR: Inlet block \"%s\" sub shape type has not been correctly defined.\n", block.name.c_str());
+        printf(
+            "ERROR: Inlet block \"%s\" sub shape type has not been correctly defined.\n",
+            block.name.c_str()
+        );
         printf("Please choose from:\n\t1. Square\n\t2. Circle\n");
         fault = 1;
     }
@@ -138,17 +144,15 @@ void InletShape::check_input(shape_block &block, real &globalspacing, int &fault
             real s = v.norm();
 
             StateMatD k;
-            k << 0.0, -v[2], v[1],
-                v[2], 0, -v[0],
-                -v[1], v[0], 0;
+            k << 0.0, -v[2], v[1], v[2], 0, -v[0], -v[1], v[0], 0;
 
             rotmat += k + k * k * (1.0 - mag) / (s * s);
         }
 #else
         // Find rotation matrix
         block.angles[0] = atan2(block.normal[1], block.normal[0]);
-        rotmat << cos(block.angles(0)), sin(block.angles(0)),
-            -sin(block.angles(0)), cos(block.angles(0));
+        rotmat << cos(block.angles(0)), sin(block.angles(0)), -sin(block.angles(0)),
+            cos(block.angles(0));
 #endif
         block.rotmat = rotmat;
         block.insert_norm = block.normal;
@@ -171,17 +175,15 @@ void InletShape::check_input(shape_block &block, real &globalspacing, int &fault
             real s = v.norm();
 
             StateMatD k;
-            k << 0.0, -v[2], v[1],
-                v[2], 0, -v[0],
-                -v[1], v[0], 0;
+            k << 0.0, -v[2], v[1], v[2], 0, -v[0], -v[1], v[0], 0;
 
             rotmat += k + k * k * (1.0 - mag) / (s * s);
         }
 #else
         // Find rotation matrix
         block.angles[0] = atan2(block.normal[1], block.normal[0]) - M_PI / 2.0;
-        rotmat << cos(block.angles(0)), sin(block.angles(0)),
-            -sin(block.angles(0)), cos(block.angles(0));
+        rotmat << cos(block.angles(0)), sin(block.angles(0)), -sin(block.angles(0)),
+            cos(block.angles(0));
 #endif
         block.rotmat = rotmat;
     }
@@ -194,13 +196,12 @@ void InletShape::check_input(shape_block &block, real &globalspacing, int &fault
 #if SIMDIM == 3
         StateVecD ac = (block.right - block.start).normalized();
         block.normal = (ab.cross(ac)).normalized();
-        rotmat << ab[0], ab[1], ab[2],
-            ac[0], ac[1], ac[2],
-            block.normal[0], block.normal[1], block.normal[2];
+        rotmat << ab[0], ab[1], ab[2], ac[0], ac[1], ac[2], block.normal[0], block.normal[1],
+            block.normal[2];
 #else
         block.angles[0] = atan2(ab[1], ab[0]);
-        rotmat << cos(block.angles(0)), sin(block.angles(0)),
-            -sin(block.angles(0)), cos(block.angles(0));
+        rotmat << cos(block.angles(0)), sin(block.angles(0)), -sin(block.angles(0)),
+            cos(block.angles(0));
         block.normal = rotmat * StateVecD(0.0, 1.0);
 #endif
         block.rotmat = rotmat;
@@ -307,7 +308,7 @@ void InletShape::check_input(shape_block &block, real &globalspacing, int &fault
 }
 
 #if SIMDIM == 2
-std::vector<StateVecD> InletShape::generate_points(shape_block &block, real const &globalspacing)
+std::vector<StateVecD> InletShape::generate_points(shape_block& block, real const& globalspacing)
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */
@@ -331,7 +332,7 @@ std::vector<StateVecD> InletShape::generate_points(shape_block &block, real cons
             block.bc.emplace_back(PIPE);
 
         } /* end i count */
-    }     /* end k count */
+    } /* end k count */
 
     // Create the back particles
     for (int ii = 0; ii < block.ni; ++ii)
@@ -371,7 +372,8 @@ std::vector<StateVecD> InletShape::generate_points(shape_block &block, real cons
 
 #else
 
-std::vector<StateVecD> create_radial_disk(shape_block const &block, real const &dx, real const &radius, int const &kk)
+std::vector<StateVecD>
+create_radial_disk(shape_block const& block, real const& dx, real const& radius, int const& kk)
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */
@@ -410,7 +412,8 @@ std::vector<StateVecD> create_radial_disk(shape_block const &block, real const &
     return points;
 }
 
-std::vector<StateVecD> create_lattice_disk(shape_block const &block, real const &dx, real const &radius, int const &kk)
+std::vector<StateVecD>
+create_lattice_disk(shape_block const& block, real const& dx, real const& radius, int const& kk)
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */
@@ -437,11 +440,12 @@ std::vector<StateVecD> create_lattice_disk(shape_block const &block, real const 
             points.emplace_back(newPoint);
 
         } /* end i count */
-    }     /* end j count */
+    } /* end j count */
     return points;
 }
 
-std::vector<StateVecD> create_disk(shape_block const &block, real const &dx, real const &radius, int const &kk)
+std::vector<StateVecD>
+create_disk(shape_block const& block, real const& dx, real const& radius, int const& kk)
 {
     if (block.hcpl)
         return create_radial_disk(block, dx, radius, kk);
@@ -449,7 +453,7 @@ std::vector<StateVecD> create_disk(shape_block const &block, real const &dx, rea
         return create_lattice_disk(block, dx, radius, kk);
 }
 
-std::vector<StateVecD> InletShape::generate_points(shape_block &block, real const &globalspacing)
+std::vector<StateVecD> InletShape::generate_points(shape_block& block, real const& globalspacing)
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */
@@ -476,8 +480,8 @@ std::vector<StateVecD> InletShape::generate_points(shape_block &block, real cons
                     points.emplace_back(newPoint);
                     block.bc.emplace_back(PIPE);
                 } /* end i count */
-            }     /* end j count */
-        }         /* end k count */
+            } /* end j count */
+        } /* end k count */
 
         // Create the back particles
         for (int jj = 0; jj < block.nj; ++jj)
@@ -495,7 +499,7 @@ std::vector<StateVecD> InletShape::generate_points(shape_block &block, real cons
                 block.back.emplace_back(points.size() - 1);
 
             } /* end i count */
-        }     /* end j count */
+        } /* end j count */
 
         // Create buffer zone
         int nBuff = 4;
@@ -519,13 +523,13 @@ std::vector<StateVecD> InletShape::generate_points(shape_block &block, real cons
                     block.buffer[partID][buff] = points.size() - 1;
                     partID++;
                 } /* end i count */
-            }     /* end j count */
+            } /* end j count */
             buff++;
         } /* end k count */
     }
     else if (block.sub_bound_type == circleSphere)
     {
-        real const &radius = block.radius;
+        real const& radius = block.radius;
 
         // StateVecD const& centre = block.centre;
         int kk = 0;
@@ -533,7 +537,7 @@ std::vector<StateVecD> InletShape::generate_points(shape_block &block, real cons
         {
             std::vector<StateVecD> temp = create_disk(block, globalspacing, radius, kk);
 
-            for (StateVecD const &pos : temp)
+            for (StateVecD const& pos : temp)
             {
                 points.emplace_back(pos);
                 block.bc.emplace_back(PIPE);
@@ -543,7 +547,7 @@ std::vector<StateVecD> InletShape::generate_points(shape_block &block, real cons
         // Create the back particles
         std::vector<StateVecD> temp = create_disk(block, globalspacing, radius, kk);
 
-        for (StateVecD const &pos : temp)
+        for (StateVecD const& pos : temp)
         {
             block.back.emplace_back(points.size());
             points.emplace_back(pos);
@@ -573,7 +577,7 @@ std::vector<StateVecD> InletShape::generate_points(shape_block &block, real cons
 
 #endif
 
-uint update_buffer_region(SIM &svar, LIMITS &limits, SPHState &pnp1, size_t &end, size_t &end_ng)
+uint update_buffer_region(SIM& svar, LIMITS& limits, SPHState& pnp1, size_t& end, size_t& end_ng)
 {
     uint nAdd = 0;
     /*Check if more particles need to be created*/
@@ -581,12 +585,12 @@ uint update_buffer_region(SIM &svar, LIMITS &limits, SPHState &pnp1, size_t &end
     {
         if (limits[block].block_type == inletZone)
         {
-            size_t &partID = svar.partID;
+            size_t& partID = svar.partID;
             /* Check if any buffer particles have become pipe particles */
             for (size_t ii = 0; ii < limits[block].back.size(); ++ii)
             {
-                size_t const &pID = limits[block].back[ii];
-                StateVecD const &pos = pnp1[pID].xi;
+                size_t const& pID = limits[block].back[ii];
+                StateVecD const& pos = pnp1[pID].xi;
                 /*Check that the starting area is clear first...*/
                 if (pos.dot(limits[block].insert_norm) > limits[block].insconst)
                 {
@@ -604,10 +608,13 @@ uint update_buffer_region(SIM &svar, LIMITS &limits, SPHState &pnp1, size_t &end
                     /* Create a new particle */
                     if (svar.totPts < svar.finPts)
                     {
-                        StateVecD xi = pnp1[limits[block].buffer[ii].back()].xi - svar.dx * limits[block].insert_norm;
+                        StateVecD xi = pnp1[limits[block].buffer[ii].back()].xi -
+                                       svar.dx * limits[block].insert_norm;
 
-                        pnp1.insert(pnp1.begin() + limits[block].index.second,
-                                    SPHPart(xi, pnp1[limits[block].buffer[ii].back()], BUFFER, partID));
+                        pnp1.insert(
+                            pnp1.begin() + limits[block].index.second,
+                            SPHPart(xi, pnp1[limits[block].buffer[ii].back()], BUFFER, partID)
+                        );
                         limits[block].buffer[ii].back() = limits[block].index.second;
 
                         limits[block].index.second++;

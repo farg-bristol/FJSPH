@@ -1,24 +1,30 @@
+/******     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code ***********/
+/******          Created by Jamie MacLeod, University of Bristol        ***********/
+
 #include "line.h"
 #include <Eigen/Geometry>
 
-void LineShape::check_input(shape_block &block, real &globalspacing, int &fault)
+void LineShape::check_input(shape_block& block, real& globalspacing, int& fault)
 {
     if (!check_vector(block.start))
     {
-        std::cout << "ERROR: Block \"" << block.name << "\" starting position has not been correctly defined. Stopping" << std::endl;
+        std::cout << "ERROR: Block \"" << block.name
+                  << "\" starting position has not been correctly defined. Stopping" << std::endl;
         fault = 1;
     }
 
     if (!check_vector(block.end))
     {
-        std::cout << "ERROR: Block \"" << block.name << "\" ending position has not been correctly defined. Stopping" << std::endl;
+        std::cout << "ERROR: Block \"" << block.name
+                  << "\" ending position has not been correctly defined. Stopping" << std::endl;
         fault = 1;
     }
 
 #if SIMDIM == 3
     if (!check_vector(block.right))
     {
-        std::cout << "ERROR: Block \"" << block.name << "\" ending position has not been correctly defined. Stopping" << std::endl;
+        std::cout << "ERROR: Block \"" << block.name
+                  << "\" ending position has not been correctly defined. Stopping" << std::endl;
         fault = 1;
     }
 #endif
@@ -31,7 +37,8 @@ void LineShape::check_input(shape_block &block, real &globalspacing, int &fault)
 #endif
         )
         {
-            std::cout << "WARNING: Neither block globalspacing or block counters have been defined." << std::endl;
+            std::cout << "WARNING: Neither block globalspacing or block counters have been defined."
+                      << std::endl;
             std::cout << "         Using global globalspacing..." << std::endl;
             block.dx = globalspacing;
         }
@@ -50,8 +57,10 @@ void LineShape::check_input(shape_block &block, real &globalspacing, int &fault)
     {
         if (block.nj > 0)
         {
-            block.dx = std::min((block.right - block.start).norm() / real(block.ni),
-                                (block.end - block.right).norm() / real(block.nj));
+            block.dx = std::min(
+                (block.right - block.start).norm() / real(block.ni),
+                (block.end - block.right).norm() / real(block.nj)
+            );
         }
     }
 #endif
@@ -60,7 +69,8 @@ void LineShape::check_input(shape_block &block, real &globalspacing, int &fault)
     {
         if (block.nk < 0)
         {
-            std::cout << "ERROR: Block \"" << block.name << "\" line thickness has not been correctly defined. Stopping." << std::endl;
+            std::cout << "ERROR: Block \"" << block.name
+                      << "\" line thickness has not been correctly defined. Stopping." << std::endl;
             fault = 1;
             return;
         }
@@ -102,7 +112,9 @@ void LineShape::check_input(shape_block &block, real &globalspacing, int &fault)
         size_t ni = static_cast<size_t>(ceil((block.right - block.start).norm() / globalspacing));
         size_t nj = 0;
         if (block.hcpl == 1)
-            nj = static_cast<int>(ceil((block.end - block.right).norm() / globalspacing / sqrt(3.0) * 2.0));
+            nj =
+                static_cast<int>(ceil((block.end - block.right).norm() / globalspacing / sqrt(3.0) * 2.0)
+                );
         else
             nj = static_cast<size_t>(ceil((block.end - block.right).norm() / globalspacing));
 
@@ -115,7 +127,7 @@ void LineShape::check_input(shape_block &block, real &globalspacing, int &fault)
 
 #if SIMDIM == 2
 // Create line with n thick particles or a given thickness.
-std::vector<StateVecD> LineShape::generate_points(shape_block const &block, real const &globalspacing)
+std::vector<StateVecD> LineShape::generate_points(shape_block const& block, real const& globalspacing)
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */
@@ -146,7 +158,7 @@ std::vector<StateVecD> LineShape::generate_points(shape_block const &block, real
 }
 #else
 // Three dimensional plane with n thick particles or a given thickness.
-std::vector<StateVecD> LineShape::generate_points(shape_block const &block, real const &globalspacing)
+std::vector<StateVecD> LineShape::generate_points(shape_block const& block, real const& globalspacing)
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */

@@ -1,5 +1,5 @@
-/*********     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code      *************/
-/*********        Created by Jamie MacLeod, University of Bristol               *************/
+/******     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code ***********/
+/******          Created by Jamie MacLeod, University of Bristol        ***********/
 
 #include "arc.h"
 
@@ -7,8 +7,10 @@
 
 // Private local functions to actually generate the arc points.
 #if SIMDIM == 2
-void get_arc_end(StateVecD const &start, StateVecD const &centre, real const &arclength,
-                 StateVecD &end, real &radius, real &theta0)
+void get_arc_end(
+    StateVecD const& start, StateVecD const& centre, real const& arclength, StateVecD& end, real& radius,
+    real& theta0
+)
 {
     StateVecD u = start - centre;
     radius = u.norm();
@@ -22,8 +24,10 @@ void get_arc_end(StateVecD const &start, StateVecD const &centre, real const &ar
     end = d2;
 }
 
-void get_arclength_centrepoint(StateVecD const &start, StateVecD const &end, StateVecD const &centre,
-                               real &radius, real &theta0, real &theta1)
+void get_arclength_centrepoint(
+    StateVecD const& start, StateVecD const& end, StateVecD const& centre, real& radius, real& theta0,
+    real& theta1
+)
 {
     StateVecD d0 = start - centre;
     StateVecD d1 = end - centre;
@@ -31,7 +35,9 @@ void get_arclength_centrepoint(StateVecD const &start, StateVecD const &end, Sta
 
     if (fabs(d1.squaredNorm() - r) > 0.001)
     {
-        std::cout << "Arc points are not correctly defined. The ending radius differs from the starting radius" << std::endl;
+        std::cout << "Arc points are not correctly defined. The ending radius "
+                     "differs from the starting radius"
+                  << std::endl;
         exit(1);
     }
 
@@ -50,8 +56,10 @@ void get_arclength_centrepoint(StateVecD const &start, StateVecD const &end, Sta
     // real arclength = theta1 - theta0;
 }
 
-void get_arclength_midpoint(StateVecD const &start, StateVecD const &end, StateVecD const &midpoint,
-                            StateVecD &centre, real &radius, real &theta0, real &theta1)
+void get_arclength_midpoint(
+    StateVecD const& start, StateVecD const& end, StateVecD const& midpoint, StateVecD& centre,
+    real& radius, real& theta0, real& theta1
+)
 {
     StateVecD r1(start[0] * start[0], start[1] * start[1]);
     StateVecD r2(midpoint[0] * midpoint[0], midpoint[1] * midpoint[1]);
@@ -69,10 +77,11 @@ void get_arclength_midpoint(StateVecD const &start, StateVecD const &end, StateV
     get_arclength_centrepoint(start, end, centre, radius, theta0, theta1);
 }
 
-inline std::vector<StateVecD> make_arc(int const &ni, int const &nk, real const &globalspacing,
-                                       real const &theta0, real const &dtheta, real const &radius,
-                                       StateVecD const &centre, real const &slength, real const &elength,
-                                       int const &hcpl)
+inline std::vector<StateVecD> make_arc(
+    int const& ni, int const& nk, real const& globalspacing, real const& theta0, real const& dtheta,
+    real const& radius, StateVecD const& centre, real const& slength, real const& elength,
+    int const& hcpl
+)
 {
     std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
     std::default_random_engine re;
@@ -83,8 +92,10 @@ inline std::vector<StateVecD> make_arc(int const &ni, int const &nk, real const 
     // StateVecD startp = svec*radius - slength * snormal;
     int smax = ceil(slength / globalspacing);
 
-    StateVecD evec(cos(theta0 + static_cast<real>(ni - 1) * dtheta),
-                   sin(theta0 + static_cast<real>(ni - 1) * dtheta));
+    StateVecD evec(
+        cos(theta0 + static_cast<real>(ni - 1) * dtheta),
+        sin(theta0 + static_cast<real>(ni - 1) * dtheta)
+    );
     StateVecD enormal(-evec[1], evec[0]);
     int emax = ceil(elength / globalspacing);
     // StateVecD endp = evec - elength * enormal;
@@ -97,7 +108,8 @@ inline std::vector<StateVecD> make_arc(int const &ni, int const &nk, real const 
         {
             for (int ii = smax; ii > 0; ii--)
             {
-                StateVecD newPoint = svec * (radius - real(jj) * globalspacing) + snormal * real(ii) * globalspacing;
+                StateVecD newPoint =
+                    svec * (radius - real(jj) * globalspacing) + snormal * real(ii) * globalspacing;
                 newPoint += StateVecD(unif(re), unif(re)) + centre;
                 points.push_back(newPoint);
             }
@@ -126,7 +138,8 @@ inline std::vector<StateVecD> make_arc(int const &ni, int const &nk, real const 
         {
             for (int ii = 1; ii <= emax; ii++)
             {
-                StateVecD newPoint = evec * (radius - real(jj) * globalspacing) + enormal * real(ii) * globalspacing;
+                StateVecD newPoint =
+                    evec * (radius - real(jj) * globalspacing) + enormal * real(ii) * globalspacing;
                 newPoint += StateVecD(unif(re), unif(re)) + centre;
                 points.push_back(newPoint);
             }
@@ -137,8 +150,10 @@ inline std::vector<StateVecD> make_arc(int const &ni, int const &nk, real const 
 
 #else // SIMDIM == 3
 
-void get_arc_end(StateVecD const &start, StateVecD const &centre, StateVecD const &normal,
-                 real const &arclength, StateVecD &end, real &radius)
+void get_arc_end(
+    StateVecD const& start, StateVecD const& centre, StateVecD const& normal, real const& arclength,
+    StateVecD& end, real& radius
+)
 {
     StateVecD u = start - centre;
 
@@ -161,8 +176,10 @@ void get_arc_end(StateVecD const &start, StateVecD const &centre, StateVecD cons
     end = d2;
 }
 
-void get_arclength_centrepoint(StateVecD const &start, StateVecD const &end, StateVecD const &centre, StateVecD &right,
-                               real &radius, real &theta0, real &theta1)
+void get_arclength_centrepoint(
+    StateVecD const& start, StateVecD const& end, StateVecD const& centre, StateVecD& right,
+    real& radius, real& theta0, real& theta1
+)
 {
     StateVecD d1 = start - centre;
     StateVecD d2 = end - centre;
@@ -170,21 +187,24 @@ void get_arclength_centrepoint(StateVecD const &start, StateVecD const &end, Sta
 
     if (fabs(d2.squaredNorm() - r) > 0.001)
     {
-        std::cout << "Arc points are not correctly defined. The ending radius differs from the starting radius" << std::endl;
+        std::cout << "Arc points are not correctly defined. The ending radius "
+                     "differs from the starting radius"
+                  << std::endl;
         exit(1);
     }
 
     radius = sqrt(r);
     // May need a check for colinearity?
-    // If it's a semicircle, normal will be poorly defined, unless I permit normal to be defined
-    // Need to use projected plane coordinates (a,b)
+    // If it's a semicircle, normal will be poorly defined, unless I permit normal
+    // to be defined Need to use projected plane coordinates (a,b)
     d1 = d1.normalized();
     d2 = d2.normalized();
     StateVecD w = d2.cross(d1).normalized();
     StateVecD v = w.cross(d1).normalized(); // the 'y' axis of the projected plane
     // So start should be (1,0) in projected coordinates
     // But end will be non trivial (end = a.U + b.V)
-    // Check which axis has the best resolution, since the system is over constrained
+    // Check which axis has the best resolution, since the system is over
+    // constrained
     real maxx = fabs(d1[0]) + fabs(v[0]);
     real maxy = fabs(d1[1]) + fabs(v[1]);
     real maxz = fabs(d1[2]) + fabs(v[2]);
@@ -222,12 +242,14 @@ void get_arclength_centrepoint(StateVecD const &start, StateVecD const &end, Sta
     theta1 = t1 * 180 / M_PI;
 
     right = w; // Also retain the normal vector travelling along the archway.
-    /* Check arc lengths */
-    // real arclength = theta1 - theta0;
+               /* Check arc lengths */
+               // real arclength = theta1 - theta0;
 }
 
-void get_arclength_midpoint(StateVecD const &start, StateVecD const &end, StateVecD const &midpoint,
-                            StateVecD &centre, StateVecD &right, real &radius, real &theta0, real &theta1)
+void get_arclength_midpoint(
+    StateVecD const& start, StateVecD const& end, StateVecD const& midpoint, StateVecD& centre,
+    StateVecD& right, real& radius, real& theta0, real& theta1
+)
 {
     StateVecD r1 = midpoint - start;
     StateVecD r3 = end - start;
@@ -249,11 +271,11 @@ void get_arclength_midpoint(StateVecD const &start, StateVecD const &end, StateV
     get_arclength_centrepoint(start, end, centre, right, radius, theta0, theta1);
 }
 
-
-inline std::vector<StateVecD> make_arch(StateVecD const &start, StateVecD const &centre, StateVecD const &right,
-                                        real const &slength, real const &elength, int const &nrad,
-                                        int const &nthick, int const &nlong, real const &globalspacing,
-                                        real const &dtheta, real const &radius, int const &hcpl)
+inline std::vector<StateVecD> make_arch(
+    StateVecD const& start, StateVecD const& centre, StateVecD const& right, real const& slength,
+    real const& elength, int const& nrad, int const& nthick, int const& nlong, real const& globalspacing,
+    real const& dtheta, real const& radius, int const& hcpl
+)
 {
     std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
     std::default_random_engine re;
@@ -330,9 +352,9 @@ inline std::vector<StateVecD> make_arch(StateVecD const &start, StateVecD const 
 }
 #endif
 
-// Public functions 
+// Public functions
 
-void ArcShape::check_input(shape_block &block, real &globalspacing, int &fault)
+void ArcShape::check_input(shape_block& block, real& globalspacing, int& fault)
 {
     int has_config = 0;
     int arc_defined = 0;
@@ -363,11 +385,14 @@ void ArcShape::check_input(shape_block &block, real &globalspacing, int &fault)
         { // No arclength, but just the end acquired
             has_config = 1;
 #if SIMDIM == 2
-            get_arclength_centrepoint(block.start, block.end, block.centre,
-                                      block.radius, block.arc_start, block.arc_end);
+            get_arclength_centrepoint(
+                block.start, block.end, block.centre, block.radius, block.arc_start, block.arc_end
+            );
 #else
-            get_arclength_centrepoint(block.start, block.end, block.centre,
-                                      block.right, block.radius, block.arc_start, block.arc_end);
+            get_arclength_centrepoint(
+                block.start, block.end, block.centre, block.right, block.radius, block.arc_start,
+                block.arc_end
+            );
 #endif
         }
     }
@@ -376,8 +401,10 @@ void ArcShape::check_input(shape_block &block, real &globalspacing, int &fault)
     if (!has_config)
     {
         // check arch geometry first. Want to use an arclength first
-        // Midpoint is required to define the plane appropriately, but not for the circle
-        if (check_vector(block.centre) && check_vector(block.start) && check_vector(block.mid) && block.arclength != default_val)
+        // Midpoint is required to define the plane appropriately, but not for the
+        // circle
+        if (check_vector(block.centre) && check_vector(block.start) && check_vector(block.mid) &&
+            block.arclength != default_val)
         {
             has_config = 1;
             arc_defined = 1;
@@ -390,11 +417,15 @@ void ArcShape::check_input(shape_block &block, real &globalspacing, int &fault)
         { // No arclength, but just the end acquired
             has_config = 1;
 #if SIMDIM == 2
-            get_arclength_midpoint(block.start, block.end, block.mid,
-                                   block.centre, block.radius, block.arc_start, block.arc_end);
+            get_arclength_midpoint(
+                block.start, block.end, block.mid, block.centre, block.radius, block.arc_start,
+                block.arc_end
+            );
 #else
-            get_arclength_midpoint(block.start, block.end, block.mid, block.centre,
-                                   block.right, block.radius, block.arc_start, block.arc_end);
+            get_arclength_midpoint(
+                block.start, block.end, block.mid, block.centre, block.right, block.radius,
+                block.arc_start, block.arc_end
+            );
 #endif
         }
     }
@@ -406,7 +437,8 @@ void ArcShape::check_input(shape_block &block, real &globalspacing, int &fault)
         {
 #if SIMDIM == 3
             if (check_vector(block.right))
-            { // Need to check if normal is defined to know the plane
+            { // Need to check if normal is defined to
+              // know the plane
                 has_config = 1;
                 arc_defined = 1;
             }
@@ -419,7 +451,8 @@ void ArcShape::check_input(shape_block &block, real &globalspacing, int &fault)
 
     if (!has_config)
     {
-        std::cout << "ERROR: Block \"" << block.name << "\" arc geometry has not been sufficiently defined. Stopping." << std::endl;
+        std::cout << "ERROR: Block \"" << block.name
+                  << "\" arc geometry has not been sufficiently defined. Stopping." << std::endl;
         fault = 1;
     }
 
@@ -427,12 +460,15 @@ void ArcShape::check_input(shape_block &block, real &globalspacing, int &fault)
     {
         if (block.ni < 0)
         {
-            std::cout << "WARNING: Block globalspacing has not been defined. Using global globalspacing." << std::endl;
+            std::cout << "WARNING: Block globalspacing has not been defined. Using "
+                         "global globalspacing."
+                      << std::endl;
             block.dx = globalspacing;
         }
         else
         {
-            /* Use ni as a number along the diameter, so define globalspacing off that */
+            /* Use ni as a number along the diameter, so define globalspacing off that
+             */
             real di = (2.0 * block.radius) / real(block.ni);
             block.dx = di;
         }
@@ -442,7 +478,8 @@ void ArcShape::check_input(shape_block &block, real &globalspacing, int &fault)
     {
         if (block.nk < 0)
         {
-            std::cout << "ERROR: Block \"" << block.name << "\" arc thickness has not been correctly defined. Stopping." << std::endl;
+            std::cout << "ERROR: Block \"" << block.name
+                      << "\" arc thickness has not been correctly defined. Stopping." << std::endl;
             fault = 1;
         }
     }
@@ -459,8 +496,8 @@ void ArcShape::check_input(shape_block &block, real &globalspacing, int &fault)
     // // Need to find the start vector first if it's not defined
     // if(!check_vector(block.start))
     // {
-    //     block.start(block.radius*cos(block.arc_start), block.radius*sin(block.arc_start));
-    //     block.start += block.centre;
+    //     block.start(block.radius*cos(block.arc_start),
+    //     block.radius*sin(block.arc_start)); block.start += block.centre;
     // }
     // #endif
 
@@ -480,7 +517,8 @@ void ArcShape::check_input(shape_block &block, real &globalspacing, int &fault)
     {
         /* Estimate how many points on the Block */
         if (block.arc_end < 0 && block.ni > 0)
-        { /* Can define arc using only starting angle and number of particles, to generate an end */
+        { /* Can define arc using only starting angle and number
+             of particles, to generate an end */
             block.arc_end = 180.0 / M_PI * (block.arc_start * M_PI / 180 + real(block.ni) * dtheta);
         }
         block.arclength = (block.arc_end - block.arc_start);
@@ -500,7 +538,8 @@ void ArcShape::check_input(shape_block &block, real &globalspacing, int &fault)
     {
         if (block.nj < 0)
         {
-            std::cout << "ERROR: Block \"" << block.name << "\" arch length has not been correctly defined. Stopping." << std::endl;
+            std::cout << "ERROR: Block \"" << block.name
+                      << "\" arch length has not been correctly defined. Stopping." << std::endl;
             fault = 1;
         }
     }
@@ -516,7 +555,7 @@ void ArcShape::check_input(shape_block &block, real &globalspacing, int &fault)
 #endif
 }
 
-std::vector<StateVecD> ArcShape::generate_points(shape_block const &block, real const &globalspacing)
+std::vector<StateVecD> ArcShape::generate_points(shape_block const& block, real const& globalspacing)
 {
 #if SIMDIM == 2
     /* Convert to radians */
@@ -524,8 +563,10 @@ std::vector<StateVecD> ArcShape::generate_points(shape_block const &block, real 
     real dtheta = globalspacing / block.radius;
     // int ni = static_cast<int>(ceil(arclength/dtheta));
 
-    return make_arc(block.ni, block.nk, globalspacing, theta0_, dtheta, block.radius,
-                    block.centre, block.sstraight, block.estraight, block.hcpl);
+    return make_arc(
+        block.ni, block.nk, globalspacing, theta0_, dtheta, block.radius, block.centre, block.sstraight,
+        block.estraight, block.hcpl
+    );
 
 #else
 
@@ -540,7 +581,9 @@ std::vector<StateVecD> ArcShape::generate_points(shape_block const &block, real 
     real dtheta = globalspacing / block.radius;
     int ni = static_cast<int>(ceil(arclength / dtheta));
 
-    return make_arch(block.start, block.centre, block.right, block.sstraight, block.estraight, ni, block.nk,
-                     block.nj, globalspacing, dtheta, block.radius, block.hcpl);
+    return make_arch(
+        block.start, block.centre, block.right, block.sstraight, block.estraight, ni, block.nk, block.nj,
+        globalspacing, dtheta, block.radius, block.hcpl
+    );
 #endif
 }

@@ -1,18 +1,22 @@
+/******     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code ***********/
+/******          Created by Jamie MacLeod, University of Bristol        ***********/
 
 #include "square.h"
 
-void SquareShape::check_input(shape_block &block, real &globalspacing, int &fault)
+void SquareShape::check_input(shape_block& block, real& globalspacing, int& fault)
 {
 
     if (!check_vector(block.start))
     {
-        std::cout << "ERROR: Block \"" << block.name << "\" starting position has not been correctly defined. Stopping" << std::endl;
+        std::cout << "ERROR: Block \"" << block.name
+                  << "\" starting position has not been correctly defined. Stopping" << std::endl;
         fault = 1;
     }
 
     if (!check_vector(block.end))
     {
-        std::cout << "ERROR: Block \"" << block.name << "\" ending position has not been correctly defined. Stopping" << std::endl;
+        std::cout << "ERROR: Block \"" << block.name
+                  << "\" ending position has not been correctly defined. Stopping" << std::endl;
         fault = 1;
     }
 
@@ -20,7 +24,8 @@ void SquareShape::check_input(shape_block &block, real &globalspacing, int &faul
     { /* Have globalspacing override counts */
         if (block.ni < 0 || block.nj < 0)
         {
-            std::cout << "WARNING: Neither block globalspacing or block counters have been defined." << std::endl;
+            std::cout << "WARNING: Neither block globalspacing or block counters have been defined."
+                      << std::endl;
             std::cout << "         Using global globalspacing..." << std::endl;
             block.dx = globalspacing;
         }
@@ -95,7 +100,7 @@ void SquareShape::check_input(shape_block &block, real &globalspacing, int &faul
     block.npts = npoints;
 }
 
-std::vector<StateVecD> SquareShape::generate_points(shape_block const &block, real const &globalspacing)
+std::vector<StateVecD> SquareShape::generate_points(shape_block const& block, real const& globalspacing)
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */
@@ -145,12 +150,18 @@ std::vector<StateVecD> SquareShape::generate_points(shape_block const &block, re
                 StateVecD newPoint;
 #if SIMDIM == 2
                 if (block.hcpl == 1)
-                    newPoint = 0.5 * StateVecD(static_cast<real>(2 * i + (j % 2)), sqrt(3.0) * static_cast<real>(j));
+                    newPoint =
+                        0.5 *
+                        StateVecD(static_cast<real>(2 * i + (j % 2)), sqrt(3.0) * static_cast<real>(j));
                 else
                     newPoint = StateVecD(static_cast<real>(i), static_cast<real>(j));
 #else
             if (block.hcpl == 1)
-                newPoint = 0.5 * StateVecD(real(2 * i + ((j + k) % 2)), sqrt(3.0) * (real(j) + real((k % 2)) / 3.0), 2.0 / 3.0 * sqrt(6.0) * real(k));
+                newPoint =
+                    0.5 * StateVecD(
+                              real(2 * i + ((j + k) % 2)), sqrt(3.0) * (real(j) + real((k % 2)) / 3.0),
+                              2.0 / 3.0 * sqrt(6.0) * real(k)
+                          );
             else
                 newPoint = StateVecD(real(i), real(j), real(k));
 #endif
@@ -161,7 +172,7 @@ std::vector<StateVecD> SquareShape::generate_points(shape_block const &block, re
                 points.emplace_back(newPoint);
 
             } /* end k count */
-        }     /* end j count */
+        } /* end j count */
 #if SIMDIM == 3
     } /* end i count */
 #endif

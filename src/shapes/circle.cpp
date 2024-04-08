@@ -1,13 +1,15 @@
-/*********     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code      *************/
-/*********        Created by Jamie MacLeod, University of Bristol               *************/
+/******     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code ***********/
+/******          Created by Jamie MacLeod, University of Bristol        ***********/
 
 #include "circle.h"
 
-void CircleShape::check_input(shape_block &block, real &globalspacing, int &fault)
+void CircleShape::check_input(shape_block& block, real& globalspacing, int& fault)
 {
     if (!check_vector(block.centre))
     {
-        printf("ERROR: Block \"%s\" centre position has not been correctly defined.\n", block.name.c_str());
+        printf(
+            "ERROR: Block \"%s\" centre position has not been correctly defined.\n", block.name.c_str()
+        );
         fault = 1;
     }
 
@@ -26,7 +28,8 @@ void CircleShape::check_input(shape_block &block, real &globalspacing, int &faul
     {
         if (block.ni < 0)
         {
-            std::cout << "WARNING: Block globalspacing has not been defined. Using global globalspacing." << std::endl;
+            std::cout << "WARNING: Block globalspacing has not been defined. Using global globalspacing."
+                      << std::endl;
             block.dx = globalspacing;
         }
         else
@@ -84,16 +87,16 @@ void CircleShape::check_input(shape_block &block, real &globalspacing, int &faul
 }
 
 #if SIMDIM == 2
-std::vector<StateVecD> CircleShape::generate_points(shape_block const &block, real const &globalspacing)
+std::vector<StateVecD> CircleShape::generate_points(shape_block const& block, real const& globalspacing)
 {
     std::vector<StateVecD> points;
 
     std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
     std::default_random_engine re;
 
-    StateVecD const &centre = block.centre;
-    real const &radius = block.radius;
-    StateMatD const &rotmat = block.rotmat;
+    StateVecD const& centre = block.centre;
+    real const& radius = block.radius;
+    StateMatD const& rotmat = block.rotmat;
     for (real rad = radius; rad > 0.99 * globalspacing; rad -= globalspacing)
     {
         // % Find spacing to have a well defined surface.
@@ -126,7 +129,7 @@ std::vector<StateVecD> CircleShape::generate_points(shape_block const &block, re
 #endif
 
 #if SIMDIM == 3
-std::vector<StateVecD> CircleShape::generate_points(shape_block const &block, real const &globalspacing)
+std::vector<StateVecD> CircleShape::generate_points(shape_block const& block, real const& globalspacing)
 {
     std::vector<StateVecD> points;
 
@@ -134,9 +137,9 @@ std::vector<StateVecD> CircleShape::generate_points(shape_block const &block, re
     std::default_random_engine re;
     // real searchDist = pow2(0.5 * globalspacing - 2.0 * tol * globalspacing);
 
-    StateVecD const &centre = block.centre;
-    real const &radius = block.radius * block.radius;
-    int const &hcpl = block.hcpl;
+    StateVecD const& centre = block.centre;
+    real const& radius = block.radius * block.radius;
+    int const& hcpl = block.hcpl;
 
     /* Start by creating a lattice rectangle, then test if point lies inside the circle radius */
     // StateVecD start = centre - StateVecD::Constant(radius);
@@ -171,7 +174,11 @@ std::vector<StateVecD> CircleShape::generate_points(shape_block const &block, re
             {
                 StateVecD newPoint;
                 if (hcpl == 1)
-                    newPoint = 0.5 * StateVecD(real(2 * i + ((j + k) % 2)), sqrt(3.0) * (real(j) + real((k % 2)) / 3.0), 2.0 / 3.0 * sqrt(6.0) * real(k));
+                    newPoint = 0.5 * StateVecD(
+                                         real(2 * i + ((j + k) % 2)),
+                                         sqrt(3.0) * (real(j) + real((k % 2)) / 3.0),
+                                         2.0 / 3.0 * sqrt(6.0) * real(k)
+                                     );
                 else
                     newPoint = StateVecD(real(i), real(j), real(k));
 
@@ -188,8 +195,8 @@ std::vector<StateVecD> CircleShape::generate_points(shape_block const &block, re
                 points.push_back(newPoint);
 
             } /* end k count */
-        }     /* end j count */
-    }         /* end i count */
+        } /* end j count */
+    } /* end i count */
 
     return points;
 }
