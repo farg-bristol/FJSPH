@@ -8,8 +8,6 @@
 
 #include <Eigen/Geometry>
 
-#define PERTURB(i, j) pow(MEPSILON, pow(2, i* SIMDIM - j))
-
 // #define X 0
 // #define Y 1
 

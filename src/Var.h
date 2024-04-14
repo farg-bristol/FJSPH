@@ -38,7 +38,7 @@ std::ofstream dambreak("Dam_Data.log",std::ios::out);
 #endif
 // std::ofstream pertLog("cellPert.log",std::ios::out);
 
-/*Define Simulation Dimension*/
+/* Define Simulation Dimension */
 #ifndef SIMDIM
 #define SIMDIM 2
 #endif
@@ -126,10 +126,16 @@ enum partType{BOUND=0,PISTON,BUFFER,BACK,PIPE,GHOST,FREE,OUTLET,LOST};
 enum shapeType{NONE=0,BOX,CYLINDER,SPHERE,JET,CONVJET};
 
 // Shapes for new intitialisation
-enum shape_type {fineLine = 0, linePlane, squareCube, circleSphere, cylinder, arcSection, coordDef,
+enum shape_type {linePlane = 0, squareCube, circleSphere, cylinder, arcSection, coordDef,
                 inletZone, hollow, solid};
 
-enum solve_type {newmark_beta = 0, runge_kutta, DBC, pressure_G, ghost};
+enum integrate_typ {newmark_beta = 0, runge_kutta};
+
+enum solve_type {DBC = 0, pressure_G, ghost};
+
+enum inlet_vel_type {fixedVel, dynamicVel};
+
+enum particle_order {grid = 0, hcp};
 
 enum aero_force {none = 0, Gissler, Induced_Pressure, SkinFric};
 
@@ -982,7 +988,7 @@ struct bound_block
         aeroconst = default_val;
         nTimes = 0;
         fixed_vel_or_dynamic = 0;
-        hcpl = 0;
+        particle_order = 0;
         bound_solver = 0;
         no_slip = 0;
         block_type = 0;
@@ -1001,7 +1007,7 @@ struct bound_block
         aeroconst = default_val;
         nTimes = 0;
         fixed_vel_or_dynamic = 0;
-        hcpl = 0;
+        particle_order = 0;
         bound_solver = 0;
         no_slip = 0;
         block_type = 0;
@@ -1025,7 +1031,7 @@ struct bound_block
 
     size_t nTimes;
     int fixed_vel_or_dynamic; //Used for inlets, but also for boundaries to identify if moving or static
-    int hcpl;
+    int particle_order;
     int no_slip;
     int bound_solver;
     int block_type;

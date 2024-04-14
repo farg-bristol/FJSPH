@@ -1,8 +1,6 @@
 /******     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code ***********/
 /******          Created by Jamie MacLeod, University of Bristol        ***********/
 
-// #include "Third_Party/nlohmann/json.hpp"
-
 #include "Init.h"
 #include "Add.h"
 #include "IOFunctions.h"
@@ -15,6 +13,8 @@
 #include "shapes/inlet.h"
 #include "shapes/line.h"
 #include "shapes/square.h"
+
+#include <filesystem>
 
 void get_boundary_velocity(shape_block& boundvar)
 {
@@ -75,7 +75,7 @@ void Read_Shapes(
         Get_String(line, "Sub-shape", shapes[block].subshape);
         Get_String(line, "Boundary solver", shapes[block].solver_name);
 
-        Get_Number(line, "Write surface data (0/1)", shapes[block].write_data);
+        Get_Bool(line, "Write surface data (0/1)", shapes[block].write_data);
         Get_Number(line, "Fixed velocity or dynamic inlet BC (0/1)", shapes[block].fixed_vel_or_dynamic);
 
         // Pipe exit plane.
@@ -116,10 +116,10 @@ void Read_Shapes(
         Get_Number(line, "Ending straight length", shapes[block].estraight);
 
         Get_Number(line, "Particle spacing", shapes[block].dx);
-        Get_Number(line, "Particle ordering (0=grid,1=HCP)", shapes[block].hcpl);
+        Get_Bool(line, "Particle ordering (0=grid,1=HCP)", shapes[block].particle_order);
         Get_Number(line, "Wall thickness", shapes[block].thickness);
         Get_Number(line, "Wall radial particle count", shapes[block].nk);
-        Get_Number(line, "Wall is no slip (0/1)", shapes[block].no_slip);
+        Get_Bool(line, "Wall is no slip (0/1)", shapes[block].no_slip);
 
         Get_String(line, "Coordinate filename", shapes[block].filename);
 
@@ -213,190 +213,18 @@ void Read_Shapes(
     inFile.close();
 
     /* Check enough information has been provided */
-    size_t count = 0;
+    int fault = 0;
     for (shape_block& bound : shapes)
     {
-        int fault = 0;
-        // Scale things first before doing checks and distances
-        if (svar.scale != 1.0)
-        {
-            if (check_vector(bound.start))
-                bound.start *= svar.scale;
+        bound.check_input(svar, fvar, globalspacing, fault);
+    }
 
-            if (check_vector(bound.end))
-                bound.end *= svar.scale;
-
-            if (check_vector(bound.right))
-                bound.right *= svar.scale;
-
-            if (check_vector(bound.mid))
-                bound.mid *= svar.scale;
-
-            if (check_vector(bound.centre))
-                bound.centre *= svar.scale;
-
-            if (bound.aeroconst != default_val)
-                bound.aeroconst *= svar.scale;
-
-            if (bound.insconst != default_val)
-                bound.insconst *= svar.scale;
-
-            if (bound.delconst != default_val)
-                bound.delconst *= svar.scale;
-        }
-
-#if SIMDIM == 2
-        if (bound.shape == "Line")
-#else
-        if (bound.shape == "Plane")
-#endif
-        {
-            bound.bound_type = linePlane;
-        }
-#if SIMDIM == 2
-        if (bound.shape == "Square")
-#else
-        if (bound.shape == "Cube")
-#endif
-        {
-            bound.bound_type = squareCube;
-        }
-#if SIMDIM == 2
-        else if (bound.shape == "Circle")
-#else
-        else if (bound.shape == "Sphere")
-#endif
-        {
-            bound.bound_type = circleSphere;
-        }
-#if SIMDIM == 2
-        else if (bound.shape == "Arc")
-#else
-        else if (bound.shape == "Arch")
-#endif
-        {
-            bound.bound_type = arcSection;
-        }
-        else if (bound.shape == "Cylinder")
-        {
-            bound.bound_type = cylinder;
-        }
-        else if (bound.shape == "Inlet")
-        {
-            bound.bound_type = inletZone;
-        }
-        else if (bound.shape == "Coordinates")
-        {
-            bound.bound_type = coordDef;
-            if (bound.filename.empty())
-            {
-                if (bound.npts == 0 || bound.coords.empty())
-                {
-                    printf(
-                        "ERROR: Block \"%s\" coordinates have not been ingested "
-                        "properly. Stopping.\n",
-                        bound.name.c_str()
-                    );
-                    fault = 1;
-                }
-            }
-        }
-
-        // Check that the input is correct for the shape defined.
-        bound.check_input(globalspacing, fault);
-
-        if (bound.position_filename.empty())
-        {
-            if (bound.ntimes != 0)
-            {
-                if (bound.times.empty())
-                {
-                    printf("ERROR: Block \"%s\" has no time information\n", bound.name.c_str());
-                    fault = 1;
-                }
-                if (bound.pos.empty() && bound.vels.empty())
-                {
-                    printf(
-                        "ERROR: Block \"%s\" position or velocity data has not been "
-                        "ingested "
-                        "properly.\n",
-                        bound.name.c_str()
-                    );
-                    fault = 1;
-                }
-            }
-        }
-
-        if (bound.bound_type == -1)
-        {
-            printf(
-                "ERROR: Block \"%s\" shape (ID %zu) has not been correctly "
-                "defined.\n",
-                bound.name.c_str(), count
-            );
-            printf("File: %s\n", filename.c_str());
-            fault = 1;
-        }
-
-        if (!bound.solver_name.empty())
-        {
-            if (bound.solver_name == "DBC")
-            {
-                bound.bound_solver = DBC;
-            }
-            else if (bound.solver_name == "Pressure-Gradient")
-            {
-                bound.bound_solver = pressure_G;
-            }
-            else if (bound.solver_name == "Ghost")
-            {
-                bound.bound_solver = ghost;
-            }
-            else
-            {
-                printf("WARNING: Unrecognised boundary solver defined. Continuing to "
-                       "use the default, "
-                       "Pressure-Gradient\n");
-                printf("         Choose from the following options for a correct "
-                       "definition: \n");
-                printf("         \t1. DBC\n         \t2. Pressure-Gradient\n         "
-                       "\t3. Ghost\n");
-            }
-        }
-
-        if (fault)
-        {
-            printf(
-                "Check of parameters for block \"%s\" finished with errors. "
-                "Stopping.\n",
-                bound.name.c_str()
-            );
-            exit(-1);
-        }
-
-        globalspacing = std::max(bound.dx, globalspacing);
-        bound.npts = bound.npts > 1 ? bound.npts : 1;
-        if (bound.bound_type != coordDef)
-            bound.coords.reserve(bound.npts);
-
-        if (bound.press != 0)
-        {
-            real Bconst = fvar.rho0 * (fvar.Cs * fvar.Cs) / fvar.gam;
-            bound.dens = pow(((bound.press - fvar.pPress) / Bconst + 1.0), fvar.gam) * fvar.rho0;
-        }
-        else
-        {
-            bound.dens = fvar.rho0;
-        }
-
-        if (bound.nu < 0)
-        {
-            bound.nu = fvar.nu;
-        }
-
-        ++count;
-
-    } /* End for bound:shapes */
+    if (fault)
+    {
+        printf("Check of parameters for geometry blocks finished with errors.\n");
+        printf("See output for details.\n");
+        exit(-1);
+    }
 
     var.nblocks = nblocks;
     var.block = shapes;
@@ -645,12 +473,22 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
     // Read boundary blocks
     Shapes boundvar;
     printf("Reading boundary settings...\n");
-    Read_Shapes(boundvar, dx, svar, fvar, svar.boundfile);
+
+    // Get the extension of the files. If it's JSON, then use the new functions.
+    if (std::filesystem::path(svar.boundfile).extension() == ".json" ||
+        std::filesystem::path(svar.boundfile).extension() == ".JSON")
+        boundvar = read_shapes_JSON(svar.boundfile, svar, fvar, dx);
+    else
+        Read_Shapes(boundvar, dx, svar, fvar, svar.boundfile);
 
     // Read fluid
     Shapes fluvar;
     printf("Reading fluid settings...\n");
-    Read_Shapes(fluvar, dx, svar, fvar, svar.fluidfile);
+    if (std::filesystem::path(svar.boundfile).extension() == ".json" ||
+        std::filesystem::path(svar.boundfile).extension() == ".JSON")
+        fluvar = read_shapes_JSON(svar.fluidfile, svar, fvar, dx);
+    else
+        Read_Shapes(fluvar, dx, svar, fvar, svar.fluidfile);
 
     // Now generate points and add to indexes
     Generate_Points(svar, fvar, svar.dx, boundvar);
@@ -705,7 +543,7 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
 
         limits.back().name = boundvar.block[block].name;
         limits.back().fixed_vel_or_dynamic = boundvar.block[block].fixed_vel_or_dynamic;
-        limits.back().hcpl = boundvar.block[block].hcpl;
+        limits.back().particle_order = boundvar.block[block].particle_order;
         limits.back().no_slip = boundvar.block[block].no_slip;
         limits.back().bound_solver = boundvar.block[block].bound_solver;
         limits.back().block_type = boundvar.block[block].bound_type;
@@ -721,7 +559,7 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
         if (fluvar.block[block].bound_type == inletZone)
         {
             size_t ii = 0;
-            size_t nBuff = fluvar.block[block].hcpl == 1 ? 5 : 4;
+            size_t nBuff = fluvar.block[block].particle_order == 1 ? 5 : 4;
 
             while (fluvar.block[block].bc[ii] == PIPE)
             {
@@ -827,7 +665,7 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
         limits.back().aeroconst = fluvar.block[block].aeroconst;
 
         limits.back().fixed_vel_or_dynamic = fluvar.block[block].fixed_vel_or_dynamic;
-        limits.back().hcpl = fluvar.block[block].hcpl;
+        limits.back().particle_order = fluvar.block[block].particle_order;
         limits.back().no_slip = fluvar.block[block].no_slip;
         limits.back().bound_solver = fluvar.block[block].bound_solver;
         limits.back().block_type = fluvar.block[block].bound_type;
@@ -901,7 +739,7 @@ void Init_Particles_Restart(SIM& svar, FLUID& fvar, LIMITS& limits)
 
         limits[block].name = boundvar.block[block].name;
         limits[block].fixed_vel_or_dynamic = boundvar.block[block].fixed_vel_or_dynamic;
-        limits[block].hcpl = boundvar.block[block].hcpl;
+        limits[block].particle_order = boundvar.block[block].particle_order;
         limits[block].no_slip = boundvar.block[block].no_slip;
         limits[block].bound_solver = boundvar.block[block].bound_solver;
         limits[block].block_type = boundvar.block[block].bound_type;
@@ -931,7 +769,7 @@ void Init_Particles_Restart(SIM& svar, FLUID& fvar, LIMITS& limits)
         limits[block + offset].aeroconst = fluvar.block[block].aeroconst;
 
         limits[block + offset].fixed_vel_or_dynamic = fluvar.block[block].fixed_vel_or_dynamic;
-        limits[block + offset].hcpl = fluvar.block[block].hcpl;
+        limits[block + offset].particle_order = fluvar.block[block].particle_order;
         limits[block + offset].no_slip = fluvar.block[block].no_slip;
         limits[block + offset].bound_solver = fluvar.block[block].bound_solver;
         limits[block + offset].block_type = fluvar.block[block].bound_type;

@@ -80,7 +80,7 @@ void get_arclength_midpoint(
 inline std::vector<StateVecD> make_arc(
     int const& ni, int const& nk, real const& globalspacing, real const& theta0, real const& dtheta,
     real const& radius, StateVecD const& centre, real const& slength, real const& elength,
-    int const& hcpl
+    int const& particle_order
 )
 {
     std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
@@ -120,7 +120,7 @@ inline std::vector<StateVecD> make_arc(
             real theta = theta0 + real(ii) * dtheta;
             real r = radius;
             // newPoint = 0.5 * StateVecD(real(2 * i + (j % 2)), sqrt(3.0) * real(j));
-            if (hcpl == 1)
+            if (particle_order == 1)
             { /* Shift by half a globalspacing if jj is even */
                 theta += 0.5 * dtheta * (jj % 2);
                 r -= 0.5 * sqrt(3) * real(jj) * globalspacing;
@@ -274,7 +274,7 @@ void get_arclength_midpoint(
 inline std::vector<StateVecD> make_arch(
     StateVecD const& start, StateVecD const& centre, StateVecD const& right, real const& slength,
     real const& elength, int const& nrad, int const& nthick, int const& nlong, real const& globalspacing,
-    real const& dtheta, real const& radius, int const& hcpl
+    real const& dtheta, real const& radius, int const& particle_order
 )
 {
     std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
@@ -299,7 +299,7 @@ inline std::vector<StateVecD> make_arch(
             real r = radius;
             real l = real(kk) * globalspacing;
             real doffset = 0;
-            if (hcpl == 1)
+            if (particle_order == 1)
             {
                 r += 1.0 / 3.0 * sqrt(6.0) * real(jj) * globalspacing;
                 l = 0.5 * sqrt(3) * (real(kk) + real(jj % 2) / 3.0) * globalspacing;
@@ -323,7 +323,7 @@ inline std::vector<StateVecD> make_arch(
             {
                 real theta = static_cast<real>(ii) * dtheta;
                 real l = real(kk) * globalspacing;
-                if (hcpl == 1)
+                if (particle_order == 1)
                 { /* Shift by half a globalspacing if jj is even */
                     theta += doffset;
                 }
@@ -485,7 +485,7 @@ void ArcShape::check_input(shape_block& block, real& globalspacing, int& fault)
     }
     else if (block.nk < 0)
     { /* Use a particle count over the real thickness value */
-        if (block.hcpl == 1)
+        if (block.particle_order == 1)
             block.nk = static_cast<int>(ceil(block.thickness / globalspacing / sqrt(3.0) * 2.0));
         else
             block.nk = static_cast<int>(ceil(block.thickness / globalspacing));
@@ -545,7 +545,7 @@ void ArcShape::check_input(shape_block& block, real& globalspacing, int& fault)
     }
     else if (block.nj < 0)
     {
-        if (block.hcpl == 1)
+        if (block.particle_order == 1)
             block.nj = static_cast<int>(ceil((block.length) / globalspacing / sqrt(6.0) * 3.0));
         else
             block.nj = static_cast<int>(ceil(block.length / globalspacing));
@@ -565,7 +565,7 @@ std::vector<StateVecD> ArcShape::generate_points(shape_block const& block, real 
 
     return make_arc(
         block.ni, block.nk, globalspacing, theta0_, dtheta, block.radius, block.centre, block.sstraight,
-        block.estraight, block.hcpl
+        block.estraight, block.particle_order
     );
 
 #else
@@ -583,7 +583,7 @@ std::vector<StateVecD> ArcShape::generate_points(shape_block const& block, real 
 
     return make_arch(
         block.start, block.centre, block.right, block.sstraight, block.estraight, ni, block.nk, block.nj,
-        globalspacing, dtheta, block.radius, block.hcpl
+        globalspacing, dtheta, block.radius, block.particle_order
     );
 #endif
 }

@@ -727,7 +727,7 @@ void Write_Binary_Timestep(
     add_zone_aux_data(
         fileHandle, outputZone, "Fixed velocity or dynamic inlet", limits.fixed_vel_or_dynamic
     );
-    add_zone_aux_data(fileHandle, outputZone, "Lattice or HCPL packing", limits.hcpl);
+    add_zone_aux_data(fileHandle, outputZone, "Lattice or HCPL packing", limits.particle_order);
     add_zone_aux_data(fileHandle, outputZone, "Boundary solver type", limits.bound_solver);
     add_zone_aux_data(fileHandle, outputZone, "Boundary is no slip", limits.no_slip);
     add_zone_aux_data(fileHandle, outputZone, "Block type", limits.block_type);

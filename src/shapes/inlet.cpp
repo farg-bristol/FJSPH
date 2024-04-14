@@ -447,7 +447,7 @@ create_lattice_disk(shape_block const& block, real const& dx, real const& radius
 std::vector<StateVecD>
 create_disk(shape_block const& block, real const& dx, real const& radius, int const& kk)
 {
-    if (block.hcpl)
+    if (block.particle_order)
         return create_radial_disk(block, dx, radius, kk);
     else
         return create_lattice_disk(block, dx, radius, kk);

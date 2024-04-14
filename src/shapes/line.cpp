@@ -77,7 +77,7 @@ void LineShape::check_input(shape_block& block, real& globalspacing, int& fault)
     }
     else if (block.nk < 0)
     { /* Use a particle count over the real thickness value */
-        if (block.hcpl == 1)
+        if (block.particle_order == 1)
             block.nk = static_cast<int>(ceil(block.thickness / block.dx / sqrt(3.0) * 2.0));
         else
             block.nk = static_cast<int>(ceil(block.thickness / block.dx));
@@ -111,7 +111,7 @@ void LineShape::check_input(shape_block& block, real& globalspacing, int& fault)
 #else
         size_t ni = static_cast<size_t>(ceil((block.right - block.start).norm() / globalspacing));
         size_t nj = 0;
-        if (block.hcpl == 1)
+        if (block.particle_order == 1)
             nj =
                 static_cast<int>(ceil((block.end - block.right).norm() / globalspacing / sqrt(3.0) * 2.0)
                 );
@@ -144,7 +144,7 @@ std::vector<StateVecD> LineShape::generate_points(shape_block const& block, real
         for (int jj = 0; jj < block.nk; ++jj)
         {
             StateVecD newPoint;
-            if (block.hcpl == 1)
+            if (block.particle_order == 1)
                 newPoint = delta * real(ii + 0.5 * (jj % 2)) + 0.5 * norm * sqrt(3.0) * real(jj);
             else
                 newPoint = delta * real(ii) + norm * real(jj);
@@ -180,7 +180,7 @@ std::vector<StateVecD> LineShape::generate_points(shape_block const& block, real
             for (int kk = 0; kk < block.nk; ++kk)
             {
                 StateVecD newPoint;
-                if (block.hcpl == 1)
+                if (block.particle_order == 1)
                     newPoint = 0.5 * (deltai * real(2 * ii + ((jj + kk) % 2)) +
                                       deltaj * (sqrt(3.0) * (real(jj) + real(kk % 2) / 3)) +
                                       norm * 2 * sqrt(6.0) / 3.0 * real(kk));

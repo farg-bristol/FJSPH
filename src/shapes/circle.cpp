@@ -46,7 +46,7 @@ void CircleShape::check_input(shape_block& block, real& globalspacing, int& faul
 #if SIMDIM == 3
     size_t nk;
 #endif
-    if (block.hcpl == 1)
+    if (block.particle_order == 1)
     {
 #if SIMDIM == 2
         ni = static_cast<int>(ceil((block.end[0] - block.start[0]) / globalspacing));
@@ -139,7 +139,7 @@ std::vector<StateVecD> CircleShape::generate_points(shape_block const& block, re
 
     StateVecD const& centre = block.centre;
     real const& radius = block.radius * block.radius;
-    int const& hcpl = block.hcpl;
+    int const& particle_order = block.particle_order;
 
     /* Start by creating a lattice rectangle, then test if point lies inside the circle radius */
     // StateVecD start = centre - StateVecD::Constant(radius);
@@ -151,7 +151,7 @@ std::vector<StateVecD> CircleShape::generate_points(shape_block const& block, re
     int ni;
     int nj;
     int nk;
-    if (hcpl == 1)
+    if (particle_order == 1)
     {
         ni = static_cast<int>(ceil((end[0] - start[0]) / globalspacing));
         nj = static_cast<int>(ceil((end[1] - start[1]) / globalspacing / sqrt(3.0) * 2.0));
@@ -173,7 +173,7 @@ std::vector<StateVecD> CircleShape::generate_points(shape_block const& block, re
             for (int i = 0; i < ni; ++i)
             {
                 StateVecD newPoint;
-                if (hcpl == 1)
+                if (particle_order == 1)
                     newPoint = 0.5 * StateVecD(
                                          real(2 * i + ((j + k) % 2)),
                                          sqrt(3.0) * (real(j) + real((k % 2)) / 3.0),

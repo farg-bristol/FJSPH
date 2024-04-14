@@ -9,108 +9,115 @@
 
 struct shape_block
 { /* Basically everything needs to be defined. Provide defaults to check against */
-    shape_block()
-        : bound_type(-1), sub_bound_type(-1), hcpl(0), fixed_vel_or_dynamic(0), bound_solver(pressure_G),
-          no_slip(0), npts(0), insert_norm(StateVecD::UnitX()), insconst(default_val),
-          delete_norm(StateVecD::UnitX()), delconst(default_val), aero_norm(StateVecD::UnitX()),
-          aeroconst(default_val), ntimes(0), dx(-1), write_data(0), stretch(StateVecD::Constant(1.0)),
-          ni(-1), nj(-1), nk(-1), normal(StateVecD::UnitX()), angles(StateVecD::Zero()),
-          rotmat(StateMatD::Identity()), start(StateVecD::Constant(default_val)),
-          end(StateVecD::Constant(default_val)), right(StateVecD::Constant(default_val)),
-          mid(StateVecD::Constant(default_val)), centre(StateVecD::Constant(default_val)), radius(-1),
-          arc_start(-1), arc_end(-1), arclength(default_val), thickness(-1), length(-1), sstraight(0),
-          estraight(0), vel(StateVecD::Constant(0.0)), vmag(0.0), press(0.0), dens(1000), mass(-1),
-          renorm_vol(-1), nu(-1), rho0(1000), gamma(7), speedOfSound(-1), backgroundP(0)
-    {
-    }
+    /* Boolean parameters */
+    bool write_data = false;
+    bool no_slip = false;
+    bool particle_order = false; /* Use grid of HCP ordering */
 
-    std::string name;
-    std::string shape;
-    std::string subshape; // For inlets (square or circle)
-    std::string filename;
-    std::string position_filename; /* File for defined motion of this boundary*/
-    std::string solver_name;
+    /* String parameters */
+    std::string name;               /* Name to write in files for particle block */
+    std::string shape;              /* Predominant shape of the block. */
+    std::string subshape;           // For inlets (square or circle)
+    std::string filename;           /* Name of the file used to read the block */
+    std::string position_filename;  /* File for defined motion of this boundary*/
+    std::string solver_name;        /* Name of the boundary solver to use */
+    std::string particle_order_str; /* Grid or HCP string */
+    std::string inlet_bc_type;      /* Inlet velocity definition */
 
-    int bound_type; /* What boundary type is it? */
-    int sub_bound_type;
-    int hcpl; /* Use grid of HCP ordering */
-    int fixed_vel_or_dynamic;
-    int bound_solver;
-    int no_slip;
+    /* Integer parameters */
+    int block_index = 0;           /* Index of the block in the file */
+    int bound_type = -1;           /* Integer value for what boundary type it is */
+    int sub_bound_type = -1;       /* Integer value for sub-type */
+    int fixed_vel_or_dynamic = 0;  /* Integer value for inlet velocity type */
+    int bound_solver = pressure_G; /* Integer value for boundary solver type */
 
-    size_t npts;                   /* Number of points */
-    std::vector<StateVecD> coords; /* Coordinates */
-    std::vector<uint> bc;          /* Boundary condition of point */
-    std::vector<int> intersect;    /* For fluid intersection with fibres */
-    StateVecD insert_norm;
-    real insconst;
-    StateVecD delete_norm;
-    real delconst;
-    StateVecD aero_norm;
-    real aeroconst;
+    int ni = 0, nj = 0, nk = 0; /* counters in i,j,k */
 
+    size_t npts = 0;   /* Number of points */
+    size_t ntimes = 0; /* Number of timestamps */
+
+    /* Float parameters */
+    real insconst = default_val;
+    real delconst = default_val;
+    real aeroconst = default_val;
+
+    real dx = -1;                 /* Particle spacing */
+    real radius = -1;             /* Radius */
+    real arc_start = -1;          /* Arc start */
+    real arc_end = -1;            /* Arc end */
+    real arclength = default_val; /* Arc length in degrees */
+    real thickness = -1;          /* How thick is the wall? */
+    real length = -1;             /* Archway length for 3D */
+    real sstraight = 0;           /* Straight to the start point */
+    real estraight = 0;           /* Straight from the end point */
+
+    // Starting physical properties
+    real vmag = 0;          /* Velocity magnitude in jet direction */
+    real press = 0;         /* Starting pressure */
+    real dens = 1000;       /* Starting density (derived from pressure or specified?) */
+    real mass = -1;         /* Starting mass (derived from spacing and density) */
+    real renorm_vol = -1;   /* Volume to renormalise mass using */
+    real nu = -1;           /* Kinematic viscosity */
+    real rho0 = 1000;       /* Resting density */
+    real gamma = 7;         /* Cole gamma value */
+    real speedOfSound = -1; /* Speed of sound */
+    real backgroundP = 0;   /* Background pressure */
+
+    /* Vector parameters */
+    StateVecD stretch = StateVecD::Constant(1.0); /* Stretching coefficient to test tension */
+
+    StateVecD insert_norm = StateVecD::UnitX();
+    StateVecD delete_norm = StateVecD::UnitX();
+    StateVecD aero_norm = StateVecD::UnitX();
+
+    // Inlet variables
+    StateVecD normal = StateVecD::UnitX();    /* Normal vector to rotate */
+    StateVecD angles = StateVecD::Zero();     /* Angles for rotation */
+    StateMatD rotmat = StateMatD::Identity(); /* Rotation matrix */
+
+    StateVecD start = StateVecD::Constant(default_val); /* Start coordinate */
+    StateVecD end = StateVecD::Constant(default_val);   /* End coordinate */
+    StateVecD right = StateVecD::Constant(default_val); /* Right coordinate */
+
+    StateVecD mid = StateVecD::Constant(default_val);    /* Arc midpoint */
+    StateVecD centre = StateVecD::Constant(default_val); /* Arc/circle centrepoint */
+
+    StateVecD static_vel = StateVecD::Zero(); /* Static velocity for boundaries */
+    StateVecD vel = StateVecD::Zero();        /* Starting velocity */
+
+    /* Array parameters */
     std::vector<size_t> back;
     std::vector<std::vector<size_t>> buffer;
 
-    size_t ntimes;               /* Number of timestamps */
+    std::vector<uint> bc;       /* Boundary condition of point */
+    std::vector<int> intersect; /* For fluid intersection with fibres */
+
     std::vector<real> times;     /* Timestamps */
     std::vector<StateVecD> pos;  /* Positions at each time*/
     std::vector<StateVecD> vels; /* Velocities at times-1 */
 
-    real dx; /* Particle spacing */
-    int write_data;
+    std::vector<StateVecD> coords; /* Coordinates */
 
-    StateVecD stretch; /* Stretching coefficient to test tension */
-
-    int ni, nj, nk; /* counters in i,j,k*/
-
-    // Inlet variables
-    StateVecD normal; /* Normal vector to rotate */
-    StateVecD angles; /* Angles for rotation */
-    StateMatD rotmat; /* Rotation matrix */
-
-    StateVecD start; /* Start coordinate */
-    StateVecD end;   /* End coordinate */
-    StateVecD right; /* Right coordinate */
-
-    StateVecD mid;    /* Arc midpoint */
-    StateVecD centre; /* Arc/circle centrepoint */
-    real radius;      /* Radius */
-    real arc_start;   /* Arc start */
-    real arc_end;     /* Arc end */
-    real arclength;   /* Arc length in degrees */
-    real thickness;   /* How thick is the wall? */
-    real length;      // Archway length for 3D
-    real sstraight;   // Straight to the start point
-    real estraight;   // Straight from the end point
-                      // int nthick;      /* Number of particles along the thickness */
-
-    // Starting physical properties
-    StateVecD static_vel; /* Static velocity for boundaries */
-    StateVecD vel;        /* Starting velocity */
-    real vmag;            /* Velocity magnitude in jet direction */
-    real press;           /* Starting pressure */
-    real dens;            /* Starting density (derived from pressure or specified?) */
-    real mass;            /* Starting mass (derived from spacing and density) */
-    real renorm_vol;      /* Volume to renormalise mass using */
-    real nu;              /* Kinematic viscosity */
-    /* Gas law properties */
-    real rho0;         /* Resting density */
-    real gamma;        /* Cole gamma value */
-    real speedOfSound; /* Speed of sound */
-    real backgroundP;  /* Background pressure */
-
-    void check_input(real& globalspacing, int& fault);
+    void check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault);
     void generate_points(real const& globalspacing);
 };
 
 struct Shapes
 {
-    Shapes() : totPts(0), nblocks(0){};
-
     std::vector<shape_block> block;
-    size_t totPts;  /* Total boundary points */
-    size_t nblocks; /* Number of boundaries */
+    size_t totPts = 0;  /* Total boundary points */
+    size_t nblocks = 0; /* Number of boundaries */
+
+    inline void emplace_back()
+    {
+        block.emplace_back();
+        nblocks++;
+    }
+
+    inline shape_block& back() { return block.back(); }
 };
+
+Shapes
+read_shapes_JSON(std::string const& filename, SIM const& svar, FLUID const& fvar, real& globalspacing);
 
 #endif

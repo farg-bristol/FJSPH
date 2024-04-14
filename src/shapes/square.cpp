@@ -66,7 +66,7 @@ void SquareShape::check_input(shape_block& block, real& globalspacing, int& faul
 #if SIMDIM == 3
     size_t nk;
 #endif
-    if (block.hcpl == 1)
+    if (block.particle_order == 1)
     {
 #if SIMDIM == 2
         ni = static_cast<int>(ceil((block.end[0] - block.start[0]) / globalspacing));
@@ -117,7 +117,7 @@ std::vector<StateVecD> SquareShape::generate_points(shape_block const& block, re
     int nk;
 #endif
 
-    if (block.hcpl == 1)
+    if (block.particle_order == 1)
     {
 #if SIMDIM == 2
         ni = static_cast<int>(ceil((block.end[0] - block.start[0]) / globalspacing));
@@ -149,14 +149,14 @@ std::vector<StateVecD> SquareShape::generate_points(shape_block const& block, re
             {
                 StateVecD newPoint;
 #if SIMDIM == 2
-                if (block.hcpl == 1)
+                if (block.particle_order == 1)
                     newPoint =
                         0.5 *
                         StateVecD(static_cast<real>(2 * i + (j % 2)), sqrt(3.0) * static_cast<real>(j));
                 else
                     newPoint = StateVecD(static_cast<real>(i), static_cast<real>(j));
 #else
-            if (block.hcpl == 1)
+            if (block.particle_order == 1)
                 newPoint =
                     0.5 * StateVecD(
                               real(2 * i + ((j + k) % 2)), sqrt(3.0) * (real(j) + real((k % 2)) / 3.0),
