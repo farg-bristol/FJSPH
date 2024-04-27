@@ -44,7 +44,14 @@ class Integrator
         uint& iteration, StateVecD& Force, StateVecD& dropVel, real& error1, real& error2
     );
 
+    real find_timestep(
+        SIM const& svar, FLUID const& fvar, MESH const& cells, SPHState const& pnp1, size_t const& start,
+        size_t const& end_ng
+    );
+
     int solver_method = newmark_beta;
+    real maxf;
+    real safe_dt;
 };
 
 #endif

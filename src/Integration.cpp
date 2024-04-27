@@ -40,67 +40,7 @@ real Integrator::integrate(
     real npd = 1.0;
 
     // Find maximum safe timestep
-    real maxf = 0.0;
-    real maxdrho = 0.0;
-    real maxU = 0.0;
-    real minST = 9999999.0;
-#pragma omp parallel for reduction(max : maxf, maxU, maxdrho) reduction(min : minST)
-    for (size_t ii = start; ii < end_ng; ++ii)
-    {
-        maxf = std::max(maxf, pnp1[ii].acc.norm());
-        maxdrho = std::max(maxdrho, abs(pnp1[ii].Rrho));
-        maxU = std::max(maxU, pnp1[ii].v.norm());
-        minST = std::min(
-            minST,
-            sqrt(pnp1[ii].rho * svar.dx * svar.dx / (2.0 * M_PI * fvar.sig * fabs(pnp1[ii].curve)))
-        );
-    }
-
-    vector<real> timestep_factors;
-    timestep_factors.emplace_back(0.25 * sqrt(fvar.H / maxf)); /* Force timestep constraint */
-    timestep_factors.emplace_back(2 * fvar.H / (maxU));        /* Velocity constraint */
-    timestep_factors.emplace_back(
-        0.125 * fvar.HSQ * fvar.rho0 / fvar.mu
-    );                                                           /* Viscosity timestep constraint */
-    timestep_factors.emplace_back(0.067 * minST);                /* Surface tension constraint */
-    timestep_factors.emplace_back(0.5 * sqrt(fvar.H / maxdrho)); /* Density gradient constraint */
-    timestep_factors.emplace_back(1.5 * fvar.H / fvar.Cs);
-    /* Acoustic constraint */ /* 2* can't be used without delta-SPH it seems. Divergent in tensile
-                                 instability */
-
-    // Only use if -fno-finite-math-only is on
-    // if (std::isinf(maxf))
-    // {
-    // 	std::cerr << "Forces are quasi-infinite. Stopping..." << std::endl;
-    // 	exit(-1);
-    // }
-
-    /***********************************************************************************/
-    /***********************************************************************************/
-    /***********************************************************************************/
-    real safe_dt = 0.75 * *std::min_element(timestep_factors.begin(), timestep_factors.end());
-    svar.dt = svar.cfl * safe_dt;
-    /***********************************************************************************/
-    /***********************************************************************************/
-    /***********************************************************************************/
-
-    if (svar.dt < svar.dt_min)
-        svar.dt = svar.dt_min;
-    else if (svar.dt > svar.dt_max)
-        svar.dt = svar.dt_max;
-
-    if (svar.dt > svar.tframem1 + svar.framet - svar.t)
-        svar.dt = svar.tframem1 + svar.framet - svar.t + svar.dt_min;
-
-    if (svar.speedTest)
-    {
-        // Bound SPH timestep by the mesh size if it's larger than that to traverse a cell, to prevent
-        // skipping.
-        if (svar.dt * pnp1[0].v.norm() > cells.minlength)
-        {
-            svar.dt = cells.minlength / pnp1[0].v.norm();
-        }
-    }
+    svar.dt = find_timestep(svar, fvar, cells, pnp1, start, end_ng);
 
     outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 
@@ -476,52 +416,7 @@ void Integrator::first_step(
     vector<real> curve;
 
     // Find maximum safe timestep
-    real maxf = 0.0;
-    real maxU = 0.0;
-    real minST = 9999999.0;
-#pragma omp parallel for reduction(max : maxf, maxU) reduction(min : minST)
-    for (size_t ii = start; ii < end_ng; ++ii)
-    {
-        maxf = std::max(maxf, pnp1[ii].acc.norm());
-        maxU = std::max(maxU, pnp1[ii].v.norm());
-        minST = std::min(
-            minST,
-            sqrt(pnp1[ii].rho * svar.dx * svar.dx / (2.0 * M_PI * fvar.sig * fabs(pnp1[ii].curve)))
-        );
-    }
-
-    real dtv = 0.125 * fvar.HSQ * fvar.rho0 / fvar.mu; /*Viscosity timestep constraint*/
-    real dtf = 0.25 * sqrt(fvar.H / maxf);             /*Force timestep constraint*/
-    real dtc = 2 * fvar.H / (maxU);                    /*Velocity constraint*/
-    real dtc2 = 1.5 * fvar.H / fvar.Cs;
-    /* Acoustic constraint */ /* 2* can't be used without delta-SPH it seems. Divergent in tensile
-                                 instability */
-
-    real dtst = 0.067 * minST;
-
-    // Only use if -fno-finite-math-only is on
-    // if (std::isinf(maxf))
-    // {
-    // 	std::cerr << "Forces are quasi-infinite. Stopping..." << std::endl;
-    // 	exit(-1);
-    // }
-
-    /***********************************************************************************/
-    /***********************************************************************************/
-    /***********************************************************************************/
-    real safe_dt = 0.75 * std::min(std::min(dtf, dtc2), std::min(dtc, std::min(dtv, dtst)));
-    svar.dt = svar.cfl * safe_dt;
-    /***********************************************************************************/
-    /***********************************************************************************/
-    /***********************************************************************************/
-
-    if (svar.dt < svar.dt_min)
-        svar.dt = svar.dt_min;
-    else if (svar.dt > svar.dt_max)
-        svar.dt = svar.dt_max;
-
-    if (svar.dt > svar.tframem1 + svar.framet - svar.t)
-        svar.dt = svar.tframem1 + svar.framet - svar.t + svar.dt_min;
+    svar.dt = find_timestep(svar, fvar, cells, pnp1, start, end_ng);
 
 #ifndef NOFROZEN
     dissipation_terms(fvar, start, end, outlist, pnp1);
@@ -648,4 +543,75 @@ void Integrator::solve_timestep(
         break;
     }
     }
+}
+
+real Integrator::find_timestep(
+    SIM const& svar, FLUID const& fvar, MESH const& cells, SPHState const& pnp1, size_t const& start,
+    size_t const& end_ng
+)
+{
+    // Find maximum safe timestep (avoiding a div by zero)
+    real maxf = MEPSILON;
+    real maxdrho = MEPSILON;
+    real maxU = MEPSILON;
+    real minST = 9999999.0;
+#pragma omp parallel for reduction(max : maxf, maxU, maxdrho) reduction(min : minST)
+    for (size_t ii = start; ii < end_ng; ++ii)
+    {
+        maxf = std::max(maxf, pnp1[ii].acc.norm());
+        maxdrho = std::max(maxdrho, abs(pnp1[ii].Rrho));
+        maxU = std::max(maxU, pnp1[ii].v.norm());
+        minST = std::min(
+            minST,
+            sqrt(pnp1[ii].rho * svar.dx * svar.dx / (2.0 * M_PI * fvar.sig * fabs(pnp1[ii].curve)))
+        );
+    }
+
+    vector<real> timestep_factors;
+    timestep_factors.emplace_back(0.25 * sqrt(fvar.H / maxf)); /* Force timestep constraint */
+    timestep_factors.emplace_back(2 * fvar.H / (maxU));        /* Velocity constraint */
+    timestep_factors.emplace_back(
+        0.125 * fvar.HSQ * fvar.rho0 / fvar.mu
+    );                                                           /* Viscosity timestep constraint */
+    timestep_factors.emplace_back(0.067 * minST);                /* Surface tension constraint */
+    timestep_factors.emplace_back(0.5 * sqrt(fvar.H / maxdrho)); /* Density gradient constraint */
+    timestep_factors.emplace_back(1.5 * fvar.H / fvar.Cs);
+    /* Acoustic constraint */ /* 2* can't be used without delta-SPH it seems. Divergent in tensile
+                                 instability */
+
+    // Only use if -fno-finite-math-only is on
+    // if (std::isinf(maxf))
+    // {
+    // 	std::cerr << "Forces are quasi-infinite. Stopping..." << std::endl;
+    // 	exit(-1);
+    // }
+
+    /***********************************************************************************/
+    /***********************************************************************************/
+    /***********************************************************************************/
+    real safe_dt = 0.75 * *std::min_element(timestep_factors.begin(), timestep_factors.end());
+    real dt = svar.cfl * safe_dt;
+    /***********************************************************************************/
+    /***********************************************************************************/
+    /***********************************************************************************/
+
+    if (dt < svar.dt_min)
+        dt = svar.dt_min;
+    else if (dt > svar.dt_max)
+        dt = svar.dt_max;
+
+    if (dt > svar.tframem1 + svar.framet - svar.t)
+        dt = svar.tframem1 + svar.framet - svar.t + svar.dt_min;
+
+    if (svar.speedTest)
+    {
+        // Bound SPH timestep by the mesh size if it's larger than that to traverse a cell, to prevent
+        // skipping.
+        if (dt * pnp1[0].v.norm() > cells.minlength)
+        {
+            dt = cells.minlength / pnp1[0].v.norm();
+        }
+    }
+
+    return dt;
 }
