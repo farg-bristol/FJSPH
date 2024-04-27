@@ -7,10 +7,10 @@
 #include "Neighbours.h"
 #include "Resid.h"
 
-int Check_Error(
+int Newmark_Beta::Check_Error(
     Sim_Tree& SPH_TREE, SIM& svar, FLUID const& fvar, size_t const& start, size_t const& end,
     real& error1, real& error2, real& logbase, OUTL& outlist, vector<StateVecD> const& xih, SPHState& pn,
-    SPHState& pnp1, uint& k, uint& nUnstab
+    SPHState& pnp1, uint& iteration
 )
 {
     /****** FIND ERROR ***********/
@@ -22,14 +22,14 @@ int Check_Error(
         errsum += r.squaredNorm();
     }
 
-    if (k == 0)
+    if (iteration == 0)
         logbase = log10(sqrt(errsum / (real(svar.totPts))));
 
     error1 = log10(sqrt(errsum / (real(svar.totPts)))) - logbase;
-    // cout << RestartCount << "  " << k << "  " << error1  << "  " << svar.dt << endl;
-    // cout << k << "  " << error1 << "  " << error1 - error2 << "  " << svar.dt << endl;
+    // cout << RestartCount << "  " << iteration << "  " << error1  << "  " << svar.dt << endl;
+    // cout << iteration << "  " << error1 << "  " << error1 - error2 << "  " << svar.dt << endl;
 
-    if (k > svar.subits)
+    if (iteration > svar.subits)
     {
         // if (error1-error2 > 0.0 /*|| std::isnan(error1)*/)
         // {	/*If simulation starts diverging, then reduce the timestep and try again.*/
@@ -44,7 +44,7 @@ int Check_Error(
 
             svar.dt = 0.5 * svar.dt;
             cout << "Unstable timestep. New dt: " << svar.dt << endl;
-            k = 0;
+            iteration = 0;
             error1 = 0.0;
             // RestartCount++;
             return -1;
@@ -57,16 +57,13 @@ int Check_Error(
     }
 
     /*Otherwise, roll forwards*/
-    nUnstab = 0;
     return 0;
 }
 
-void Do_NB_Iter(
+void Newmark_Beta::Do_NB_Iter(
     Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start,
-    size_t& end, real const& a, real const& b, real const& c, real const& d, real const& B,
-    real const& gam, real const& npd, MESH const& cells, LIMITS const& limits,
-    OUTL& outlist, /* DELTAP const& dp, */
-    SPHState& pn, SPHState& pnp1, StateVecD& Force, StateVecD& dropVel
+    size_t& end, real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pn,
+    SPHState& pnp1, StateVecD& Force, StateVecD& dropVel
 )
 {
     /*Update the state at time n+1*/
@@ -79,6 +76,11 @@ void Do_NB_Iter(
 
     Force = StateVecD::Zero();
     svar.AForce = StateVecD::Zero();
+
+    const real& gamma = svar.gamma;
+    const real gamma_2 = 1 - gamma;
+    const real beta = beta;
+    const real beta_2 = 0.5 * (1 - 2 * svar.beta);
 
     for (size_t block = 0; block < svar.nbound; block++)
     {
@@ -161,7 +163,9 @@ void Do_NB_Iter(
                 { /****** BOUNDARY PARTICLES ***********/
                     real const rho = std::max(
                         fvar.rhoMin,
-                        std::min(fvar.rhoMax, pn[ii].rho + dt * (a * pn[ii].Rrho + b * Rrho[ii]))
+                        std::min(
+                            fvar.rhoMax, pn[ii].rho + dt * (gamma * Rrho[ii] + gamma_2 * pn[ii].Rrho)
+                        )
                     );
                     pnp1[ii].rho = rho;
                     pnp1[ii].p =
@@ -179,7 +183,9 @@ void Do_NB_Iter(
                     { // Don't allow negative pressures
                         real const rho = std::max(
                             fvar.rho0,
-                            std::min(fvar.rhoMax, pn[ii].rho + dt * (a * pn[ii].Rrho + b * Rrho[ii]))
+                            std::min(
+                                fvar.rhoMax, pn[ii].rho + dt * (gamma * Rrho[ii] + gamma_2 * pn[ii].Rrho)
+                            )
                         );
                         pnp1[ii].rho = rho;
                         pnp1[ii].p =
@@ -190,7 +196,9 @@ void Do_NB_Iter(
                     {
                         real const rho = std::max(
                             fvar.rhoMin,
-                            std::min(fvar.rhoMax, pn[ii].rho + dt * (a * pn[ii].Rrho + b * Rrho[ii]))
+                            std::min(
+                                fvar.rhoMax, pn[ii].rho + dt * (gamma * Rrho[ii] + gamma_2 * pn[ii].Rrho)
+                            )
                         );
                         pnp1[ii].rho = rho;
                         pnp1[ii].p =
@@ -220,19 +228,22 @@ void Do_NB_Iter(
 /*For any other particles, intergrate as normal*/
 #ifdef ALE
                     pnp1[ii].xi = pn[ii].xi + dt * (pn[ii].v + pnp1[ii].vPert) +
-                                  dt2 * (c * pn[ii].acc + d * res[ii]);
+                                  dt2 * (beta * res[ii] + beta_2 * pn[ii].acc);
 #else
-                    pnp1[ii].xi = pn[ii].xi + dt * pn[ii].v + dt2 * (c * pn[ii].acc + d * res[ii]);
+                    pnp1[ii].xi =
+                        pn[ii].xi + dt * pn[ii].v + dt2 * (beta_2 * pn[ii].acc + beta * res[ii]);
 #endif
 
-                    pnp1[ii].v = pn[ii].v + dt * (a * pn[ii].acc + b * res[ii]);
+                    pnp1[ii].v = pn[ii].v + dt * (gamma * res[ii] + gamma_2 * pn[ii].acc);
                     pnp1[ii].acc = res[ii];
                     pnp1[ii].Af = Af[ii];
                     pnp1[ii].Rrho = Rrho[ii];
 
                     real const rho = std::max(
                         fvar.rhoMin,
-                        std::min(fvar.rhoMax, pn[ii].rho + dt * (a * pn[ii].Rrho + b * Rrho[ii]))
+                        std::min(
+                            fvar.rhoMax, pn[ii].rho + dt * (gamma * Rrho[ii] + gamma_2 * pn[ii].Rrho)
+                        )
                     );
                     pnp1[ii].rho = rho;
                     pnp1[ii].p =
@@ -290,8 +301,8 @@ void Do_NB_Iter(
                             real const rho = std::max(
                                 fvar.rhoMin,
                                 std::min(
-                                    fvar.rhoMax,
-                                    pn[buffID].rho + dt * (a * pn[buffID].Rrho + b * Rrho[buffID])
+                                    fvar.rhoMax, pn[buffID].rho + dt * (gamma * Rrho[buffID] +
+                                                                        gamma_2 * pn[buffID].Rrho)
                                 )
                             );
                             pnp1[buffID].rho = rho;
@@ -309,17 +320,13 @@ void Do_NB_Iter(
     } /*End pragma omp parallel*/
 }
 
-void Newmark_Beta(
+void Newmark_Beta::Newmark_Beta(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    size_t const& start, size_t& end, real const& a, real const& b, real const& c, real const& d,
-    real const& B, real const& gam, real const& npd, MESH const& cells, LIMITS const& limits,
-    OUTL& outlist, /* DELTAP const& dp, */
-    real& logbase, uint& k, real& error1, real& error2, vector<StateVecD>& xih, SPHState& pn,
-    SPHState& pnp1, StateVecD& Force, StateVecD& dropVel
+    size_t const& start, size_t& end, real const& npd, MESH const& cells, LIMITS const& limits,
+    OUTL& outlist, real& logbase, uint& iteration, real& error1, real& error2, vector<StateVecD>& xih,
+    SPHState& pn, SPHState& pnp1, StateVecD& Force, StateVecD& dropVel
 )
 {
-    uint nUnstab = 0;
-
     while (error1 > svar.minRes)
     {
 /*Previous state for error calc*/
@@ -328,16 +335,16 @@ void Newmark_Beta(
             xih[ii - start] = pnp1[ii].xi;
 
         Do_NB_Iter(
-            CELL_TREE, svar, fvar, avar, start, end, a, b, c, d, B, gam, npd, cells, limits, outlist, pn,
-            pnp1, Force, dropVel
+            CELL_TREE, svar, fvar, avar, start, end, npd, cells, limits, outlist, pn, pnp1, Force,
+            dropVel
         );
 
         int errstate = Check_Error(
-            SPH_TREE, svar, fvar, start, end, error1, error2, logbase, outlist, xih, pn, pnp1, k, nUnstab
+            SPH_TREE, svar, fvar, start, end, error1, error2, logbase, outlist, xih, pn, pnp1, iteration
         );
 
         if (errstate == 0) /*Continue as normal*/
-            k++;
+            iteration++;
         else if (errstate == 1) /*Sub iterations exceeded*/
             break;
 

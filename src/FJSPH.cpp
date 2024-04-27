@@ -22,7 +22,6 @@
 #include "VLM.h"
 #include "Var.h"
 
-
 #ifdef DEBUG
 /*Open debug file to write to*/
 FILE* dbout;
@@ -181,6 +180,9 @@ int main(int argc, char* argv[])
     Vec_Tree CELL_TREE(SIMDIM, cells.cCentre, 10);
     CELL_TREE.index->buildIndex();
 
+    ///********* Declare the time integrator ************/
+    Integrator integrator(svar.solver_type);
+
     ///*************** Open simulation files ***************/
     FILE* ff = NULL;
     FILE* f2 = NULL;
@@ -210,7 +212,7 @@ int main(int argc, char* argv[])
     ///*** Perform an iteration to populate the vectors *****/
     if (!svar.restart)
     {
-        First_Step(
+        integrator.first_step(
             SPH_TREE, CELL_TREE, svar, fvar, avar, vortex, cells, limits, outlist, pnp1, pn, iptdata
         );
     }
@@ -320,7 +322,7 @@ int main(int argc, char* argv[])
                        "Max-Af    | Step time (ms)| \n");
 #endif
 
-            error = Integrate(
+            error = integrator.integrate(
                 SPH_TREE, CELL_TREE, svar, fvar, avar, vortex, cells, surf_marks, limits, outlist, pn,
                 pnp1, iptdata
             );

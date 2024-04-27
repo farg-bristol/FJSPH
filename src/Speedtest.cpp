@@ -527,6 +527,8 @@ void Speed_Test_Sweep(SIM& svar, FLUID& fvar, AERO& avar)
         Vec_Tree CELL_TREE(SIMDIM, cells.cCentre, 20);
         CELL_TREE.index->buildIndex();
 
+        Integrator integrator(svar.solver_type);
+
         // Transform to do nRuns timed, and average, so that machine precision is less involved
         // How to do efficiently for SPH however...
 
@@ -585,7 +587,7 @@ void Speed_Test_Sweep(SIM& svar, FLUID& fvar, AERO& avar)
         auto time1_sph = high_resolution_clock::now();
         for (int run = 0; run < svar.nRuns; ++run)
         {
-            First_Step(
+            integrator.first_step(
                 sph_vect[run].NP1, CELL_TREE, sph_vect[run].svar, fvar, avar, vortex, cells, limits,
                 sph_vect[run].outlist, sph_vect[run].pnp1, sph_vect[run].pn, iptdata
             );
@@ -597,7 +599,7 @@ void Speed_Test_Sweep(SIM& svar, FLUID& fvar, AERO& avar)
 
                 while (stept + 0.1 * sph_vect[run].svar.dt_min < sph_vect[run].svar.framet)
                 {
-                    Integrate(
+                    integrator.integrate(
                         sph_vect[run].NP1, CELL_TREE, sph_vect[run].svar, fvar, avar, vortex, cells,
                         surf_marks, limits, sph_vect[run].outlist, sph_vect[run].pn, sph_vect[run].pnp1,
                         iptdata

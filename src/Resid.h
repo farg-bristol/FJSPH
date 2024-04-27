@@ -14,7 +14,6 @@
 #include "VLM.h"
 #include "Var.h"
 
-
 /* Boundary pressure calculation - Adami, Hu, and Adams, 2012 -
  * https://doi.org/10.1016/j.jcp.2012.05.005*/
 void Get_Boundary_Pressure(
@@ -43,4 +42,9 @@ void Forces(
     vector<real>& Rrho, std::vector<StateVecD>& Af, StateVecD& Force
 );
 
+void Get_Aero_Velocity(
+    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
+    MESH const& cells, VLM const& vortex, size_t const& start, size_t& end_ng, OUTL& outlist,
+    LIMITS& limits, SPHState& pn, SPHState& pnp1, real& npd
+);
 #endif

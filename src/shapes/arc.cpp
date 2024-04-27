@@ -209,9 +209,13 @@ void get_arclength_centrepoint(
     real maxy = fabs(d1[1]) + fabs(v[1]);
     real maxz = fabs(d1[2]) + fabs(v[2]);
 
-    Eigen::Matrix2d m;
     Eigen::Vector2d result;
-    Eigen::Vector2d v_;
+
+    // default to x and y
+    Eigen::Matrix2d m;
+    m << d1[0], v[0], d1[1], v[1];
+    Eigen::Vector2d v_(v[0], v[1]);
+
     if (maxx < maxy && maxx < maxz)
     { // x is the worst dimension, use y and z
         m << d1[1], v[1], d1[2], v[2];
@@ -221,11 +225,6 @@ void get_arclength_centrepoint(
     { // y is the worst dimension, use x and z
         m << d1[0], v[0], d1[2], v[2];
         v_(v[0], v[2]);
-    }
-    else
-    { // z is the worst dimension, use x and y
-        m << d1[0], v[0], d1[1], v[1];
-        v_(v[0], v[1]);
     }
 
     result = m.colPivHouseholderQr().solve(v_);
