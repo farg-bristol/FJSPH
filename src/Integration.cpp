@@ -19,20 +19,20 @@
 
 using namespace std::chrono;
 
-/* Integration loop to perform a timestep and move forward in time.
+/* Integration loop to perform the first timestep and find forces only.
 
 Solve the forces and pressures for particles according to a calculated stable timestep (current no option
-to use a fixed timestep) and update the data of time n.
- */
-real Integrator::integrate(
+to use a fixed timestep) and do not update the new timestep. This should be used only as a prestep to
+write files with starting forces.
+*/
+real Integrator::integrate_no_update(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    VLM const& vortex, MESH const& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist, SPHState& pn,
-    SPHState& pnp1, vector<IPTState>& iptdata
+    VLM const& vortex, MESH const& cells, LIMITS& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1
 )
 {
-    high_resolution_clock::time_point t1 = high_resolution_clock::now();
-    size_t const start = svar.bndPts;
-    size_t end_ng = svar.bndPts + svar.simPts;
+    start_index = svar.bndPts;
+    end_index = svar.totPts;
+    iteration = 0;
 
     real error1 = 0.0;
     real error2 = 1.0;
@@ -40,60 +40,57 @@ real Integrator::integrate(
     real npd = 1.0;
 
     // Find maximum safe timestep
-    svar.dt = find_timestep(svar, fvar, cells, pnp1, start, end_ng);
+    svar.dt = find_timestep(svar, fvar, cells, pnp1, start_index, end_index);
 
     outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 
     dSPH_PreStep(fvar, svar.totPts, pnp1, outlist, npd);
 
     Get_Aero_Velocity(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, vortex, start, end_ng, outlist, limits, pn, pnp1,
-        npd
+        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, vortex, start_index, end_index, outlist, limits,
+        pn, pnp1, npd
     );
 
-    Detect_Surface(svar, fvar, avar, start, end_ng, outlist, cells, vortex, pnp1);
+    Detect_Surface(svar, fvar, avar, start_index, end_index, outlist, cells, vortex, pnp1);
 
     if (svar.ghost == 1)
     { /* Poisson points */
         PoissonGhost(svar, fvar, avar, cells, SPH_TREE, outlist, pn, pnp1);
-        dSPH_PreStep(fvar, end_ng, pnp1, outlist, npd);
+        dSPH_PreStep(fvar, end_index, pnp1, outlist, npd);
     }
     else if (svar.ghost == 2)
     { /* Lattice points */
         LatticeGhost(svar, fvar, avar, cells, SPH_TREE, outlist, pn, pnp1, limits);
-        dSPH_PreStep(fvar, end_ng, pnp1, outlist, npd);
+        dSPH_PreStep(fvar, end_index, pnp1, outlist, npd);
     }
 
-    size_t end = svar.totPts;
-
 #ifndef NOFROZEN
-    dissipation_terms(fvar, start, end, outlist, pnp1);
+    dissipation_terms(fvar, start_index, end_index, outlist, pnp1);
 #endif
 
 #ifdef ALE
     if (svar.ghost > 0)
-        Particle_Shift_Ghost(svar, fvar, start, end_ng, outlist, pnp1);
+        Particle_Shift_Ghost(svar, fvar, start_index, end_index, outlist, pnp1);
     else
-        Particle_Shift_No_Ghost(svar, fvar, start, end_ng, outlist, pnp1);
+        Particle_Shift_No_Ghost(svar, fvar, start_index, end_index, outlist, pnp1);
 #endif
 
-    Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end, end_ng);
+    Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end_index, end_index);
 
     StateVecD dropVel = StateVecD::Zero();
     StateVecD Force = StateVecD::Zero();
 
-    vector<StateVecD> xih(end - start);
+    vector<StateVecD> xih(end_index - start_index);
 #pragma omp parallel for default(shared)
-    for (size_t ii = start; ii < end; ++ii)
+    for (size_t ii = start_index; ii < end_index; ++ii)
     {
-        xih[ii - start] = pnp1[ii].xi;
+        xih[ii - start_index] = pnp1[ii].xi;
     }
 
     /*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
-    uint iteration = 0;
     solve_prestep(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pnp1, pn, xih, start, end,
-        logbase, npd, iteration, Force, dropVel, error1, error2
+        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pnp1, pn, xih, start_index,
+        end_index, logbase, npd, Force, dropVel, error1, error2
     );
 
     // cout << "Error: " << error1 << endl;
@@ -101,46 +98,55 @@ real Integrator::integrate(
     /****** UPDATE NEIGHBOURS AND TREE ***********/
     outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 
-    dSPH_PreStep(fvar, end, pnp1, outlist, npd);
+    dSPH_PreStep(fvar, end_index, pnp1, outlist, npd);
 
     Get_Aero_Velocity(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, vortex, start, end_ng, outlist, limits, pn, pnp1,
-        npd
+        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, vortex, start_index, end_index, outlist, limits,
+        pn, pnp1, npd
     );
 
-    Detect_Surface(svar, fvar, avar, start, end_ng, outlist, cells, vortex, pnp1);
+    Detect_Surface(svar, fvar, avar, start_index, end_index, outlist, cells, vortex, pnp1);
 
 #ifndef NOFROZEN
-    dissipation_terms(fvar, start, end, outlist, pnp1);
+    dissipation_terms(fvar, start_index, end_index, outlist, pnp1);
 #endif
 
-    // Apply_XSPH(fvar,start,end,outlist,pnp1);
+    // Apply_XSPH(fvar,start_index,end_index,outlist,pnp1);
 
 #ifdef ALE
     if (svar.ghost > 0)
-        Particle_Shift_Ghost(svar, fvar, start, end_ng, outlist, pnp1);
+        Particle_Shift_Ghost(svar, fvar, start_index, end_index, outlist, pnp1);
     else
-        Particle_Shift_No_Ghost(svar, fvar, start, end_ng, outlist, pnp1);
+        Particle_Shift_No_Ghost(svar, fvar, start_index, end_index, outlist, pnp1);
 #endif
 
-    Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end, end_ng);
+    Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end_index, end_index);
 
     dropVel = StateVecD::Zero();
 
     /*Do time integration*/
-    solve_timestep(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pnp1, pn, xih, start, end,
-        logbase, npd, iteration, Force, dropVel, error1, error2
+    solve_step(
+        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pnp1, pn, xih, start_index,
+        end_index, logbase, npd, Force, dropVel, error1, error2
     );
 
     if (svar.ghost != 0)
         Check_If_Ghost_Needs_Removing(svar, fvar, SPH_TREE, pn, pnp1);
 
-    uint nAdd = update_buffer_region(svar, limits, pnp1, end, end_ng);
+    return error1;
+}
+
+size_t Integrator::update_data(
+    Sim_Tree& SPH_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
+    LIMITS& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1, SURFS& surf_marks,
+    vector<IPTState>& iptdata
+)
+{
+    uint nAdd = update_buffer_region(svar, limits, pnp1, end_index, end_index);
 
     /* Check if any particles need to be deleted, and turned to particle tracking */
     std::set<size_t> to_del;
-    vector<size_t> ndelperblock(limits.size(), 0);
+    vector<size_t> n_del_per_block(limits.size(), 0);
     for (size_t block = svar.nbound; block < svar.nbound + svar.nfluid; block++)
     {
         // Need to check if the delete plane is active.
@@ -150,10 +156,6 @@ real Integrator::integrate(
 #pragma omp parallel for default(shared)
         for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
         {
-            // if(pnp1[ii].xi[0] > svar.max_x_sph - fvar.H*fvar.Hfac)
-            // {
-            /* Create a buffer outlet zone, to avoid truncation of the evolved physics */
-            // pnp1[ii].b = OUTLET;
             if (pnp1[ii].xi.dot(limits[block].delete_norm) > limits[block].delconst)
             {
 /* SPHPart is downstream enough to convert to IPT */
@@ -162,14 +164,8 @@ real Integrator::integrate(
                     to_del.insert(ii);
                 }
 #pragma omp atomic
-                ndelperblock[block]++;
+                n_del_per_block[block]++;
             }
-            // }
-
-            // if(pnp1[ii].b == LOST)
-            // {
-            // 	to_del.emplace_back(ii);
-            // }
         }
     }
 
@@ -202,8 +198,8 @@ real Integrator::integrate(
             pnp1.erase(pnp1.begin() + *itr);
             svar.totPts--;
             svar.simPts--;
-            end_ng--;
-            end--;
+            end_index--;
+            end_index--;
             nDel++;
             svar.delNum++;
         }
@@ -213,7 +209,7 @@ real Integrator::integrate(
         {
             // Shift the blocks, which will happen cumulatively
             limits[block].index.first -= delshift;
-            delshift += ndelperblock[block];
+            delshift += n_del_per_block[block];
             limits[block].index.second -= delshift;
 
             /* Need to shift back vector and buffer vector for correct inlet */
@@ -226,49 +222,6 @@ real Integrator::integrate(
                     part -= delshift;
                 }
         }
-    }
-
-    real maxRho = 0.0;
-#ifndef DEBUG
-    if (svar.speedTest == 0)
-#endif
-    {
-        real maxAf = 0.0;
-        real maxRhoi = 0.0;
-#ifdef ALE
-        real maxShift = 0.0;
-#endif
-#pragma omp parallel for reduction(max : maxAf, maxRhoi)
-        for (size_t ii = start; ii < end_ng; ++ii)
-        {
-            maxAf = std::max(maxAf, pnp1[ii].Af.norm());
-            maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - fvar.rho0));
-#ifdef ALE
-            maxShift = std::max(maxShift, pnp1[ii].vPert.norm());
-#endif
-        }
-        maxRho = 100 * maxRhoi / fvar.rho0;
-        real cfl = svar.dt / safe_dt;
-        high_resolution_clock::time_point t2 = high_resolution_clock::now();
-        auto duration = duration_cast<milliseconds>(t2 - t1).count();
-#ifdef ALE
-        printf(
-            "%9.3e | %7.2e | %4.2f | %8.4f | %7.3f | %9.3e | %9.3e | %9.3e | %14ld|\n", svar.t, svar.dt,
-            cfl, error1, maxRho, maxf, maxAf, maxShift, duration
-        );
-
-#else
-        printf(
-            "%9.3e | %7.2e | %4.2f | %9.4f | %3u | %8.3f | %9.3e | %9.3e | %14ld|\n", svar.t, svar.dt,
-            cfl, error1, iteration, maxRho, maxf, maxAf, duration
-        );
-#endif
-    }
-
-    if (pnp1.size() == 0 || svar.simPts == 0)
-    {
-        // cout << "No more particles. Stopping." << endl;
-        return 0;
     }
 
     if (nAdd != 0 || nDel != 0)
@@ -289,13 +242,78 @@ real Integrator::integrate(
 
     copy_omp(pnp1, pn);
 
+    return pnp1.size();
+}
+
+/* Integration loop to perform a timestep and move forward in time.
+
+Solve the forces and pressures for particles according to a calculated stable timestep (current no option
+to use a fixed timestep) and update the data of time n.
+ */
+real Integrator::integrate(
+    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
+    VLM const& vortex, MESH const& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist, SPHState& pn,
+    SPHState& pnp1, vector<IPTState>& ipt_data
+)
+{
+    high_resolution_clock::time_point t1 = high_resolution_clock::now();
+
+    real step_error = integrate_no_update(
+        SPH_TREE, CELL_TREE, svar, fvar, avar, vortex, cells, limits, outlist, pn, pnp1
+    );
+
+    size_t npts =
+        update_data(SPH_TREE, svar, fvar, avar, cells, limits, outlist, pn, pnp1, surf_marks, ipt_data);
+
+    // If there are no particles then exit early.
+    if (npts == 0)
+        return 0;
+
+    // Process and output some useful information for each timestep
+    real maxRho = 0.0;
+#ifndef DEBUG
+    if (svar.speedTest == 0)
+#endif
+    {
+        real maxAf = 0.0;
+        real maxRhoi = 0.0;
+#ifdef ALE
+        real maxShift = 0.0;
+#endif
+#pragma omp parallel for reduction(max : maxAf, maxRhoi)
+        for (size_t ii = start_index; ii < end_index; ++ii)
+        {
+            maxAf = std::max(maxAf, pnp1[ii].Af.norm());
+            maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - fvar.rho0));
+#ifdef ALE
+            maxShift = std::max(maxShift, pnp1[ii].vPert.norm());
+#endif
+        }
+        maxRho = 100 * maxRhoi / fvar.rho0;
+        real cfl = svar.dt / safe_dt;
+        high_resolution_clock::time_point t2 = high_resolution_clock::now();
+        auto duration = duration_cast<milliseconds>(t2 - t1).count();
+#ifdef ALE
+        printf(
+            "%9.3e | %7.2e | %4.2f | %8.4f | %7.3f | %9.3e | %9.3e | %9.3e | %14ld|\n", svar.t, svar.dt,
+            cfl, step_error, maxRho, maxf, maxAf, maxShift, duration
+        );
+
+#else
+        printf(
+            "%9.3e | %7.2e | %4.2f | %9.4f | %3u | %8.3f | %9.3e | %9.3e | %14ld|\n", svar.t, svar.dt,
+            cfl, step_error, iteration, maxRho, maxf, maxAf, duration
+        );
+#endif
+    }
+
     /*Add time to global*/
     svar.t += svar.dt;
 
     /* Check the error and adjust the CFL to try and keep convergence */
-    if (error1 > svar.minRes || maxRho > fvar.rhoMaxIter)
+    if (step_error > svar.minRes || maxRho > fvar.rhoMaxIter)
     {
-        if (error1 > 0.6 * svar.minRes)
+        if (step_error > 0.6 * svar.minRes)
         { // If really unstable, immediately reduce the timestep
             svar.cfl = std::max(svar.cfl_min, svar.cfl - svar.cfl_step);
             svar.nUnstable = 0;
@@ -328,12 +346,12 @@ real Integrator::integrate(
     /* Find max x and y coordinates of the fluid */
     // Find maximum safe timestep
     vector<SPHPart>::iterator maxXi = std::max_element(
-        pnp1.begin() + svar.bndPts, pnp1.end(),
+        pnp1.begin() + svar.bndPts, pnp1.end_index(),
         [](SPHPart const& p1, SPHPart const& p2) { return p1.xi[0] < p2.xi[0]; }
     );
 
     vector<SPHPart>::iterator maxYi = std::max_element(
-        pnp1.begin() + svar.bndPts, pnp1.end(),
+        pnp1.begin() + svar.bndPts, pnp1.end_index(),
         [](SPHPart const& p1, SPHPart const& p2) { return p1.xi[1] < p2.xi[1]; }
     );
 
@@ -343,145 +361,14 @@ real Integrator::integrate(
     dambreak << svar.t << "  " << maxX + 0.5 * svar.Pstep << "  " << maxY + 0.5 * svar.Pstep << endl;
 #endif
 
-    return error1;
-}
-
-/* Integration loop to perform the first timestep and find forces only.
-
-Solve the forces and pressures for particles according to a calculated stable timestep (current no option
-to use a fixed timestep) and do not update the new timestep. This should be used only as a prestep to
-write files with starting forces.
-*/
-void Integrator::first_step(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    VLM const& vortex, MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1,
-    SPHState& pn, vector<IPTState>& iptdata
-)
-{
-    size_t const start = svar.bndPts;
-    size_t end = svar.totPts;
-    size_t end_ng = svar.bndPts + svar.simPts;
-    real npd = 1.0;
-#if DEBUG
-    fprintf(dbout, "Starting first step. Start index: %zu End index: %zu\n", start, end);
-#endif
-
-    dSPH_PreStep(fvar, end, pnp1, outlist, npd);
-    if (svar.Asource == meshInfl)
-    {
-        FindCell(svar, avar, CELL_TREE, cells, pnp1, pn);
-        if (svar.totPts != pnp1.size())
-        { // Rebuild the neighbour list
-            // cout << "Updating neighbour list" << endl;
-            // cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
-            svar.delNum += svar.totPts - pnp1.size();
-            svar.totPts = pnp1.size();
-            svar.simPts = svar.totPts - svar.bndPts;
-            end = svar.totPts;
-            end_ng = end;
-            outlist = update_neighbours(SPH_TREE, fvar, pnp1);
-            dSPH_PreStep(fvar, end, pnp1, outlist, npd);
-        }
-    }
-
-    Detect_Surface(svar, fvar, avar, start, end_ng, outlist, cells, vortex, pnp1);
-
-    if (svar.ghost == 1)
-    { /* Poisson points */
-        PoissonGhost(svar, fvar, avar, cells, SPH_TREE, outlist, pn, pnp1);
-        dSPH_PreStep(fvar, svar.totPts, pnp1, outlist, npd);
-        // Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,pnp1);
-    }
-    else if (svar.ghost == 2)
-    { /* Lattice points */
-        LatticeGhost(svar, fvar, avar, cells, SPH_TREE, outlist, pn, pnp1, limits);
-        dSPH_PreStep(fvar, svar.totPts, pnp1, outlist, npd);
-        // Detect_Surface(svar,fvar,avar,start,end_ng,outlist,cells,pnp1);
-    }
-
-    end = svar.totPts;
-
-    uint iteration = 0;
-    real error1 = 1.0;
-    real error2 = 0.0;
-    real logbase = 0.0;
-
-    StateVecD dropVel = StateVecD::Zero();
-    StateVecD Force = StateVecD::Zero();
-
-    /*find force at time n*/
-    vector<StateVecD> res;
-    vector<StateVecD> Af;
-    vector<real> Rrho;
-    vector<real> curve;
-
-    // Find maximum safe timestep
-    svar.dt = find_timestep(svar, fvar, cells, pnp1, start, end_ng);
-
-#ifndef NOFROZEN
-    dissipation_terms(fvar, start, end, outlist, pnp1);
-#endif
-
-    // /*Previous SPHState for error calc*/
-    vector<StateVecD> xih(end - start);
-#pragma omp parallel for default(shared) // shared(pnp1)
-    for (size_t ii = start; ii < end; ++ii)
-    {
-        xih[ii - start] = pnp1[ii].xi;
-    }
-
-    /*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
-    solve_prestep(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pnp1, pn, xih, start, end,
-        logbase, npd, iteration, Force, dropVel, error1, error2
-    );
-
-    outlist = update_neighbours(SPH_TREE, fvar, pnp1);
-
-    dSPH_PreStep(fvar, end, pnp1, outlist, npd);
-
-    if (svar.Asource == meshInfl)
-    {
-        FindCell(svar, avar, CELL_TREE, cells, pnp1, pn);
-        if (svar.totPts != pnp1.size())
-        { // Rebuild the neighbour list
-            svar.delNum += svar.totPts - pnp1.size();
-            svar.totPts = pnp1.size();
-            svar.simPts = svar.totPts - svar.bndPts;
-            end = svar.totPts;
-            end_ng = end;
-            outlist = update_neighbours(SPH_TREE, fvar, pnp1);
-            dSPH_PreStep(fvar, end, pnp1, outlist, npd);
-        }
-    }
-
-    Detect_Surface(svar, fvar, avar, start, end_ng, outlist, cells, vortex, pnp1);
-
-#ifndef NOFROZEN
-    dissipation_terms(fvar, start, end, outlist, pnp1);
-#endif
-
-    /*Do time integration*/
-    solve_timestep(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pnp1, pn, xih, start, end,
-        logbase, npd, iteration, Force, dropVel, error1, error2
-    );
-
-    Check_If_Ghost_Needs_Removing(svar, fvar, SPH_TREE, pn, pnp1);
-
-    // In the first timestep no update of the particle positions is desired.
-    // It is only to establish forces and pressures prior to writing time zero files.
-    // Useful to debug if starting forces are crazy
-#if DEBUG
-    fprintf(dbout, "Exiting first step. Error: %f\n", error1);
-#endif
+    return step_error;
 }
 
 /* Internal pre-step for the integration methods to find base error for the timestep. */
 void Integrator::solve_prestep(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
     MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn,
-    vector<StateVecD>& xih, size_t const& start, size_t& end, real& logbase, real& npd, uint& iteration,
+    vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& logbase, real& npd,
     StateVecD& Force, StateVecD& dropVel, real& error1, real& error2
 )
 {
@@ -491,20 +378,21 @@ void Integrator::solve_prestep(
     case runge_kutta:
     {
         error1 = Get_First_RK(
-            svar, fvar, avar, start, end, fvar.B, fvar.gam, npd, cells, limits, outlist, logbase, pn,
-            pnp1, error1
+            svar, fvar, avar, start_index, end_index, fvar.B, fvar.gam, npd, cells, limits, outlist,
+            logbase, pn, pnp1, error1
         );
         break;
     }
     case newmark_beta:
     {
         Newmark_Beta::Do_NB_Iter(
-            CELL_TREE, svar, fvar, avar, start, end, npd, cells, limits, outlist, pn, pnp1, Force,
-            dropVel
+            CELL_TREE, svar, fvar, avar, start_index, end_index, npd, cells, limits, outlist, pn, pnp1,
+            Force, dropVel
         );
 
         void(Newmark_Beta::Check_Error(
-            SPH_TREE, svar, fvar, start, end, error1, error2, logbase, outlist, xih, pn, pnp1, iteration
+            SPH_TREE, svar, fvar, start_index, end_index, error1, error2, logbase, outlist, xih, pn,
+            pnp1, iteration
         ));
         iteration++; // Update iteration count
         break;
@@ -513,10 +401,10 @@ void Integrator::solve_prestep(
 }
 
 /* Internal funtion to solve the timestep given a base error from the pre-step. */
-void Integrator::solve_timestep(
+void Integrator::solve_step(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
     MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn,
-    vector<StateVecD>& xih, size_t const& start, size_t& end, real& logbase, real& npd, uint& iteration,
+    vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& logbase, real& npd,
     StateVecD& Force, StateVecD& dropVel, real& error1, real& error2
 )
 {
@@ -528,8 +416,8 @@ void Integrator::solve_timestep(
         SPHState st_2 = pnp1;
 
         error1 = Runge_Kutta4(
-            CELL_TREE, svar, fvar, avar, start, end, fvar.B, fvar.gam, npd, cells, limits, outlist,
-            logbase, pn, st_2, pnp1, Force, dropVel
+            CELL_TREE, svar, fvar, avar, start_index, end_index, fvar.B, fvar.gam, npd, cells, limits,
+            outlist, logbase, pn, st_2, pnp1, Force, dropVel
         );
         break;
     }
@@ -537,8 +425,8 @@ void Integrator::solve_timestep(
     {
 
         Newmark_Beta::Newmark_Beta(
-            SPH_TREE, CELL_TREE, svar, fvar, avar, start, end, npd, cells, limits, outlist, logbase,
-            iteration, error1, error2, xih, pn, pnp1, Force, dropVel
+            SPH_TREE, CELL_TREE, svar, fvar, avar, start_index, end_index, npd, cells, limits, outlist,
+            logbase, iteration, error1, error2, xih, pn, pnp1, Force, dropVel
         );
         break;
     }
@@ -546,8 +434,8 @@ void Integrator::solve_timestep(
 }
 
 real Integrator::find_timestep(
-    SIM const& svar, FLUID const& fvar, MESH const& cells, SPHState const& pnp1, size_t const& start,
-    size_t const& end_ng
+    SIM const& svar, FLUID const& fvar, MESH const& cells, SPHState const& pnp1,
+    size_t const& start_index, size_t const& end_index
 )
 {
     // Find maximum safe timestep (avoiding a div by zero)
@@ -556,7 +444,7 @@ real Integrator::find_timestep(
     real maxU = MEPSILON;
     real minST = 9999999.0;
 #pragma omp parallel for reduction(max : maxf, maxU, maxdrho) reduction(min : minST)
-    for (size_t ii = start; ii < end_ng; ++ii)
+    for (size_t ii = start_index; ii < end_index; ++ii)
     {
         maxf = std::max(maxf, pnp1[ii].acc.norm());
         maxdrho = std::max(maxdrho, abs(pnp1[ii].Rrho));

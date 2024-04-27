@@ -587,9 +587,9 @@ void Speed_Test_Sweep(SIM& svar, FLUID& fvar, AERO& avar)
         auto time1_sph = high_resolution_clock::now();
         for (int run = 0; run < svar.nRuns; ++run)
         {
-            integrator.first_step(
+            integrator.integrate_no_update(
                 sph_vect[run].NP1, CELL_TREE, sph_vect[run].svar, fvar, avar, vortex, cells, limits,
-                sph_vect[run].outlist, sph_vect[run].pnp1, sph_vect[run].pn, iptdata
+                sph_vect[run].outlist, sph_vect[run].pn, sph_vect[run].pnp1
             );
 
             for (uint frame = 0; frame < sph_vect[run].svar.Nframe; ++frame)

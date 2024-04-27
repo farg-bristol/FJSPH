@@ -212,8 +212,8 @@ int main(int argc, char* argv[])
     ///*** Perform an iteration to populate the vectors *****/
     if (!svar.restart)
     {
-        integrator.first_step(
-            SPH_TREE, CELL_TREE, svar, fvar, avar, vortex, cells, limits, outlist, pnp1, pn, iptdata
+        integrator.integrate_no_update(
+            SPH_TREE, CELL_TREE, svar, fvar, avar, vortex, cells, limits, outlist, pn, pnp1
         );
     }
     else
