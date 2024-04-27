@@ -9,7 +9,9 @@
 #include "IOFunctions.h"
 #include "Kernel.h"
 #include "VLM.h"
+
 #include <Eigen/LU>
+
 #include <ctime>
 #include <filesystem>
 #include <regex>
@@ -793,22 +795,22 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
         // svar.streakfile.insert(pos,"_streak");
     }
 
-    if (svar.offset_axis != 0)
+    if (svar.offset_axis != no_offset)
     {
         if (SIMDIM != 2)
         {
             printf("WARNING: trying to use 3D code with a 2D settings file.\n");
-            svar.offset_axis = 0;
+            svar.offset_axis = no_offset;
         }
     }
-    else if (svar.offset_axis > 3)
+    else if (svar.offset_axis > z_axis)
     {
         printf("ERROR: 2D offset axis option out of bounds\n");
         fault = 1;
     }
 
 #if SIMDIM == 2
-    if (svar.offset_axis == 0)
+    if (svar.offset_axis == no_offset)
     {
         printf("ERROR: Offset axis has not been defined.\n");
         fault = 1;
@@ -1074,21 +1076,46 @@ void Remove_Old_Files(SIM const& svar)
 
 void Check_Output_Variables(SIM& svar)
 {
-    // Set the initial output options
-    svar.outvar = std::vector<uint>(29, 0);
-    for (size_t ii = 0; ii < 8; ++ii)
-        svar.outvar[ii] = 1;
+    OutputMap& outvars = svar.output_variables;
+    // Mandatory output parameters.
+    outvars.insert({"pos-vec", OutputVariable("X", realType, true, true)});
+    outvars.insert({"vel-vec", OutputVariable("V", realType, true, true)});
+    outvars.insert({"acc-vec", OutputVariable("A", realType, true, true)});
+    outvars.insert({"press", OutputVariable("Pressure", realType, true, false)});
+    outvars.insert({"dRho", OutputVariable("dRho", realType, true, false)});
+    outvars.insert({"partID", OutputVariable("partID", int32Type, true, false)});
+    outvars.insert({"cellID", OutputVariable("cellID", int32Type, true, false)});
+    outvars.insert({"bound", OutputVariable("bound", uint8Type, true, false)});
 
-    size_t nVars = SIMDIM * 3 + 5;
-    svar.var_types = std::vector<int32_t>(nVars, 2);
-    size_t nOptVars = 0;
+    // Start of optional parameters.
+    outvars.insert({"dens", OutputVariable("Density", realType, false, false)});
+    outvars.insert({"densVar", OutputVariable("Density-Variation", realType, false, false)});
+    outvars.insert({"vmag", OutputVariable("V-mag", realType, false, false)});
+    outvars.insert({"surf", OutputVariable("Surface", realType, false, false)});
+    outvars.insert({"surfZ", OutputVariable("Surface-Zone", realType, false, false)});
+    outvars.insert({"aero-mag", OutputVariable("Aero-mag", realType, false, false)});
+    outvars.insert({"aero-vec", OutputVariable("Aero-vector", realType, false, true)});
+    outvars.insert({"curv", OutputVariable("curvature", realType, false, false)});
+    outvars.insert({"occl", OutputVariable("occl", realType, false, false)});
+    outvars.insert({"cellP", OutputVariable("cell-pressure", realType, false, false)});
+    outvars.insert({"cellRho", OutputVariable("cell-density", realType, false, false)});
+    outvars.insert({"cellV-mag", OutputVariable("cell-vel-mag", realType, false, false)});
+    outvars.insert({"cellV-vec", OutputVariable("cell-vel-vector", realType, false, true)});
+    outvars.insert({"dsphG-vec", OutputVariable("Dsph-grad-vector", realType, false, true)});
+    outvars.insert({"lam", OutputVariable("lambda", realType, false, false)});
+    outvars.insert({"lam-nb", OutputVariable("lambda-no-bound", realType, false, false)});
+    outvars.insert({"colour", OutputVariable("colour", realType, false, false)});
+    outvars.insert({"colour-G-vec", OutputVariable("colour-grad-vector", realType, false, true)});
+    outvars.insert({"norm-vec", OutputVariable("surf-normal-vector", realType, false, true)});
+    outvars.insert({"shiftV-mag", OutputVariable("shift-vel-mag", realType, false, false)});
+    outvars.insert({"shiftV-vec", OutputVariable("shift-vel-vector", realType, false, true)});
 
     if (!svar.output_names.empty())
     {
         // Split the names using underscore as a delimiter
         std::vector<std::string> vals;
-        auto start = 0U;
-        auto end = svar.output_names.find_first_of("_");
+        size_t start = 0;
+        size_t end = svar.output_names.find_first_of("_");
         while (end != std::string::npos)
         {
             vals.emplace_back(svar.output_names.substr(start, end - start));
@@ -1100,411 +1127,71 @@ void Check_Output_Variables(SIM& svar)
         // Now check the variables for which ones want to be output
         for (std::string const& var : vals)
         {
-            if (var == "dens")
+            if (outvars.find(var) != outvars.end())
             {
-                svar.outvar[8] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "densVar")
-            {
-                svar.outvar[9] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "vmag")
-            {
-                svar.outvar[10] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "surf")
-            {
-                svar.outvar[11] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "surfZ")
-            {
-                svar.outvar[12] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "aero-mag")
-            {
-                svar.outvar[13] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "aero-vec")
-            {
-                svar.outvar[14] = 1;
-                nOptVars += SIMDIM;
-            }
-            else if (var == "curv")
-            {
-                svar.outvar[15] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "occl")
-            {
-                svar.outvar[16] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "cellP")
-            {
-                svar.outvar[17] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "cellRho")
-            {
-                svar.outvar[18] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "cellV-mag")
-            {
-                svar.outvar[19] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "cellV-vec")
-            {
-                svar.outvar[20] = 1;
-                nOptVars += SIMDIM;
-            }
-            else if (var == "dsphG")
-            {
-                svar.outvar[21] = 1;
-                nOptVars += SIMDIM;
-            }
-            else if (var == "lam")
-            {
-                svar.outvar[22] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "lam-nb")
-            {
-                svar.outvar[23] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "colour")
-            {
-                svar.outvar[24] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "colour-G")
-            {
-                svar.outvar[25] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "norm")
-            {
-                svar.outvar[26] = 1;
-                nOptVars += SIMDIM;
-            }
-            else if (var == "shiftV-mag")
-            {
-                svar.outvar[27] = 1;
-                nOptVars += 1;
-            }
-            else if (var == "shiftV-vec")
-            {
-                svar.outvar[28] = 1;
-                nOptVars += SIMDIM;
+                // Variable exists, so mark it to be output
+                outvars.at(var).write = true;
             }
             else
             {
-                std::printf("Unrecognised output variable \"%s\" defined\n", var.c_str());
+                std::printf("Unrecognised output variable \"%s\" defined.\n", var.c_str());
             }
         }
     }
 
-    svar.var_types.resize(nVars + nOptVars, 0);
-
-    // Define the variable names
-    string axis1 = "X";
-    string axis1s = "x";
-    string axis2 = "Y";
-    string axis2s = "y";
+    // Fill the var_names string and var_types vector
+    bool write_x = true;
+    bool write_y = true;
+    bool write_z = true;
 #if SIMDIM == 2
-    if (svar.offset_axis != 0)
+    switch (svar.offset_axis)
     {
-        if (svar.offset_axis == 1)
-        {
-            axis1 = "Y";
-            axis1s = "y";
-            axis2 = "Z";
-            axis2s = "z";
-        }
-        else if (svar.offset_axis == 2)
-        {
-            axis1 = "X";
-            axis1s = "x";
-            axis2 = "Z";
-            axis2s = "z";
-        }
-        else if (svar.offset_axis == 3)
-        {
-            axis1 = "X";
-            axis1s = "x";
-            axis2 = "Y";
-            axis2s = "y";
-        }
+    case x_axis:
+        write_x = false;
+        break;
+    case y_axis:
+        write_y = false;
+        break;
+    case z_axis:
+        write_z = false;
+        break;
     }
 #endif
 
-    size_t varCount = 0;
     svar.var_names.clear();
-    if (svar.outvar[0])
+    svar.var_types.clear();
+    for (auto const& [key, var] : outvars)
     {
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += axis1 + "," + axis2;
-#if SIMDIM == 3
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",Z";
-#endif
+        if (var.write)
+        {
+            if (var.is_vector)
+            {
+                // Add variables for a vector
+                if (write_x)
+                {
+                    svar.var_names += var.output_name + "-x,";
+                    svar.var_types.emplace_back(var.data_type);
+                }
+                if (write_y)
+                {
+                    svar.var_names += var.output_name + "-y,";
+                    svar.var_types.emplace_back(var.data_type);
+                }
+                if (write_z)
+                {
+                    svar.var_names += var.output_name + "-z,";
+                    svar.var_types.emplace_back(var.data_type);
+                }
+            }
+            else
+            {
+                svar.var_names += var.output_name + ",";
+                svar.var_types.emplace_back(var.data_type);
+            }
+        }
     }
 
-    if (svar.outvar[1])
-    {
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",A" + axis1s + ",A" + axis2s;
-#if SIMDIM == 3
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",Az";
-#endif
-    }
-
-    if (svar.outvar[2])
-    {
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",V" + axis1s + ",V" + axis2s;
-#if SIMDIM == 3
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",Vz";
-#endif
-    }
-
-    if (svar.outvar[3])
-    {
-        svar.var_names += ",Pressure";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[4])
-    {
-        svar.var_names += ",dRho";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[5])
-    {
-        svar.var_names += ",partID";
-        svar.var_types[varCount] = 3;
-        varCount++;
-    }
-
-    if (svar.outvar[6])
-    {
-        svar.var_names += ",cellID";
-        svar.var_types[varCount] = 3;
-        varCount++;
-    }
-
-    if (svar.outvar[7])
-    {
-        svar.var_names += ",bound";
-        svar.var_types[varCount] = 5;
-        varCount++;
-    }
-
-    // Add optionals
-    if (svar.outvar[8])
-    {
-        svar.var_names += ",Dens";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[9])
-    {
-        svar.var_names += ",DensVar";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[10])
-    {
-        svar.var_names += ",Vmag";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[11])
-    {
-        svar.var_names += ",Surf";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[12])
-    {
-        svar.var_names += ",Surfzone";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[13])
-    {
-        svar.var_names += ",Aero-mag";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[14])
-    {
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",Af" + axis1s + ",Af" + axis2s;
-#if SIMDIM == 3
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",Afz";
-#endif
-    }
-
-    if (svar.outvar[15])
-    {
-        svar.var_names += ",curvature";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[16])
-    {
-        svar.var_names += ",occl";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[17])
-    {
-        svar.var_names += ",cellP";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[18])
-    {
-        svar.var_names += ",cellRho";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[19])
-    {
-        svar.var_names += ",cellV-mag";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[20])
-    {
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",cellV" + axis1s + ",cellV" + axis2s;
-#if SIMDIM == 3
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",cellVz";
-#endif
-    }
-
-    if (svar.outvar[21])
-    {
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",dsphG" + axis1s + ",dsphG" + axis2s;
-#if SIMDIM == 3
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",dsphGz";
-#endif
-    }
-
-    if (svar.outvar[22])
-    {
-        svar.var_names += ",lam";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[23])
-    {
-        svar.var_names += ",lam-nb";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[24])
-    {
-        svar.var_names += ",colour";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[25])
-    {
-        svar.var_names += ",colourG";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[26])
-    {
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",surf-norm" + axis1s + ",surf-norm" + axis2s;
-#if SIMDIM == 3
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",surf-normz";
-#endif
-    }
-
-    if (svar.outvar[27])
-    {
-        svar.var_names += ",shiftV-mag";
-        svar.var_types[varCount] = realType;
-        varCount++;
-    }
-
-    if (svar.outvar[28])
-    {
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",shiftV" + axis1s + ",shiftV" + axis2s;
-#if SIMDIM == 3
-        svar.var_types[varCount] = realType;
-        varCount++;
-        svar.var_names += ",shiftVz";
-#endif
-    }
+    // Remove the trailing comma
+    if (svar.var_names.back() == ',')
+        svar.var_names.pop_back();
 }

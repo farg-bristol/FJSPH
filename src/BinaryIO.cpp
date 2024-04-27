@@ -348,7 +348,7 @@ inline void Write_UInt_Value(
 /*************************** BINARY OUTPUTS ******************************/
 /*************************************************************************/
 inline void Write_Zone(
-    SPHState const& pnp1, real const& rho0, real const& scale, std::vector<uint> const& outvar,
+    SPHState const& pnp1, real const& rho0, real const& scale, OutputMap const& output_variables,
     size_t const& start, size_t const& end, void* const& fileHandle, int32_t const& outputZone
 )
 {
@@ -357,7 +357,7 @@ inline void Write_Zone(
 
     vector<real> vec(imax);
     // Restart essential variables. These should not be zero, but could possibly in future
-    if (outvar[0])
+    if (output_variables.at("pos").write)
     {
         for (uint dim = 0; dim < SIMDIM; ++dim)
         {
@@ -370,20 +370,7 @@ inline void Write_Zone(
         }
     }
 
-    if (outvar[1])
-    {
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].acc(dim);
-
-            string name = "Acceleration " + std::to_string(dim);
-            Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, name);
-        }
-    }
-
-    if (outvar[2])
+    if (output_variables.at("vel").write)
     {
         for (uint dim = 0; dim < SIMDIM; ++dim)
         {
@@ -396,7 +383,20 @@ inline void Write_Zone(
         }
     }
 
-    if (outvar[3])
+    if (output_variables.at("acc").write)
+    {
+        for (uint dim = 0; dim < SIMDIM; ++dim)
+        {
+#pragma omp parallel for
+            for (size_t ii = start; ii < end; ++ii)
+                vec[ii - start] = pnp1[ii].acc(dim);
+
+            string name = "Acceleration " + std::to_string(dim);
+            Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, name);
+        }
+    }
+
+    if (output_variables.at("press").write)
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -404,7 +404,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Pressure");
     }
 
-    if (outvar[4])
+    if (output_variables.at("dRho").write)
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -412,7 +412,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Density gradient");
     }
 
-    if (outvar[5])
+    if (output_variables.at("partID").write)
     {
         vector<int> uvec(imax);
         for (size_t ii = start; ii < end; ++ii)
@@ -420,7 +420,7 @@ inline void Write_Zone(
         Write_Int_Vector(fileHandle, outputZone, varCount, 0, imax, uvec, "Particle ID");
     }
 
-    if (outvar[6])
+    if (output_variables.at("cellID").write)
     {
         vector<int> uvec(imax);
         for (size_t ii = start; ii < end; ++ii)
@@ -428,7 +428,7 @@ inline void Write_Zone(
         Write_Int_Vector(fileHandle, outputZone, varCount, 0, imax, uvec, "Cell ID");
     }
 
-    if (outvar[7])
+    if (output_variables.at("bound").write)
     {
         vector<uint8_t> uvec(imax);
         for (size_t ii = start; ii < end; ++ii)
@@ -436,14 +436,8 @@ inline void Write_Zone(
         Write_UInt_Vector(fileHandle, outputZone, varCount, 0, imax, uvec, "Particle status condition");
     }
 
-    // if(outvar[5])
-    // 	Write_Real_Vector(sphFile, outputZone, varCount, imax, start, parts.m, "Mass" );
-
-    // if(outvar[6])
-    // 	Write_Int_Vector(sphFile, outputZone, varCount, imax, start, parts.marker, "Marker" );
-
     // Non essential variables, but to provide further information
-    if (outvar[8])
+    if (output_variables.at("dens").write)
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -451,7 +445,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Density");
     }
 
-    if (outvar[9])
+    if (output_variables.at("densVar").write)
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -459,14 +453,14 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Density Variation");
     }
 
-    if (outvar[10])
+    if (output_variables.at("vmag").write)
     {
         for (size_t ii = start; ii < end; ++ii)
             vec[ii - start] = pnp1[ii].v.norm();
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Velocity magnitude");
     }
 
-    if (outvar[11])
+    if (output_variables.at("surf").write)
     {
         vector<uint8_t> uvec(imax);
         for (size_t ii = start; ii < end; ++ii)
@@ -474,7 +468,7 @@ inline void Write_Zone(
         Write_UInt_Vector(fileHandle, outputZone, varCount, 0, imax, uvec, "Surface flag");
     }
 
-    if (outvar[12])
+    if (output_variables.at("surfZ").write)
     {
         vector<uint8_t> uvec(imax);
         for (size_t ii = start; ii < end; ++ii)
@@ -482,14 +476,14 @@ inline void Write_Zone(
         Write_UInt_Vector(fileHandle, outputZone, varCount, 0, imax, uvec, "Surface zone flag");
     }
 
-    if (outvar[13])
+    if (output_variables.at("aero-mag").write)
     {
         for (size_t ii = start; ii < end; ++ii)
             vec[ii - start] = pnp1[ii].Af.norm();
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Aerodynamic force magnitude");
     }
 
-    if (outvar[14])
+    if (output_variables.at("aero-vec").write)
     {
         for (uint dim = 0; dim < SIMDIM; ++dim)
         {
@@ -502,7 +496,7 @@ inline void Write_Zone(
         }
     }
 
-    if (outvar[15])
+    if (output_variables.at("curv").write)
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -510,7 +504,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Curvature");
     }
 
-    if (outvar[16])
+    if (output_variables.at("occl").write)
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -518,7 +512,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Occlusion factor");
     }
 
-    if (outvar[17])
+    if (output_variables.at("cellP").write)
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -526,7 +520,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Cell pressure");
     }
 
-    if (outvar[18])
+    if (output_variables.at("cellRho").write)
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -534,7 +528,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Cell density");
     }
 
-    if (outvar[19])
+    if (output_variables.at("cellV-mag").write)
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -542,7 +536,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Cell velocity magnitude");
     }
 
-    if (outvar[20])
+    if (output_variables.at("cellV-vec").write)
     {
         for (uint dim = 0; dim < SIMDIM; ++dim)
         {
@@ -555,7 +549,7 @@ inline void Write_Zone(
         }
     }
 
-    if (outvar[21]) // Delta SPH density gradient
+    if (output_variables.at("dsphG-vec").write) // Delta SPH density gradient
     {
         for (uint dim = 0; dim < SIMDIM; ++dim)
         {
@@ -568,7 +562,7 @@ inline void Write_Zone(
         }
     }
 
-    if (outvar[22]) // Lambda eigenvalue of L matrix
+    if (output_variables.at("lam").write) // Lambda eigenvalue of L matrix
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -576,7 +570,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Lambda eigenvalue");
     }
 
-    if (outvar[23]) // Lambda eigenvalue of L matrix without boundary
+    if (output_variables.at("lam-nb").write) // Lambda eigenvalue of L matrix without boundary
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -586,7 +580,7 @@ inline void Write_Zone(
         );
     }
 
-    if (outvar[24]) // Surface colour function
+    if (output_variables.at("colour").write) // Surface colour function
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -594,7 +588,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Colour function");
     }
 
-    if (outvar[25]) // Gradient of the colour function for CSF
+    if (output_variables.at("colour-G-vec").write) // Gradient of the colour function for CSF
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -602,7 +596,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Colour function gradient");
     }
 
-    if (outvar[26]) // Surface normal
+    if (output_variables.at("norm-vec").write) // Surface normal
     {
         for (uint dim = 0; dim < SIMDIM; ++dim)
         {
@@ -615,7 +609,7 @@ inline void Write_Zone(
         }
     }
 
-    if (outvar[27])
+    if (output_variables.at("shiftV-mag").write)
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -623,7 +617,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Shifting velocity magnitude");
     }
 
-    if (outvar[28])
+    if (output_variables.at("shiftV-vec").write)
     {
         for (uint dim = 0; dim < SIMDIM; ++dim)
         {
@@ -671,7 +665,7 @@ void Write_Binary_Timestep(
             exit(-1);
         }
 
-    Write_Zone(pnp1, rho0, svar.scale, svar.outvar, start, end, fileHandle, outputZone);
+    Write_Zone(pnp1, rho0, svar.scale, svar.output_variables, start, end, fileHandle, outputZone);
 
     // Write some auxiliary data, such as mass
     add_zone_aux_data(fileHandle, outputZone, "Particle mass", pnp1[start].m);
