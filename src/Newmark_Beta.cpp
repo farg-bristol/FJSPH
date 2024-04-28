@@ -9,7 +9,7 @@
 
 int Newmark_Beta::Check_Error(
     Sim_Tree& SPH_TREE, SIM& svar, FLUID const& fvar, size_t const& start, size_t const& end,
-    real& error1, real& error2, real& logbase, OUTL& outlist, vector<StateVecD> const& xih, SPHState& pn,
+    real& rms_error, real& logbase, OUTL& outlist, vector<StateVecD> const& xih, SPHState& pn,
     SPHState& pnp1, uint& iteration
 )
 {
@@ -25,18 +25,11 @@ int Newmark_Beta::Check_Error(
     if (iteration == 0)
         logbase = log10(sqrt(errsum / (real(svar.totPts))));
 
-    error1 = log10(sqrt(errsum / (real(svar.totPts)))) - logbase;
-    // cout << RestartCount << "  " << iteration << "  " << error1  << "  " << svar.dt << endl;
-    // cout << iteration << "  " << error1 << "  " << error1 - error2 << "  " << svar.dt << endl;
+    rms_error = log10(sqrt(errsum / (real(svar.totPts)))) - logbase;
 
     if (iteration > svar.subits)
     {
-        // if (error1-error2 > 0.0 /*|| std::isnan(error1)*/)
-        // {	/*If simulation starts diverging, then reduce the timestep and try again.*/
-        // nUnstab++;
-
-        // if(nUnstab > 4)
-        if (error1 > 0.0)
+        if (rms_error > 0.0)
         {
             pnp1 = pn;
 
@@ -45,14 +38,10 @@ int Newmark_Beta::Check_Error(
             svar.dt = 0.5 * svar.dt;
             cout << "Unstable timestep. New dt: " << svar.dt << endl;
             iteration = 0;
-            error1 = 0.0;
+            rms_error = 0.0;
             // RestartCount++;
             return -1;
         }
-
-        // 	return 0;
-        // }	/*Check if we've exceeded the maximum iteration count*/
-
         return 1;
     }
 
@@ -63,7 +52,7 @@ int Newmark_Beta::Check_Error(
 void Newmark_Beta::Do_NB_Iter(
     Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start,
     size_t& end, real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pn,
-    SPHState& pnp1, StateVecD& Force, StateVecD& dropVel
+    SPHState& pnp1
 )
 {
     /*Update the state at time n+1*/
@@ -73,9 +62,6 @@ void Newmark_Beta::Do_NB_Iter(
     vector<StateVecD> Af(end, StateVecD::Zero());
     vector<real> Rrho(end, 0.0);
     vector<int> near_inlet(svar.bndPts, 0);
-
-    Force = StateVecD::Zero();
-    svar.AForce = StateVecD::Zero();
 
     const real& gamma = svar.gamma;
     const real gamma_2 = 1 - gamma;
@@ -143,9 +129,8 @@ void Newmark_Beta::Do_NB_Iter(
         }
     }
 
-    Forces(
-        svar, fvar, avar, cells, pnp1, outlist, npd, res, Rrho, Af, Force
-    ); /*Guess force at time n+1*/
+    /*Guess force at time n+1*/
+    Forces(svar, fvar, avar, cells, pnp1, outlist, npd, res, Rrho, Af);
 
 #pragma omp parallel default(shared) /*reduction(+:Force,dropVel)*/
     {
@@ -320,27 +305,24 @@ void Newmark_Beta::Do_NB_Iter(
     } /*End pragma omp parallel*/
 }
 
-void Newmark_Beta::Newmark_Beta(
+real Newmark_Beta::Newmark_Beta(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
     size_t const& start, size_t& end, real const& npd, MESH const& cells, LIMITS const& limits,
-    OUTL& outlist, real& logbase, uint& iteration, real& error1, real& error2, vector<StateVecD>& xih,
-    SPHState& pn, SPHState& pnp1, StateVecD& Force, StateVecD& dropVel
+    OUTL& outlist, real& logbase, uint& iteration, vector<StateVecD>& xih, SPHState& pn, SPHState& pnp1
 )
 {
-    while (error1 > svar.minRes)
+    real rms_error = 0.0;
+    while (rms_error > svar.minRes)
     {
 /*Previous state for error calc*/
 #pragma omp parallel for shared(pnp1)
         for (size_t ii = start; ii < end; ++ii)
             xih[ii - start] = pnp1[ii].xi;
 
-        Do_NB_Iter(
-            CELL_TREE, svar, fvar, avar, start, end, npd, cells, limits, outlist, pn, pnp1, Force,
-            dropVel
-        );
+        Do_NB_Iter(CELL_TREE, svar, fvar, avar, start, end, npd, cells, limits, outlist, pn, pnp1);
 
         int errstate = Check_Error(
-            SPH_TREE, svar, fvar, start, end, error1, error2, logbase, outlist, xih, pn, pnp1, iteration
+            SPH_TREE, svar, fvar, start, end, rms_error, logbase, outlist, xih, pn, pnp1, iteration
         );
 
         if (errstate == 0) /*Continue as normal*/
@@ -348,9 +330,7 @@ void Newmark_Beta::Newmark_Beta(
         else if (errstate == 1) /*Sub iterations exceeded*/
             break;
 
-        error2 = error1;
-
-        // cout << "It: " << k << " Error: " << error1 << endl;
-
     } /*End of subits*/
+
+    return rms_error;
 }

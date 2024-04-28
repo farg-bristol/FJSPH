@@ -2,8 +2,10 @@
 /******          Created by Jamie MacLeod, University of Bristol        ***********/
 
 #include "VLM.h"
-
 #include "IOFunctions.h"
+
+#include "Third_Party/Eigen/Geometry"
+#include "Third_Party/Eigen/LU"
 
 // Define pi
 #ifndef M_PI

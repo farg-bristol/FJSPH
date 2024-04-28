@@ -3,7 +3,7 @@
 
 #include "arc.h"
 
-#include <Eigen/Dense>
+#include "../Third_Party/Eigen/Dense"
 
 // Private local functions to actually generate the arc points.
 #if SIMDIM == 2

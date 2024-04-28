@@ -39,7 +39,7 @@ void Set_No_Slip(
 void Forces(
     SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, SPHState const& pnp1,
     OUTL const& outlist, /* DELTAP const& dp, */ real const& npd, vector<StateVecD>& RV,
-    vector<real>& Rrho, std::vector<StateVecD>& Af, StateVecD& Force
+    vector<real>& Rrho, std::vector<StateVecD>& Af
 );
 
 void Get_Aero_Velocity(

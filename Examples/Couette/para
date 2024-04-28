@@ -1,6 +1,6 @@
 
-                      Input fluid definition filename: fluid.bmap
-                   Input boundary definition filename: boundary.bmap
+                      Input fluid definition filename: fluid.json
+                   Input boundary definition filename: boundary.json
 
                           Reference dispersed density: 1
                         Reference dispersed viscosity: 1e-2
@@ -32,3 +32,5 @@
                         SPH maximum shifting velocity: 20
                     SPH surface tension contact angle: 150.0
                             SPH restart fit tolerance: 0.5
+
+                                        Variable list: dens_dsphG-vec

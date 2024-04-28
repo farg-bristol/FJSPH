@@ -34,8 +34,7 @@ real Integrator::integrate_no_update(
     end_index = svar.totPts;
     iteration = 0;
 
-    real error1 = 0.0;
-    real error2 = 1.0;
+    real rms_error = 0.0;
     real logbase = 0.0;
     real npd = 1.0;
 
@@ -77,9 +76,6 @@ real Integrator::integrate_no_update(
 
     Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end_index, end_index);
 
-    StateVecD dropVel = StateVecD::Zero();
-    StateVecD Force = StateVecD::Zero();
-
     vector<StateVecD> xih(end_index - start_index);
 #pragma omp parallel for default(shared)
     for (size_t ii = start_index; ii < end_index; ++ii)
@@ -88,9 +84,9 @@ real Integrator::integrate_no_update(
     }
 
     /*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
-    solve_prestep(
+    logbase = solve_prestep(
         SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pnp1, pn, xih, start_index,
-        end_index, logbase, npd, Force, dropVel, error1, error2
+        end_index, npd
     );
 
     // cout << "Error: " << error1 << endl;
@@ -122,18 +118,16 @@ real Integrator::integrate_no_update(
 
     Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end_index, end_index);
 
-    dropVel = StateVecD::Zero();
-
     /*Do time integration*/
-    solve_step(
+    rms_error = solve_step(
         SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pnp1, pn, xih, start_index,
-        end_index, logbase, npd, Force, dropVel, error1, error2
+        end_index, logbase, npd
     );
 
     if (svar.ghost != 0)
         Check_If_Ghost_Needs_Removing(svar, fvar, SPH_TREE, pn, pnp1);
 
-    return error1;
+    return rms_error;
 }
 
 size_t Integrator::update_data(
@@ -271,41 +265,36 @@ real Integrator::integrate(
 
     // Process and output some useful information for each timestep
     real maxRho = 0.0;
-#ifndef DEBUG
-    if (svar.speedTest == 0)
-#endif
-    {
-        real maxAf = 0.0;
-        real maxRhoi = 0.0;
+    real maxAf = 0.0;
+    real maxRhoi = 0.0;
 #ifdef ALE
-        real maxShift = 0.0;
+    real maxShift = 0.0;
 #endif
 #pragma omp parallel for reduction(max : maxAf, maxRhoi)
-        for (size_t ii = start_index; ii < end_index; ++ii)
-        {
-            maxAf = std::max(maxAf, pnp1[ii].Af.norm());
-            maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - fvar.rho0));
+    for (size_t ii = start_index; ii < end_index; ++ii)
+    {
+        maxAf = std::max(maxAf, pnp1[ii].Af.norm());
+        maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - fvar.rho0));
 #ifdef ALE
-            maxShift = std::max(maxShift, pnp1[ii].vPert.norm());
-#endif
-        }
-        maxRho = 100 * maxRhoi / fvar.rho0;
-        real cfl = svar.dt / safe_dt;
-        high_resolution_clock::time_point t2 = high_resolution_clock::now();
-        auto duration = duration_cast<milliseconds>(t2 - t1).count();
-#ifdef ALE
-        printf(
-            "%9.3e | %7.2e | %4.2f | %8.4f | %7.3f | %9.3e | %9.3e | %9.3e | %14ld|\n", svar.t, svar.dt,
-            cfl, step_error, maxRho, maxf, maxAf, maxShift, duration
-        );
-
-#else
-        printf(
-            "%9.3e | %7.2e | %4.2f | %9.4f | %3u | %8.3f | %9.3e | %9.3e | %14ld|\n", svar.t, svar.dt,
-            cfl, step_error, iteration, maxRho, maxf, maxAf, duration
-        );
+        maxShift = std::max(maxShift, pnp1[ii].vPert.norm());
 #endif
     }
+    maxRho = 100 * maxRhoi / fvar.rho0;
+    real cfl = svar.dt / safe_dt;
+    high_resolution_clock::time_point t2 = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(t2 - t1).count();
+#ifdef ALE
+    printf(
+        "%9.3e | %7.2e | %4.2f | %8.4f | %7.3f | %9.3e | %9.3e | %9.3e | %14ld|\n", svar.t, svar.dt, cfl,
+        step_error, maxRho, maxf, maxAf, maxShift, duration
+    );
+
+#else
+    printf(
+        "%9.3e | %7.2e | %4.2f | %9.4f | %3u | %8.3f | %9.3e | %9.3e | %14ld|\n", svar.t, svar.dt, cfl,
+        step_error, iteration, maxRho, maxf, maxAf, duration
+    );
+#endif
 
     /*Add time to global*/
     svar.t += svar.dt;
@@ -365,72 +354,74 @@ real Integrator::integrate(
 }
 
 /* Internal pre-step for the integration methods to find base error for the timestep. */
-void Integrator::solve_prestep(
+real Integrator::solve_prestep(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
     MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn,
-    vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& logbase, real& npd,
-    StateVecD& Force, StateVecD& dropVel, real& error1, real& error2
+    vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& npd
 )
 {
     /*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
+    real logbase = 0.0;
+    real rms_error = 0.0;
     switch (solver_method)
     {
     case runge_kutta:
     {
-        error1 = Get_First_RK(
-            svar, fvar, avar, start_index, end_index, fvar.B, fvar.gam, npd, cells, limits, outlist,
-            logbase, pn, pnp1, error1
+        logbase = Get_First_RK(
+            svar, fvar, avar, start_index, end_index, fvar.B, fvar.gam, npd, cells, limits, outlist, pn,
+            pnp1
         );
         break;
     }
     case newmark_beta:
     {
         Newmark_Beta::Do_NB_Iter(
-            CELL_TREE, svar, fvar, avar, start_index, end_index, npd, cells, limits, outlist, pn, pnp1,
-            Force, dropVel
+            CELL_TREE, svar, fvar, avar, start_index, end_index, npd, cells, limits, outlist, pn, pnp1
         );
 
         void(Newmark_Beta::Check_Error(
-            SPH_TREE, svar, fvar, start_index, end_index, error1, error2, logbase, outlist, xih, pn,
-            pnp1, iteration
+            SPH_TREE, svar, fvar, start_index, end_index, rms_error, logbase, outlist, xih, pn, pnp1,
+            iteration
         ));
         iteration++; // Update iteration count
         break;
     }
     }
+    return logbase;
 }
 
 /* Internal funtion to solve the timestep given a base error from the pre-step. */
-void Integrator::solve_step(
+real Integrator::solve_step(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
     MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn,
-    vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& logbase, real& npd,
-    StateVecD& Force, StateVecD& dropVel, real& error1, real& error2
+    vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& logbase, real& npd
 )
 {
     /*Do time integration*/
+    real rms_error = 0.0;
     switch (solver_method)
     {
     case runge_kutta:
     {
         SPHState st_2 = pnp1;
 
-        error1 = Runge_Kutta4(
+        rms_error = Runge_Kutta4(
             CELL_TREE, svar, fvar, avar, start_index, end_index, fvar.B, fvar.gam, npd, cells, limits,
-            outlist, logbase, pn, st_2, pnp1, Force, dropVel
+            outlist, logbase, pn, st_2, pnp1
         );
         break;
     }
     case newmark_beta:
     {
 
-        Newmark_Beta::Newmark_Beta(
+        rms_error = Newmark_Beta::Newmark_Beta(
             SPH_TREE, CELL_TREE, svar, fvar, avar, start_index, end_index, npd, cells, limits, outlist,
-            logbase, iteration, error1, error2, xih, pn, pnp1, Force, dropVel
+            logbase, iteration, xih, pn, pnp1
         );
         break;
     }
     }
+    return rms_error;
 }
 
 real Integrator::find_timestep(
@@ -490,16 +481,6 @@ real Integrator::find_timestep(
 
     if (dt > svar.tframem1 + svar.framet - svar.t)
         dt = svar.tframem1 + svar.framet - svar.t + svar.dt_min;
-
-    if (svar.speedTest)
-    {
-        // Bound SPH timestep by the mesh size if it's larger than that to traverse a cell, to prevent
-        // skipping.
-        if (dt * pnp1[0].v.norm() > cells.minlength)
-        {
-            dt = cells.minlength / pnp1[0].v.norm();
-        }
-    }
 
     return dt;
 }

@@ -231,7 +231,7 @@ inline StateVecD SurfTenContrib(
 void Forces(
     SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, SPHState const& pnp1,
     OUTL const& outlist, real const& npd, vector<StateVecD>& RV, vector<real>& Rrho,
-    std::vector<StateVecD>& Af, StateVecD& Force
+    std::vector<StateVecD>& Af
 )
 {
 
@@ -262,7 +262,7 @@ void Forces(
         StateVecD const& g = svar.grav;
 
 /******* Loop fluid points: Calculate forces on the fluid. *********/
-#pragma omp for reduction(+ : Force, RV, Af) schedule(static) nowait
+#pragma omp for reduction(+ : RV, Af) schedule(static) nowait
         for (size_t ii = start; ii < end; ++ii)
         {
             SPHPart const& pi = pnp1[ii];
@@ -297,7 +297,6 @@ void Forces(
                 );
                 RV[ii] += aero;
                 Af[ii] += aero;
-                Force += aero;
             }
 
             for (neighbour_index const& jj : outlist[ii])

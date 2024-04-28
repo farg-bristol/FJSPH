@@ -6,8 +6,6 @@
 #include "Neighbours.h"
 #include "Var.h"
 
-#include <Eigen/Geometry>
-
 // #define X 0
 // #define Y 1
 

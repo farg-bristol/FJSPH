@@ -70,7 +70,7 @@ void Write_ASCII_Timestep(
     // fp << std::left << std::scientific << std::setprecision(6);
     // const static uint width = 15;
 
-    if (svar.outvar[0]) // Position coordinates, scaled
+    if (svar.output_variables.at("pos").write) // Position coordinates, scaled
     {
         for (size_t ii = start; ii < end; ++ii)
         {
@@ -80,17 +80,7 @@ void Write_ASCII_Timestep(
         }
     }
 
-    if (svar.outvar[1]) // Acceleration vector
-    {
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-                fprintf(fp, "%3.7e", pnp1[ii].acc(dim));
-            fprintf(fp, "\n");
-        }
-    }
-
-    if (svar.outvar[2]) // Velocity vector
+    if (svar.output_variables.at("vel").write) // Velocity vector
     {
         for (size_t ii = start; ii < end; ++ii)
         {
@@ -100,7 +90,17 @@ void Write_ASCII_Timestep(
         }
     }
 
-    if (svar.outvar[3]) // Pressure scalar
+    if (svar.output_variables.at("acc").write) // Acceleration vector
+    {
+        for (size_t ii = start; ii < end; ++ii)
+        {
+            for (uint dim = 0; dim < SIMDIM; ++dim)
+                fprintf(fp, "%3.7e", pnp1[ii].acc(dim));
+            fprintf(fp, "\n");
+        }
+    }
+
+    if (svar.output_variables.at("press").write) // Pressure scalar
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -117,7 +117,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[4]) // Density gradient
+    if (svar.output_variables.at("dRho").write) // Density gradient
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -134,7 +134,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[5]) // Particle ID, integer
+    if (svar.output_variables.at("partID").write) // Particle ID, integer
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -151,7 +151,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[6]) // cellID
+    if (svar.output_variables.at("cellID").write) // cellID
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -168,7 +168,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[7]) // Boundary type
+    if (svar.output_variables.at("bound").write) // Boundary type
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -185,7 +185,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[8]) // Density
+    if (svar.output_variables.at("dens").write) // Density
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -202,7 +202,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[9]) // Density Variation
+    if (svar.output_variables.at("densVar").write) // Density Variation
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -219,7 +219,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[10]) // Velocity magnitude
+    if (svar.output_variables.at("vmag").write) // Velocity magnitude
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -236,7 +236,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[11]) // Surface flag
+    if (svar.output_variables.at("surf").write) // Surface flag
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -253,7 +253,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[12]) // Surface zone flag
+    if (svar.output_variables.at("surfZ").write) // Surface zone flag
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -270,7 +270,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[13]) // Aerodynamic force magnitude
+    if (svar.output_variables.at("aero-mag").write) // Aerodynamic force magnitude
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -287,7 +287,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[14]) // Aerodynamic force vector
+    if (svar.output_variables.at("aero-vec").write) // Aerodynamic force vector
     {
         for (size_t ii = start; ii < end; ++ii)
         {
@@ -297,7 +297,7 @@ void Write_ASCII_Timestep(
         }
     }
 
-    if (svar.outvar[15]) // Curvature scalar
+    if (svar.output_variables.at("curv").write) // Curvature scalar
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -314,7 +314,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[16]) // Occlusion factor
+    if (svar.output_variables.at("occl").write) // Occlusion factor
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -331,7 +331,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[17]) // Cell pressure
+    if (svar.output_variables.at("cellP").write) // Cell pressure
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -348,7 +348,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[18]) // Cell density
+    if (svar.output_variables.at("cellRho").write) // Cell density
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -365,7 +365,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[19]) // Cell velocity magnitude
+    if (svar.output_variables.at("cellV-mag").write) // Cell velocity magnitude
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -382,7 +382,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[20]) // Cell velocity vector
+    if (svar.output_variables.at("cellV-vec").write) // Cell velocity vector
     {
         for (size_t ii = start; ii < end; ++ii)
         {
@@ -392,7 +392,7 @@ void Write_ASCII_Timestep(
         }
     }
 
-    if (svar.outvar[21]) // dSPH density gradient
+    if (svar.output_variables.at("dephG-vec").write) // dSPH density gradient
     {
         for (size_t ii = start; ii < end; ++ii)
         {
@@ -402,7 +402,7 @@ void Write_ASCII_Timestep(
         }
     }
 
-    if (svar.outvar[22]) // Lambda eigenvalue of L matrix
+    if (svar.output_variables.at("lam").write) // Lambda eigenvalue of L matrix
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -419,7 +419,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[23]) // Lambda eigenvalue without boundary
+    if (svar.output_variables.at("lam-nb").write) // Lambda eigenvalue without boundary
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -436,7 +436,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[24]) // Surface colour function
+    if (svar.output_variables.at("colour").write) // Surface colour function
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -453,7 +453,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[25]) // Surface colour gradient
+    if (svar.output_variables.at("colour-G").write) // Surface colour gradient
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -470,8 +470,8 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[26]) // Surface normal
-    {                    // Cell velocity vector
+    if (svar.output_variables.at("norm-vec").write) // Surface normal
+    {                                               // Cell velocity vector
         for (size_t ii = start; ii < end; ++ii)
         {
             for (uint dim = 0; dim < SIMDIM; ++dim)
@@ -480,7 +480,7 @@ void Write_ASCII_Timestep(
         }
     }
 
-    if (svar.outvar[27])
+    if (svar.output_variables.at("shiftV-mag").write)
     { // Shifting velocity magnitude
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
@@ -497,7 +497,7 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.outvar[28])
+    if (svar.output_variables.at("shiftV-vec").write)
     { // Shifting velocity vector
         for (size_t ii = start; ii < end; ++ii)
         {

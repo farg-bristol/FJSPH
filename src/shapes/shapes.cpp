@@ -20,13 +20,18 @@ template <typename T> void get_var(json const& file_data, string const& param, T
     try
     {
         // See if the parameter exists before trying to retrieve data.
-        if (file_data.find(param) != file_data.end())
+        if (file_data.contains(param))
         {
             // parameter exists, now retrieve it in the format of the data it will be placed in.
             value = file_data[param].template get<T>();
+            cout << "Updating param " << param << endl;
+        }
+        else
+        {
+            cout << "Didn't find parameter " << param << " in keys" << endl;
         }
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         printf("An error occured trying to read a parameter from the JSON file.\n");
         printf("File: %s\n", file_data["filename"].get<string>().c_str());
@@ -72,7 +77,6 @@ void read_shape_JSON(
     shape_block& output_block, int& fault
 )
 {
-    get_var(input_block, "filename", output_block.filename);
     get_var(input_block, "Shape", output_block.shape);
     get_var(input_block, "Sub-shape", output_block.subshape);
     get_var(input_block, "Boundary solver", output_block.solver_name);
@@ -101,13 +105,13 @@ void read_shape_JSON(
     get_var(input_block, "Rotation angle (degree)", output_block.angles[0]);
 
     // Square input_block definitions
-    get_var(input_block, "Start coordinate", output_block.start);
-    get_var(input_block, "End coordinate", output_block.end);
-    get_var(input_block, "Right coordinate", output_block.right);
+    get_var(input_block, "Start coordinates", output_block.start);
+    get_var(input_block, "End coordinates", output_block.end);
+    get_var(input_block, "Right coordinates", output_block.right);
 
     // Circle/arc definitions
-    get_var(input_block, "Midpoint coordinate", output_block.mid);
-    get_var(input_block, "Centre coordinate", output_block.centre);
+    get_var(input_block, "Midpoint coordinates", output_block.mid);
+    get_var(input_block, "Centre coordinates", output_block.centre);
     get_var(input_block, "Arch normal", output_block.right);
     get_var(input_block, "Radius", output_block.radius);
     get_var(input_block, "Length", output_block.length);
@@ -388,9 +392,15 @@ read_shapes_JSON(std::string const& filename, SIM const& svar, FLUID const& fvar
         shape_block& output_block = shapes.back();
 
         // JSON key is the name of the particle block.
+        output_block.filename = filename;
         output_block.name = input_block.key();
 
-        read_shape_JSON(input_block, svar, fvar, globalspacing, output_block, fault);
+        // cout << input_block << endl;
+        json inner_block = input_block.value();
+        // for (auto& new_block : inner_block.items())
+        //     cout << new_block.key() << " : " << new_block.value() << endl;
+
+        read_shape_JSON(inner_block, svar, fvar, globalspacing, output_block, fault);
     }
 
     if (fault)

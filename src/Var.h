@@ -16,9 +16,9 @@
 #include <vector>
 
 // Third party includes
+#include "Third_Party/Eigen/Core"
+#include "Third_Party/Eigen/StdVector"
 #include "Third_Party/NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
-#include <Eigen/Core>
-#include <Eigen/StdVector>
 
 using std::cerr;
 using std::cout;
@@ -161,7 +161,7 @@ enum shape_type
     solid
 };
 
-enum integrate_typ
+enum integrate_type
 {
     newmark_beta = 0,
     runge_kutta
@@ -201,6 +201,11 @@ enum aero_source
     VLMInfl
 };
 
+enum mesh_source
+{
+    TAU_CDF = 0,
+    OpenFOAM
+};
 enum plane_axis
 {
     no_offset = 0,
@@ -254,92 +259,11 @@ struct SIM
         else
             numThreads = omp_get_num_threads();
 
-        /* Input files */
-        CDForFOAM = 0;
-        isBinary = 0;
-        buoyantSim = 0;
-        incomp = 0;
-        labelSize = 32;
-        scalarSize = 64;
 #if SIMDIM == 3
         offset_axis = 0;
 #else
         offset_axis = 2; /* Default to XZ plane in 2D */
 #endif
-
-        angle_alpha = 0;
-
-        boundFile = NULL;
-        fluidFile = NULL;
-
-        write_tecio = 1;
-        write_h5part = 0;
-        out_encoding = 1; /* default to binary */
-        gout = 0;         /* Default to restartable data */
-        single_file = 1;
-        restart_header_written = 0;
-        restart = 0;
-        scale = 1.0;
-
-        nbound = 0;
-        nfluid = 0;
-        partID = 0;
-        simPts = 0;
-        bndPts = 0;
-        totPts = 0;
-        gstPts = 0;
-        delNum = 0;
-        intNum = 0;
-        nrefresh = 0;
-        addcount = 0;
-        finPts = 99999999; /* Default to basically no particle limit */
-
-        Pstep = -1.0;
-        Bstep = 0.7;
-        dx = -1.0;
-
-        bound_type = "(none)"; /* Default to no boundary */
-        Scase = 0;
-        Bcase = 0;
-        ghost = 0;
-        Asource = constVel;
-        init_hydro_pressure = 0;
-        use_global_gas_law = 1;
-        hydro_height = -1;
-
-        /* Universal geometry parameters */
-        offset_vec = StateVecD::Zero();
-
-        /* Droplet geometry parameters */
-        nrad = 0;
-        diam = -1.0;
-
-        /* Integration parameters */
-        solver_type = newmark_beta;
-        subits = 20;
-        Nframe = -1;
-        frame = 0;
-        bound_solver = 0;
-        nStable = 0;
-        nStable_Limit = 10;
-        nUnstable = 0;
-        nUnstable_Limit = 3;
-        subits_factor = 0.333;
-        minRes = -7.0;
-        cfl = 1.0;
-        cfl_step = 0.05;
-        cfl_max = 2.0;
-        cfl_min = 0.1;
-        t = 0.0;
-        tframem1 = 0.0;
-        dt = 2e-10;
-        framet = -1;
-        dt_max = 1;
-        dt_min = 0.0;
-        beta = 0.25;
-        gamma = 0.5;
-        maxmu = 0;
-        maxshift = 9999999;
 
 /*Gravity Vector*/
 #if SIMDIM == 3
@@ -347,181 +271,143 @@ struct SIM
 #else
         grav = StateVecD(0.0, -9.81);
 #endif
-
-        framecount = 0;
-        restart_tol = 0.001;
-        Force = StateVecD::Zero();
-        AForce = StateVecD::Zero(); /*Total Force*/
-        mass = 0;
-        tMom = 0;
-        aMom = 0;
-
-        /* SPHPart tracking settings */
-        using_ipt = 0;
-        eqOrder = 2;
-        max_x_sph = 9999999;
-        max_x = 9999999;
-        nSuccess = 0;
-        nFailed = 0;
-        IPT_diam = 0.0;
-        IPT_area = 0.0;
-        relax = 0.6;
-        nrelax = 5;
-        cellsout = 0;
-        streakout = 1;
-        partout = 0;
-
-        dropDragSweep = 0;
-        speedTest = 0;
-        nRuns = 1;
     }
 
-    uint numThreads;
+    uint numThreads; /* Number of threads that the simulation will use. */
 
     /* File input parameters */
-    uint CDForFOAM;
-    std::string infile, output_prefix, outdir;
-    std::string fluidfile, boundfile;
-    std::string restart_prefix;
-    std::string vlm_file;
+    std::string infile = "";         /* Input settings file. */
+    std::string output_prefix = "";  /* Output file prefix before _boundary or _fluid. */
+    std::string fluidfile = "";      /* Fluid definition settings file. */
+    std::string boundfile = "";      /* Boundary definition settings file. */
+    std::string restart_prefix = ""; /* Restart file prefix before _boundary or _fluid. */
+    std::string vlm_file = "";       /* Vortex Lattice Method (VLM) settings file. Can be infile. */
+    uint mesh_source = TAU_CDF;      /* Using TAU or OpenFOAM for mesh input */
 
     /* OpenFOAM files */
-    std::string foamdir, foamsol;
-    int isBinary, buoyantSim, incomp, labelSize, scalarSize;
+    std::string foamdir = ""; /* OpenFOAM project root directory. */
+    std::string foamsol = ""; /* OpenFOAM time folder to use. */
+    bool isBinary = false;    /* OpenFOAM files are stored in ASCII or binary format. */
+    bool buoyantSim = false;  /* OpenFOAM solution is using a buoyant sim or not. */
+    bool incomp = false;      /* OpenFOAM solution is incompressible or not. */
+    int labelSize = 32;       /* OpenFOAM label size for binary files. */
+    int scalarSize = 64;      /* OpenFOAM scalar size for binary files. */
 
     /* TAU files */
-    std::string taumesh, taubmap, tausol;
-    int offset_axis;
-    real angle_alpha;
-    vector<int> markers;
-    vector<string> bnames;
-    vector<int> bwrite; /* If surface wants data writing */
+    std::string taumesh = ""; /* TAU mesh file name. */
+    std::string taubmap = ""; /* TAU boundary map definition file name. */
+    std::string tausol = "";  /* TAU solution file name. */
+    int offset_axis;          /* TAU offset axis for two-dimensional  */
+    real angle_alpha = 0.0;   /* TAU angle of attack. */
+    vector<int> markers;      /* TAU boundary surface markers. */
+    vector<string> bnames;    /* TAU boundary surface names  */
+    vector<int> bwrite;       /* TAU if surface wants data writing */
 
     /* TECIO File outputs */
-    void* boundFile; /*TECIO file handles*/
-    void* fluidFile;
-    void* ghostFile;
-    std::string output_names; /**< Names of variables to output */
-    OutputMap output_variables;
-    std::vector<uint> outvar;       /**< Variables to output */
-    std::vector<int32_t> var_types; /**< Data types for output */
-    std::string var_names;          /**< Variable names for tecplot output */
+    void* boundFile = NULL;         /* TECIO SPH boundary file handle. */
+    void* fluidFile = NULL;         /* TECIO SPH fluid file handle. */
+    void* ghostFile = NULL;         /* DEPRECATED */
+    std::vector<int32_t> var_types; /* TECIO data types for variables being output */
+    std::string var_names;          /* TECIO variable name string output */
+    std::string output_names = "";  /* Names of variables to output */
+    OutputMap output_variables;     /* Internal map of variables storing which to be output */
 
     /* H5Part file outputs */
-    int64_t ffile, bfile;
-    uint write_tecio;  /**< Write Tecplot file (this or write_h5part needs to be true) */
-    uint write_h5part; /**< Write H5part file (this or write_tecio needs to be true) */
+    int64_t bfile = -1;        /* HDF5 h5part SPH boundary file handle */
+    int64_t ffile = -1;        /* HDF5 h5part SPH fluid file handle */
+    bool write_tecio = true;   /* Write Tecplot file (this or write_h5part needs to be true) */
+    bool write_h5part = false; /* Write H5part file (this or write_tecio needs to be true) */
 
-    ofstream surfacefile; /* Surface impact file */
-    void* surfaceHandle;
+    ofstream surfacefile;       /* ACSII surface impact file */
+    void* surfaceHandle = NULL; /* TECIO Surface impact file */
 
     /* Output type */
-    uint out_encoding;           /* ASCII or binary output*/
-    uint gout;                   /* Output type.*/
-    uint single_file;            /* Use single file or not for output */
-    uint restart_header_written; /* Whether the restart header has been written yet */
-    uint restart;                /* If starting from existing solution */
-    real scale;                  /* Simulation scale */
+    uint out_encoding = 1;           /* ASCII or binary output*/
+    uint gout = 0;                   /* DEPRECATED.*/
+    uint single_file = 1;            /* Write timesteps to a single file or a file for each. */
+    uint restart_header_written = 0; /* Whether the restart header has been written yet */
+    uint restart = 0;                /* If starting from existing solution */
+    real scale = 1.0;                /* Simulation scale */
 
     /* SPHPart counts */
-    size_t nbound;   /* Number of boundary blocks */
-    size_t nfluid;   /* Number of fluid blocks */
-    size_t partID;   /* Track the particle ID separately */
-    size_t totPts;   /* Total count */
-    size_t simPts;   /* Fluid count */
-    size_t bndPts;   /* Boundary count */
-    size_t gstPts;   /* Ghost count */
-    size_t finPts;   /* End count */
-    size_t delNum;   /* Number of deleted particles */
-    size_t intNum;   /* Number of internal particles */
-    size_t nrefresh; /* last add call particle number */
-    uint addcount;   /* Current Number of add-particle calls */
+    size_t nbound = 0;       /* Number of boundary blocks */
+    size_t nfluid = 0;       /* Number of fluid blocks */
+    size_t partID = 0;       /* Track the particle ID separately */
+    size_t totPts = 0;       /* Total count */
+    size_t simPts = 0;       /* Fluid count */
+    size_t bndPts = 0;       /* Boundary count */
+    size_t gstPts = 0;       /* Ghost count -DEPRECATED */
+    size_t finPts = 9999999; /* End count */
+    size_t delNum = 0;       /* Number of deleted particles */
+    size_t intNum = 0;       /* Number of internal particles */
+    size_t nrefresh = 0;     /* last add call particle number */
+    uint addcount = 0;       /* Current Number of add-particle calls */
 
     /* Particle size value */
-    real Pstep, Bstep, dx; /* Initial spacings for particles and boundary */
+    real Pstep = -1.0; /* Particle step for creating particle blocks. Must be specified. */
+    real Bstep = 1.0;  /* Boundary spacing factor of dx */
+    real dx = -1.0;    /* Initial spacings for particles and boundary. Must be specified. */
 
     /* Geometry parameters */
-    string start_type, bound_type;
-    int Scase, Bcase;        /* What initial shape to take */
-    StateVecD offset_vec;    /* Global offset coordinate */
-    int ghost;               /* If the jet is closed or not */
-    int Asource;             /* Source of aerodynamic solution */
-    int init_hydro_pressure; /* Initialise fluid with hydrostatic pressure? */
-    int use_global_gas_law;  /* Whether to use block specific gas laws (Currently not active) */
-    real hydro_height;       /* Hydrostatic height to initialise using */
-
-    /* Jet geometry parameters */
-    real diam; /* Droplet diameter */
-    uint nrad; /* Points along the radius of the jet/droplet */
+    StateVecD offset_vec = StateVecD::Zero(); /* Global offset coordinate */
+    int ghost;                                /* DEPRECATED */
+    int Asource = constVel;                   /* Source of aerodynamic solution */
+    int init_hydro_pressure = 0;              /* Initialise fluid with hydrostatic pressure? */
+    int use_global_gas_law = 1; /* Whether to use block specific gas laws (Currently not active) */
+    real hydro_height = -1;     /* Hydrostatic height to initialise using */
 
     /* Integration parameters */
-    string solver_name;   /* Name of solver */
-    uint solver_type;     /* Use Runge-Kutta or Newmark-Beta */
-    uint subits;          /* Max number of sub-iterations */
-    uint Nframe;          /* Max number of frames to output */
-    uint frame;           /* Current frame number */
-    uint bound_solver;    /* Use boundary pressure or ghost particles */
-    uint nStable;         /* Count for number of overly stable timesteps to alter CFL */
-    uint nStable_Limit;   /* Limit before changing CFL */
-    uint nUnstable;       /* Count for number of unstable timestep to alter CFL */
-    uint nUnstable_Limit; /* Limit before changing CFL */
-    real subits_factor;   /* Factor * max subits, under which is considered overly stable CFL */
-    double cfl;           /* CFL criterion number */
-    double cfl_step;      /* CFL step to perform if unstable */
-    double cfl_max;       /* Maximum CFL for the simulation */
-    double cfl_min;       /* Minimum CFL for the simulation */
-    double t;             /* Simulation time */
-    double tframem1;      /* Last written frame time */
-    real minRes;          /* Minimum solver residual */
-    real dt, framet;      /* Timestep, frame times */
-    real dt_max;          /* Maximum timestep */
-    real dt_min;          /* Minimum timestep */
-    real beta, gamma;     /* Newmark-Beta Parameters */
-    real maxmu;           /* Maximum viscosity component (CFL) */
-    real maxshift;        /* Maximum shifting velocity */
-    StateVecD grav;       /* Gravity vector (assumed to be on z-axis) */
+    string solver_name = "";         /* Name of solver */
+    uint solver_type = newmark_beta; /* Use Runge-Kutta or Newmark-Beta. */
+    uint subits = 20;                /* Max number of sub-iterations. */
+    uint Nframe = -1;                /* Max number of frames to output. Must be specified. */
+    uint frame = 0;                  /* Current frame number. */
+    uint bound_solver = 0;           /* Use boundary pressure or ghost particles. */
+    uint nStable = 0;                /* Count for number of overly stable timesteps to alter CFL */
+    uint nStable_Limit = 10;         /* Limit before changing CFL */
+    uint nUnstable = 0;              /* Count for number of unstable timestep to alter CFL */
+    uint nUnstable_Limit = 3;        /* Limit before changing CFL */
+    real subits_factor = 0.333; /* Factor * max subits, under which is considered overly stable CFL */
+    double cfl = 1.0;           /* CFL criterion number. */
+    double cfl_step = 0.05;     /* CFL step to perform if unstable. */
+    double cfl_max = 2.0;       /* Maximum CFL for the simulation. */
+    double cfl_min = 0.1;       /* Minimum CFL for the simulation. */
+    double t = 0.0;             /* Simulation time. */
+    double tframem1 = 0.0;      /* Last written frame time. */
+    real framet;                /* Timestep, frame times. */
+    real minRes = -7.0;         /* Minimum solver residual. */
+    real dt = 2e-10;            /* Integration timestep. */
+    real dt_max = 1.0;          /* Maximum timestep. */
+    real dt_min = 0.0;          /* Minimum timestep. */
+    real beta = 0.25;
+    real gamma = 0.5;        /* Newmark-Beta Parameters. */
+    real maxmu = 0;          /* Maximum viscosity component (CFL). */
+    real maxshift = 9999999; /* Maximum shifting velocity. */
+    StateVecD grav;          /* Gravity vector (assumed to be on z-axis). */
 
-    uint framecount;  /* How many frames have been output */
-    real restart_tol; /* Tolerance on buffer particles fitting*/
-
-    StateVecD Force, AForce; /*Total Force*/
-    real mass;
-    real tMom, aMom;
+    uint framecount = 0;      /* How many frames have been output. */
+    real restart_tol = 0.001; /* Tolerance on buffer particles fitting. */
 
     /* Particle tracking settings */
-    int using_ipt;
-    int eqOrder;
-    real max_x_sph, max_x; /* Transition distance for sph (naive assumption) and termination for IPT */
-    size_t nSuccess, nFailed;
-    real IPT_diam, IPT_area;
-    real relax, nrelax;                // Relaxation parameters
-    uint cellsout, streakout, partout; /* Whether to output for particle tracking */
-    FILE* cellfile;
-    FILE* streakfile;
-    FILE* partfile;   /* File handles for particle tracking */
-    void* cellHandle; /*TECIO file handles*/
-    void* streakHandle;
-    void* partHandle;
-
-    /* Droplet sweep parameters */
-    int dropDragSweep;
-    vector<size_t> nacross;
-    vector<real> diameters;
-    vector<real> velocities;
-    vector<real> Reynolds;
-
-    /* Speed test options */
-    int speedTest;
-    int nRuns;
-
-    /*Post Processessing settings*/
-    uint afterSim;
-    uint sliceOrSet;
-    StateVecD planeOrigin, planeNorm; /* Plane conditions if in 3D */
-    real cellSize;                    /* Size of each cell to make */
-    StateVecD maxC, minC;             /* Max and min coords to make grid */
-    uint numVars, wrongDim;
-    real postRadius;
+    int using_ipt = 0;        /* Transition to IPT after reaching a point. */
+    int eqOrder = 2;          /* Order of equation to use for IPT. */
+    real max_x_sph = 9999999; /* Transition x-coordinate to convert to IPT. */
+    real max_x = 9999999;    /* Transition distance for sph (naive assumption) and termination for IPT */
+    size_t nSuccess = 0;     /* Number of successful IPT particles. */
+    size_t nFailed = 0;      /* Number of failed IPT particles. */
+    real IPT_diam = 0.0;     /* Diameter of IPT particle. */
+    real IPT_area = 0.0;     /* Cross-sectional area of IPT particle. */
+    real relax = 0.6;        /* Relaxation factor for IPT iteration. */
+    real nrelax = 5;         /* Number of relaxation steps to try. */
+    uint cellsout = 0;       /* IPT output cells traversed by particle. */
+    uint streakout = 1;      /* IPT output streamlines. */
+    uint partout = 0;        /* Whether to output for particle tracking. */
+    FILE* cellfile = NULL;   /* ACSII file handle for IPT cells intersected. */
+    FILE* streakfile = NULL; /* ASCII file handle for IPT streamlines. */
+    FILE* partfile = NULL;   /* ASCII file handle for IPT particle scatter data. */
+    void* cellHandle = NULL; /* TECIO file handle for IPT cells intersected. */
+    void* streakHandle = NULL; /* TECIO file handle for IPT streamlines. */
+    void* partHandle = NULL;   /* TECIO file handle for IPT particle scatter data. */
 };
 
 /*Fluid and smoothing parameters*/

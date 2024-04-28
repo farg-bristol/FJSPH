@@ -30,7 +30,7 @@ void get_boundary_velocity(shape_block& boundvar)
     }
 }
 
-void Read_Shapes(
+void read_shapes_bmap(
     Shapes& var, real& globalspacing, SIM const& svar, FLUID const& fvar, std::string const& filename
 )
 {
@@ -479,7 +479,7 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
         std::filesystem::path(svar.boundfile).extension() == ".JSON")
         boundvar = read_shapes_JSON(svar.boundfile, svar, fvar, dx);
     else
-        Read_Shapes(boundvar, dx, svar, fvar, svar.boundfile);
+        read_shapes_bmap(boundvar, dx, svar, fvar, svar.boundfile);
 
     // Read fluid
     Shapes fluvar;
@@ -488,7 +488,7 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
         std::filesystem::path(svar.boundfile).extension() == ".JSON")
         fluvar = read_shapes_JSON(svar.fluidfile, svar, fvar, dx);
     else
-        Read_Shapes(fluvar, dx, svar, fvar, svar.fluidfile);
+        read_shapes_bmap(fluvar, dx, svar, fvar, svar.fluidfile);
 
     // Now generate points and add to indexes
     Generate_Points(svar, fvar, svar.dx, boundvar);
@@ -701,12 +701,12 @@ void Init_Particles_Restart(SIM& svar, FLUID& fvar, LIMITS& limits)
     // Read boundary blocks
     Shapes boundvar;
     printf("Reading boundary settings...\n");
-    Read_Shapes(boundvar, dx, svar, fvar, svar.boundfile);
+    read_shapes_bmap(boundvar, dx, svar, fvar, svar.boundfile);
 
     // Read fluid
     Shapes fluvar;
     printf("Reading fluid settings...\n");
-    Read_Shapes(fluvar, dx, svar, fvar, svar.fluidfile);
+    read_shapes_bmap(fluvar, dx, svar, fvar, svar.fluidfile);
 
     limits.resize(boundvar.nblocks + fluvar.nblocks, bound_block(0));
 

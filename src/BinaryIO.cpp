@@ -588,7 +588,7 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Colour function");
     }
 
-    if (output_variables.at("colour-G-vec").write) // Gradient of the colour function for CSF
+    if (output_variables.at("colour-G").write) // Gradient of the colour function for CSF
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
@@ -869,48 +869,6 @@ void Init_Binary_PLT(
     add_file_aux_data(fileHandle, "Particle scatter output", svar.partout);
     add_file_aux_data(fileHandle, "Particle streak output", svar.streakout);
     add_file_aux_data(fileHandle, "Particle cell intersection output", svar.cellsout);
-
-    /* Droplet drag sweep settings */
-    add_file_aux_data(fileHandle, "Do droplet drag sweep", svar.dropDragSweep);
-    add_file_aux_data(fileHandle, "Do speed test", svar.speedTest);
-    add_file_aux_data(fileHandle, "Speed test run count", svar.nRuns);
-
-    string str;
-    if (!svar.nacross.empty())
-    {
-        for (auto const& x : svar.nacross)
-            str.append(std::to_string(x) + ",");
-        str.pop_back(); // Remove the last comma
-        add_file_aux_data(fileHandle, "Droplet resolutions", str);
-        str.clear();
-    }
-
-    if (!svar.diameters.empty())
-    {
-        for (auto const& x : svar.diameters)
-            str.append(std::to_string(x) + ",");
-        str.pop_back(); // Remove the last comma
-        add_file_aux_data(fileHandle, "Droplet diameters", str);
-        str.clear();
-    }
-
-    if (!svar.velocities.empty())
-    {
-        for (auto const& x : svar.velocities)
-            str.append(std::to_string(x) + ",");
-        str.pop_back(); // Remove the last comma
-        add_file_aux_data(fileHandle, "Droplet velocities", str);
-        str.clear();
-    }
-
-    if (!svar.Reynolds.empty())
-    {
-        for (auto const& x : svar.Reynolds)
-            str.append(std::to_string(x) + ",");
-        str.pop_back(); // Remove the last comma
-        add_file_aux_data(fileHandle, "Droplet Reynolds numbers", str);
-        str.clear();
-    }
 }
 
 void close_file(void* handle)

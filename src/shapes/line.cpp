@@ -2,7 +2,8 @@
 /******          Created by Jamie MacLeod, University of Bristol        ***********/
 
 #include "line.h"
-#include <Eigen/Geometry>
+
+#include "../Third_Party/Eigen/Geometry"
 
 void LineShape::check_input(shape_block& block, real& globalspacing, int& fault)
 {

@@ -7,10 +7,9 @@
 #include "Resid.h"
 #include "Shifting.h"
 
-
 real Check_RK_Error(
-    SIM const& svar, size_t const& start, size_t const& end, real& error1, real& error2, real& logbase,
-    SPHState const& pn, SPHState const& pnp1, uint& k
+    SIM const& svar, size_t const& start, size_t const& end, real const& logbase, SPHState const& pn,
+    SPHState const& pnp1
 )
 {
     /****** FIND ERROR ***********/
@@ -21,36 +20,26 @@ real Check_RK_Error(
         errsum += (pnp1[ii].xi - pn[ii].xi).squaredNorm();
     }
 
-    if (k == 1)
-        logbase = log10(sqrt(errsum / (real(svar.totPts))));
+    real rms_error = log10(sqrt(errsum / (real(svar.totPts)))) - logbase;
 
-    error1 = log10(sqrt(errsum / (real(svar.totPts)))) - logbase;
-
-    return error1;
+    return rms_error;
 }
 
-/* <summary> Peform the first stage of the Runge-Kutta integration
-        to get the first guess of time n+1 (regarded here as time n+1/4)
-        to perform neighbour search and dissipation terms before freezing </summary */
+/* Peform the first stage of the Runge-Kutta integration
+to get the first guess of time n+1 (regarded here as time n+1/4)
+to perform neighbour search and dissipation terms before freezing </summary */
 real Get_First_RK(
     SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start, size_t const& end,
     real const& B, real const& gam, real const& npd, MESH const& cells, LIMITS const& limits,
-    OUTL const& outlist, real& logbase, SPHState& pn, SPHState& st_2, real& error1
+    OUTL const& outlist, SPHState& pn, SPHState& st_2
 )
 {
     const real dt = svar.dt;
 
-    // real error1 = 0.0;
-    real error2 = 0.0;
-    // logbase = 0.0;
-    uint k = 1;
-
     vector<StateVecD> res_1(end, StateVecD::Zero());
     vector<real> Rrho_1(end, 0.0);
 
-    StateVecD Force = StateVecD::Zero();
     vector<StateVecD> Af;
-    svar.AForce = StateVecD::Zero();
 
     for (size_t block = 0; block < svar.nbound; block++)
     {
@@ -145,7 +134,7 @@ real Get_First_RK(
         }
     }
 
-    Forces(svar, fvar, avar, cells, st_2, outlist, npd, res_1, Rrho_1, Af, Force);
+    Forces(svar, fvar, avar, cells, st_2, outlist, npd, res_1, Rrho_1, Af);
 
 #pragma omp parallel default(shared) // shared(svar,pn,st_2) /*reduction(+:Force,dropVel)*/
     {
@@ -166,8 +155,6 @@ real Get_First_RK(
                 if (st_2[ii].b > BUFFER)
                 {
 
-// Step_1(dt,pn[ii].xi,pn[ii].v,pn[ii].rho,pn[ii].acc,pn[ii].Rrho,
-// 		st_2[ii].xi,st_2[ii].v,st_2[ii].rho);
 #ifdef ALE
                     st_2[ii].xi = pn[ii].xi + 0.5 * dt * (pn[ii].v + pn[ii].vPert);
 #else
@@ -251,16 +238,18 @@ real Get_First_RK(
         }
     }
 
-    return (Check_RK_Error(svar, start, end, error1, error2, logbase, pn, st_2, k));
+    // First iteration so error log base is zero.
+    real logbase = 0.0;
+    return Check_RK_Error(svar, start, end, logbase, pn, st_2);
 }
 
 /* <summary> Perform the rest of the Runge-Kutta integration, assuming frozen
         dissipation terms. This will do step 2 to 4 (n+1/4 to n+1) </summary> */
-void Perform_RK4(
+real Runge_Kutta4(
     Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start,
     size_t& end, real const& B, real const& gam, real const& npd, MESH const& cells,
-    LIMITS const& limits, OUTL const& outlist, real& logbase, SPHState& pn, SPHState& st_2,
-    SPHState& pnp1, StateVecD& Force, StateVecD& dropVel, real& error1
+    LIMITS const& limits, OUTL const& outlist, real const& logbase, SPHState& pn, SPHState& st_2,
+    SPHState& pnp1
 )
 {
     /*Create the vectors*/
@@ -279,15 +268,7 @@ void Perform_RK4(
     vector<real> wDiff(end, 0.0);
     vector<StateVecD> norm(end, StateVecD::Zero());
 
-    Force = StateVecD::Zero();
-    svar.AForce = StateVecD::Zero();
-
-    const real dt = svar.dt;
-
-    // real error1 = 0.0;
-    real error2 = error1;
-    // logbase = 0.0;
-    uint k = 2;
+    real const& dt = svar.dt;
 
     /********************************************************************/
     /*************************  STEP 2  *********************************/
@@ -384,7 +365,7 @@ void Perform_RK4(
         }
     }
 
-    Forces(svar, fvar, avar, cells, st_2, outlist, npd, res_2, Rrho_2, Af, Force);
+    Forces(svar, fvar, avar, cells, st_2, outlist, npd, res_2, Rrho_2, Af);
 
 #pragma omp parallel default(shared) // shared(svar,pn,st_2,res_2,Rrho_2,st_3,res_3,Rrho_3)
     {
@@ -472,11 +453,6 @@ void Perform_RK4(
             }
         }
     }
-
-    // if (Check_RK_Error(svar,start,end,error1,error2,logbase,st_2,st_3,k) < 0)
-    // 	return -1;
-
-    k++;
 
 /********************************************************************/
 /*************************  STEP 3  *********************************/
@@ -579,7 +555,7 @@ void Perform_RK4(
         }
     }
 
-    Forces(svar, fvar, avar, cells, st_3, outlist, npd, res_3, Rrho_3, Af, Force);
+    Forces(svar, fvar, avar, cells, st_3, outlist, npd, res_3, Rrho_3, Af);
 
 #pragma omp parallel default(shared) // shared(svar,pn,st_3,res_3,Rrho_3,st_4,res_4,Rrho_4)
     {
@@ -665,10 +641,6 @@ void Perform_RK4(
         }
     }
 
-    // if (Check_RK_Error(svar,start,end,error1,error2,logbase,st_3,st_4,k) < 0)
-    // 	return -1;
-
-    k++;
 /********************************************************************/
 /*************************  STEP 4  *********************************/
 /********************************************************************/
@@ -786,10 +758,9 @@ void Perform_RK4(
         }
     }
 
-    Forces(svar, fvar, avar, cells, st_4, outlist, npd, res_4, Rrho_4, Af, Force);
+    Forces(svar, fvar, avar, cells, st_4, outlist, npd, res_4, Rrho_4, Af);
 
-#pragma omp parallel default(shared                                                                     \
-) // shared(svar,pn,pnp1,st_2,res_2,Rrho_2,st_3,res_3,Rrho_3,st_4,res_4,Rrho_4)
+#pragma omp parallel default(shared)
     {
         for (size_t block = svar.nbound; block < svar.nfluid + svar.nbound; block++)
         {
@@ -896,31 +867,5 @@ void Perform_RK4(
         }
     } /*End pragma omp parallel*/
 
-    Check_RK_Error(svar, start, end, error1, error2, logbase, st_4, pnp1, k);
-}
-
-real Runge_Kutta4(
-    Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start,
-    size_t& end, real const& B, real const& gam, real const& npd, MESH const& cells,
-    LIMITS const& limits, OUTL const& outlist, real& logbase, SPHState& pn, SPHState& st_2,
-    SPHState& pnp1, StateVecD& Force, StateVecD& dropVel
-)
-{
-    real error = 0.0;
-    // int errstate = 1;
-    // while(errstate != 0)
-    // {
-    Perform_RK4(
-        CELL_TREE, svar, fvar, avar, start, end, B, gam, npd, cells, limits, outlist, logbase, pn, st_2,
-        pnp1, Force, dropVel, error
-    );
-
-    // 	if(errstate < 0)
-    // 	{
-    // 		/*Timestep was unstable - reduce the timestep*/
-    // 		svar.dt *= 0.5;
-    // 	}
-    // }
-
-    return error;
+    return Check_RK_Error(svar, start, end, logbase, st_4, pnp1);
 }

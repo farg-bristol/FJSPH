@@ -10,7 +10,7 @@
 #include "Kernel.h"
 #include "VLM.h"
 
-#include <Eigen/LU>
+#include "Third_Party/Eigen/LU"
 
 #include <ctime>
 #include <filesystem>
@@ -21,24 +21,13 @@ using std::filesystem::directory_iterator;
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
 /*************************************************************************/
+
+/* Set simulation parameters based off the user file inputs */
 void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex)
 {
-    /*Universal parameters based on input values*/
-    // StateVecD angle = svar.Angle;
-    // angle *= M_PI/180.0;
-    // svar.Rotate = GetRotationMat(angle);
-    // svar.Transp = svar.Rotate.transpose();
-
     svar.offset_vec *= svar.scale;
     svar.max_x *= svar.scale;
     svar.max_x_sph *= svar.scale;
-
-    // if(avar.vJetMag != -1)
-    // {
-    // 	avar.vStart = StateVecD::Zero();
-    // 	avar.vStart[1] = avar.vJetMag;
-    // 	avar.vStart = svar.Rotate*avar.vStart;
-    // }
 
     fvar.B = fvar.rho0 * pow(fvar.Cs, 2) / fvar.gam; /*Factor for Cole's Eq*/
 
@@ -52,50 +41,7 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex)
         fvar.rhoMin = fvar.rho0 * (1.0 - fvar.rhoVar * 0.01);
     }
 
-    // svar.nrad = 1;
-    // if(svar.Scase == BOX)
-    // {
-    // 	svar.dx = svar.Pstep;
-    // }
-    // else if(svar.Scase == CYLINDER || svar.Scase == JET || svar.Scase == CONVJET)
-    // {	/* Cylinder case */
-    // 	// Defining dx to fit the pipe, then find rest spacing
-    // 	if(svar.jet_diam/svar.Pstep < 1.5)
-    // 	{	/*spacing is too close to full size to use standard adjustment*/
-    // 		printf("Warning: particle spacing if of the same order of magintude of the jet
-    // diameter.\n"); 		printf("Consider a different size for accuracy.\n");
-    // 	}
-    // 	else
-    // 	{
-    // 		svar.nrad = ceil(abs(0.5*svar.jet_diam/svar.Pstep));
-    // 		svar.dx = 0.5*(svar.jet_diam)/real(svar.nrad);
-    // 	}
-
-    // 	// avar.dPipe = svar.Jet(0);
-    // }
-    // else if (svar.Scase == SPHERE)
-    // {	/* Droplet case */
-    // 	if(svar.diam/svar.Pstep < 1.5)
-    // 	{	/*spacing is too close to full size to use standard adjustment*/
-    // 		svar.nrad = 1;
-    // 		svar.dx = svar.diam;
-    // 	}
-    // 	else
-    // 	{
-    // 		real radius = 0.5*svar.diam;
-
-    // 		svar.nrad = ceil(abs(radius/svar.Pstep));
-    // 		svar.dx = radius/real(svar.nrad);
-    // 	}
-    // }
-
     svar.dx = svar.Pstep * pow(fvar.rhoJ / fvar.rho0, 1.0 / SIMDIM);
-
-    // Correct the droplet to have the same volume as the original
-    // if(svar.Scase == SPHERE)
-    // {
-    // 	printf("Droplet Diameter: ", svar.diam, endl;
-    // }
 
 #if SIMDIM == 3
     avar.pVol = 4.0 / 3.0 * M_PI * pow(svar.Pstep * 0.5, SIMDIM);
@@ -345,35 +291,6 @@ void Print_Settings(FILE* out, SIM const& svar, FLUID const& fvar, AERO const& a
     fprintf(out, "               Particle streak output (0/1/2): %u\n", svar.streakout);
     fprintf(out, "    Particle cell intersection output (0/1/2): %u\n\n", svar.cellsout);
 
-    /* Droplet drag sweep settings */
-    fprintf(out, " Droplet drag parameters --------------------: -\n");
-    fprintf(out, "                  Do droplet drag sweep (0/1): %d\n", svar.dropDragSweep);
-    fprintf(out, "                          Do speed test (0/1): %d\n", svar.speedTest);
-    fprintf(out, "                         Speed test run count: %d\n", svar.nRuns);
-
-    string str;
-    for (auto const& x : svar.nacross)
-        str.append(std::to_string(x) + ",");
-    str.pop_back(); // Remove the last comma
-    fprintf(out, "                          Droplet resolutions: %s\n", str.c_str());
-
-    str.clear();
-    for (auto const& x : svar.diameters)
-        str.append(std::to_string(x) + ",");
-    str.pop_back(); // Remove the last comma
-    fprintf(out, "                            Droplet diameters: %s\n", str.c_str());
-
-    str.clear();
-    for (auto const& x : svar.velocities)
-        str.append(std::to_string(x) + ",");
-    str.pop_back(); // Remove the last comma
-    fprintf(out, "                           Droplet velocities: %s\n", str.c_str());
-
-    str.clear();
-    for (auto const& x : svar.Reynolds)
-        str.append(std::to_string(x) + ",");
-    str.pop_back(); // Remove the last comma
-    fprintf(out, "                     Droplet Reynolds numbers: %s\n\n", str.c_str());
     fflush(out);
 }
 
@@ -433,23 +350,22 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
         Get_Number(line, "2D offset vector (0 / x=1,y=2,z=3)", svar.offset_axis);
         Get_String(line, "OpenFOAM input directory", svar.foamdir);
         Get_String(line, "OpenFOAM solution directory", svar.foamsol);
-        Get_Number(line, "OpenFOAM binary (0/1)", svar.isBinary);
+        Get_Bool(line, "OpenFOAM binary (0/1)", svar.isBinary);
         Get_Number(line, "Label size (32/64)", svar.labelSize);
         Get_Number(line, "Scalar size (32/64)", svar.scalarSize);
-        Get_Number(line, "OpenFOAM buoyant (0/1)", svar.buoyantSim);
+        Get_Bool(line, "OpenFOAM buoyant (0/1)", svar.buoyantSim);
 #if SIMDIM == 3
         Get_String(line, "VLM definition filename", svar.vlm_file);
 #endif
 
         /* File outputs */
-        Get_Number(line, "Write Tecplot output (0/1)", svar.write_tecio);
-        Get_Number(line, "Write H5Part output (0/1)", svar.write_h5part);
+        Get_Bool(line, "Write Tecplot output (0/1)", svar.write_tecio);
+        Get_Bool(line, "Write H5Part output (0/1)", svar.write_h5part);
         Get_Number(line, "Single file for output (0/1)", svar.single_file);
         Get_String(line, "Output files prefix", svar.output_prefix);
         Get_Number(line, "SPH frame time interval", svar.framet);
         Get_Number(line, "SPH frame count", svar.Nframe);
         Get_Number(line, "SPH output encoding (0=ascii/1=binary)", svar.out_encoding);
-        Get_Number(line, "SPH ghost output (0/1)", svar.gout);
         Get_String(line, "Variable list", svar.output_names);
 
         // Get_String(line, "Particle surface impact filename", svar.surfacefile);
@@ -525,17 +441,6 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
         Get_Number(line, "Particle streak output (0/1/2)", svar.streakout);
         Get_Number(line, "Particle cell intersection output (0/1/2)", svar.cellsout);
 
-        /* Droplet drag sweep settings */
-        Get_Number(line, "Do droplet drag sweep (0/1)", svar.dropDragSweep);
-        Get_Array(line, "Droplet resolutions", svar.nacross);
-        Get_Array(line, "Droplet diameters", svar.diameters);
-        Get_Array(line, "Droplet velocities", svar.velocities);
-        Get_Array(line, "Droplet Reynolds numbers", svar.Reynolds);
-
-        /* Speed test settings */
-        Get_Number(line, "Do speed test (0/1)", svar.speedTest);
-        Get_Number(line, "Speed test run count", svar.nRuns);
-
         cline_size = getline(&cline, &cline_buf_size, fin);
     }
 
@@ -573,13 +478,13 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
                 fault = 1;
             }
 
-            svar.CDForFOAM = 1;
+            svar.mesh_source = OpenFOAM;
             svar.Asource = meshInfl;
         }
     }
     else
     {
-        svar.CDForFOAM = 0;
+        svar.mesh_source = TAU_CDF;
         svar.Asource = meshInfl;
         if (svar.taubmap.empty())
         {
@@ -743,35 +648,6 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
     {
         printf("ERROR: SPH aerodynamic interpolation factor must be between 0 < x < 1.\n");
         fault = 1;
-    }
-
-    if (svar.dropDragSweep)
-    {
-        if (svar.nacross.empty())
-        {
-            if (svar.diameters.empty())
-            {
-                printf("\n");
-                fault = 1;
-            }
-            else
-            {
-                for (real const& dx : svar.diameters)
-                {
-                    /* Droplet case */
-                    if (svar.diam / dx < 1.5)
-                    { /*spacing is too close to full size to use standard adjustment*/
-                        svar.nacross.emplace_back(1);
-                    }
-                    else
-                    {
-                        svar.nacross.emplace_back(static_cast<size_t>(ceil(abs(svar.diam / dx))));
-                    }
-                }
-            }
-        }
-
-        fvar.pPress = 0;
     }
 
     /* Particle Tracking Settings */
@@ -1105,7 +981,7 @@ void Check_Output_Variables(SIM& svar)
     outvars.insert({"lam", OutputVariable("lambda", realType, false, false)});
     outvars.insert({"lam-nb", OutputVariable("lambda-no-bound", realType, false, false)});
     outvars.insert({"colour", OutputVariable("colour", realType, false, false)});
-    outvars.insert({"colour-G-vec", OutputVariable("colour-grad-vector", realType, false, true)});
+    outvars.insert({"colour-G", OutputVariable("colour-grad-vector", realType, false, false)});
     outvars.insert({"norm-vec", OutputVariable("surf-normal-vector", realType, false, true)});
     outvars.insert({"shiftV-mag", OutputVariable("shift-vel-mag", realType, false, false)});
     outvars.insert({"shiftV-vec", OutputVariable("shift-vel-vector", realType, false, true)});

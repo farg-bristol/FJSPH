@@ -7,7 +7,6 @@
 #include "BinaryIO.h"
 #include "CDFIO.h"
 #include "Containment.h"
-#include "Droplet.h"
 #include "FOAMIO.h"
 #include "Geometry.h"
 #include "H5IO.h"
@@ -18,7 +17,6 @@
 #include "Integration.h"
 #include "Neighbours.h"
 #include "Shifting.h"
-#include "Speedtest.h"
 #include "VLM.h"
 #include "Var.h"
 
@@ -76,22 +74,10 @@ int main(int argc, char* argv[])
     // 	exit(-1);
     // }
 
-    if (svar.dropDragSweep)
-    {
-        Droplet_Drag_Sweep(svar, fvar, avar);
-        return 0; /* End after this */
-    }
-
-    if (svar.speedTest)
-    {
-        Speed_Test_Sweep(svar, fvar, avar);
-        return 0;
-    }
-
     if (svar.Asource == meshInfl)
     {
 #if SIMDIM == 3
-        if (svar.CDForFOAM == 0)
+        if (svar.mesh_source == TAU_CDF)
         {
             vector<uint> empty;
             TAU::Read_BMAP(svar);
@@ -103,7 +89,7 @@ int main(int argc, char* argv[])
             FOAM::Read_FOAM(svar, cells);
         }
 #else
-        if (svar.CDForFOAM == 0)
+        if (svar.mesh_source == OpenFOAM)
         {
             vector<uint> used_verts;
             TAU::Read_BMAP(svar);

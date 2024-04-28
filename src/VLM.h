@@ -5,14 +5,12 @@
 #define VLM_H
 
 #include "Var.h"
-#include <Eigen/Geometry>
-#include <Eigen/LU>
+
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string.h>
-
 
 /*A structure for the coordinates to define a panel.*/
 typedef struct Panel

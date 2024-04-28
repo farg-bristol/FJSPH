@@ -12,14 +12,14 @@
 real Get_First_RK(
     SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start, size_t const& end,
     real const& B, real const& gam, real const& npd, MESH const& cells, LIMITS const& limits,
-    OUTL const& outlist, real& logbase, SPHState& pn, SPHState& st_2, real& error1
+    OUTL const& outlist, SPHState& pn, SPHState& st_2
 );
 
 real Runge_Kutta4(
     Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start,
     size_t& end, real const& B, real const& gam, real const& npd, MESH const& cells,
-    LIMITS const& limits, OUTL const& outlist, real& logbase, SPHState& pn, SPHState& st_2,
-    SPHState& pnp1, StateVecD& Force, StateVecD& dropVel
+    LIMITS const& limits, OUTL const& outlist, real const& logbase, SPHState& pn, SPHState& st_2,
+    SPHState& pnp1
 );
 
 #endif

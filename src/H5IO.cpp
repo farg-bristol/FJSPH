@@ -1167,11 +1167,6 @@ void Write_HDF5_Attributes(int64_t const& file, SIM const& svar, FLUID const& fv
     HDF5::Write_Uint_Attribute(file, "Particle scatter output", svar.partout);
     HDF5::Write_Uint_Attribute(file, "Particle streak output", svar.streakout);
     HDF5::Write_Uint_Attribute(file, "Particle cell intersection output", svar.cellsout);
-
-    /* Droplet drag sweep settings */
-    HDF5::Write_Int_Attribute(file, "Do droplet drag sweep", svar.dropDragSweep);
-    HDF5::Write_Int_Attribute(file, "Do speed test", svar.speedTest);
-    HDF5::Write_Int_Attribute(file, "Speed test run count", svar.nRuns);
 }
 
 void Write_Zone_Attributes(int64_t const& zone, bound_block const& limits)
@@ -1477,7 +1472,7 @@ namespace h5part
 
     void Write_Zone_Data(
         int64_t const& fout, real const& scale, double const& time, SPHState const& pnp1,
-        size_t const& start, size_t const& end, std::vector<uint> const& outvar, double const& rho0
+        size_t const& start, size_t const& end, OutputMap const& output_variables, double const& rho0
     )
     {
         /* Need to write position, velocity, acceleration, pressure, density gradient, mass, boundary
@@ -1524,30 +1519,8 @@ namespace h5part
 
         /* Kinda optional outputs */
 
-        /* Acceleration */
-        if (outvar[1])
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-            {
-#pragma omp parallel for
-                for (size_t ii = start; ii < end; ++ii)
-                    vec[ii - start] = pnp1[ii].acc(dim);
-
-                string name = "Acc " + HDF5::get_dim(dim);
-                HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-            }
-#if SIMDIM == 2
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = 0;
-
-            string name = "Acc z";
-            HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-#endif
-        }
-
         /* Velocity */
-        if (outvar[2])
+        if (output_variables.at("vel").write)
         {
             for (uint dim = 0; dim < SIMDIM; ++dim)
             {
@@ -1568,8 +1541,30 @@ namespace h5part
 #endif
         }
 
+        /* Acceleration */
+        if (output_variables.at("acc").write)
+        {
+            for (uint dim = 0; dim < SIMDIM; ++dim)
+            {
+#pragma omp parallel for
+                for (size_t ii = start; ii < end; ++ii)
+                    vec[ii - start] = pnp1[ii].acc(dim);
+
+                string name = "Acc " + HDF5::get_dim(dim);
+                HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
+            }
+#if SIMDIM == 2
+#pragma omp parallel for
+            for (size_t ii = start; ii < end; ++ii)
+                vec[ii - start] = 0;
+
+            string name = "Acc z";
+            HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
+#endif
+        }
+
         /* Pressure */
-        if (outvar[3])
+        if (output_variables.at("press").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1577,7 +1572,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Pressure", dims, 0, vec);
         }
 
-        if (outvar[4])
+        if (output_variables.at("dRho").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1585,7 +1580,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Density gradient", dims, 0, vec);
         }
 
-        if (outvar[5])
+        if (output_variables.at("partID").write)
         {
             vector<int> uvec(length);
             for (size_t ii = start; ii < end; ++ii)
@@ -1593,7 +1588,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Particle ID", dims, 0, uvec);
         }
 
-        if (outvar[6])
+        if (output_variables.at("cellID").write)
         {
             vector<int> uvec(length);
             for (size_t ii = start; ii < end; ++ii)
@@ -1601,7 +1596,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Cell ID", dims, 0, uvec);
         }
 
-        if (outvar[7])
+        if (output_variables.at("bound").write)
         {
             vector<uint> uvec(length);
             for (size_t ii = start; ii < end; ++ii)
@@ -1610,7 +1605,7 @@ namespace h5part
         }
 
         // Non essential variables, but to provide further information
-        if (outvar[8])
+        if (output_variables.at("dens").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1618,7 +1613,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Density", dims, 0, vec);
         }
 
-        if (outvar[9])
+        if (output_variables.at("densVar").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1626,14 +1621,14 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Density Variation", dims, 0, vec);
         }
 
-        if (outvar[10])
+        if (output_variables.at("vmag").write)
         {
             for (size_t ii = start; ii < end; ++ii)
                 vec[ii - start] = pnp1[ii].v.norm();
             HDF5::Write_Variable_Scalar(fout, "Velocity magnitude", dims, 0, vec);
         }
 
-        if (outvar[11])
+        if (output_variables.at("surf").write)
         {
             vector<uint> uvec(length);
             for (size_t ii = start; ii < end; ++ii)
@@ -1641,7 +1636,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Surface flag", dims, 0, uvec);
         }
 
-        if (outvar[12])
+        if (output_variables.at("surfZ").write)
         {
             vector<uint> uvec(length);
             for (size_t ii = start; ii < end; ++ii)
@@ -1649,14 +1644,14 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Surface zone flag", dims, 0, uvec);
         }
 
-        if (outvar[13])
+        if (output_variables.at("aero-mag").write)
         {
             for (size_t ii = start; ii < end; ++ii)
                 vec[ii - start] = pnp1[ii].Af.norm();
             HDF5::Write_Variable_Scalar(fout, "Aerodynamic force magnitude", dims, 0, vec);
         }
 
-        if (outvar[14])
+        if (output_variables.at("aero-vec").write)
         {
             for (uint dim = 0; dim < SIMDIM; ++dim)
             {
@@ -1677,7 +1672,7 @@ namespace h5part
 #endif
         }
 
-        if (outvar[15])
+        if (output_variables.at("curv").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1685,7 +1680,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Curvature", dims, 0, vec);
         }
 
-        if (outvar[16])
+        if (output_variables.at("occl").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1693,7 +1688,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Occlusion factor", dims, 0, vec);
         }
 
-        if (outvar[17])
+        if (output_variables.at("cellP").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1701,7 +1696,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Cell pressure", dims, 0, vec);
         }
 
-        if (outvar[18])
+        if (output_variables.at("cellRho").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1709,7 +1704,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Cell density", dims, 0, vec);
         }
 
-        if (outvar[19])
+        if (output_variables.at("cellV-mag").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1717,7 +1712,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Cell velocity magnitude", dims, 0, vec);
         }
 
-        if (outvar[20])
+        if (output_variables.at("cellV-vec").write)
         {
             for (uint dim = 0; dim < SIMDIM; ++dim)
             {
@@ -1738,7 +1733,7 @@ namespace h5part
 #endif
         }
 
-        if (outvar[21]) // Delta SPH density gradient
+        if (output_variables.at("dsphG-vec").write)
         {
             for (uint dim = 0; dim < SIMDIM; ++dim)
             {
@@ -1759,7 +1754,7 @@ namespace h5part
 #endif
         }
 
-        if (outvar[22]) // Lambda eigenvalue of L matrix
+        if (output_variables.at("lam").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1767,7 +1762,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Lambda eigenvalue", dims, 0, vec);
         }
 
-        if (outvar[23]) // Lambda eigenvalue of L matrix without boundary
+        if (output_variables.at("lam-nb").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1775,7 +1770,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Lambda eigenvalue without boundary", dims, 0, vec);
         }
 
-        if (outvar[24]) // Surface colour function
+        if (output_variables.at("colour").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1783,7 +1778,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Colour function", dims, 0, vec);
         }
 
-        if (outvar[25]) // Gradient of the colour function for CSF
+        if (output_variables.at("colour-G").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1791,7 +1786,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Colour function gradient", dims, 0, vec);
         }
 
-        if (outvar[26]) // Surface normal
+        if (output_variables.at("norm-vec").write)
         {
             for (uint dim = 0; dim < SIMDIM; ++dim)
             {
@@ -1812,7 +1807,7 @@ namespace h5part
 #endif
         }
 
-        if (outvar[27])
+        if (output_variables.at("shiftV-mag").write)
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
@@ -1820,7 +1815,7 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Shifting velocity magnitude", dims, 0, vec);
         }
 
-        if (outvar[28])
+        if (output_variables.at("shiftV-vec").write)
         {
             for (uint dim = 0; dim < SIMDIM; ++dim)
             {
@@ -1903,7 +1898,7 @@ void write_h5part_data(
         // Create a group of the current timestep
         int64_t fluzone = H5Gcreate2(ffile, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         h5part::Write_Zone_Data(
-            fluzone, svar.scale, svar.t, pnp1, svar.bndPts, svar.totPts, svar.outvar, fvar.rho0
+            fluzone, svar.scale, svar.t, pnp1, svar.bndPts, svar.totPts, svar.output_variables, fvar.rho0
         );
 
         if (H5Gclose(fluzone))
@@ -1925,7 +1920,7 @@ void write_h5part_data(
         // Create a group of the current timestep
         int64_t bndzone = H5Gcreate2(bfile, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         h5part::Write_Zone_Data(
-            bndzone, svar.scale, svar.t, pnp1, 0, svar.bndPts, svar.outvar, fvar.rho0
+            bndzone, svar.scale, svar.t, pnp1, 0, svar.bndPts, svar.output_variables, fvar.rho0
         );
 
         if (H5Gclose(bndzone))

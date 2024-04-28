@@ -35,18 +35,16 @@ class Integrator
         vector<IPTState>& iptdata
     );
 
-    void solve_prestep(
+    real solve_prestep(
         Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
         MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn,
-        vector<StateVecD>& xih, size_t const& start, size_t& end, real& logbase, real& npd,
-        StateVecD& Force, StateVecD& dropVel, real& error1, real& error2
+        vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& npd
     );
 
-    void solve_step(
+    real solve_step(
         Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
         MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn,
-        vector<StateVecD>& xih, size_t const& start, size_t& end, real& logbase, real& npd,
-        StateVecD& Force, StateVecD& dropVel, real& error1, real& error2
+        vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& logbase, real& npd
     );
 
     real find_timestep(
