@@ -23,9 +23,9 @@ int Newmark_Beta::Check_Error(
     }
 
     if (iteration == 0)
-        logbase = log10(sqrt(errsum / (real(svar.totPts))));
+        logbase = log10(sqrt(errsum / real(svar.totPts)));
 
-    rms_error = log10(sqrt(errsum / (real(svar.totPts)))) - logbase;
+    rms_error = log10(sqrt(errsum / real(svar.totPts))) - logbase;
 
     if (iteration > svar.subits)
     {

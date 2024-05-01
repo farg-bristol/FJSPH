@@ -698,15 +698,25 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
 void Init_Particles_Restart(SIM& svar, FLUID& fvar, LIMITS& limits)
 {
     real dx = svar.dx;
+
     // Read boundary blocks
     Shapes boundvar;
-    printf("Reading boundary settings...\n");
-    read_shapes_bmap(boundvar, dx, svar, fvar, svar.boundfile);
+
+    // Get the extension of the files. If it's JSON, then use the new functions.
+    if (std::filesystem::path(svar.boundfile).extension() == ".json" ||
+        std::filesystem::path(svar.boundfile).extension() == ".JSON")
+        boundvar = read_shapes_JSON(svar.boundfile, svar, fvar, dx);
+    else
+        read_shapes_bmap(boundvar, dx, svar, fvar, svar.boundfile);
 
     // Read fluid
     Shapes fluvar;
     printf("Reading fluid settings...\n");
-    read_shapes_bmap(fluvar, dx, svar, fvar, svar.fluidfile);
+    if (std::filesystem::path(svar.boundfile).extension() == ".json" ||
+        std::filesystem::path(svar.boundfile).extension() == ".JSON")
+        fluvar = read_shapes_JSON(svar.fluidfile, svar, fvar, dx);
+    else
+        read_shapes_bmap(fluvar, dx, svar, fvar, svar.fluidfile);
 
     limits.resize(boundvar.nblocks + fluvar.nblocks, bound_block(0));
 

@@ -70,7 +70,7 @@ void Write_ASCII_Timestep(
     // fp << std::left << std::scientific << std::setprecision(6);
     // const static uint width = 15;
 
-    if (svar.output_variables.at("pos").write) // Position coordinates, scaled
+    if (svar.output_variables.at("pos-vec").write) // Position coordinates, scaled
     {
         for (size_t ii = start; ii < end; ++ii)
         {
@@ -80,7 +80,7 @@ void Write_ASCII_Timestep(
         }
     }
 
-    if (svar.output_variables.at("vel").write) // Velocity vector
+    if (svar.output_variables.at("vel-vec").write) // Velocity vector
     {
         for (size_t ii = start; ii < end; ++ii)
         {
@@ -90,7 +90,7 @@ void Write_ASCII_Timestep(
         }
     }
 
-    if (svar.output_variables.at("acc").write) // Acceleration vector
+    if (svar.output_variables.at("acc-vec").write) // Acceleration vector
     {
         for (size_t ii = start; ii < end; ++ii)
         {

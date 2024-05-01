@@ -24,11 +24,6 @@ template <typename T> void get_var(json const& file_data, string const& param, T
         {
             // parameter exists, now retrieve it in the format of the data it will be placed in.
             value = file_data[param].template get<T>();
-            cout << "Updating param " << param << endl;
-        }
-        else
-        {
-            cout << "Didn't find parameter " << param << " in keys" << endl;
         }
     }
     catch (std::exception const& e)
@@ -51,7 +46,7 @@ void get_var(json const& file_data, string const& param, StateVecD& value)
     // If the vector has the right size, then use it to initialise the Eigen vector.
     // If it didn't find the parameter, then the vector will be size zero.
     if (temp_vec.size() == SIMDIM)
-        value(temp_vec.data());
+        value = StateVecD(temp_vec.data());
 }
 
 // Create a separate function for Eigen vectors, as it doesn't have the right setup.
@@ -74,79 +69,78 @@ void get_var(json const& file_data, string const& param, std::vector<StateVecD>&
 
 void read_shape_JSON(
     json const& input_block, SIM const& svar, FLUID const& fvar, real& globalspacing,
-    shape_block& output_block, int& fault
+    shape_block& new_block, int& fault
 )
 {
-    get_var(input_block, "Shape", output_block.shape);
-    get_var(input_block, "Sub-shape", output_block.subshape);
-    get_var(input_block, "Boundary solver", output_block.solver_name);
-    get_var(input_block, "Aerodynamic entry normal", output_block.aero_norm);
+    get_var(input_block, "Shape", new_block.shape);
+    get_var(input_block, "Sub-shape", new_block.subshape);
+    get_var(input_block, "Boundary solver", new_block.solver_name);
+    get_var(input_block, "Aerodynamic entry normal", new_block.aero_norm);
 
-    get_var(input_block, "Fixed velocity or dynamic inlet BC", output_block.inlet_bc_type);
+    get_var(input_block, "Fixed velocity or dynamic inlet BC", new_block.inlet_bc_type);
 
     // Pipe exit plane.
-    get_var(input_block, "Aerodynamic entry normal", output_block.aero_norm);
-    get_var(input_block, "Deletion normal", output_block.delete_norm);
-    get_var(input_block, "Insertion normal", output_block.insert_norm);
-    get_var(input_block, "Aerodynamic entry plane constant", output_block.aeroconst);
-    get_var(input_block, "Deletion plane constant", output_block.delconst);
-    get_var(input_block, "Insertion plane constant", output_block.insconst);
-    get_var(input_block, "Pipe depth", output_block.thickness);
+    get_var(input_block, "Aerodynamic entry normal", new_block.aero_norm);
+    get_var(input_block, "Deletion normal", new_block.delete_norm);
+    get_var(input_block, "Insertion normal", new_block.insert_norm);
+    get_var(input_block, "Aerodynamic entry plane constant", new_block.aeroconst);
+    get_var(input_block, "Deletion plane constant", new_block.delconst);
+    get_var(input_block, "Insertion plane constant", new_block.insconst);
+    get_var(input_block, "Pipe depth", new_block.thickness);
 
-    get_var(input_block, "i-direction count", output_block.ni);
-    get_var(input_block, "j-direction count", output_block.nj);
-    get_var(input_block, "k-direction count", output_block.nk);
+    get_var(input_block, "i-direction count", new_block.ni);
+    get_var(input_block, "j-direction count", new_block.nj);
+    get_var(input_block, "k-direction count", new_block.nk);
 
-    get_var(input_block, "Stretching factor", output_block.stretch);
+    get_var(input_block, "Stretching factor", new_block.stretch);
 
     // Rotation definitions
-    get_var(input_block, "Normal vector", output_block.normal);
-    get_var(input_block, "Rotation angles (degree)", output_block.angles);
-    get_var(input_block, "Rotation angle (degree)", output_block.angles[0]);
+    get_var(input_block, "Normal vector", new_block.normal);
+    get_var(input_block, "Rotation angles (degree)", new_block.angles);
+    get_var(input_block, "Rotation angle (degree)", new_block.angles[0]);
 
     // Square input_block definitions
-    get_var(input_block, "Start coordinates", output_block.start);
-    get_var(input_block, "End coordinates", output_block.end);
-    get_var(input_block, "Right coordinates", output_block.right);
+    get_var(input_block, "Start coordinates", new_block.start);
+    get_var(input_block, "End coordinates", new_block.end);
+    get_var(input_block, "Right coordinates", new_block.right);
 
     // Circle/arc definitions
-    get_var(input_block, "Midpoint coordinates", output_block.mid);
-    get_var(input_block, "Centre coordinates", output_block.centre);
-    get_var(input_block, "Arch normal", output_block.right);
-    get_var(input_block, "Radius", output_block.radius);
-    get_var(input_block, "Length", output_block.length);
-    get_var(input_block, "Arc start (degree)", output_block.arc_start);
-    get_var(input_block, "Arc end (degree)", output_block.arc_end);
-    get_var(input_block, "Arc length (degree)", output_block.arclength);
-    get_var(input_block, "Starting straight length", output_block.sstraight);
-    get_var(input_block, "Ending straight length", output_block.estraight);
+    get_var(input_block, "Midpoint coordinates", new_block.mid);
+    get_var(input_block, "Centre coordinates", new_block.centre);
+    get_var(input_block, "Arch normal", new_block.right);
+    get_var(input_block, "Radius", new_block.radius);
+    get_var(input_block, "Length", new_block.length);
+    get_var(input_block, "Arc start (degree)", new_block.arc_start);
+    get_var(input_block, "Arc end (degree)", new_block.arc_end);
+    get_var(input_block, "Arc length (degree)", new_block.arclength);
+    get_var(input_block, "Start straight length", new_block.sstraight);
+    get_var(input_block, "End straight length", new_block.estraight);
 
-    get_var(input_block, "Particle spacing", output_block.dx);
-    get_var(input_block, "Particle ordering (Grid/HCP)", output_block.particle_order);
-    get_var(input_block, "Wall thickness", output_block.thickness);
-    get_var(input_block, "Wall radial particle count", output_block.nk);
-    get_var(input_block, "Wall is no-slip", output_block.no_slip);
+    get_var(input_block, "Particle spacing", new_block.dx);
+    get_var(input_block, "Particle ordering (Grid/HCP)", new_block.particle_order);
+    get_var(input_block, "Wall thickness", new_block.thickness);
+    get_var(input_block, "Wall radial particle count", new_block.nk);
+    get_var(input_block, "Wall is no-slip", new_block.no_slip);
 
-    get_var(input_block, "Starting velocity", output_block.vel);
-    get_var(input_block, "Starting jet velocity", output_block.vmag);
-    get_var(input_block, "Starting pressure", output_block.press);
-    get_var(input_block, "Starting density", output_block.dens);
-    // get_var(input_block, "Starting mass", output_block.mass);
+    get_var(input_block, "Start velocity", new_block.vel);
+    get_var(input_block, "Start jet velocity", new_block.vmag);
+    get_var(input_block, "Start pressure", new_block.press);
+    get_var(input_block, "Start density", new_block.dens);
 
-    get_var(input_block, "Cole EOS gamma", output_block.gamma);
-    get_var(input_block, "Speed of sound", output_block.speedOfSound);
-    get_var(input_block, "Resting density", output_block.rho0);
-    get_var(input_block, "Volume to target", output_block.renorm_vol);
+    get_var(input_block, "Cole EOS gamma", new_block.gamma);
+    get_var(input_block, "Speed of sound", new_block.speedOfSound);
+    get_var(input_block, "Rest density", new_block.rho0);
+    get_var(input_block, "Volume to target", new_block.renorm_vol);
 
-    get_var(input_block, "Coordinate filename", output_block.filename);
+    get_var(input_block, "Coordinate filename", new_block.filename);
 
-    get_var(input_block, "Coordinate data", output_block.coords);
+    get_var(input_block, "Coordinate data", new_block.coords);
 
-    get_var(input_block, "Time data filename", output_block.position_filename);
-    get_var(input_block, "Time data", output_block.times);
-    get_var(input_block, "Position data", output_block.pos);
+    get_var(input_block, "Time data filename", new_block.position_filename);
+    get_var(input_block, "Time data", new_block.times);
+    get_var(input_block, "Position data", new_block.pos);
 
-    output_block.check_input(svar, fvar, globalspacing, fault);
+    new_block.check_input(svar, fvar, globalspacing, fault);
 }
 
 // Check the inputs for a block to make sure they are valid.
@@ -247,7 +241,7 @@ void shape_block::check_input(SIM const& svar, FLUID const& fvar, real& globalsp
         }
     }
 
-    if (position_filename.empty())
+    if (!position_filename.empty())
     {
         if (ntimes != 0)
         {
@@ -380,27 +374,19 @@ read_shapes_JSON(std::string const& filename, SIM const& svar, FLUID const& fvar
 
     json data = json::parse(inFile);
 
-    // Store the filename for error reporting
-    data["filename"] = filename;
-
     // Create an empty vector of shapes. This will be filled as the file is read.
     Shapes shapes;
     int fault = 0;
-    for (auto& input_block : data.items())
+    for (auto& [block_name, input_block] : data.items())
     {
         shapes.emplace_back();
-        shape_block& output_block = shapes.back();
+        shape_block& new_block = shapes.back();
 
         // JSON key is the name of the particle block.
-        output_block.filename = filename;
-        output_block.name = input_block.key();
+        new_block.filename = filename;
+        new_block.name = block_name;
 
-        // cout << input_block << endl;
-        json inner_block = input_block.value();
-        // for (auto& new_block : inner_block.items())
-        //     cout << new_block.key() << " : " << new_block.value() << endl;
-
-        read_shape_JSON(inner_block, svar, fvar, globalspacing, output_block, fault);
+        read_shape_JSON(input_block, svar, fvar, globalspacing, new_block, fault);
     }
 
     if (fault)

@@ -357,7 +357,7 @@ inline void Write_Zone(
 
     vector<real> vec(imax);
     // Restart essential variables. These should not be zero, but could possibly in future
-    if (output_variables.at("pos").write)
+    if (output_variables.at("pos-vec").write)
     {
         for (uint dim = 0; dim < SIMDIM; ++dim)
         {
@@ -370,7 +370,7 @@ inline void Write_Zone(
         }
     }
 
-    if (output_variables.at("vel").write)
+    if (output_variables.at("vel-vec").write)
     {
         for (uint dim = 0; dim < SIMDIM; ++dim)
         {
@@ -383,7 +383,7 @@ inline void Write_Zone(
         }
     }
 
-    if (output_variables.at("acc").write)
+    if (output_variables.at("acc-vec").write)
     {
         for (uint dim = 0; dim < SIMDIM; ++dim)
         {

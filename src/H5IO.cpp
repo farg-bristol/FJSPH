@@ -1520,7 +1520,7 @@ namespace h5part
         /* Kinda optional outputs */
 
         /* Velocity */
-        if (output_variables.at("vel").write)
+        if (output_variables.at("vel-vec").write)
         {
             for (uint dim = 0; dim < SIMDIM; ++dim)
             {
@@ -1542,7 +1542,7 @@ namespace h5part
         }
 
         /* Acceleration */
-        if (output_variables.at("acc").write)
+        if (output_variables.at("acc-vec").write)
         {
             for (uint dim = 0; dim < SIMDIM; ++dim)
             {
