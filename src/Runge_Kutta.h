@@ -11,15 +11,14 @@
         to perform neighbour search and dissipation terms before freezing </summary */
 real Get_First_RK(
     SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start, size_t const& end,
-    real const& B, real const& gam, real const& npd, MESH const& cells, LIMITS const& limits,
-    OUTL const& outlist, SPHState& pn, SPHState& st_2
+    real const& npd, MESH const& cells, LIMITS const& limits, OUTL const& outlist, SPHState& part_n,
+    SPHState& st_1
 );
 
 real Runge_Kutta4(
-    Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start,
-    size_t& end, real const& B, real const& gam, real const& npd, MESH const& cells,
-    LIMITS const& limits, OUTL const& outlist, real const& logbase, SPHState& pn, SPHState& st_2,
-    SPHState& pnp1
+    SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start, size_t& end, real const& npd,
+    MESH const& cells, LIMITS const& limits, OUTL const& outlist, real const& logbase, SPHState& part_n,
+    SPHState& st_1, SPHState& part_np1
 );
 
 #endif

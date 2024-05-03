@@ -9,23 +9,25 @@
 
 int Newmark_Beta::Check_Error(
     Sim_Tree& SPH_TREE, SIM& svar, FLUID const& fvar, size_t const& start, size_t const& end,
-    real& rms_error, real& logbase, OUTL& outlist, vector<StateVecD> const& xih, SPHState& pn,
+    real& rms_error, real& logbase, OUTL& outlist, vector<StateVecD> const& xih, SPHState const& pn,
     SPHState& pnp1, uint& iteration
 )
 {
     /****** FIND ERROR ***********/
     real errsum = 0.0;
-#pragma omp parallel for reduction(+ : errsum) schedule(static) default(shared) // shared(pnp1,xih)
+#pragma omp parallel for reduction(+ : errsum) schedule(static) default(shared)
     for (size_t ii = start; ii < end; ++ii)
     {
         StateVecD r = pnp1[ii].xi - xih[ii - start];
         errsum += r.squaredNorm();
     }
 
-    if (iteration == 0)
-        logbase = log10(sqrt(errsum / real(svar.totPts)));
+    real log_error = log10(sqrt(errsum / real(svar.totPts)));
 
-    rms_error = log10(sqrt(errsum / real(svar.totPts))) - logbase;
+    if (iteration == 0)
+        logbase = log_error;
+
+    rms_error = log_error - logbase;
 
     if (iteration > svar.subits)
     {
@@ -51,8 +53,8 @@ int Newmark_Beta::Check_Error(
 
 void Newmark_Beta::Do_NB_Iter(
     Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start,
-    size_t& end, real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pn,
-    SPHState& pnp1
+    size_t& end, real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist,
+    SPHState const& pn, SPHState& pnp1
 )
 {
     /*Update the state at time n+1*/
@@ -63,10 +65,10 @@ void Newmark_Beta::Do_NB_Iter(
     vector<real> Rrho(end, 0.0);
     vector<int> near_inlet(svar.bndPts, 0);
 
-    const real& gamma = svar.gamma;
-    const real gamma_2 = 1 - gamma;
-    const real beta = beta;
-    const real beta_2 = 0.5 * (1 - 2 * svar.beta);
+    real const& gamma_t1 = svar.gamma;
+    real const gamma_t2 = 1 - gamma_t1;
+    real const& beta_t1 = svar.beta;
+    real const beta_t2 = 0.5 * (1 - 2 * beta_t1);
 
     for (size_t block = 0; block < svar.nbound; block++)
     {
@@ -132,7 +134,7 @@ void Newmark_Beta::Do_NB_Iter(
     /*Guess force at time n+1*/
     Forces(svar, fvar, avar, cells, pnp1, outlist, npd, res, Rrho, Af);
 
-#pragma omp parallel default(shared) /*reduction(+:Force,dropVel)*/
+#pragma omp parallel default(shared)
     {
         const real dt = svar.dt;
         const real dt2 = dt * dt;
@@ -149,7 +151,7 @@ void Newmark_Beta::Do_NB_Iter(
                     real const rho = std::max(
                         fvar.rhoMin,
                         std::min(
-                            fvar.rhoMax, pn[ii].rho + dt * (gamma * Rrho[ii] + gamma_2 * pn[ii].Rrho)
+                            fvar.rhoMax, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] + gamma_t2 * pn[ii].Rrho)
                         )
                     );
                     pnp1[ii].rho = rho;
@@ -167,10 +169,10 @@ void Newmark_Beta::Do_NB_Iter(
                     if (near_inlet[ii])
                     { // Don't allow negative pressures
                         real const rho = std::max(
-                            fvar.rho0,
-                            std::min(
-                                fvar.rhoMax, pn[ii].rho + dt * (gamma * Rrho[ii] + gamma_2 * pn[ii].Rrho)
-                            )
+                            fvar.rho0, std::min(
+                                           fvar.rhoMax, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] +
+                                                                           gamma_t2 * pn[ii].Rrho)
+                                       )
                         );
                         pnp1[ii].rho = rho;
                         pnp1[ii].p =
@@ -180,10 +182,10 @@ void Newmark_Beta::Do_NB_Iter(
                     else
                     {
                         real const rho = std::max(
-                            fvar.rhoMin,
-                            std::min(
-                                fvar.rhoMax, pn[ii].rho + dt * (gamma * Rrho[ii] + gamma_2 * pn[ii].Rrho)
-                            )
+                            fvar.rhoMin, std::min(
+                                             fvar.rhoMax, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] +
+                                                                             gamma_t2 * pn[ii].Rrho)
+                                         )
                         );
                         pnp1[ii].rho = rho;
                         pnp1[ii].p =
@@ -213,13 +215,13 @@ void Newmark_Beta::Do_NB_Iter(
 /*For any other particles, intergrate as normal*/
 #ifdef ALE
                     pnp1[ii].xi = pn[ii].xi + dt * (pn[ii].v + pnp1[ii].vPert) +
-                                  dt2 * (beta * res[ii] + beta_2 * pn[ii].acc);
+                                  dt2 * (beta_t1 * res[ii] + beta_t2 * pn[ii].acc);
 #else
                     pnp1[ii].xi =
-                        pn[ii].xi + dt * pn[ii].v + dt2 * (beta_2 * pn[ii].acc + beta * res[ii]);
+                        pn[ii].xi + dt * pn[ii].v + dt2 * (beta_t2 * pn[ii].acc + beta_t1 * res[ii]);
 #endif
 
-                    pnp1[ii].v = pn[ii].v + dt * (gamma * res[ii] + gamma_2 * pn[ii].acc);
+                    pnp1[ii].v = pn[ii].v + dt * (gamma_t1 * res[ii] + gamma_t2 * pn[ii].acc);
                     pnp1[ii].acc = res[ii];
                     pnp1[ii].Af = Af[ii];
                     pnp1[ii].Rrho = Rrho[ii];
@@ -227,7 +229,7 @@ void Newmark_Beta::Do_NB_Iter(
                     real const rho = std::max(
                         fvar.rhoMin,
                         std::min(
-                            fvar.rhoMax, pn[ii].rho + dt * (gamma * Rrho[ii] + gamma_2 * pn[ii].Rrho)
+                            fvar.rhoMax, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] + gamma_t2 * pn[ii].Rrho)
                         )
                     );
                     pnp1[ii].rho = rho;
@@ -238,7 +240,6 @@ void Newmark_Beta::Do_NB_Iter(
                 { /* For the outlet zone, just perform euler integration of last info */
                     pnp1[ii].xi = pn[ii].xi + dt * pnp1[ii].v;
                 }
-                // pnp1[ii].s = dp.lam_ng[ii];
 
             } /*End fluid particles*/
 
@@ -286,8 +287,8 @@ void Newmark_Beta::Do_NB_Iter(
                             real const rho = std::max(
                                 fvar.rhoMin,
                                 std::min(
-                                    fvar.rhoMax, pn[buffID].rho + dt * (gamma * Rrho[buffID] +
-                                                                        gamma_2 * pn[buffID].Rrho)
+                                    fvar.rhoMax, pn[buffID].rho + dt * (gamma_t1 * Rrho[buffID] +
+                                                                        gamma_t2 * pn[buffID].Rrho)
                                 )
                             );
                             pnp1[buffID].rho = rho;
@@ -308,7 +309,8 @@ void Newmark_Beta::Do_NB_Iter(
 real Newmark_Beta::Newmark_Beta(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
     size_t const& start, size_t& end, real const& npd, MESH const& cells, LIMITS const& limits,
-    OUTL& outlist, real& logbase, uint& iteration, vector<StateVecD>& xih, SPHState& pn, SPHState& pnp1
+    OUTL& outlist, real& logbase, uint& iteration, vector<StateVecD>& xih, SPHState const& pn,
+    SPHState& pnp1
 )
 {
     real rms_error = 0.0;

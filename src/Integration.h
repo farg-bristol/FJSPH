@@ -37,13 +37,13 @@ class Integrator
 
     real solve_prestep(
         Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-        MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn,
+        MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1,
         vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& npd
     );
 
     real solve_step(
         Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-        MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn,
+        MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1,
         vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& logbase, real& npd
     );
 

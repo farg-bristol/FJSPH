@@ -85,7 +85,7 @@ real Integrator::integrate_no_update(
 
     /*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
     logbase = solve_prestep(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pnp1, pn, xih, start_index,
+        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pn, pnp1, xih, start_index,
         end_index, npd
     );
 
@@ -120,7 +120,7 @@ real Integrator::integrate_no_update(
 
     /*Do time integration*/
     rms_error = solve_step(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pnp1, pn, xih, start_index,
+        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pn, pnp1, xih, start_index,
         end_index, logbase, npd
     );
 
@@ -356,7 +356,7 @@ real Integrator::integrate(
 /* Internal pre-step for the integration methods to find base error for the timestep. */
 real Integrator::solve_prestep(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn,
+    MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1,
     vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& npd
 )
 {
@@ -368,8 +368,7 @@ real Integrator::solve_prestep(
     case runge_kutta:
     {
         logbase = Get_First_RK(
-            svar, fvar, avar, start_index, end_index, fvar.B, fvar.gam, npd, cells, limits, outlist, pn,
-            pnp1
+            svar, fvar, avar, start_index, end_index, npd, cells, limits, outlist, pn, pnp1
         );
         break;
     }
@@ -393,7 +392,7 @@ real Integrator::solve_prestep(
 /* Internal funtion to solve the timestep given a base error from the pre-step. */
 real Integrator::solve_step(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pnp1, SPHState& pn,
+    MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1,
     vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& logbase, real& npd
 )
 {
@@ -403,11 +402,11 @@ real Integrator::solve_step(
     {
     case runge_kutta:
     {
-        SPHState st_2 = pnp1;
+        SPHState st_1 = pnp1;
 
         rms_error = Runge_Kutta4(
-            CELL_TREE, svar, fvar, avar, start_index, end_index, fvar.B, fvar.gam, npd, cells, limits,
-            outlist, logbase, pn, st_2, pnp1
+            svar, fvar, avar, start_index, end_index, npd, cells, limits, outlist, logbase, pn, st_1,
+            pnp1
         );
         break;
     }
