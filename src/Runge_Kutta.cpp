@@ -20,7 +20,7 @@ real Check_RK_Error(
         errsum += (part_np1[ii].xi - part_n[ii].xi).squaredNorm();
     }
 
-    real rms_error = log10(sqrt(errsum / (real(svar.totPts)))) - logbase;
+    real rms_error = log10(sqrt(errsum / (real(end - start)))) - logbase;
 
     return rms_error;
 }
@@ -34,10 +34,9 @@ SPHState do_runge_kutta_intermediate_step(
     SPHState part_inter = part_prev;
     vector<StateVecD> res_inter(end, StateVecD::Zero());
     vector<real> Rrho_inter(end, 0.0);
+    vector<StateVecD> Af_inter(end, StateVecD::Zero());
 
-    vector<StateVecD> Af;
-
-    for (size_t block = 0; block < svar.nbound; block++)
+    for (size_t block = 0; block < svar.n_bound_blocks; block++)
     {
 
         if (limits[block].nTimes != 0)
@@ -46,7 +45,7 @@ SPHState do_runge_kutta_intermediate_step(
             StateVecD vel = StateVecD::Zero();
             for (size_t time = 0; time < limits[block].nTimes; time++)
             {
-                if (limits[block].times[time] > svar.t)
+                if (limits[block].times[time] > svar.current_time)
                 {
                     vel = limits[block].vels[time];
                 }
@@ -138,14 +137,15 @@ SPHState do_runge_kutta_intermediate_step(
         }
     }
 
-    Forces(svar, fvar, avar, cells, part_inter, outlist, npd, res_inter, Rrho_inter, Af);
+    Forces(svar, fvar, avar, cells, part_inter, outlist, npd, res_inter, Rrho_inter, Af_inter);
 
 #pragma omp parallel default(shared) // shared(svar,part_n,st_2) /*reduction(+:Force,dropVel)*/
     {
         /********************************************************************/
         /*************************  STEP 1  *********************************/
         /********************************************************************/
-        for (size_t block = svar.nbound; block < svar.nfluid + svar.nbound; block++)
+        for (size_t block = svar.n_bound_blocks; block < svar.n_fluid_blocks + svar.n_bound_blocks;
+             block++)
         {
 #pragma omp for nowait
             for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
@@ -174,16 +174,8 @@ SPHState do_runge_kutta_intermediate_step(
                     part_inter[ii].p =
                         pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
                     part_inter[ii].acc = res_inter[ii];
-                    part_inter[ii].Af = Af[ii];
+                    part_inter[ii].Af = Af_inter[ii];
                     part_inter[ii].Rrho = Rrho_inter[ii];
-                }
-                else
-                {
-                    part_inter[ii].xi = part_n[ii].xi + dt_inter * part_inter[ii].v;
-                    part_inter[ii].rho = part_n[ii].rho + 0.5 * dt_inter * Rrho_inter[ii];
-                    part_inter[ii].p = pressure_equation(
-                        part_inter[ii].rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP
-                    );
                 }
             }
 
@@ -258,7 +250,7 @@ SPHState do_runge_kutta_final_step(
     vector<real> Rrho_4(end, 0.0);
     vector<StateVecD> Af(end, StateVecD::Zero());
 
-    for (size_t block = 0; block < svar.nbound; block++)
+    for (size_t block = 0; block < svar.n_bound_blocks; block++)
     {
         if (limits[block].nTimes != 0)
         {
@@ -266,7 +258,7 @@ SPHState do_runge_kutta_final_step(
             StateVecD vel = StateVecD::Zero();
             for (size_t time = 0; time < limits[block].nTimes; time++)
             {
-                if (limits[block].times[time] > svar.t)
+                if (limits[block].times[time] > svar.current_time)
                 {
                     vel = limits[block].vels[time];
                 }
@@ -373,7 +365,8 @@ SPHState do_runge_kutta_final_step(
 
 #pragma omp parallel default(shared)
     {
-        for (size_t block = svar.nbound; block < svar.nfluid + svar.nbound; block++)
+        for (size_t block = svar.n_bound_blocks; block < svar.n_fluid_blocks + svar.n_bound_blocks;
+             block++)
         {
 #pragma omp for nowait
             for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
@@ -489,7 +482,7 @@ real Get_First_RK(
     SPHState& st_1
 )
 {
-    const real dt = 0.5 * svar.dt;
+    const real dt = 0.5 * svar.delta_t;
 
     st_1 = do_runge_kutta_intermediate_step(
         svar, fvar, avar, start, end, npd, cells, limits, outlist, part_n, part_n, dt
@@ -512,8 +505,8 @@ real Runge_Kutta4(
     SPHState st_2 = part_np1; /*Step 2*/
     SPHState st_3 = part_np1; /*Step 3*/
 
-    real const dt_inter = 0.5 * svar.dt;
-    real const dt_final = svar.dt;
+    real const dt_inter = 0.5 * svar.delta_t;
+    real const dt_final = svar.delta_t;
 
     /********************************************************************/
     /*************************  STEP 2  *********************************/

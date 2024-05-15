@@ -105,8 +105,8 @@ struct shape_block
 struct Shapes
 {
     std::vector<shape_block> block;
-    size_t totPts = 0;  /* Total boundary points */
-    size_t nblocks = 0; /* Number of boundaries */
+    size_t total_points = 0; /* Total boundary points */
+    size_t nblocks = 0;      /* Number of boundaries */
 
     inline void emplace_back()
     {

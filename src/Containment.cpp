@@ -563,7 +563,7 @@ void FirstCell(SIM& svar, Vec_Tree const& CELL_INDEX, MESH const& cells, SPHPart
         {
 #pragma omp single
             {
-                cout << "First containing cell for particle " << pi.partID
+                cout << "First containing cell for particle " << pi.part_id
                      << " not found. Something is wrong." << endl;
                 Write_Containment(svar, ret_indexes, cells, testp);
                 exit(-1);
@@ -582,8 +582,8 @@ vector<size_t> FindCell(
 {
     /*Find which cell the particle is in*/
     vector<size_t> toDelete;
-    size_t const& start = svar.bndPts;
-    size_t const& end = svar.totPts;
+    size_t const& start = svar.bound_points;
+    size_t const& end = svar.total_points;
 
 #pragma omp parallel default(shared)
     {
@@ -605,7 +605,7 @@ vector<size_t> FindCell(
                 pnp1[ii].cellV = cells.cVel[pnp1[ii].cellID];
                 pnp1[ii].cellP = cells.cP[pnp1[ii].cellID];
                 pnp1[ii].cellRho = cells.cRho[pnp1[ii].cellID];
-                pnp1[ii].nFailed = 0;
+                pnp1[ii].ipt_n_failed = 0;
                 continue;
             }
 
@@ -661,7 +661,7 @@ vector<size_t> FindCell(
                         pnp1[ii].cellV = cells.cVel[cell];
                         pnp1[ii].cellP = cells.cP[cell];
                         pnp1[ii].cellRho = cells.cRho[cell];
-                        pnp1[ii].nFailed = 0;
+                        pnp1[ii].ipt_n_failed = 0;
                         pnp1[ii].internal = 0;
                         inside_flag = 1;
                         break;
@@ -683,7 +683,7 @@ vector<size_t> FindCell(
                     //         pnp1[ii].cellV = cells.cVel[cell];
                     //         pnp1[ii].cellP = cells.cP[cell];
                     //         pnp1[ii].cellRho = cells.cRho[cell];
-                    //         pnp1[ii].nFailed = 0;
+                    //         pnp1[ii].ipt_n_failed = 0;
                     //         break;
                     //     }
                     // }
@@ -726,7 +726,7 @@ vector<size_t> FindCell(
                         pnp1[ii].cellV = cells.cVel[cell];
                         pnp1[ii].cellP = cells.cP[cell];
                         pnp1[ii].cellRho = cells.cRho[cell];
-                        pnp1[ii].nFailed = 0;
+                        pnp1[ii].ipt_n_failed = 0;
                         pnp1[ii].internal = 0;
                         inside_flag = 1;
                         break;
@@ -780,7 +780,7 @@ vector<size_t> FindCell(
 
                     if (cross == 0)
                     {
-                        if (pnp1[ii].nFailed > 10)
+                        if (pnp1[ii].ipt_n_failed > 10)
                         {
 #pragma omp critical
                             {
@@ -802,7 +802,7 @@ vector<size_t> FindCell(
                                  << " is inside, but continuing..." << endl;
 
 #pragma omp atomic
-                            pnp1[ii].nFailed++;
+                            pnp1[ii].ipt_n_failed++;
                         }
                     }
                 }
@@ -828,7 +828,7 @@ void Check_Pipe_Outlet(
 {
     vector<size_t> del;
     vector<size_t> ndel(limits.size(), 0);
-    for (size_t block = svar.nbound; block < svar.nfluid + svar.nbound; block++)
+    for (size_t block = svar.n_bound_blocks; block < svar.n_fluid_blocks + svar.n_bound_blocks; block++)
     {
 #pragma omp for nowait
         for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
@@ -861,15 +861,16 @@ void Check_Pipe_Outlet(
         for (vector<size_t>::reverse_iterator itr = del.rbegin(); itr != del.rend(); ++itr)
         {
             pnp1.erase(pnp1.begin() + *itr);
-            svar.totPts--;
-            svar.simPts--;
+            svar.total_points--;
+            svar.fluid_points--;
             end_ng--;
             end--;
-            svar.delNum++;
+            svar.delete_count++;
         }
 
         size_t delshift = 0;
-        for (size_t block = svar.nbound; block < svar.nfluid + svar.nbound; block++)
+        for (size_t block = svar.n_bound_blocks; block < svar.n_fluid_blocks + svar.n_bound_blocks;
+             block++)
         {
             // Shift the blocks, which will happen cumulatively
             limits[block].index.first -= delshift;
@@ -1032,7 +1033,7 @@ real FindFace(SIM const& svar, MESH const& cells, IPTPart const& pn, IPTPart& pn
     {
         // cout << "Could not find a positive intersection for some reason..." << endl;
         // cout << "No of intersections with planes: " << intersects.size() << endl;
-        // cout << "ParticleID: " << pnp1.partID << " position: " << pn.xi[0] << "  " << pn.xi[1]
+        // cout << "ParticleID: " << pnp1.part_id << " position: " << pn.xi[0] << "  " << pn.xi[1]
         // << "  " << pn.xi[2] << " velocity n: " << pn.v[0] << "  " << pn.v[1] << "  " << pn.v[2] <<
         //  " velocity np1: " << pnp1.v[0] << "  " << pnp1.v[1] << "  " << pnp1.v[2] << endl;
         pnp1.xi = pn.xi;

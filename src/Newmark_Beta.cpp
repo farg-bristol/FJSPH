@@ -22,14 +22,14 @@ int Newmark_Beta::Check_Error(
         errsum += r.squaredNorm();
     }
 
-    real log_error = log10(sqrt(errsum / real(svar.totPts)));
+    real log_error = log10(sqrt(errsum / real(end - start)));
 
     if (iteration == 0)
         logbase = log_error;
 
     rms_error = log_error - logbase;
 
-    if (iteration > svar.subits)
+    if (iteration > svar.max_subits)
     {
         if (rms_error > 0.0)
         {
@@ -37,8 +37,8 @@ int Newmark_Beta::Check_Error(
 
             outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 
-            svar.dt = 0.5 * svar.dt;
-            cout << "Unstable timestep. New dt: " << svar.dt << endl;
+            svar.delta_t = 0.5 * svar.delta_t;
+            cout << "Unstable timestep. New dt: " << svar.delta_t << endl;
             iteration = 0;
             rms_error = 0.0;
             // RestartCount++;
@@ -63,14 +63,14 @@ void Newmark_Beta::Do_NB_Iter(
     vector<StateVecD> res(end, StateVecD::Zero());
     vector<StateVecD> Af(end, StateVecD::Zero());
     vector<real> Rrho(end, 0.0);
-    vector<int> near_inlet(svar.bndPts, 0);
+    vector<int> near_inlet(svar.bound_points, 0);
 
-    real const& gamma_t1 = svar.gamma;
+    real const& gamma_t1 = svar.nb_gamma;
     real const gamma_t2 = 1 - gamma_t1;
-    real const& beta_t1 = svar.beta;
+    real const& beta_t1 = svar.nb_beta;
     real const beta_t2 = 0.5 * (1 - 2 * beta_t1);
 
-    for (size_t block = 0; block < svar.nbound; block++)
+    for (size_t block = 0; block < svar.n_bound_blocks; block++)
     {
         if (limits[block].nTimes != 0)
         {
@@ -78,7 +78,7 @@ void Newmark_Beta::Do_NB_Iter(
             StateVecD vel = StateVecD::Zero();
             for (size_t time = 0; time < limits[block].nTimes; time++)
             {
-                if (svar.t > limits[block].times[time])
+                if (svar.current_time > limits[block].times[time])
                 {
                     vel = limits[block].vels[time];
                 }
@@ -136,10 +136,10 @@ void Newmark_Beta::Do_NB_Iter(
 
 #pragma omp parallel default(shared)
     {
-        const real dt = svar.dt;
+        const real dt = svar.delta_t;
         const real dt2 = dt * dt;
 
-        for (size_t block = 0; block < svar.nbound; block++)
+        for (size_t block = 0; block < svar.n_bound_blocks; block++)
         {
             switch (limits[block].bound_solver)
             {
@@ -198,7 +198,8 @@ void Newmark_Beta::Do_NB_Iter(
             }
         }
 
-        for (size_t block = svar.nbound; block < svar.nfluid + svar.nbound; block++)
+        for (size_t block = svar.n_bound_blocks; block < svar.n_fluid_blocks + svar.n_bound_blocks;
+             block++)
         {
 #pragma omp for nowait
             for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
@@ -314,7 +315,7 @@ real Newmark_Beta::Newmark_Beta(
 )
 {
     real rms_error = 0.0;
-    while (rms_error > svar.minRes)
+    while (rms_error > svar.min_residual)
     {
 /*Previous state for error calc*/
 #pragma omp parallel for shared(pnp1)

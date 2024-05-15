@@ -1,7 +1,6 @@
 /*********     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code      *************/
 /*********        Created by Jamie MacLeod, University of Bristol               *************/
 
-#include "Add.h"
 #include "IOFunctions.h"
 #include "Init.h"
 #include "Kernel.h"
@@ -22,7 +21,7 @@ class fluid_block
     /* Read the input for a block from the input file. */
     void read_block()
     {
-        while (getline(inFile, line))
+        while (getline(input_file, line))
         {
             size_t end = line.find_first_of('#');
             if (end != std::string::npos)
@@ -84,9 +83,9 @@ class fluid_block
             if (line.find("Coordinate data:") != std::string::npos)
             {
                 std::string tmp;
-                getline(inFile, tmp); /* Go to the next line and get data */
+                getline(input_file, tmp); /* Go to the next line and get data */
                 size_t npts;
-                inFile >> npts;
+                input_file >> npts;
                 self.npts = npts;
                 self.coords = std::vector<StateVecD>(npts);
 
@@ -94,7 +93,7 @@ class fluid_block
                 {
                     for (size_t dim = 0; dim < SIMDIM; ++dim)
                     {
-                        inFile >> self.coords[ii][dim];
+                        input_file >> self.coords[ii][dim];
                     }
                 }
             }
@@ -115,18 +114,18 @@ class fluid_block
             if (line.find("Time position data") != std::string::npos)
             {
                 std::string tmp;
-                getline(inFile, tmp); /* Go to the next line and get data */
+                getline(input_file, tmp); /* Go to the next line and get data */
                 size_t ntimes;
                 std::istringstream iss(tmp);
                 iss >> ntimes;
-                // inFile >> ntimes;
+                // input_file >> ntimes;
                 self.ntimes = ntimes;
                 self.times = std::vector<real>(ntimes);
                 self.pos = std::vector<StateVecD>(ntimes);
 
                 for (size_t ii = 0; ii < ntimes; ++ii)
                 {
-                    getline(inFile, tmp); /* Go to the next line and get data */
+                    getline(input_file, tmp); /* Go to the next line and get data */
                     std::istringstream iss2(tmp);
                     iss2 >> self.times[ii];
                     for (size_t dim = 0; dim < SIMDIM; ++dim)
@@ -139,18 +138,18 @@ class fluid_block
             if (line.find("Time velocity data") != std::string::npos)
             {
                 std::string tmp;
-                getline(inFile, tmp); /* Go to the next line and get data */
+                getline(input_file, tmp); /* Go to the next line and get data */
                 size_t ntimes;
                 std::istringstream iss(tmp);
                 iss >> ntimes;
-                // inFile >> ntimes;
+                // input_file >> ntimes;
                 self.ntimes = ntimes;
                 self.times = std::vector<real>(ntimes);
                 self.vels = std::vector<StateVecD>(ntimes);
 
                 for (size_t ii = 0; ii < ntimes; ++ii)
                 {
-                    getline(inFile, tmp); /* Go to the next line and get data */
+                    getline(input_file, tmp); /* Go to the next line and get data */
                     std::istringstream iss2(tmp);
                     iss2 >> self.times[ii];
                     for (size_t dim = 0; dim < SIMDIM; ++dim)

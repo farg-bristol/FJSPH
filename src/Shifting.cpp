@@ -200,7 +200,7 @@ void dissipation_terms(
 }
 
 #ifdef ALE
-void Particle_Shift_No_Ghost(
+void particle_shift(
     SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
     /* DELTAP const& dp, */ SPHState& pnp1
 )
@@ -267,8 +267,8 @@ void Particle_Shift_No_Ghost(
             // deltaR *= -1 * fvar.sr * maxU / fvar.Cs;
             deltaU *= -2.0 * fvar.H * pi.v.norm();
 
-            deltaU =
-                std::min(deltaU.norm(), std::min(maxUij / 2.0, svar.maxshift)) * deltaU.normalized();
+            deltaU = std::min(deltaU.norm(), std::min(maxUij / 2.0, svar.max_shift_vel)) *
+                     deltaU.normalized();
 
             // gradLam = gradLam.normalized();
             // cout << gradLam(0) << "  " << gradLam(1) << endl;
@@ -304,81 +304,6 @@ void Particle_Shift_No_Ghost(
     }
 }
 
-void Particle_Shift_Ghost(
-    SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
-    /* DELTAP const& dp, */ SPHState& pnp1
-)
-{
-    /*Implement particle shifting technique - Sun, Colagrossi, Marrone, Zhang (2018)*/
-
-    // vector<SPHPart>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
-    // 	[](SPHPart p1, SPHPart p2){return p1.v.norm()< p2.v.norm();});
-
-    // real const maxU = fvar.maxU/**maxUi->v.norm()*/;
-
-    // real const maxU = fvar.maxU;
-
-#pragma omp parallel default(shared)
-    {
-#pragma omp for schedule(static) nowait
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            /*Check if the particle is too close to the surface, and ignore them if so*/
-            if (pnp1[ii].lam_nb < 0.55)
-                continue;
-
-            SPHPart const& pi = pnp1[ii];
-
-            StateVecD deltaU = StateVecD::Zero();
-            StateVecD gradLam = StateVecD::Zero();
-            real maxUij = 0.0;
-
-            real woccl = 0.0;
-
-            for (neighbour_index const& jj : outlist[ii])
-            { /* Neighbour list loop. */
-                SPHPart const& pj = pnp1[jj.first];
-
-                if (pj.partID == pi.partID /*|| pj.b == PartState.BOUND_*/)
-                    continue;
-
-                StateVecD const Rji = pj.xi - pi.xi;
-                real const r = sqrt(jj.second);
-                real const volj = pj.m / pj.rho;
-                real const kern = Kernel(r, fvar.H, fvar.correc);
-                StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.correc);
-
-                deltaU += (1.0 + 0.2 * pow(kern / fvar.Wdx, 4.0)) * gradK * volj;
-                // deltaU +=
-                gradLam += (pj.lam - pi.lam) * pi.L * gradK * volj;
-
-                real theta = acos(pi.norm.normalized().dot(pj.norm.normalized()));
-                if (theta > woccl)
-                    woccl = theta;
-
-                if ((pj.v - pi.v).norm() > maxUij)
-                {
-                    maxUij = (pj.v - pi.v).norm();
-                }
-            }
-
-            // deltaR *= -1 * fvar.sr * maxU / fvar.Cs;
-            deltaU *= -2.0 * fvar.H * pi.v.norm();
-
-            deltaU = std::min(deltaU.norm(), maxUij / 2.0) * deltaU.normalized();
-
-            if (pi.b != BUFFER)
-            {
-                /*Apply the partial shifting*/
-                pnp1[ii].vPert = deltaU;
-            }
-            else
-            {
-                pnp1[ii].vPert = StateVecD::Zero();
-            }
-        }
-    }
-}
 #endif
 
 // void Apply_XSPH(FLUID const& fvar, size_t const& start, size_t const& end,
@@ -396,7 +321,7 @@ void Particle_Shift_Ghost(
 // 			{	 Neighbour list loop.
 // 				SPHPart const& pj(pnp1[jj]);
 
-// 				if(pj.partID == pi.partID || pj.b == PartState.BOUND_)
+// 				if(pj.part_id == pi.part_id || pj.b == PartState.BOUND_)
 // 				{
 // 					continue;
 // 				}
@@ -412,25 +337,6 @@ void Particle_Shift_Ghost(
 // 			pnp1[ii].vPert = vPert_;
 // 		}
 // 	}
-// }
-
-// /*Numerical particle density for Nair & Poeschel (2017) surface tension*/
-// real GetNumpartdens(SIM const& svar, FLUID const& fvar, SPHState const& pnp1, OUTL const& outlist)
-// {
-// 	real npd = 0.0;
-// 	uint const& end = svar.totPts;
-// 	#pragma omp parallel for reduction(+:npd)
-// 	for (uint ii=0; ii< end; ++ii)
-// 	{
-// 		StateVecD const& pi = pnp1[ii].xi;
-// 		for (auto jj:outlist[ii])
-// 		{ /* Surface Tension calcs */
-// 			StateVecD const& pj = pnp1[jj].xi;
-// 			real const r = (pj-pi).norm();
-// 			npd += W2Kernel(r,fvar.H,fvar.correc);
-// 		}
-// 	}
-// 	return npd/real(svar.totPts);
 // }
 
 #endif

@@ -235,8 +235,8 @@ void Forces(
 )
 {
 
-    const size_t start = svar.bndPts;
-    const size_t end = svar.totPts;
+    const size_t start = svar.bound_points;
+    const size_t end = svar.total_points;
 
 #ifdef PAIRWISE
 
@@ -502,13 +502,13 @@ void Get_Aero_Velocity(
             }
             // Rebuild the neighbour list
             //  cout << "Updating neighbour list" << endl;
-            //  cout << "Old: " << svar.totPts << "  New: " << pnp1.size() << endl;
-            svar.delNum += nDel;
-            svar.simPts -= nDel;
-            svar.totPts -= nDel;
+            //  cout << "Old: " << svar.total_points << "  New: " << pnp1.size() << endl;
+            svar.delete_count += nDel;
+            svar.fluid_points -= nDel;
+            svar.total_points -= nDel;
             end_ng -= nDel;
             outlist = update_neighbours(SPH_TREE, fvar, pnp1);
-            dSPH_PreStep(fvar, svar.totPts, pnp1, outlist, npd);
+            dSPH_PreStep(fvar, svar.total_points, pnp1, outlist, npd);
         }
         break;
     }

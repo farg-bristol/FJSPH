@@ -412,11 +412,11 @@ inline void Write_Zone(
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Density gradient");
     }
 
-    if (output_variables.at("partID").write)
+    if (output_variables.at("part_id").write)
     {
         vector<int> uvec(imax);
         for (size_t ii = start; ii < end; ++ii)
-            uvec[ii - start] = pnp1[ii].partID;
+            uvec[ii - start] = pnp1[ii].part_id;
         Write_Int_Vector(fileHandle, outputZone, varCount, 0, imax, uvec, "Particle ID");
     }
 
@@ -640,7 +640,7 @@ void Write_Binary_Timestep(
     size_t end = limits.index.second;
     int32_t const size = end - start;
 
-    double solTime = svar.t;
+    double solTime = svar.current_time;
     int32_t outputZone;
 
     // Get zone data types
@@ -769,39 +769,38 @@ void Init_Binary_PLT(
 #endif
 
     // Write crucial simulation auxiliary data. Potential to expand
-    add_file_aux_data(fileHandle, "Number of boundary blocks", svar.nbound);
-    add_file_aux_data(fileHandle, "Number of fluid blocks", svar.nfluid);
-    add_file_aux_data(fileHandle, "Number of boundary points", svar.bndPts);
-    add_file_aux_data(fileHandle, "Number of fluid points", svar.simPts);
-    add_file_aux_data(fileHandle, "Current frame", svar.frame);
+    add_file_aux_data(fileHandle, "Number of boundary blocks", svar.n_bound_blocks);
+    add_file_aux_data(fileHandle, "Number of fluid blocks", svar.n_fluid_blocks);
+    add_file_aux_data(fileHandle, "Number of boundary points", svar.bound_points);
+    add_file_aux_data(fileHandle, "Number of fluid points", svar.fluid_points);
+    add_file_aux_data(fileHandle, "Current frame", svar.current_frame);
 
-    add_file_aux_data(fileHandle, "Input para filename", svar.infile);
-    add_file_aux_data(fileHandle, "Input fluid definition filename", svar.fluidfile);
-    add_file_aux_data(fileHandle, "Input boundary definition filename", svar.boundfile);
+    add_file_aux_data(fileHandle, "Input para filename", svar.input_file);
+    add_file_aux_data(fileHandle, "Input fluid definition filename", svar.input_fluid_file);
+    add_file_aux_data(fileHandle, "Input boundary definition filename", svar.input_bound_file);
 
-    // add_file_aux_data(fileHandle, "Primary grid face filename", svar.taumesh);
-    // add_file_aux_data(fileHandle, "Boundary mapping filename", svar.taubmap);
-    // add_file_aux_data(fileHandle, "Restart-data prefix", svar.tausol);
+    // add_file_aux_data(fileHandle, "Primary grid face filename", svar.tau_mesh);
+    // add_file_aux_data(fileHandle, "Boundary mapping filename", svar.tau_bmap);
+    // add_file_aux_data(fileHandle, "Restart-data prefix", svar.tau_sol);
     add_file_aux_data(fileHandle, "Dimension offset vector", svar.offset_axis);
     add_file_aux_data(fileHandle, "Solution angle of attack", svar.angle_alpha);
     add_file_aux_data(fileHandle, "Grid scale", svar.scale);
 
-    add_file_aux_data(fileHandle, "OpenFOAM input directory", svar.foamdir);
-    add_file_aux_data(fileHandle, "OpenFOAM solution directory", svar.foamsol);
-    add_file_aux_data(fileHandle, "OpenFOAM binary", svar.isBinary);
-    add_file_aux_data(fileHandle, "Label size", svar.labelSize);
-    add_file_aux_data(fileHandle, "Scalar size", svar.scalarSize);
-    add_file_aux_data(fileHandle, "OpenFOAM buoyant", svar.buoyantSim);
+    add_file_aux_data(fileHandle, "OpenFOAM input directory", svar.foam_dir);
+    add_file_aux_data(fileHandle, "OpenFOAM solution directory", svar.foam_sol);
+    add_file_aux_data(fileHandle, "OpenFOAM binary", svar.foam_is_binary);
+    add_file_aux_data(fileHandle, "Label size", svar.foam_label_size);
+    add_file_aux_data(fileHandle, "Scalar size", svar.foam_scalar_size);
+    add_file_aux_data(fileHandle, "OpenFOAM buoyant", svar.foam_buoyant_sim);
 
     add_file_aux_data(fileHandle, "VLM definition filename", svar.vlm_file);
 
     add_file_aux_data(fileHandle, "Single file for output", svar.single_file);
     add_file_aux_data(fileHandle, "Output files prefix", svar.output_prefix);
     add_file_aux_data(fileHandle, "SPH restart prefix", svar.restart_prefix);
-    add_file_aux_data(fileHandle, "SPH frame time interval", svar.framet);
-    add_file_aux_data(fileHandle, "SPH frame count", svar.Nframe);
+    add_file_aux_data(fileHandle, "SPH frame time interval", svar.frame_time_interval);
+    add_file_aux_data(fileHandle, "SPH frame count", svar.max_frames);
     add_file_aux_data(fileHandle, "SPH output encoding", svar.out_encoding);
-    add_file_aux_data(fileHandle, "SPH ghost output", svar.gout);
     add_file_aux_data(fileHandle, "Variable list", svar.output_names);
 
     /* Fluid data */
@@ -824,17 +823,17 @@ void Init_Binary_PLT(
     /* Simulation settings */
     add_file_aux_data(fileHandle, "SPH integration solver", svar.solver_name);
     add_file_aux_data(fileHandle, "SPH boundary solver", svar.bound_solver);
-    add_file_aux_data(fileHandle, "SPH solver minimum residual", svar.minRes);
-    add_file_aux_data(fileHandle, "SPH maximum timestep", svar.dt_max);
-    add_file_aux_data(fileHandle, "SPH minimum timestep", svar.dt_min);
+    add_file_aux_data(fileHandle, "SPH solver minimum residual", svar.min_residual);
+    add_file_aux_data(fileHandle, "SPH maximum timestep", svar.delta_t_max);
+    add_file_aux_data(fileHandle, "SPH minimum timestep", svar.delta_t_min);
     add_file_aux_data(fileHandle, "SPH maximum CFL", svar.cfl_max);
     add_file_aux_data(fileHandle, "SPH minimum CFL", svar.cfl_min);
     add_file_aux_data(fileHandle, "SPH CFL condition", svar.cfl);
     add_file_aux_data(fileHandle, "SPH unstable CFL step", svar.cfl_step);
-    add_file_aux_data(fileHandle, "SPH unstable CFL count limit", svar.nUnstable_Limit);
-    add_file_aux_data(fileHandle, "SPH stable CFL count limit", svar.nStable_Limit);
+    add_file_aux_data(fileHandle, "SPH unstable CFL count limit", svar.n_unstable_limit);
+    add_file_aux_data(fileHandle, "SPH stable CFL count limit", svar.n_stable_limit);
     add_file_aux_data(fileHandle, "SPH stable CFL count iteration factor", svar.subits_factor);
-    add_file_aux_data(fileHandle, "SPH maximum shifting velocity", svar.maxshift);
+    add_file_aux_data(fileHandle, "SPH maximum shifting velocity", svar.max_shift_vel);
 
     add_file_aux_data(fileHandle, "SPH background pressure", fvar.backP);
     add_file_aux_data(fileHandle, "SPH starting pressure", fvar.pPress);
@@ -845,30 +844,29 @@ void Init_Binary_PLT(
 
     add_file_aux_data(fileHandle, "SPH artificial viscosity factor", fvar.alpha);
     add_file_aux_data(fileHandle, "SPH speed of sound", fvar.Cs);
-    add_file_aux_data(fileHandle, "SPH Newmark Beta iteration limit", svar.subits);
+    add_file_aux_data(fileHandle, "SPH Newmark Beta iteration limit", svar.max_subits);
     add_file_aux_data(fileHandle, "SPH gravity vector", svar.grav);
 
-    add_file_aux_data(fileHandle, "SPH initial spacing", svar.Pstep);
-    add_file_aux_data(fileHandle, "SPH boundary spacing factor", svar.Bstep);
+    add_file_aux_data(fileHandle, "SPH initial spacing", svar.particle_step);
+    add_file_aux_data(fileHandle, "SPH boundary spacing factor", svar.bound_step_factor);
     add_file_aux_data(fileHandle, "SPH smoothing length factor", fvar.Hfac);
     add_file_aux_data(fileHandle, "SPH aerodynamic case", avar.aero_case);
     add_file_aux_data(fileHandle, "SPH SP diameter definition", avar.use_dx);
     add_file_aux_data(fileHandle, "SPH use TAB deformation", avar.useDef);
-    add_file_aux_data(fileHandle, "SPH use ghost particles", svar.ghost);
     add_file_aux_data(fileHandle, "SPH global offset coordinate", svar.offset_vec);
-    add_file_aux_data(fileHandle, "SPH maximum particle count", svar.finPts);
+    add_file_aux_data(fileHandle, "SPH maximum particle count", svar.max_points);
     add_file_aux_data(fileHandle, "SPH aerodynamic cutoff value", avar.cutoff);
     add_file_aux_data(fileHandle, "SPH freestream velocity", avar.vInf);
     add_file_aux_data(fileHandle, "SPH restart fit tolerance", svar.restart_tol);
 
     /* Particle tracking settings */
     add_file_aux_data(fileHandle, "Transition to IPT", svar.using_ipt);
-    add_file_aux_data(fileHandle, "Velocity equation order", svar.eqOrder);
+    add_file_aux_data(fileHandle, "Velocity equation order", svar.ipt_eq_order);
     add_file_aux_data(fileHandle, "SPH tracking conversion x coordinate", svar.max_x_sph);
     add_file_aux_data(fileHandle, "Maximum x trajectory coordinate", svar.max_x);
-    add_file_aux_data(fileHandle, "Particle scatter output", svar.partout);
-    add_file_aux_data(fileHandle, "Particle streak output", svar.streakout);
-    add_file_aux_data(fileHandle, "Particle cell intersection output", svar.cellsout);
+    add_file_aux_data(fileHandle, "Particle scatter output", svar.part_out);
+    add_file_aux_data(fileHandle, "Particle streak output", svar.streak_out);
+    add_file_aux_data(fileHandle, "Particle cell intersection output", svar.cells_out);
 }
 
 void close_file(void* handle)
@@ -970,22 +968,22 @@ namespace IPT
             string part_variables = Get_Variables(svar.offset_axis);
             string cell_variables = Cell_Variables(svar.offset_axis);
 
-            if (svar.partout == 1)
+            if (svar.part_out == 1)
             {
                 string title = "IPT particle scatter data";
-                Open_File(partf, title, part_variables, 1, svar.partHandle);
+                Open_File(partf, title, part_variables, 1, svar.part_handle);
             }
 
-            if (svar.streakout == 1)
+            if (svar.streak_out == 1)
             {
                 string title = "IPT particle streak data";
-                Open_File(streakf, title, part_variables, 1, svar.streakHandle);
+                Open_File(streakf, title, part_variables, 1, svar.streak_handle);
             }
 
-            if (svar.cellsout == 1)
+            if (svar.cells_out == 1)
             {
                 string title = "IPT particle cell intersection data";
-                Open_File(cellf, title, cell_variables, 0, svar.cellHandle);
+                Open_File(cellf, title, cell_variables, 0, svar.cell_handle);
             }
         }
 
@@ -1006,9 +1004,9 @@ namespace IPT
             vector<int32_t> valueLocation(varTypes.size(), 1);
             vector<int32_t> passiveVarList(varTypes.size(), 0);
 
-            string group = "IPT Particle " + std::to_string(pnp1.partID) + " scatter data";
+            string group = "IPT Particle " + std::to_string(pnp1.part_id) + " scatter data";
             if (tecZoneCreateIJK(
-                    svar.partHandle, group.c_str(), size, 1, 1, &varTypes[0], &shareVarFromZone[0],
+                    svar.part_handle, group.c_str(), size, 1, 1, &varTypes[0], &shareVarFromZone[0],
                     &valueLocation[0], &passiveVarList[0], 0, 0, 0, &outputZone
                 ))
             {
@@ -1016,7 +1014,7 @@ namespace IPT
                 exit(-1);
             }
 
-            if (tecZoneSetUnsteadyOptions(svar.partHandle, outputZone, solTime, 4))
+            if (tecZoneSetUnsteadyOptions(svar.part_handle, outputZone, solTime, 4))
             {
                 cerr << "Failed to add unsteady options." << endl;
                 exit(-1);
@@ -1031,7 +1029,7 @@ namespace IPT
 
                 string name = "position coordinate ";
                 name.append(std::to_string(dim));
-                Write_Real_Vector(svar.partHandle, outputZone, var, 0, size, x, name);
+                Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, x, name);
             }
 
             vector<real> t(size);
@@ -1049,24 +1047,24 @@ namespace IPT
             acc[0] = pnp1.acc;
             cVel[0] = pnp1.cellV.norm();
             cRho[0] = pnp1.cellRho;
-            pID[0] = pnp1.partID;
+            pID[0] = pnp1.part_id;
             cID[0] = pnp1.cellID;
 
-            Write_Real_Vector(svar.partHandle, outputZone, var, 0, size, t, "particle time");
-            Write_Real_Vector(svar.partHandle, outputZone, var, 0, size, dt, "timestep");
-            Write_Real_Vector(svar.partHandle, outputZone, var, 0, size, vel, "velocity magnitude");
-            Write_Real_Vector(svar.partHandle, outputZone, var, 0, size, acc, "acceleration magnitude");
-            Write_Int_Vector(svar.partHandle, outputZone, var, 0, size, pID, "particle ID");
-            Write_Real_Vector(svar.partHandle, outputZone, var, 0, size, cVel, "cell velocity");
-            Write_Real_Vector(svar.partHandle, outputZone, var, 0, size, cRho, "cell density");
-            Write_Int_Vector(svar.partHandle, outputZone, var, 0, size, cID, "cell ID");
+            Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, t, "particle time");
+            Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, dt, "timestep");
+            Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, vel, "velocity magnitude");
+            Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, acc, "acceleration magnitude");
+            Write_Int_Vector(svar.part_handle, outputZone, var, 0, size, pID, "particle ID");
+            Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, cVel, "cell velocity");
+            Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, cRho, "cell density");
+            Write_Int_Vector(svar.part_handle, outputZone, var, 0, size, cID, "cell ID");
 
-            if (tecFileWriterFlush(svar.partHandle, 0, NULL))
+            if (tecFileWriterFlush(svar.part_handle, 0, NULL))
             {
                 cout << "Failed to flush data. Retrying..." << endl;
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 // retry the flush
-                if (tecFileWriterFlush(svar.partHandle, 0, NULL))
+                if (tecFileWriterFlush(svar.part_handle, 0, NULL))
                 {
                     cerr << "Failed to flush data to particle file" << endl;
                     exit(-1);
@@ -1079,7 +1077,7 @@ namespace IPT
         {
             int64_t const size = pnp1.size();
 
-            double solTime = svar.t;
+            double solTime = svar.current_time;
             int32_t outputZone;
 
 #if SIMDIM == 3
@@ -1140,7 +1138,7 @@ namespace IPT
                 acc[ii] = pnp1[ii].acc;
                 cVel[ii] = pnp1[ii].cellV.norm();
                 cRho[ii] = pnp1[ii].cellRho;
-                pID[ii] = pnp1[ii].partID;
+                pID[ii] = pnp1[ii].part_id;
                 cID[ii] = pnp1[ii].cellID;
             }
 
@@ -1163,7 +1161,7 @@ namespace IPT
         {
             // int64_t const size = pnp1.size();
 
-            double solTime = svar.t;
+            double solTime = svar.current_time;
             int32_t outputZone;
 
 #if SIMDIM == 3
@@ -1187,7 +1185,7 @@ namespace IPT
 
             string group = "IPT cell intersection data";
             if (tecZoneCreatePoly(
-                    svar.cellHandle, group.c_str(), zoneType, nNodes, nFaces, nCells, totalNumFaceNodes,
+                    svar.cell_handle, group.c_str(), zoneType, nNodes, nFaces, nCells, totalNumFaceNodes,
                     &varTypes[0], &shareVarFromZone[0], &valueLocation[0], &passiveVarList[0], 0, 0, 0,
                     &outputZone
                 ))
@@ -1196,7 +1194,7 @@ namespace IPT
                 exit(-1);
             }
 
-            if (tecZoneSetUnsteadyOptions(svar.cellHandle, outputZone, solTime, 7))
+            if (tecZoneSetUnsteadyOptions(svar.cell_handle, outputZone, solTime, 7))
             {
                 cerr << "Failed to add unsteady options." << endl;
                 exit(-1);
@@ -1212,7 +1210,7 @@ namespace IPT
                     x[ii] = usedVerts[ii][dim];
 
                 string name = "position coordinate " + std::to_string(dim);
-                Write_Real_Vector(svar.cellHandle, outputZone, var, 0, nNodes, x, name);
+                Write_Real_Vector(svar.cell_handle, outputZone, var, 0, nNodes, x, name);
             }
 
             vector<int32_t> faceCounts(faces.size());
@@ -1230,7 +1228,7 @@ namespace IPT
             }
 
             tecZoneWritePolyFaces32(
-                svar.cellHandle, outputZone, 0, nFaces, &faceCounts[0], &faceNodes[0], &left[0],
+                svar.cell_handle, outputZone, 0, nFaces, &faceCounts[0], &faceNodes[0], &left[0],
                 &right[0], 1
             );
         }

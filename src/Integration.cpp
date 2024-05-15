@@ -3,7 +3,6 @@
 
 #include "Integration.h"
 
-#include "Add.h"
 #include "Containment.h"
 #include "Geometry.h"
 #include "Helper_Functions.h"
@@ -30,8 +29,8 @@ real Integrator::integrate_no_update(
     VLM const& vortex, MESH const& cells, LIMITS& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1
 )
 {
-    start_index = svar.bndPts;
-    end_index = svar.totPts;
+    start_index = svar.bound_points;
+    end_index = svar.total_points;
     iteration = 0;
 
     real rms_error = 0.0;
@@ -39,11 +38,11 @@ real Integrator::integrate_no_update(
     real npd = 1.0;
 
     // Find maximum safe timestep
-    svar.dt = find_timestep(svar, fvar, cells, pnp1, start_index, end_index);
+    svar.delta_t = find_timestep(svar, fvar, cells, pnp1, start_index, end_index);
 
     outlist = update_neighbours(SPH_TREE, fvar, pnp1);
 
-    dSPH_PreStep(fvar, svar.totPts, pnp1, outlist, npd);
+    dSPH_PreStep(fvar, svar.total_points, pnp1, outlist, npd);
 
     Get_Aero_Velocity(
         SPH_TREE, CELL_TREE, svar, fvar, avar, cells, vortex, start_index, end_index, outlist, limits,
@@ -52,26 +51,12 @@ real Integrator::integrate_no_update(
 
     Detect_Surface(svar, fvar, avar, start_index, end_index, outlist, cells, vortex, pnp1);
 
-    if (svar.ghost == 1)
-    { /* Poisson points */
-        PoissonGhost(svar, fvar, avar, cells, SPH_TREE, outlist, pn, pnp1);
-        dSPH_PreStep(fvar, end_index, pnp1, outlist, npd);
-    }
-    else if (svar.ghost == 2)
-    { /* Lattice points */
-        LatticeGhost(svar, fvar, avar, cells, SPH_TREE, outlist, pn, pnp1, limits);
-        dSPH_PreStep(fvar, end_index, pnp1, outlist, npd);
-    }
-
 #ifndef NOFROZEN
     dissipation_terms(fvar, start_index, end_index, outlist, pnp1);
 #endif
 
 #ifdef ALE
-    if (svar.ghost > 0)
-        Particle_Shift_Ghost(svar, fvar, start_index, end_index, outlist, pnp1);
-    else
-        Particle_Shift_No_Ghost(svar, fvar, start_index, end_index, outlist, pnp1);
+    particle_shift(svar, fvar, start_index, end_index, outlist, pnp1);
 #endif
 
     Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end_index, end_index);
@@ -110,10 +95,7 @@ real Integrator::integrate_no_update(
     // Apply_XSPH(fvar,start_index,end_index,outlist,pnp1);
 
 #ifdef ALE
-    if (svar.ghost > 0)
-        Particle_Shift_Ghost(svar, fvar, start_index, end_index, outlist, pnp1);
-    else
-        Particle_Shift_No_Ghost(svar, fvar, start_index, end_index, outlist, pnp1);
+    particle_shift(svar, fvar, start_index, end_index, outlist, pnp1);
 #endif
 
     Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end_index, end_index);
@@ -123,9 +105,6 @@ real Integrator::integrate_no_update(
         SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pn, pnp1, xih, start_index,
         end_index, logbase, npd
     );
-
-    if (svar.ghost != 0)
-        Check_If_Ghost_Needs_Removing(svar, fvar, SPH_TREE, pn, pnp1);
 
     return rms_error;
 }
@@ -141,7 +120,7 @@ size_t Integrator::update_data(
     /* Check if any particles need to be deleted, and turned to particle tracking */
     std::set<size_t> to_del;
     vector<size_t> n_del_per_block(limits.size(), 0);
-    for (size_t block = svar.nbound; block < svar.nbound + svar.nfluid; block++)
+    for (size_t block = svar.n_bound_blocks; block < svar.n_bound_blocks + svar.n_fluid_blocks; block++)
     {
         // Need to check if the delete plane is active.
         if (limits[block].delconst == default_val)
@@ -168,7 +147,7 @@ size_t Integrator::update_data(
         vector<IPTPart> IPT_nm1, IPT_n, IPT_np1;
         for (size_t const& ii : to_del)
         {
-            IPT_nm1.emplace_back(IPTPart(pnp1[ii], svar.t, svar.IPT_diam, svar.IPT_area));
+            IPT_nm1.emplace_back(IPTPart(pnp1[ii], svar.current_time, svar.ipt_diam, svar.ipt_area));
         }
 
         /* Do particle tracking on the particles converted */
@@ -190,16 +169,17 @@ size_t Integrator::update_data(
         for (std::set<size_t>::reverse_iterator itr = to_del.rbegin(); itr != to_del.rend(); ++itr)
         {
             pnp1.erase(pnp1.begin() + *itr);
-            svar.totPts--;
-            svar.simPts--;
+            svar.total_points--;
+            svar.fluid_points--;
             end_index--;
             end_index--;
             nDel++;
-            svar.delNum++;
+            svar.delete_count++;
         }
 
         size_t delshift = 0;
-        for (size_t block = svar.nbound; block < svar.nbound + svar.nfluid; block++)
+        for (size_t block = svar.n_bound_blocks; block < svar.n_bound_blocks + svar.n_fluid_blocks;
+             block++)
         {
             // Shift the blocks, which will happen cumulatively
             limits[block].index.first -= delshift;
@@ -224,13 +204,13 @@ size_t Integrator::update_data(
     }
 
     /****** UPDATE TIME N ***********/
-    if (svar.totPts != pnp1.size())
+    if (svar.total_points != pnp1.size())
     {
         cout << "Size mismatch. Total points not equal to array size. Stopping" << endl;
         exit(-1);
     }
 
-    // cout << "Updating. Time: " << svar.t << "  dt: " << svar.dt << endl;
+    // cout << "Updating. Time: " << svar.current_time << "  dt: " << svar.delta_t << endl;
     if (pn.size() != pnp1.size())
         pn.resize(pnp1.size());
 
@@ -280,74 +260,75 @@ real Integrator::integrate(
 #endif
     }
     maxRho = 100 * maxRhoi / fvar.rho0;
-    real cfl = svar.dt / safe_dt;
+    real cfl = svar.delta_t / safe_dt;
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(t2 - t1).count();
 #ifdef ALE
     printf(
-        "%9.3e | %7.2e | %4.2f | %8.4f | %7.3f | %9.3e | %9.3e | %9.3e | %14ld|\n", svar.t, svar.dt, cfl,
-        step_error, maxRho, maxf, maxAf, maxShift, duration
+        "%9.3e | %7.2e | %4.2f | %8.4f | %7.3f | %9.3e | %9.3e | %9.3e | %14ld|\n", svar.current_time,
+        svar.delta_t, cfl, step_error, maxRho, maxf, maxAf, maxShift, duration
     );
 
 #else
     printf(
-        "%9.3e | %7.2e | %4.2f | %9.4f | %3u | %8.3f | %9.3e | %9.3e | %14ld|\n", svar.t, svar.dt, cfl,
-        step_error, iteration, maxRho, maxf, maxAf, duration
+        "%9.3e | %7.2e | %4.2f | %9.4f | %3u | %8.3f | %9.3e | %9.3e | %14ld|\n", svar.current_time,
+        svar.delta_t, cfl, step_error, iteration, maxRho, maxf, maxAf, duration
     );
 #endif
 
     /*Add time to global*/
-    svar.t += svar.dt;
+    svar.current_time += svar.delta_t;
 
     /* Check the error and adjust the CFL to try and keep convergence */
-    if (step_error > svar.minRes || maxRho > fvar.rhoMaxIter)
+    if (step_error > svar.min_residual || maxRho > fvar.rhoMaxIter)
     {
-        if (step_error > 0.6 * svar.minRes)
+        if (step_error > 0.6 * svar.min_residual)
         { // If really unstable, immediately reduce the timestep
             svar.cfl = std::max(svar.cfl_min, svar.cfl - svar.cfl_step);
-            svar.nUnstable = 0;
+            svar.n_unstable = 0;
         }
-        else if (svar.nUnstable > svar.nUnstable_Limit)
+        else if (svar.n_unstable > svar.n_unstable_limit)
         {
             svar.cfl = std::max(svar.cfl_min, svar.cfl - svar.cfl_step);
-            svar.nUnstable = 0;
+            svar.n_unstable = 0;
         }
         else
-            svar.nUnstable++;
+            svar.n_unstable++;
     }
     else
-        svar.nUnstable = 0;
+        svar.n_unstable = 0;
 
-    if (iteration < svar.subits_factor * svar.subits && svar.nUnstable == 0)
+    if (iteration < svar.subits_factor * svar.max_subits && svar.n_unstable == 0)
     {
-        if (svar.nStable > svar.nStable_Limit)
+        if (svar.n_stable > svar.n_stable_limit)
         { // Try boosting the CFL if it does converge nicely
             svar.cfl = std::min(svar.cfl_max, svar.cfl + svar.cfl_step);
-            svar.nStable = 0;
+            svar.n_stable = 0;
         }
         else
-            svar.nStable++;
+            svar.n_stable++;
     }
     else
-        svar.nStable = 0;
+        svar.n_stable = 0;
 
 #ifdef DAMBREAK
     /* Find max x and y coordinates of the fluid */
     // Find maximum safe timestep
     vector<SPHPart>::iterator maxXi = std::max_element(
-        pnp1.begin() + svar.bndPts, pnp1.end_index(),
+        pnp1.begin() + svar.bound_points, pnp1.end_index(),
         [](SPHPart const& p1, SPHPart const& p2) { return p1.xi[0] < p2.xi[0]; }
     );
 
     vector<SPHPart>::iterator maxYi = std::max_element(
-        pnp1.begin() + svar.bndPts, pnp1.end_index(),
+        pnp1.begin() + svar.bound_points, pnp1.end_index(),
         [](SPHPart const& p1, SPHPart const& p2) { return p1.xi[1] < p2.xi[1]; }
     );
 
     real maxX = maxXi->xi[0];
     real maxY = maxYi->xi[1];
 
-    dambreak << svar.t << "  " << maxX + 0.5 * svar.Pstep << "  " << maxY + 0.5 * svar.Pstep << endl;
+    dambreak << svar.current_time << "  " << maxX + 0.5 * svar.particle_step << "  "
+             << maxY + 0.5 * svar.particle_step << endl;
 #endif
 
     return step_error;
@@ -473,13 +454,13 @@ real Integrator::find_timestep(
     /***********************************************************************************/
     /***********************************************************************************/
 
-    if (dt < svar.dt_min)
-        dt = svar.dt_min;
-    else if (dt > svar.dt_max)
-        dt = svar.dt_max;
+    if (dt < svar.delta_t_min)
+        dt = svar.delta_t_min;
+    else if (dt > svar.delta_t_max)
+        dt = svar.delta_t_max;
 
-    if (dt > svar.tframem1 + svar.framet - svar.t)
-        dt = svar.tframem1 + svar.framet - svar.t + svar.dt_min;
+    if (dt > svar.last_frame_time + svar.frame_time_interval - svar.current_time)
+        dt = svar.last_frame_time + svar.frame_time_interval - svar.current_time + svar.delta_t_min;
 
     return dt;
 }

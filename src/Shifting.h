@@ -19,12 +19,7 @@ void dissipation_terms(
 );
 
 #ifdef ALE
-void Particle_Shift_No_Ghost(
-    SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
-    /* DELTAP const& dp, */ SPHState& pnp1
-);
-
-void Particle_Shift_Ghost(
+void particle_shift(
     SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
     /* DELTAP const& dp, */ SPHState& pnp1
 );

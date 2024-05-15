@@ -501,7 +501,7 @@ namespace HDF5
         vector<size_t> svec(length);
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
-            svec[ii - start] = pnp1[ii].partID;
+            svec[ii - start] = pnp1[ii].part_id;
 
         Write_Variable_Scalar(fout, "Particle ID", dims, 0, svec);
         svec.clear();
@@ -1006,7 +1006,7 @@ namespace HDF5
         Read_Variable_Scalar(fin, "Particle ID", svect);
 #pragma omp parallel for
         for (size_t ii = 0; ii < length; ii++)
-            temp[ii].partID = svect[ii];
+            temp[ii].part_id = svect[ii];
 
         /* Cell ID */
         Read_Variable_Scalar(fin, "Cell ID", lvect);
@@ -1061,43 +1061,42 @@ void Write_HDF5_Attributes(int64_t const& file, SIM const& svar, FLUID const& fv
 {
 
     // Write crucial simulation auxiliary data. Potential to expand
-    HDF5::Write_Real_Attribute(file, "Simulation current time", svar.t);
-    HDF5::Write_Uint_Attribute(file, "Particle index to add", svar.partID);
-    HDF5::Write_Uint_Attribute(file, "Number of boundary blocks", svar.nbound);
-    HDF5::Write_Uint_Attribute(file, "Number of fluid blocks", svar.nfluid);
-    HDF5::Write_Uint_Attribute(file, "Number of boundary points", svar.bndPts);
-    HDF5::Write_Uint_Attribute(file, "Number of fluid points", svar.simPts);
-    HDF5::Write_Uint_Attribute(file, "Current frame", svar.frame);
+    HDF5::Write_Real_Attribute(file, "Simulation current time", svar.current_time);
+    HDF5::Write_Uint_Attribute(file, "Particle index to add", svar.part_id);
+    HDF5::Write_Uint_Attribute(file, "Number of boundary blocks", svar.n_bound_blocks);
+    HDF5::Write_Uint_Attribute(file, "Number of fluid blocks", svar.n_fluid_blocks);
+    HDF5::Write_Uint_Attribute(file, "Number of boundary points", svar.bound_points);
+    HDF5::Write_Uint_Attribute(file, "Number of fluid points", svar.fluid_points);
+    HDF5::Write_Uint_Attribute(file, "Current frame", svar.current_frame);
 
-    HDF5::Write_String_Attribute(file, "Input para filename", svar.infile);
-    HDF5::Write_String_Attribute(file, "Input fluid definition filename", svar.fluidfile);
-    HDF5::Write_String_Attribute(file, "Input boundary definition filename", svar.boundfile);
+    HDF5::Write_String_Attribute(file, "Input para filename", svar.input_file);
+    HDF5::Write_String_Attribute(file, "Input fluid definition filename", svar.input_fluid_file);
+    HDF5::Write_String_Attribute(file, "Input boundary definition filename", svar.input_bound_file);
 
-    HDF5::Write_String_Attribute(file, "Primary grid face filename", svar.taumesh);
-    HDF5::Write_String_Attribute(file, "Boundary mapping filename", svar.taubmap);
-    HDF5::Write_String_Attribute(file, "Restart-data prefix", svar.tausol);
+    HDF5::Write_String_Attribute(file, "Primary grid face filename", svar.tau_mesh);
+    HDF5::Write_String_Attribute(file, "Boundary mapping filename", svar.tau_bmap);
+    HDF5::Write_String_Attribute(file, "Restart-data prefix", svar.tau_sol);
     HDF5::Write_Int_Attribute(file, "Dimension offset vector", svar.offset_axis);
     HDF5::Write_Real_Attribute(file, "Solution angle of attack", svar.angle_alpha);
     HDF5::Write_Real_Attribute(file, "Grid scale", svar.scale);
 
-    HDF5::Write_String_Attribute(file, "OpenFOAM input directory", svar.foamdir);
-    HDF5::Write_String_Attribute(file, "OpenFOAM solution directory", svar.foamsol);
-    HDF5::Write_Int_Attribute(file, "OpenFOAM binary", svar.isBinary);
-    HDF5::Write_Int_Attribute(file, "Label size", svar.labelSize);
-    HDF5::Write_Int_Attribute(file, "Scalar size", svar.scalarSize);
-    HDF5::Write_Int_Attribute(file, "OpenFOAM is buoyant", svar.buoyantSim);
-    HDF5::Write_Int_Attribute(file, "OpenFOAM is incompressible", svar.incomp);
+    HDF5::Write_String_Attribute(file, "OpenFOAM input directory", svar.foam_dir);
+    HDF5::Write_String_Attribute(file, "OpenFOAM solution directory", svar.foam_sol);
+    HDF5::Write_Int_Attribute(file, "OpenFOAM binary", svar.foam_is_binary);
+    HDF5::Write_Int_Attribute(file, "Label size", svar.foam_label_size);
+    HDF5::Write_Int_Attribute(file, "Scalar size", svar.foam_scalar_size);
+    HDF5::Write_Int_Attribute(file, "OpenFOAM is buoyant", svar.foam_buoyant_sim);
+    HDF5::Write_Int_Attribute(file, "OpenFOAM is foam_is_incompressible", svar.foam_is_incomp);
 
     HDF5::Write_String_Attribute(file, "VLM definition filename", svar.vlm_file);
 
     HDF5::Write_Uint_Attribute(file, "Single file for output", svar.single_file);
     HDF5::Write_String_Attribute(file, "Output files prefix", svar.output_prefix);
     HDF5::Write_String_Attribute(file, "SPH restart prefix", svar.restart_prefix);
-    HDF5::Write_Real_Attribute(file, "SPH frame time interval", svar.framet);
-    HDF5::Write_Uint_Attribute(file, "SPH frame count", svar.Nframe);
-    HDF5::Write_Real_Attribute(file, "SPH previous frame time", svar.tframem1);
+    HDF5::Write_Real_Attribute(file, "SPH frame time interval", svar.frame_time_interval);
+    HDF5::Write_Uint_Attribute(file, "SPH frame count", svar.max_frames);
+    HDF5::Write_Real_Attribute(file, "SPH previous frame time", svar.last_frame_time);
     HDF5::Write_Uint_Attribute(file, "SPH output encoding", svar.out_encoding);
-    HDF5::Write_Uint_Attribute(file, "SPH ghost output", svar.gout);
     HDF5::Write_String_Attribute(file, "Variable list", svar.output_names);
 
     /* Fluid data */
@@ -1120,19 +1119,19 @@ void Write_HDF5_Attributes(int64_t const& file, SIM const& svar, FLUID const& fv
     /* Simulation settings */
     HDF5::Write_String_Attribute(file, "SPH integration solver", svar.solver_name);
     HDF5::Write_Uint_Attribute(file, "SPH boundary solver", svar.bound_solver);
-    HDF5::Write_Real_Attribute(file, "SPH solver minimum residual", svar.minRes);
-    HDF5::Write_Real_Attribute(file, "SPH maximum timestep", svar.dt_max);
-    HDF5::Write_Real_Attribute(file, "SPH minimum timestep", svar.dt_min);
+    HDF5::Write_Real_Attribute(file, "SPH solver minimum residual", svar.min_residual);
+    HDF5::Write_Real_Attribute(file, "SPH maximum timestep", svar.delta_t_max);
+    HDF5::Write_Real_Attribute(file, "SPH minimum timestep", svar.delta_t_min);
     HDF5::Write_Real_Attribute(file, "SPH maximum CFL", svar.cfl_max);
     HDF5::Write_Real_Attribute(file, "SPH minimum CFL", svar.cfl_min);
     HDF5::Write_Real_Attribute(file, "SPH CFL condition", svar.cfl);
     HDF5::Write_Real_Attribute(file, "SPH unstable CFL step", svar.cfl_step);
-    HDF5::Write_Uint_Attribute(file, "SPH unstable CFL count limit", svar.nUnstable_Limit);
-    HDF5::Write_Uint_Attribute(file, "SPH stable CFL count limit", svar.nStable_Limit);
+    HDF5::Write_Uint_Attribute(file, "SPH unstable CFL count limit", svar.n_unstable_limit);
+    HDF5::Write_Uint_Attribute(file, "SPH stable CFL count limit", svar.n_stable_limit);
     HDF5::Write_Real_Attribute(file, "SPH stable CFL count iteration factor", svar.subits_factor);
-    HDF5::Write_Real_Attribute(file, "SPH maximum shifting velocity", svar.maxshift);
-    HDF5::Write_Uint_Attribute(file, "SPH stable CFL count", svar.nStable);
-    HDF5::Write_Uint_Attribute(file, "SPH unstable CFL count", svar.nUnstable);
+    HDF5::Write_Real_Attribute(file, "SPH maximum shifting velocity", svar.max_shift_vel);
+    HDF5::Write_Uint_Attribute(file, "SPH stable CFL count", svar.n_stable);
+    HDF5::Write_Uint_Attribute(file, "SPH unstable CFL count", svar.n_unstable);
 
     HDF5::Write_Real_Attribute(file, "SPH background pressure", fvar.backP);
     HDF5::Write_Real_Attribute(file, "SPH starting pressure", fvar.pPress);
@@ -1143,30 +1142,29 @@ void Write_HDF5_Attributes(int64_t const& file, SIM const& svar, FLUID const& fv
 
     HDF5::Write_Real_Attribute(file, "SPH artificial viscosity factor", fvar.alpha);
     HDF5::Write_Real_Attribute(file, "SPH speed of sound", fvar.Cs);
-    HDF5::Write_Uint_Attribute(file, "SPH Newmark Beta iteration limit", svar.subits);
+    HDF5::Write_Uint_Attribute(file, "SPH Newmark Beta iteration limit", svar.max_subits);
     HDF5::Write_Vector_Attribute(file, "SPH gravity vector", svar.grav);
 
-    HDF5::Write_Real_Attribute(file, "SPH initial spacing", svar.Pstep);
-    HDF5::Write_Real_Attribute(file, "SPH boundary spacing factor", svar.Bstep);
+    HDF5::Write_Real_Attribute(file, "SPH initial spacing", svar.particle_step);
+    HDF5::Write_Real_Attribute(file, "SPH boundary spacing factor", svar.bound_step_factor);
     HDF5::Write_Real_Attribute(file, "SPH smoothing length factor", fvar.Hfac);
     HDF5::Write_String_Attribute(file, "SPH aerodynamic case", avar.aero_case);
     HDF5::Write_Int_Attribute(file, "SPH SP diameter definition", avar.use_dx);
     HDF5::Write_Int_Attribute(file, "SPH use TAB deformation", avar.useDef);
-    HDF5::Write_Int_Attribute(file, "SPH use ghost particles", svar.ghost);
     HDF5::Write_Vector_Attribute(file, "SPH global offset coordinate", svar.offset_vec);
-    HDF5::Write_Uint_Attribute(file, "SPH maximum particle count", svar.finPts);
+    HDF5::Write_Uint_Attribute(file, "SPH maximum particle count", svar.max_points);
     HDF5::Write_Real_Attribute(file, "SPH aerodynamic cutoff value", avar.cutoff);
     HDF5::Write_Vector_Attribute(file, "SPH freestream velocity", avar.vInf);
     HDF5::Write_Real_Attribute(file, "SPH restart fit tolerance", svar.restart_tol);
 
     /* Particle tracking settings */
     HDF5::Write_Int_Attribute(file, "Transition to IPT", svar.using_ipt);
-    HDF5::Write_Int_Attribute(file, "Velocity equation order", svar.eqOrder);
+    HDF5::Write_Int_Attribute(file, "Velocity equation order", svar.ipt_eq_order);
     HDF5::Write_Real_Attribute(file, "SPH tracking conversion x coordinate", svar.max_x_sph);
     HDF5::Write_Real_Attribute(file, "Maximum x trajectory coordinate", svar.max_x);
-    HDF5::Write_Uint_Attribute(file, "Particle scatter output", svar.partout);
-    HDF5::Write_Uint_Attribute(file, "Particle streak output", svar.streakout);
-    HDF5::Write_Uint_Attribute(file, "Particle cell intersection output", svar.cellsout);
+    HDF5::Write_Uint_Attribute(file, "Particle scatter output", svar.part_out);
+    HDF5::Write_Uint_Attribute(file, "Particle streak output", svar.streak_out);
+    HDF5::Write_Uint_Attribute(file, "Particle cell intersection output", svar.cells_out);
 }
 
 void Write_Zone_Attributes(int64_t const& zone, bound_block const& limits)
@@ -1265,9 +1263,9 @@ void Write_HDF5(
     size_t blockID = 0;
 
     // Boundary particles
-    if (svar.nbound > 0)
+    if (svar.n_bound_blocks > 0)
     {
-        for (size_t ii = 0; ii < svar.nbound; ++ii)
+        for (size_t ii = 0; ii < svar.n_bound_blocks; ++ii)
         {
             std::string zoneHeader = "Boundary " + std::to_string(ii);
 
@@ -1293,10 +1291,10 @@ void Write_HDF5(
     }
 
     // Fluid particles
-    if (svar.nfluid > 0)
+    if (svar.n_fluid_blocks > 0)
     {
         size_t flublock = 0;
-        for (size_t ii = svar.nbound; ii < svar.nbound + svar.nfluid; ++ii)
+        for (size_t ii = svar.n_bound_blocks; ii < svar.n_bound_blocks + svar.n_fluid_blocks; ++ii)
         {
             std::string zoneHeader = "Fluid " + std::to_string(flublock);
 
@@ -1341,7 +1339,7 @@ void Write_HDF5(
     if (!svar.restart_header_written)
     {
         /* Append a restart prefix to the end of the para file */
-        FILE* para = fopen(svar.infile.c_str(), "a");
+        FILE* para = fopen(svar.input_file.c_str(), "a");
         if (para == NULL)
         {
             printf("Failed to reopen para file\n");
@@ -1376,39 +1374,39 @@ void Read_HDF5(
     }
 
     // Read attributes, but only essential ones to not cause discrepancy
-    HDF5::Read_Real_Attribute(file, "Simulation current time", svar.t);
-    HDF5::Read_Uint_Attribute(file, "Current frame", svar.frame);
-    HDF5::Read_Real_Attribute(file, "SPH initial spacing", svar.Pstep);
+    HDF5::Read_Real_Attribute(file, "Simulation current time", svar.current_time);
+    HDF5::Read_Uint_Attribute(file, "Current frame", svar.current_frame);
+    HDF5::Read_Real_Attribute(file, "SPH initial spacing", svar.particle_step);
     HDF5::Read_Uint_Attribute(file, "Single file for output", svar.single_file);
-    HDF5::Read_Real_Attribute(file, "SPH frame time interval", svar.framet);
-    // HDF5::Read_Real_Attribute(file,   "SPH previous frame time", svar.tframem1);
+    HDF5::Read_Real_Attribute(file, "SPH frame time interval", svar.frame_time_interval);
+    // HDF5::Read_Real_Attribute(file,   "SPH previous frame time", svar.last_frame_time);
 
     HDF5::Read_String_Attribute(file, "Variable list", svar.output_names);
     HDF5::Read_Real_Attribute(file, "Grid scale", svar.scale);
     HDF5::Read_Real_Attribute(file, "SPH CFL condition", svar.cfl);
 
-    HDF5::Read_Uint_Attribute(file, "Number of boundary blocks", svar.nbound);
-    HDF5::Read_Uint_Attribute(file, "Number of fluid blocks", svar.nfluid);
-    HDF5::Read_Uint_Attribute(file, "Number of boundary points", svar.bndPts);
-    HDF5::Read_Uint_Attribute(file, "Number of fluid points", svar.simPts);
-    HDF5::Read_Uint_Attribute(file, "Current frame", svar.frame);
-    HDF5::Read_Uint_Attribute(file, "Particle index to add", svar.partID);
-    HDF5::Read_Uint_Attribute(file, "SPH stable CFL count", svar.nStable);
-    HDF5::Read_Uint_Attribute(file, "SPH unstable CFL count", svar.nUnstable);
-    svar.tframem1 = svar.t;
+    HDF5::Read_Uint_Attribute(file, "Number of boundary blocks", svar.n_bound_blocks);
+    HDF5::Read_Uint_Attribute(file, "Number of fluid blocks", svar.n_fluid_blocks);
+    HDF5::Read_Uint_Attribute(file, "Number of boundary points", svar.bound_points);
+    HDF5::Read_Uint_Attribute(file, "Number of fluid points", svar.fluid_points);
+    HDF5::Read_Uint_Attribute(file, "Current frame", svar.current_frame);
+    HDF5::Read_Uint_Attribute(file, "Particle index to add", svar.part_id);
+    HDF5::Read_Uint_Attribute(file, "SPH stable CFL count", svar.n_stable);
+    HDF5::Read_Uint_Attribute(file, "SPH unstable CFL count", svar.n_unstable);
+    svar.last_frame_time = svar.current_time;
 
     Set_Values(svar, fvar, avar, vortex);
 
     size_t start = 0;
     size_t block = 0;
-    if (svar.nbound > 0)
+    if (svar.n_bound_blocks > 0)
     {
         // Will already be set from reading the boundary file
         // parts.ntimes.assign(nBound,0);
         // parts.b_times.resize(nBound);
         // parts.b_vels.resize(nBound);
-        svar.bndPts = 0;
-        for (size_t ii = 0; ii < svar.nbound; ii++)
+        svar.bound_points = 0;
+        for (size_t ii = 0; ii < svar.n_bound_blocks; ii++)
         {
             std::string zoneHeader = "Boundary " + std::to_string(ii);
             int64_t group = H5Gopen(file, zoneHeader.c_str(), H5P_DEFAULT);
@@ -1424,14 +1422,14 @@ void Read_HDF5(
 
             H5Gclose(group);
             block++;
-            svar.bndPts += length;
+            svar.bound_points += length;
         }
     }
 
-    if (svar.nfluid > 0)
+    if (svar.n_fluid_blocks > 0)
     {
-        svar.simPts = 0;
-        for (size_t ii = 0; ii < svar.nfluid; ii++)
+        svar.fluid_points = 0;
+        for (size_t ii = 0; ii < svar.n_fluid_blocks; ii++)
         {
             // Assume the block definition files have been read.
             std::string zoneHeader = "Fluid " + std::to_string(ii);
@@ -1455,12 +1453,12 @@ void Read_HDF5(
 
             H5Gclose(group);
             block++;
-            svar.simPts += length;
+            svar.fluid_points += length;
         }
     }
 
     H5Fclose(file);
-    svar.totPts = svar.bndPts + svar.simPts;
+    svar.total_points = svar.bound_points + svar.fluid_points;
     pnp1.resize(pn.size());
     copy_omp(pn.begin(), pn.end(), pnp1.begin());
 
@@ -1580,11 +1578,11 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Density gradient", dims, 0, vec);
         }
 
-        if (output_variables.at("partID").write)
+        if (output_variables.at("part_id").write)
         {
             vector<int> uvec(length);
             for (size_t ii = start; ii < end; ++ii)
-                uvec[ii - start] = pnp1[ii].partID;
+                uvec[ii - start] = pnp1[ii].part_id;
             HDF5::Write_Variable_Scalar(fout, "Particle ID", dims, 0, uvec);
         }
 
@@ -1839,38 +1837,38 @@ namespace h5part
 } // namespace h5part
 
 void open_h5part_files(
-    SIM const& svar, FLUID const& fvar, AERO const& avar, string const& prefix, int64_t& ffile,
-    int64_t& bfile
+    SIM const& svar, FLUID const& fvar, AERO const& avar, string const& prefix,
+    int64_t& h5part_fluid_file, int64_t& h5part_bound_file
 )
 {
 
-    if (svar.simPts > 0)
+    if (svar.fluid_points > 0)
     {
         std::string filename = prefix + "_fluid.h5part";
 
         if (std::filesystem::exists(filename))
         {
-            ffile = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+            h5part_fluid_file = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
         }
         else
         {
-            ffile = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-            Write_HDF5_Attributes(ffile, svar, fvar, avar);
+            h5part_fluid_file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+            Write_HDF5_Attributes(h5part_fluid_file, svar, fvar, avar);
         }
     }
 
-    if (svar.bndPts > 0)
+    if (svar.bound_points > 0)
     {
         std::string filename = prefix + "_boundary.h5part";
 
         if (std::filesystem::exists(filename))
         {
-            bfile = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+            h5part_bound_file = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
         }
         else
         {
-            bfile = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-            Write_HDF5_Attributes(bfile, svar, fvar, avar);
+            h5part_bound_file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+            Write_HDF5_Attributes(h5part_bound_file, svar, fvar, avar);
         }
     }
 }
@@ -1878,8 +1876,8 @@ void open_h5part_files(
 /**
  * @brief Initialise and add the boundary particles to the SPH particles
  *
- * @param ffile fluid file identifier
- * @param bfile boundary file identifier
+ * @param h5part_fluid_file fluid file identifier
+ * @param h5part_bound_file boundary file identifier
  * @param sfile structure file identifier
  * @param svar Structure of simulation variables
  * @param parts SoA containing SPH particles
@@ -1889,16 +1887,19 @@ void open_h5part_files(
  * @return void
  */
 void write_h5part_data(
-    int64_t& ffile, int64_t& bfile, SIM const& svar, FLUID const& fvar, SPHState const& pnp1
+    int64_t& h5part_fluid_file, int64_t& h5part_bound_file, SIM const& svar, FLUID const& fvar,
+    SPHState const& pnp1
 )
 {
-    std::string zoneHeader = "Step#" + std::to_string(svar.frame);
-    if (svar.nfluid > 0)
+    std::string zoneHeader = "Step#" + std::to_string(svar.current_frame);
+    if (svar.n_fluid_blocks > 0)
     {
         // Create a group of the current timestep
-        int64_t fluzone = H5Gcreate2(ffile, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t fluzone =
+            H5Gcreate2(h5part_fluid_file, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         h5part::Write_Zone_Data(
-            fluzone, svar.scale, svar.t, pnp1, svar.bndPts, svar.totPts, svar.output_variables, fvar.rho0
+            fluzone, svar.scale, svar.current_time, pnp1, svar.bound_points, svar.total_points,
+            svar.output_variables, fvar.rho0
         );
 
         if (H5Gclose(fluzone))
@@ -1908,19 +1909,21 @@ void write_h5part_data(
         }
 
         // Close the file
-        if (H5Fclose(ffile))
+        if (H5Fclose(h5part_fluid_file))
         {
             printf("Failed to close fluid HDF file\n");
             exit(-1);
         }
     }
 
-    if (svar.nbound > 0)
+    if (svar.n_bound_blocks > 0)
     {
         // Create a group of the current timestep
-        int64_t bndzone = H5Gcreate2(bfile, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t bndzone =
+            H5Gcreate2(h5part_bound_file, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         h5part::Write_Zone_Data(
-            bndzone, svar.scale, svar.t, pnp1, 0, svar.bndPts, svar.output_variables, fvar.rho0
+            bndzone, svar.scale, svar.current_time, pnp1, 0, svar.bound_points, svar.output_variables,
+            fvar.rho0
         );
 
         if (H5Gclose(bndzone))
@@ -1930,7 +1933,7 @@ void write_h5part_data(
         }
 
         // Close the file
-        if (H5Fclose(bfile))
+        if (H5Fclose(h5part_bound_file))
         {
             printf("Failed to close boundary HDF file\n");
             exit(-1);

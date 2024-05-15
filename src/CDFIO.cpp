@@ -200,7 +200,7 @@ namespace TAU
 #ifdef DEBUG
         fprintf(dbout, "Entering Find_Bmap_Markers...\n");
 #endif
-        string const& bmapIn = svar.taubmap;
+        string const& bmapIn = svar.tau_bmap;
         std::ifstream fin(bmapIn, std::ios::in);
 
         if (!fin.is_open())
@@ -236,7 +236,7 @@ namespace TAU
 #ifdef DEBUG
         fprintf(dbout, "Entering Find_Bmap_Markers...\n");
 #endif
-        string const& bmapIn = svar.taubmap;
+        string const& bmapIn = svar.tau_bmap;
         std::ifstream fin(bmapIn, std::ios::in);
 
         if (!fin.is_open())
@@ -261,9 +261,9 @@ namespace TAU
 
         uint blockno = 0;
 
-        svar.markers = vector<int>(nBlocks, 0);
-        svar.bnames = vector<string>(nBlocks);
-        svar.bwrite = vector<int>(nBlocks, 0);
+        svar.tau_markers = vector<int>(nBlocks, 0);
+        svar.tau_bnames = vector<string>(nBlocks);
+        svar.tau_bwrite = vector<int>(nBlocks, 0);
 
         vector<string> types(nBlocks);
 
@@ -276,10 +276,10 @@ namespace TAU
                 continue;
 
             Get_Number(line, "Angle alpha (degree)", svar.angle_alpha);
-            Get_Number(line, "Markers", svar.markers[blockno]);
-            Get_String(line, "Name", svar.bnames[blockno]);
+            Get_Number(line, "tau_markers", svar.tau_markers[blockno]);
+            Get_String(line, "Name", svar.tau_bnames[blockno]);
             Get_String(line, "Type", types[blockno]);
-            Get_Number(line, "Write surface data (0/1)", svar.bwrite[blockno]);
+            Get_Number(line, "Write surface data (0/1)", svar.tau_bwrite[blockno]);
 
             if (line.find("block end") != string::npos)
             { /*We're on a new block*/
@@ -292,9 +292,9 @@ namespace TAU
         /* Check if the boundary has a name. If not, then give it the type name*/
         for (size_t ii = 0; ii < nBlocks; ++ii)
         {
-            if (svar.bnames[ii].empty())
+            if (svar.tau_bnames[ii].empty())
             {
-                svar.bnames[ii] = types[ii];
+                svar.tau_bnames[ii] = types[ii];
             }
         }
 
@@ -662,7 +662,7 @@ namespace TAU
 #ifdef DEBUG
         fprintf(dbout, "Opening solultion file.\n");
 #endif
-        string const& solIn = svar.tausol;
+        string const& solIn = svar.tau_sol;
         int retval;
         int solID;
 
@@ -860,7 +860,8 @@ namespace TAU
         // 	}
         // }
 
-        vector<int> markers = Get_Scalar_Property_int(fin, "boundarymarker_of_surfaces", cells.nSurf);
+        vector<int> tau_markers =
+            Get_Scalar_Property_int(fin, "boundarymarker_of_surfaces", cells.nSurf);
 
         vector<std::pair<int, int>> leftright(nEdge);
         cells.smarkers = vector<std::pair<size_t, int>>(cells.nSurf);
@@ -925,7 +926,7 @@ namespace TAU
             for (size_t ii = 0; ii < cells.nSurf; ++ii)
             {
                 cells.smarkers[ii].first = surf_IDs[ii];
-                cells.smarkers[ii].second = markers[ii];
+                cells.smarkers[ii].second = tau_markers[ii];
             }
         } /* End parallel */
 
@@ -951,8 +952,8 @@ namespace TAU
         // 			for (auto const &vert : face)
         // 			{
         // 				if (std::find(cells.elems[ii].begin(), cells.elems[ii].end(),
-        // vert) == cells.elems[ii].end()) 				{ /*Vertex doesn't exist in the elems vector yet.*/ 					#pragma
-        // omp critical
+        // vert) == cells.elems[ii].end()) 				{ /*Vertex doesn't exist in the
+        // elems vector yet.*/ 					#pragma omp critical
         // 					{
         // 						cells.elems[ii].emplace_back(vert);
         // 					}
@@ -991,10 +992,10 @@ namespace TAU
     }
 
     void
-    Read_TAUMESH_EDGE(SIM& svar, MESH& cells, FLUID const& fvar, AERO const& avar, vector<uint>& uVerts)
+    Read_tau_mesh_EDGE(SIM& svar, MESH& cells, FLUID const& fvar, AERO const& avar, vector<uint>& uVerts)
     {
-        string meshIn = svar.taumesh;
-        string solIn = svar.tausol;
+        string meshIn = svar.tau_mesh;
+        string solIn = svar.tau_sol;
 
 #ifdef DEBUG
         fprintf(dbout, "Attempting read of NetCDF file.\n");
@@ -1110,7 +1111,8 @@ namespace TAU
 
         vector<int> left = Get_Scalar_Property_int(fin, "left_element_of_faces", nFace);
         vector<int> right = Get_Scalar_Property_int(fin, "right_element_of_faces", nFace);
-        vector<int> markers = Get_Scalar_Property_int(fin, "boundarymarker_of_surfaces", cells.nSurf);
+        vector<int> tau_markers =
+            Get_Scalar_Property_int(fin, "boundarymarker_of_surfaces", cells.nSurf);
 
         vector<std::pair<int, int>> leftright(nFace);
         cells.smarkers = vector<std::pair<size_t, int>>(cells.nSurf);
@@ -1208,7 +1210,7 @@ namespace TAU
             for (size_t ii = 0; ii < cells.nSurf; ++ii)
             {
                 cells.smarkers[ii].first = surf_IDs[ii];
-                cells.smarkers[ii].second = markers[ii];
+                cells.smarkers[ii].second = tau_markers[ii];
             }
         } /* End parallel */
 
@@ -1226,10 +1228,10 @@ namespace TAU
 #endif
     }
 
-    void Read_TAUMESH_FACE(SIM& svar, MESH& cells, FLUID const& fvar, AERO const& avar)
+    void Read_tau_mesh_FACE(SIM& svar, MESH& cells, FLUID const& fvar, AERO const& avar)
     {
-        string meshIn = svar.taumesh;
-        string solIn = svar.tausol;
+        string meshIn = svar.tau_mesh;
+        string solIn = svar.tau_sol;
 
 #ifdef DEBUG
         fprintf(dbout, "Attempting read of NetCDF file.\n");

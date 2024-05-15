@@ -96,12 +96,12 @@ namespace IPT
 
             surfacef = svar.output_prefix + "_surface_impacts.dat";
 
-            if (svar.partout == 1)
+            if (svar.part_out == 1)
             {
                 if (svar.restart == 1)
                 {
-                    svar.partfile = fopen(partf.c_str(), "a");
-                    if (svar.partfile == NULL)
+                    svar.part_file = fopen(partf.c_str(), "a");
+                    if (svar.part_file == NULL)
                     {
                         cout << "Couldn't open the IPT particle scatter output file." << endl;
                         exit(-1);
@@ -109,26 +109,26 @@ namespace IPT
                 }
                 else
                 {
-                    svar.partfile = fopen(partf.c_str(), "w");
+                    svar.part_file = fopen(partf.c_str(), "w");
 
-                    if (svar.partfile == NULL)
+                    if (svar.part_file == NULL)
                     {
                         cout << "Couldn't open the IPT particle scatter output file." << endl;
                         exit(-1);
                     }
                     else
                     {
-                        Write_Scatter_Header(svar.partfile, svar.offset_axis);
+                        Write_Scatter_Header(svar.part_file, svar.offset_axis);
                     }
                 }
             }
 
-            if (svar.streakout == 1)
+            if (svar.streak_out == 1)
             {
                 if (svar.restart == 1)
                 {
-                    svar.streakfile = fopen(streakf.c_str(), "a");
-                    if (svar.streakfile == NULL)
+                    svar.streak_file = fopen(streakf.c_str(), "a");
+                    if (svar.streak_file == NULL)
                     {
                         cout << "Couldn't open the IPT streaks output file." << endl;
                         exit(-1);
@@ -136,26 +136,26 @@ namespace IPT
                 }
                 else
                 {
-                    svar.streakfile = fopen(streakf.c_str(), "w");
+                    svar.streak_file = fopen(streakf.c_str(), "w");
 
-                    if (svar.streakfile == NULL)
+                    if (svar.streak_file == NULL)
                     {
                         cout << "Couldn't open the IPT streaks output file." << endl;
                         exit(-1);
                     }
                     else
                     {
-                        Write_Streaks_Header(svar.streakfile, svar.offset_axis);
+                        Write_Streaks_Header(svar.streak_file, svar.offset_axis);
                     }
                 }
             }
 
-            if (svar.cellsout == 1)
+            if (svar.cells_out == 1)
             {
                 if (svar.restart == 1)
                 {
-                    svar.cellfile = fopen(cellf.c_str(), "a");
-                    if (svar.cellfile == NULL)
+                    svar.cell_file = fopen(cellf.c_str(), "a");
+                    if (svar.cell_file == NULL)
                     {
                         cout << "Couldn't open the IPT cell intersection output file." << endl;
                         exit(-1);
@@ -163,16 +163,16 @@ namespace IPT
                 }
                 else
                 {
-                    svar.cellfile = fopen(cellf.c_str(), "w");
+                    svar.cell_file = fopen(cellf.c_str(), "w");
 
-                    if (svar.cellfile == NULL)
+                    if (svar.cell_file == NULL)
                     {
                         cout << "Couldn't open the IPT cell intersection output file." << endl;
                         exit(-1);
                     }
                     else
                     {
-                        Write_Cells_Header(svar.cellfile, svar.offset_axis);
+                        Write_Cells_Header(svar.cell_file, svar.offset_axis);
                     }
                 }
             }
@@ -185,14 +185,17 @@ namespace IPT
 
             fprintf(
                 fout, " %2.7e %2.7e %2.7e %2.7e %zu %2.7e %2.7e %6ld\n", pnp1.t, pnp1.dt, pnp1.v.norm(),
-                pnp1.acc, pnp1.partID, pnp1.cellV.norm(), pnp1.cellRho, pnp1.cellID
+                pnp1.acc, pnp1.part_id, pnp1.cellV.norm(), pnp1.cellRho, pnp1.cellID
             );
         }
 
         void Write_Timestep(FILE* fout, SIM const& svar, IPTState const& pnp1)
         {
             fprintf(fout, "ZONE T=\"IPT scatter data\"");
-            fprintf(fout, ", I=%zu, F=POINT, STRANDID=5, SOLUTIONTIME= %.7g\n", pnp1.size(), svar.t);
+            fprintf(
+                fout, ", I=%zu, F=POINT, STRANDID=5, SOLUTIONTIME= %.7g\n", pnp1.size(),
+                svar.current_time
+            );
 
             for (size_t ii = 0; ii < pnp1.size(); ++ii)
                 Write_Point(fout, svar.scale, pnp1[ii]);
@@ -202,7 +205,7 @@ namespace IPT
 
         void Write_Streaks(SIM& svar, IPTState const& t_pnp1)
         {
-            FILE* fout = svar.streakfile;
+            FILE* fout = svar.streak_file;
             if (fout == NULL)
             {
                 cout << "The streak output file is not open. Cannot write." << endl;
@@ -212,7 +215,7 @@ namespace IPT
             size_t nTimes = t_pnp1.size();
             size_t time = 0;
 
-            fprintf(fout, "ZONE T=\"Particle %zu\"\n", t_pnp1[0].partID);
+            fprintf(fout, "ZONE T=\"Particle %zu\"\n", t_pnp1[0].part_id);
             fprintf(fout, "I= %zu, J=1, K=1, DATAPACKING=POINT\n", nTimes);
 
             for (time = 0; time < nTimes; ++time)
@@ -228,7 +231,7 @@ namespace IPT
             vector<int32_t> const& right
         )
         {
-            FILE* fout = svar.cellfile;
+            FILE* fout = svar.cell_file;
 
             if (fout == NULL)
             {
@@ -236,7 +239,7 @@ namespace IPT
                 exit(-1);
             }
 
-            fprintf(fout, "ZONE T=\"particle %zu intersecting cells\"\n", t_pnp1[0].partID);
+            fprintf(fout, "ZONE T=\"particle %zu intersecting cells\"\n", t_pnp1[0].part_id);
 #if SIMDIM == 3
             fprintf(fout, "ZONETYPE=FEPOLYHEDRON,");
 #else
@@ -547,7 +550,7 @@ namespace IPT
         vector<vector<StateVecD>>& usedVerts, vector<vector<vector<size_t>>>& faces
     )
     {
-        // uint nSurf = svar.markers.size();
+        // uint nSurf = svar.tau_markers.size();
         uint nSurf = 0;
         vector<int> marks;
         // vector<string> names;
@@ -556,8 +559,8 @@ namespace IPT
         {
             if (surfs[ii].output == 1)
             {
-                marks.emplace_back(svar.markers[ii]);
-                names.emplace_back(svar.bnames[ii]);
+                marks.emplace_back(svar.tau_markers[ii]);
+                names.emplace_back(svar.tau_bnames[ii]);
                 surfaces_to_write.emplace_back(surfs[ii]);
             }
             nSurf += surfs[ii].output;
@@ -581,7 +584,7 @@ namespace IPT
         vector<vector<size_t>> vertIndexes(nSurf);
         usedVerts = vector<vector<StateVecD>>(nSurf);
 
-        /* Do I need to sort the markers? */
+        /* Do I need to sort the tau_markers? */
         std::sort(
             smarkers.begin(), smarkers.end(),
             [](std::pair<size_t, int> const& p1, std::pair<size_t, int> const& p2)
@@ -639,24 +642,24 @@ namespace IPT
     void Write_Point(SIM& svar, IPTPart& pnp1)
     {
         if (svar.out_encoding == 0)
-            ASCII::Write_Point(svar.partfile, svar.scale, pnp1);
+            ASCII::Write_Point(svar.part_file, svar.scale, pnp1);
         else
             BINARY::Write_Point(svar, pnp1);
     }
 
     void Write_Data(SIM& svar, MESH& cells, vector<IPTState>& time_record)
     {
-        if (svar.partout == 1)
+        if (svar.part_out == 1)
         {
             // for(size_t ii = 0; ii < time_record.size(); ii++)
             // {
             //     if(svar.out_encoding == 0)
-            //         ASCII::Write_Timestep(svar.partfile,svar,time_record[ii]);
+            //         ASCII::Write_Timestep(svar.part_file,svar,time_record[ii]);
             //     else
             //         BINARY::
             // }
         }
-        if (svar.streakout == 1)
+        if (svar.streak_out == 1)
         {
             for (size_t ii = 0; ii < time_record.size(); ii++)
             {
@@ -667,8 +670,8 @@ namespace IPT
                     else
                     {
                         string zone =
-                            "IPT Particle" + std::to_string(time_record[ii][0].partID) + " Streak";
-                        BINARY::Write_State(svar, time_record[ii], zone, svar.streakHandle);
+                            "IPT Particle" + std::to_string(time_record[ii][0].part_id) + " Streak";
+                        BINARY::Write_State(svar, time_record[ii], zone, svar.streak_handle);
                     }
                 }
             }
@@ -676,14 +679,14 @@ namespace IPT
             if (!time_record.empty())
             {
                 if (svar.out_encoding == 0)
-                    fflush(svar.streakfile);
+                    fflush(svar.streak_file);
                 else
                 {
-                    flush_file(svar.streakHandle);
+                    flush_file(svar.streak_handle);
                 }
             }
         }
-        if (svar.cellsout == 1)
+        if (svar.cells_out == 1)
         {
             for (size_t ii = 0; ii < time_record.size(); ii++)
             {
@@ -717,10 +720,10 @@ namespace IPT
             if (!time_record.empty())
             {
                 if (svar.out_encoding == 0)
-                    fflush(svar.cellfile);
+                    fflush(svar.cell_file);
                 else
                 {
-                    flush_file(svar.cellHandle);
+                    flush_file(svar.cell_handle);
                 }
             }
         }
@@ -739,7 +742,7 @@ namespace IPT
         if (pnp1.failed != 1)
             time_record.emplace_back(pnp1);
 
-        // cout << "Particle " << pnp1.partID << " stopped iterating";
+        // cout << "Particle " << pnp1.part_id << " stopped iterating";
         if (pnp1.cellID < 0)
         {
             /* Find which surface it has impacted  */
@@ -753,13 +756,14 @@ namespace IPT
             if (index != cells.smarkers.end())
             {
                 /* Find which surface to add to, and which face of that*/
-                auto const surface = std::find(svar.markers.begin(), svar.markers.end(), index->second);
+                auto const surface =
+                    std::find(svar.tau_markers.begin(), svar.tau_markers.end(), index->second);
 
-                if (surface != svar.markers.end())
+                if (surface != svar.tau_markers.end())
                 {
-                    size_t const surf = surface - svar.markers.begin();
+                    size_t const surf = surface - svar.tau_markers.begin();
 
-// cout << " after hitting surface: " << svar.bnames[surf] << endl;
+// cout << " after hitting surface: " << svar.tau_bnames[surf] << endl;
 #pragma omp critical
                     {
                         surface_data[surf].marker_count++;
@@ -805,7 +809,7 @@ namespace IPT
         }
 
         iptdata.emplace_back(time_record);
-        // if(svar.streakout == 1)
+        // if(svar.streak_out == 1)
         // {
         //     #pragma omp critical
         //     {
@@ -813,7 +817,7 @@ namespace IPT
         //     }
         // }
 
-        // if(svar.cellsout == 1)
+        // if(svar.cells_out == 1)
         // {
         //     #pragma omp critical
         //     {
@@ -871,7 +875,7 @@ namespace IPT
         /* Do the first step */
         IPTState time_record;
         time_record.emplace_back(pnp1);
-        ofstream partfile;
+        ofstream part_file;
 
         /* Find intersecting face for np1 */
         // pnp1.faceV = pnp1.cellV; /* Start by guessing the face as the cell*/
@@ -893,7 +897,7 @@ namespace IPT
 
         size_t iter = 0;
         size_t min_iter = 3;
-        size_t max_iter = svar.subits;
+        size_t max_iter = svar.max_subits;
         real error = 1.0;
 
         // real relaxation = 1.0; /* Relaxation factor for 2nd order */
@@ -912,7 +916,7 @@ namespace IPT
             // cout << "Iteration: " << iter << endl;
 
             real const dt = pnp1.dt;
-            if (svar.eqOrder == 2)
+            if (svar.ipt_eq_order == 2)
             {
                 real const dtm1 = pnp1.dt;
                 BFD2(fvar, avar, svar.grav, dt, dtm1, pnm1, pn, pnp1);
@@ -939,7 +943,7 @@ namespace IPT
         step++;
 #endif
 
-        if (svar.partout == 1)
+        if (svar.part_out == 1)
             Write_Point(svar, pnp1);
 
         if (pnp1.going == 0 || pnp1.v.norm() > 1e3 || (pnp1.xi - pn.xi).norm() > cells.maxlength)
@@ -954,13 +958,13 @@ namespace IPT
             pnp1.failed = 1;
             Terminate_Particle(svar, cells, time_record, ii, pnp1, marker_data, iptdata);
 #pragma omp atomic
-            svar.nFailed++;
+            svar.ipt_n_failed++;
         }
         else if (pnp1.cellID < 0 || pnp1.xi[0] > svar.max_x)
         {
             Terminate_Particle(svar, cells, time_record, ii, pnp1, marker_data, iptdata);
 #pragma omp atomic
-            svar.nSuccess++;
+            svar.ipt_n_success++;
         }
 
         /* Move forward in time */
@@ -969,14 +973,14 @@ namespace IPT
         // " old cell: " << pn.cellID << " new cell: " << pnp1.cellID << endl;
 
         /* March forward in time */
-        if (svar.eqOrder == 2)
+        if (svar.ipt_eq_order == 2)
             pnm1 = pn;
 
         pn = pnp1;
         pnp1.t += pnp1.dt;
 
         /* Only need the information if streaks or cells are output */
-        if (svar.cellsout == 1 || svar.streakout == 1)
+        if (svar.cells_out == 1 || svar.streak_out == 1)
             time_record.emplace_back(pnp1);
 
         while (pnp1.going != 0)
@@ -1019,7 +1023,7 @@ namespace IPT
                 // vec<real,3> temp = pnp1.xi;
 
                 real const dt = pnp1.dt;
-                if (svar.eqOrder == 2)
+                if (svar.ipt_eq_order == 2)
                 {
                     real dtm1 = iter > 0 ? pn.dt : pnp1.dt;
                     BFD2(fvar, avar, svar.grav, dt, dtm1, pnm1, pn, pnp1);
@@ -1030,7 +1034,7 @@ namespace IPT
                 real dt_temp = FindFace(svar, cells, pn, pnp1);
 
                 // Implement relaxation, since it appears to struggle with convergence
-                if (iter > svar.nrelax)
+                if (iter > svar.n_relax)
                     pnp1.dt = (1.0 - svar.relax) * dt_temp + svar.relax * pnp1.dt;
                 else
                     pnp1.dt = dt_temp;
@@ -1049,7 +1053,7 @@ namespace IPT
                 iter++;
             }
 
-            if (svar.partout == 1)
+            if (svar.part_out == 1)
                 Write_Point(svar, pnp1);
 
             if (pnp1.going == 0 || pnp1.v.norm() > 1e3 || (pnp1.xi - pn.xi).norm() > cells.maxlength)
@@ -1065,7 +1069,7 @@ namespace IPT
                 pnp1.failed = 1;
                 Terminate_Particle(svar, cells, time_record, ii, pnp1, marker_data, iptdata);
 #pragma omp atomic
-                svar.nFailed++;
+                svar.ipt_n_failed++;
                 break;
             }
             else if (pnp1.cellID < 0 || pnp1.xi[0] > svar.max_x)
@@ -1076,7 +1080,7 @@ namespace IPT
 #endif
                 Terminate_Particle(svar, cells, time_record, ii, pnp1, marker_data, iptdata);
 #pragma omp atomic
-                svar.nSuccess++;
+                svar.ipt_n_success++;
                 break;
             }
 
@@ -1086,14 +1090,14 @@ namespace IPT
             // " old cell: " << pn.cellID << " new cell: " << pnp1.cellID << endl;
 
             /* March forward in time */
-            if (svar.eqOrder == 2)
+            if (svar.ipt_eq_order == 2)
                 pnm1 = pn;
 
             pn = pnp1;
             pnp1.t += pnp1.dt;
 
             /* Only need the information if streaks or cells are output */
-            if (svar.cellsout == 1 || svar.streakout == 1)
+            if (svar.cells_out == 1 || svar.streak_out == 1)
                 time_record.emplace_back(pnp1);
 
 #ifdef DEBUG

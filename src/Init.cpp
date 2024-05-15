@@ -2,7 +2,6 @@
 /******          Created by Jamie MacLeod, University of Bristol        ***********/
 
 #include "Init.h"
-#include "Add.h"
 #include "IOFunctions.h"
 #include "Kernel.h"
 #include "Neighbours.h"
@@ -35,8 +34,8 @@ void read_shapes_bmap(
 )
 {
     /* Read shapes from file */
-    std::ifstream inFile(filename);
-    if (!inFile.is_open())
+    std::ifstream input_file(filename);
+    if (!input_file.is_open())
     {
         std::cerr << filename << " file missing\n";
         exit(1);
@@ -46,7 +45,7 @@ void read_shapes_bmap(
     size_t nblocks = 0;
 
     /* Find number of blocks to initialise */
-    while (getline(inFile, line))
+    while (getline(input_file, line))
     {
         size_t end = line.find_first_of('#');
         if (end != std::string::npos)
@@ -58,13 +57,13 @@ void read_shapes_bmap(
         }
     }
 
-    inFile.clear();
-    inFile.seekg(0);
+    input_file.clear();
+    input_file.seekg(0);
 
     std::vector<shape_block> shapes(nblocks);
 
     size_t block = 0;
-    while (getline(inFile, line))
+    while (getline(input_file, line))
     {
         size_t end = line.find_first_of('#');
         if (end != std::string::npos)
@@ -126,9 +125,9 @@ void read_shapes_bmap(
         if (line.find("Coordinate data:") != std::string::npos)
         {
             std::string tmp;
-            getline(inFile, tmp); /* Go to the next line and get data */
+            getline(input_file, tmp); /* Go to the next line and get data */
             size_t npts;
-            inFile >> npts;
+            input_file >> npts;
             shapes[block].npts = npts;
             shapes[block].coords = std::vector<StateVecD>(npts);
 
@@ -136,7 +135,7 @@ void read_shapes_bmap(
             {
                 for (size_t dim = 0; dim < SIMDIM; ++dim)
                 {
-                    inFile >> shapes[block].coords[ii][dim];
+                    input_file >> shapes[block].coords[ii][dim];
                 }
             }
         }
@@ -157,18 +156,18 @@ void read_shapes_bmap(
         if (line.find("Time position data") != std::string::npos)
         {
             std::string tmp;
-            getline(inFile, tmp); /* Go to the next line and get data */
+            getline(input_file, tmp); /* Go to the next line and get data */
             size_t ntimes;
             std::istringstream iss(tmp);
             iss >> ntimes;
-            // inFile >> ntimes;
+            // input_file >> ntimes;
             shapes[block].ntimes = ntimes;
             shapes[block].times = std::vector<real>(ntimes);
             shapes[block].pos = std::vector<StateVecD>(ntimes);
 
             for (size_t ii = 0; ii < ntimes; ++ii)
             {
-                getline(inFile, tmp); /* Go to the next line and get data */
+                getline(input_file, tmp); /* Go to the next line and get data */
                 std::istringstream iss2(tmp);
                 iss2 >> shapes[block].times[ii];
                 for (size_t dim = 0; dim < SIMDIM; ++dim)
@@ -181,18 +180,18 @@ void read_shapes_bmap(
         if (line.find("Time velocity data") != std::string::npos)
         {
             std::string tmp;
-            getline(inFile, tmp); /* Go to the next line and get data */
+            getline(input_file, tmp); /* Go to the next line and get data */
             size_t ntimes;
             std::istringstream iss(tmp);
             iss >> ntimes;
-            // inFile >> ntimes;
+            // input_file >> ntimes;
             shapes[block].ntimes = ntimes;
             shapes[block].times = std::vector<real>(ntimes);
             shapes[block].vels = std::vector<StateVecD>(ntimes);
 
             for (size_t ii = 0; ii < ntimes; ++ii)
             {
-                getline(inFile, tmp); /* Go to the next line and get data */
+                getline(input_file, tmp); /* Go to the next line and get data */
                 std::istringstream iss2(tmp);
                 iss2 >> shapes[block].times[ii];
                 for (size_t dim = 0; dim < SIMDIM; ++dim)
@@ -210,7 +209,7 @@ void read_shapes_bmap(
         }
     }
 
-    inFile.close();
+    input_file.close();
 
     /* Check enough information has been provided */
     int fault = 0;
@@ -232,7 +231,7 @@ void read_shapes_bmap(
     // Estimate the number of particles in each Block
     for (size_t ii = 0; ii < var.nblocks; ++ii)
     {
-        var.totPts += var.block[ii].npts;
+        var.total_points += var.block[ii].npts;
     }
 
     return;
@@ -240,21 +239,21 @@ void read_shapes_bmap(
 
 std::vector<StateVecD> Read_Geom_File(std::string const& filename)
 {
-    std::ifstream inFile(filename, std::ios::in);
+    std::ifstream input_file(filename, std::ios::in);
 
     int nPts;
-    inFile >> nPts;
+    input_file >> nPts;
     std::vector<StateVecD> points(nPts);
 
     for (int ii = 0; ii < nPts; ++ii)
     {
         for (int dim = 0; dim < SIMDIM; ++dim)
         {
-            inFile >> points[ii][dim];
+            input_file >> points[ii][dim];
         }
     }
 
-    inFile.close();
+    input_file.close();
 
     return points;
 }
@@ -408,26 +407,26 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
 
     // Get number of fluid particles to keep
     printf(
-        "Keeping %zu out of %zu boundary points. %.2f%% intersected.\n", nBoundPts, boundvar.totPts,
-        100.0 * (boundvar.totPts - nBoundPts) / boundvar.totPts
+        "Keeping %zu out of %zu boundary points. %.2f%% intersected.\n", nBoundPts,
+        boundvar.total_points, 100.0 * (boundvar.total_points - nBoundPts) / boundvar.total_points
     );
 
     printf(
-        "Keeping %zu out of %zu fluid points. %.2f%% intersected.\n", nFluidPts, fluvar.totPts,
-        100.0 * (fluvar.totPts - nFluidPts) / fluvar.totPts
+        "Keeping %zu out of %zu fluid points. %.2f%% intersected.\n", nFluidPts, fluvar.total_points,
+        100.0 * (fluvar.total_points - nFluidPts) / fluvar.total_points
     );
 
     printf(
         "Keeping %zu out of %zu total particles.\n", nBoundPts + nFluidPts,
-        fluvar.totPts + boundvar.totPts
+        fluvar.total_points + boundvar.total_points
     );
-    boundvar.totPts = nBoundPts;
-    fluvar.totPts = nFluidPts;
+    boundvar.total_points = nBoundPts;
+    fluvar.total_points = nFluidPts;
 }
 
 size_t Generate_Points(SIM const& svar, FLUID const& fvar, double const& globalspacing, Shapes& var)
 {
-    size_t totPts = 0;
+    size_t total_points = 0;
     size_t diff = 0;
     for (shape_block& bound : var.block)
     {
@@ -448,7 +447,7 @@ size_t Generate_Points(SIM const& svar, FLUID const& fvar, double const& globals
         }
 
         bound.npts = bound.coords.size();
-        totPts += bound.npts;
+        total_points += bound.npts;
 
         if (svar.use_global_gas_law)
         { // Set block gas law properties as the global
@@ -459,8 +458,8 @@ size_t Generate_Points(SIM const& svar, FLUID const& fvar, double const& globals
             bound.backgroundP = fvar.pPress;
         }
     }
-    var.totPts = totPts;
-    // var.totPts = boundary_intersection(globalspacing, var);
+    var.total_points = total_points;
+    // var.total_points = boundary_intersection(globalspacing, var);
 
     // get_boundary_velocity(boundvar);
 
@@ -475,20 +474,20 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
     printf("Reading boundary settings...\n");
 
     // Get the extension of the files. If it's JSON, then use the new functions.
-    if (std::filesystem::path(svar.boundfile).extension() == ".json" ||
-        std::filesystem::path(svar.boundfile).extension() == ".JSON")
-        boundvar = read_shapes_JSON(svar.boundfile, svar, fvar, dx);
+    if (std::filesystem::path(svar.input_bound_file).extension() == ".json" ||
+        std::filesystem::path(svar.input_bound_file).extension() == ".JSON")
+        boundvar = read_shapes_JSON(svar.input_bound_file, svar, fvar, dx);
     else
-        read_shapes_bmap(boundvar, dx, svar, fvar, svar.boundfile);
+        read_shapes_bmap(boundvar, dx, svar, fvar, svar.input_bound_file);
 
     // Read fluid
     Shapes fluvar;
     printf("Reading fluid settings...\n");
-    if (std::filesystem::path(svar.boundfile).extension() == ".json" ||
-        std::filesystem::path(svar.boundfile).extension() == ".JSON")
-        fluvar = read_shapes_JSON(svar.fluidfile, svar, fvar, dx);
+    if (std::filesystem::path(svar.input_fluid_file).extension() == ".json" ||
+        std::filesystem::path(svar.input_fluid_file).extension() == ".JSON")
+        fluvar = read_shapes_JSON(svar.input_fluid_file, svar, fvar, dx);
     else
-        read_shapes_bmap(fluvar, dx, svar, fvar, svar.fluidfile);
+        read_shapes_bmap(fluvar, dx, svar, fvar, svar.input_fluid_file);
 
     // Now generate points and add to indexes
     Generate_Points(svar, fvar, svar.dx, boundvar);
@@ -498,10 +497,10 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
     Check_Intersection(svar, boundvar, fluvar);
 
     // Insert points into the state vectors. Change to SoA?
-    size_t pID = 0;
+    size_t part_id = 0;
     for (size_t block = 0; block < boundvar.nblocks; block++)
     {
-        limits.emplace_back(pID, 0);
+        limits.emplace_back(part_id, 0);
 
         for (size_t ii = 0; ii < boundvar.block[block].coords.size(); ii++)
         {
@@ -509,9 +508,9 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
             {
                 pn.emplace_back(SPHPart(
                     boundvar.block[block].coords[ii], boundvar.block[block].vel,
-                    boundvar.block[block].dens, fvar.bndM, boundvar.block[block].press, BOUND, pID
+                    boundvar.block[block].dens, fvar.bndM, boundvar.block[block].press, BOUND, part_id
                 ));
-                pID++;
+                part_id++;
             }
         }
         if (!boundvar.block[block].times.empty())
@@ -539,7 +538,7 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
             limits.back().vels.emplace_back(boundvar.block[block].vel);
         }
 
-        limits.back().index.second = pID;
+        limits.back().index.second = part_id;
 
         limits.back().name = boundvar.block[block].name;
         limits.back().fixed_vel_or_dynamic = boundvar.block[block].fixed_vel_or_dynamic;
@@ -549,13 +548,13 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
         limits.back().block_type = boundvar.block[block].bound_type;
     }
 
-    svar.nbound = boundvar.nblocks;
-    svar.bndPts = pID;
+    svar.n_bound_blocks = boundvar.nblocks;
+    svar.bound_points = part_id;
 
     // Fluid points
     for (size_t block = 0; block < fluvar.nblocks; block++)
     {
-        limits.emplace_back(pID, 0);
+        limits.emplace_back(part_id, 0);
         if (fluvar.block[block].bound_type == inletZone)
         {
             size_t ii = 0;
@@ -567,9 +566,9 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
                 {
                     pn.emplace_back(SPHPart(
                         fluvar.block[block].coords[ii], fluvar.block[block].vel,
-                        fluvar.block[block].dens, fvar.bndM, fluvar.block[block].press, PIPE, pID
+                        fluvar.block[block].dens, fvar.bndM, fluvar.block[block].press, PIPE, part_id
                     ));
-                    pID++;
+                    part_id++;
                 }
                 ii++;
             }
@@ -597,13 +596,13 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
                     size_t pointID = fluvar.block[block].back[bID];
                     pn.emplace_back(SPHPart(
                         fluvar.block[block].coords[pointID], fluvar.block[block].vel,
-                        fluvar.block[block].dens, fvar.simM, fluvar.block[block].press, BACK, pID
+                        fluvar.block[block].dens, fvar.simM, fluvar.block[block].press, BACK, part_id
                     ));
 
-                    limits.back().back.emplace_back(pID);
+                    limits.back().back.emplace_back(part_id);
                     limits.back().buffer.emplace_back(nBuff, 0);
 
-                    pID++;
+                    part_id++;
                 }
             }
             // Insert the buffer particles
@@ -617,12 +616,13 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
                         size_t pointID = fluvar.block[block].buffer[bID][buffID];
                         pn.emplace_back(SPHPart(
                             fluvar.block[block].coords[pointID], fluvar.block[block].vel,
-                            fluvar.block[block].dens, fvar.simM, fluvar.block[block].press, BUFFER, pID
+                            fluvar.block[block].dens, fvar.simM, fluvar.block[block].press, BUFFER,
+                            part_id
                         ));
 
-                        limits.back().buffer[bIndex][buffID] = pID;
+                        limits.back().buffer[bIndex][buffID] = part_id;
 
-                        pID++;
+                        part_id++;
                         bIndex++;
                     }
                 }
@@ -636,14 +636,14 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
                 {
                     pn.emplace_back(SPHPart(
                         fluvar.block[block].coords[ii], fluvar.block[block].vel,
-                        fluvar.block[block].dens, fvar.simM, fluvar.block[block].press, FREE, pID
+                        fluvar.block[block].dens, fvar.simM, fluvar.block[block].press, FREE, part_id
                     ));
-                    pID++;
+                    part_id++;
                 }
             }
         }
 
-        limits.back().index.second = pID;
+        limits.back().index.second = part_id;
         if (!fluvar.block[block].times.empty())
         {
             limits.back().times = fluvar.block[block].times;
@@ -671,17 +671,17 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
         limits.back().block_type = fluvar.block[block].bound_type;
     }
 
-    svar.nfluid = fluvar.nblocks;
-    svar.totPts = pID;
-    svar.simPts = svar.totPts - svar.bndPts;
-    svar.partID = pID;
+    svar.n_fluid_blocks = fluvar.nblocks;
+    svar.total_points = part_id;
+    svar.fluid_points = svar.total_points - svar.bound_points;
+    svar.part_id = part_id;
 
     if (svar.init_hydro_pressure)
     { /* If using hydrostatic initialisation, set
          pressure */
         printf("Initialising hydrostatic pressure...\n");
 #pragma omp parallel for
-        for (size_t ii = 0; ii < svar.totPts; ++ii)
+        for (size_t ii = 0; ii < svar.total_points; ++ii)
         {
             real press = std::max(0.0, -fvar.rho0 * svar.grav[1] * (svar.hydro_height - pn[ii].xi[1]));
             real dens = density_equation(press, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
@@ -703,20 +703,20 @@ void Init_Particles_Restart(SIM& svar, FLUID& fvar, LIMITS& limits)
     Shapes boundvar;
 
     // Get the extension of the files. If it's JSON, then use the new functions.
-    if (std::filesystem::path(svar.boundfile).extension() == ".json" ||
-        std::filesystem::path(svar.boundfile).extension() == ".JSON")
-        boundvar = read_shapes_JSON(svar.boundfile, svar, fvar, dx);
+    if (std::filesystem::path(svar.input_bound_file).extension() == ".json" ||
+        std::filesystem::path(svar.input_bound_file).extension() == ".JSON")
+        boundvar = read_shapes_JSON(svar.input_bound_file, svar, fvar, dx);
     else
-        read_shapes_bmap(boundvar, dx, svar, fvar, svar.boundfile);
+        read_shapes_bmap(boundvar, dx, svar, fvar, svar.input_bound_file);
 
     // Read fluid
     Shapes fluvar;
     printf("Reading fluid settings...\n");
-    if (std::filesystem::path(svar.boundfile).extension() == ".json" ||
-        std::filesystem::path(svar.boundfile).extension() == ".JSON")
-        fluvar = read_shapes_JSON(svar.fluidfile, svar, fvar, dx);
+    if (std::filesystem::path(svar.input_fluid_file).extension() == ".json" ||
+        std::filesystem::path(svar.input_fluid_file).extension() == ".JSON")
+        fluvar = read_shapes_JSON(svar.input_fluid_file, svar, fvar, dx);
     else
-        read_shapes_bmap(fluvar, dx, svar, fvar, svar.fluidfile);
+        read_shapes_bmap(fluvar, dx, svar, fvar, svar.input_fluid_file);
 
     limits.resize(boundvar.nblocks + fluvar.nblocks, bound_block(0));
 
@@ -785,30 +785,30 @@ void Init_Particles_Restart(SIM& svar, FLUID& fvar, LIMITS& limits)
         limits[block + offset].block_type = fluvar.block[block].bound_type;
     }
 
-    svar.nbound = boundvar.nblocks;
-    svar.nfluid = fluvar.nblocks;
+    svar.n_bound_blocks = boundvar.nblocks;
+    svar.n_fluid_blocks = fluvar.nblocks;
 }
 
 void Init_Surface(SIM const& svar, MESH const& cells, vector<SURF>& surf_marks)
 {
-    surf_marks = vector<SURF>(svar.markers.size());
+    surf_marks = vector<SURF>(svar.tau_markers.size());
 
-    vector<vector<size_t>> faceIDs(svar.markers.size());
-    vector<vector<int>> markers(svar.markers.size());
+    vector<vector<size_t>> faceIDs(svar.tau_markers.size());
+    vector<vector<int>> tau_markers(svar.tau_markers.size());
     /* for each surface, find how many faces are in it. */
     for (std::pair<size_t, int> const& marker : cells.smarkers)
     {
-        auto index = find(svar.markers.begin(), svar.markers.end(), marker.second);
-        if (index != svar.markers.end())
+        auto index = find(svar.tau_markers.begin(), svar.tau_markers.end(), marker.second);
+        if (index != svar.tau_markers.end())
         {
-            size_t mark = index - svar.markers.begin();
+            size_t mark = index - svar.tau_markers.begin();
             faceIDs[mark].emplace_back(marker.first);
-            markers[mark].emplace_back(marker.second);
+            tau_markers[mark].emplace_back(marker.second);
 
             // surf_faces[mark].back().faceID  = marker.first;
             // if()
-            // printf(mark << "  " << markers.first << endl;
-            // printf(surf_faces[mark].back().faceID << "  " << markers.first << endl;
+            // printf(mark << "  " << tau_markers.first << endl;
+            // printf(surf_faces[mark].back().faceID << "  " << tau_markers.first << endl;
             // surf_faces[mark].back().marker  = marker.second;
         }
         else
@@ -817,11 +817,11 @@ void Init_Surface(SIM const& svar, MESH const& cells, vector<SURF>& surf_marks)
         }
     }
 
-    for (size_t ii = 0; ii < svar.markers.size(); ii++)
+    for (size_t ii = 0; ii < svar.tau_markers.size(); ii++)
     {
-        surf_marks[ii].name = svar.bnames[ii];
-        surf_marks[ii].marker = svar.markers[ii];
-        surf_marks[ii].output = svar.bwrite[ii];
+        surf_marks[ii].name = svar.tau_bnames[ii];
+        surf_marks[ii].marker = svar.tau_markers[ii];
+        surf_marks[ii].output = svar.tau_bwrite[ii];
 
         size_t nFaces = faceIDs[ii].size();
         surf_marks[ii].faceIDs = faceIDs[ii];

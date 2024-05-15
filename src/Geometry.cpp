@@ -21,7 +21,7 @@ void Detect_Surface(
 
 #pragma omp parallel default(shared) // shared(pnp1)
     {
-        real const h = 1.33 * svar.Pstep;
+        real const h = 1.33 * svar.particle_step;
 
 #pragma omp for
         for (size_t ii = start; ii < end; ++ii)

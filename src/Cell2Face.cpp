@@ -618,13 +618,13 @@ namespace TAUtoFace
 
         /*Put them in the file*/
         vector<double> coord = Get_Real_Scalar(fin, "points_xc", nPnts);
-        Write_Variable_Scalar(fout, ptsxID, coord, "x coordinate");
+        Write_Variable_Scalar(fout, ptsxID, &coord[0], "x coordinate");
 
         coord = Get_Real_Scalar(fin, "points_yc", nPnts);
-        Write_Variable_Scalar(fout, ptsyID, coord, "y coordinate");
+        Write_Variable_Scalar(fout, ptsyID, &coord[0], "y coordinate");
 
         coord = Get_Real_Scalar(fin, "points_zc", nPnts);
-        Write_Variable_Scalar(fout, ptszID, coord, "z coordinate");
+        Write_Variable_Scalar(fout, ptszID, &coord[0], "z coordinate");
 
         cout << "Completed writing points" << endl;
     }
@@ -689,11 +689,6 @@ namespace TAUtoFace
         size_t nqFaces = 0;
         size_t ntSurf = 0;
         size_t nqSurf = 0;
-        int* tfaces;
-        int* qfaces;
-        int* left;
-        int* right;
-        int* zone;
 
 // Find out how many of each face type exist
 #pragma omp parallel for

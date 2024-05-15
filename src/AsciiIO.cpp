@@ -58,17 +58,16 @@ void Write_ASCII_Timestep(
     char const* name, uint const& strandID, FILE* fp
 )
 {
-    // if(bwrite == 1)
+    // if(tau_bwrite == 1)
     //  	fp <<  "ZONE T=\"" << name << "\"";
     // else
     fprintf(
         fp, "ZONE T=\"%s\", I=%zu, DATAPACKING=BLOCK, STRANDID=%d, SOLUTIONTIME=%.7g\n", name,
-        end - start, strandID, svar.t
+        end - start, strandID, svar.current_time
     );
 
-    // fp <<", I=" << end - start << ", F=POINT" <<", STRANDID=1, SOLUTIONTIME=" << svar.t  << "\n";
-    // fp << std::left << std::scientific << std::setprecision(6);
-    // const static uint width = 15;
+    // fp <<", I=" << end - start << ", F=POINT" <<", STRANDID=1, SOLUTIONTIME=" << svar.current_time  <<
+    // "\n"; fp << std::left << std::scientific << std::setprecision(6); const static uint width = 15;
 
     if (svar.output_variables.at("pos-vec").write) // Position coordinates, scaled
     {
@@ -134,12 +133,12 @@ void Write_ASCII_Timestep(
         fprintf(fp, "\n");
     }
 
-    if (svar.output_variables.at("partID").write) // Particle ID, integer
+    if (svar.output_variables.at("part_id").write) // Particle ID, integer
     {
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
         {
-            fprintf(fp, "%zu", pnp1[ii].partID);
+            fprintf(fp, "%zu", pnp1[ii].part_id);
             if (newl > 6)
             {
                 fprintf(fp, "\n");

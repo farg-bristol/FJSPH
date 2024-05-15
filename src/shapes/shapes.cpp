@@ -365,14 +365,14 @@ read_shapes_JSON(std::string const& filename, SIM const& svar, FLUID const& fvar
 {
 
     /* Read shapes from file */
-    std::ifstream inFile(filename);
-    if (!inFile.is_open())
+    std::ifstream input_file(filename);
+    if (!input_file.is_open())
     {
         std::cerr << filename << " file missing\n";
         exit(-1);
     }
 
-    json data = json::parse(inFile);
+    json data = json::parse(input_file);
 
     // Create an empty vector of shapes. This will be filled as the file is read.
     Shapes shapes;
