@@ -188,9 +188,9 @@ enum particle_order
 
 enum aero_force
 {
-    none = 0,
+    NoAero = 0,
     Gissler,
-    Induced_Pressure,
+    InducedPressure,
     SkinFric
 };
 
@@ -406,109 +406,50 @@ struct SIM
 struct FLUID
 {
     // EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    /* Add default values */
-    FLUID()
-    {
-        H = -1.0;
-        HSQ = -1.0;
-        sr = -1.0;
-        Hfac = 2.0;
-        Wdx = -1.0;
 
-        rho0 = 1000.0;
-        rhoJ = 1000.0;
-        pPress = 0.0;
-        backP = 0.0;
-        rhoMax = 1500; /* Allow a large variation by default */
-        rhoMin = 500;  /* making it essentially unbounded other */
-        rhoVar = 50.0; /* than truly unphysical pressures */
-        rhoMaxIter = 1.0;
+    real H = -1.0;      /* Support radius */
+    real HSQ = -1.0;    /* Support radius squared */
+    real sr = -1.0;     /* Search radius (support radius * factor)*/
+    real Hfac = 2.0;    /* Search radius factor */
+    real Wdx = -1.0;    /* Kernel value at the initial particle spacing distance.*/
+    real rho0 = 1000.0; /* Resting fluid density */
+    real rhoJ = 1000.0; /* Pipe starting density */
+    real pPress = 0.0;  /* Starting pressure in pipe*/
+    real backP = 0.0;   /* Background pressure */
 
-        simM = -1.0;
-        bndM = -1.0;
-        correc = -1.0;
-        alpha = 0.1;
-        Cs = 300.0;
-        mu = 8.94e-4;
-        nu = mu / rho0;
-        sig = 0.0708;
-        gam = 7.0;
-        B = -1.0;
-        contangb = 150.0;
-        resVel = 0.0;
-        delta = 0.1;
-        dCont = -1.0;
-        dMom = -1.0;
-    }
+    /* Allow a large variation by default */
+    /* making it essentially unbounded other */
+    /* than truly unphysical pressures */
+    real rhoMax = 1500.0;  /* Maximum density value */
+    real rhoMin = 500.0;   /* Minimum density */
+    real rhoVar = 50.0;    /* Maximum density variation allowed (in %) */
+    real rhoMaxIter = 1.0; /* Maximum value to reduce the timestep */
 
-    real H, HSQ, sr; /* Support Radius, SR squared, Search radius*/
-    real Hfac;
-    real Wdx;            /* Kernel value at the initial particle spacing distance.*/
-    real rho0, rhoJ;     /* Resting Fluid density*/
-    real pPress;         /* Starting pressure in pipe*/
-    real backP;          /* Background pressure */
-    real rhoMax, rhoMin; /* Minimum and maximum pressure */
-    real rhoVar;         /* Maximum density variation allowed (in %) */
-    real rhoMaxIter;     /* Maximum value to reduce the timestep */
+    real simM = -1.0;    /* SPH fluid particle mass */
+    real bndM = -1.0;    /* SPH boundary mass */
+    real correc = -1.0;  /* Smoothing Kernel Correction*/
+    real alpha = 0.1;    /* Artificial viscosity factor */
+    real Cs = 300.0;     /* Speed of sound */
+    real mu = 8.94e-4;   /* Dynamic viscosity */
+    real nu = mu / rho0; /* Kinematic viscosity */
+    real sig = 0.0708;   /* Surface tension coefficient */
+    real gam = 7.0;      /* Tait equation gamma power*/
+    real B = -1.0;       /* Tait equation speed of sound factor */
 
-    real simM, bndM;        /* SPHPart and boundary masses*/
-    real correc;            /* Smoothing Kernel Correction*/
-    real alpha, Cs, mu, nu; /*}*/
-    real sig;               /* Fluid properties*/
-    real gam, B;            /*}*/
+    real contangb = 150.0; /* Boundary contact angle */
+    real resVel = 0.0;     /* Reservoir velocity */
+    // real front, height, height0; /* Dam Break validation parameters*/
 
-    real contangb; /* Boundary contact angle*/
-    real resVel;   /* Reservoir velocity*/
-    // real front, height, height0;		/* Dam Break validation parameters*/
-
-    /*delta SPH terms*/
-    real delta; /*delta-SPH contribution*/
-    real dCont; /*delta-SPH continuity constant term, since density and speed of sound are constant*/
-    real dMom;  /*delta-SPH momentum constant term (dCont * rho0)*/
-
-    // real maxU; /*Maximum particle velocity shift*/ (No longer needed)
+    /* delta SPH terms */
+    real delta = 0.1;  /* delta-SPH contribution */
+    real dCont = -1.0; /* delta-SPH continuity constant term */
+    real dMom = -1.0;  /* delta-SPH momentum constant term (dCont * rho0) */
 };
 
 /*Aerodynamic Properties*/
 struct AERO
 {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    AERO()
-    {
-        vInf = StateVecD::Zero();
-
-        Cf = 1.0 / 3.0;
-        Ck = 8.0;
-        Cd = 5.0;
-        Cb = 0.5;
-
-        vRef = 0.0;
-        pRef = 101353.0;
-        rhog = 1.29251;
-        mug = 1.716e-5;
-        T = 298.0;
-        Rgas = 287.0;
-        gamma = 1.403;
-        sos = sqrt(T * Rgas * gamma);
-        isossqr = 1.0 / (sos * sos);
-        MRef = -1.0;
-
-        vJetMag = -1.0;
-        cutoff = 0.75;
-        interp_fac = 2.0;
-        iinterp_fac = 0.5;
-#if SIMDIM == 2
-        nfull = 30;
-#else
-        nfull = 200;
-#endif
-        infull = 1.0 / nfull;
-        incount = 1.0 / (iinterp_fac * nfull);
-        acase = 0;
-        use_lam = 1;
-        useDef = 0;
-        use_dx = 0;
-    }
 
     void GetYcoef(const FLUID& fvar, const real diam)
     {
@@ -534,44 +475,48 @@ struct AERO
         // cout << ycoef << "  " << Cdef << "  " << tmax << "  " << endl;
     }
 
-    StateVecD vInf; /* Freestream velocity*/
+    StateVecD vInf = StateVecD::Zero(); /* Freestream velocity*/
 
     /*Gissler Parameters*/
-    real L;
-    real td;
-    real omega;
-    real tmax;
-    real ycoef;
-    real Cf, Ck, Cd, Cb, Cdef;
+    real L = -1.0;
+    real td = -1.0;
+    real omega = -1.0;
+    real tmax = -1.0;
+    real ycoef = -1.0;
+    real Cf = 1.0 / 3.0;
+    real Ck = 8.0;
+    real Cd = 5.0;
+    real Cb = 0.5;
+    real Cdef = -1.0;
 
-    real pVol;    /* Volume of a particle */
-    real aSphere; /* Area of a sphere/cylinder */
-    real aPlate;  /* Area of a plate*/
+    real aSphere = -1.0; /* Area of a sphere/cylinder */
+    real aPlate = -1.0;  /* Area of a plate*/
 
     /* Gas Properties*/
-    real vRef, pRef; /* Reference gas values*/
-    real rhog, mug;
-    real gasM;    /* A gas particle mass*/
-    real T;       /* Temperature*/
-    real Rgas;    /* Specific gas constant*/
-    real gamma;   /* Ratio of specific heats */
-    real sos;     /* Speed of sound */
-    real isossqr; /* Inverse speed of sound squared */
-    real MRef;
+    real vRef = 0.0;                   /* Reference velocity */
+    real pRef = 101353.0;              /* Reference pressure */
+    real rhog = 1.29251;               /* Gas density */
+    real mug = 1.716e-5;               /* Gas dynamic viscosity */
+    real gasM = -1.0;                  /* Gas particle mass */
+    real T = 298.0;                    /* Gas temperature */
+    real Rgas = 287.0;                 /* Specific gas constant */
+    real gamma = 1.403;                /* Ratio of specific heats */
+    real sos = sqrt(T * Rgas * gamma); /* Speed of sound */
+    real isossqr = 1.0 / (sos * sos);  /* Inverse speed of sound squared */
+    real MRef = -1.0;                  /* Reference Mach */
 
-    real vJetMag;
-    real cutoff;      /* Lambda value cutoff */
-    real interp_fac;  /* Factor for the interpolation value */
-    real iinterp_fac; /* Inverse factor for the interpolation */
-    real nfull;       /* 2/3ds full neighbourhood count */
-    real infull;      /* inverse of nfull */
-    real incount;     /* inverse nfull * factor */
+    real cutoff = 0.75;                         /* Lambda value cutoff */
+    real interp_fac = 2.0;                      /* Factor for the interpolation value */
+    real iinterp_fac = 0.5;                     /* Inverse factor for the interpolation */
+    real nfull = SIMDIM == 2 ? 30 : 200;        /* 2/3ds full neighbourhood count */
+    real infull = 1.0 / nfull;                  /* inverse of nfull */
+    real incount = 1.0 / (iinterp_fac * nfull); /* inverse nfull * factor */
 
-    string aero_case;
-    int acase; /* Aerodynamic force case*/
-    int use_lam;
-    int useDef;
-    int use_dx;
+    string aero_case;   /* String input to define aero force type */
+    int acase = NoAero; /* Aerodynamic force case */
+    int use_lam = 1;    /* Use lambda value for aero interpolation */
+    int useDef = 0;     /* Use TAB deformation estimate  */
+    int use_dx = 0;     /* Use particle spacing or support radius for aero force. */
 };
 
 struct MESH

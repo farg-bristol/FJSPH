@@ -34,7 +34,7 @@ inline StateVecD AeroForce(StateVecD const& Vdiff, AERO const& avar, real const 
 }
 
 /*Sphere-Plate interpolation method - Gissler et al (2017)*/
-inline StateVecD GisslerForce(
+inline StateVecD gissler_force(
     AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, real const& rho, real const& press,
     real const& mass, real const& lam, real const& nnieghb, real const& woccl
 )
@@ -97,7 +97,7 @@ inline StateVecD GisslerForce(
     return 0.5 * Vdiff.norm() * Vdiff / (avar.sos * avar.sos) * avar.gamma * press * Cdi * Ai / mass;
 }
 
-inline StateVecD InducedPressure(
+inline StateVecD induced_pressure(
     AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, real const& Pbasei, real const& lam,
     real const& nnieghb, real const& dx, SPHPart const& pi
 )
@@ -207,12 +207,12 @@ inline StateVecD CalcAeroAcc(
     {
     case Gissler: /* Original Gissler */
     {
-        acc = GisslerForce(avar, Vdiff, norm, pi.cellRho, pi.cellP, pi.m, lam, nneigh, pi.woccl);
+        acc = gissler_force(avar, Vdiff, norm, pi.cellRho, pi.cellP, pi.m, lam, nneigh, pi.woccl);
         break;
     }
-    case Induced_Pressure: /* Induced pressure based model */
+    case InducedPressure: /* Induced pressure based model */
     {
-        acc = InducedPressure(avar, Vdiff, norm, Pbasei, lam, nneigh, dx, pi);
+        acc = induced_pressure(avar, Vdiff, norm, Pbasei, lam, nneigh, dx, pi);
         break;
     }
     case SkinFric: /*Skin Friction Method*/

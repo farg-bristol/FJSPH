@@ -43,12 +43,6 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex)
 
     svar.dx = svar.particle_step * pow(fvar.rhoJ / fvar.rho0, 1.0 / SIMDIM);
 
-#if SIMDIM == 3
-    avar.pVol = 4.0 / 3.0 * M_PI * pow(svar.particle_step * 0.5, SIMDIM);
-#else
-    avar.pVol = M_PI * svar.particle_step * svar.particle_step / 4.0;
-#endif
-
     svar.nb_beta = 0.25;
     svar.nb_gamma = 0.5; /*Newmark Beta parameters*/
 
@@ -614,7 +608,7 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
     /* Aerodynamic settings */
     if (avar.aero_case == "(none)")
     {
-        avar.acase = none;
+        avar.acase = NoAero;
     }
     else if (avar.aero_case == "Gissler")
     {
@@ -622,7 +616,7 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
     }
     else if (avar.aero_case == "Induced_pressure")
     {
-        avar.acase = Induced_Pressure;
+        avar.acase = InducedPressure;
     }
     else if (avar.aero_case == "Skin_friction")
     {
