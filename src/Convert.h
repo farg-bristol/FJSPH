@@ -24,7 +24,6 @@ using std::string;
 using std::vector;
 
 /* Define data type. */
-/* Define data type. */
 #ifndef FOD
 #define FOD 1 /*0 = float, 1 = double*/
 #endif
@@ -80,34 +79,6 @@ namespace netCDF
             exit(-1);
         }
     }
-
-    // inline double* Get_Real_Scalar(int &fin, string const& variable, size_t const &nPnts)
-    // {
-    //     int retval, varID;
-    //     if ((retval = nc_inq_varid(fin, variable.c_str(), &varID)))
-    //     {
-    //         cout << "\n\tError: failed to get ID for variable \"" << variable << "\"" << endl;
-    //         #ifdef DEBUG
-    //             dbout << "\n\tError: failed to get ID for variable \"" << variable << "\"" << endl;
-    //         #endif
-    //         ERR(retval);
-    //         exit(-1);
-    //     }
-
-    //     double *var = new double[nPnts];
-
-    //     if ((retval = nc_get_var_double(fin, varID, &var[0])))
-    //     {
-    //         cout << "\n\tError: failed to get data for variable  \"" << variable << "\"" << endl;
-    //         #ifdef DEBUG
-    //             dbout << "\n\tError: failed to get data for variable  \"" << variable << "\"" << endl;
-    //         #endif
-    //         ERR(retval);
-    //         exit(-1);
-    //     }
-
-    //     return var;
-    // }
 
     inline vector<double> Get_Real_Scalar(int& fin, string const& variable, size_t const& nPnts)
     {
