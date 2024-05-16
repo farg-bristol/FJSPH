@@ -11,25 +11,40 @@
 #ifndef RESID_H
 #define RESID_H
 
-#include "Var.h"
 #include "VLM.h"
+#include "Var.h"
 
-/* Boundary pressure calculation - Adami, Hu, and Adams, 2012 - https://doi.org/10.1016/j.jcp.2012.05.005*/
-void Get_Boundary_Pressure(StateVecD const& grav, FLUID const& fvar,
-	size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1);
+/* Boundary pressure calculation - Adami, Hu, and Adams, 2012 -
+ * https://doi.org/10.1016/j.jcp.2012.05.005*/
+void Get_Boundary_Pressure(
+    StateVecD const& grav, FLUID const& fvar, size_t const& start, size_t const& end,
+    OUTL const& outlist, SPHState& pnp1
+);
 
-void Boundary_DBC( FLUID const& fvar, size_t const& start, size_t const& end,
-	 OUTL const& outlist, SPHState& pnp1, vector<StateVecD>& RV);
+void Boundary_DBC(
+    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1,
+    vector<StateVecD>& RV
+);
 
-void Boundary_Ghost( FLUID const& fvar, size_t const& start, size_t const& end,
-	 OUTL const& outlist, SPHState& pnp1, vector<real>& Rrho, vector<int>& near_inlet);
+void Boundary_Ghost(
+    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1,
+    vector<real>& Rrho, vector<int>& near_inlet
+);
 
-void Set_No_Slip( FLUID const& fvar, size_t const& start, size_t const& end,
-	 OUTL const& outlist, SPHState& pnp1);
+void Set_No_Slip(
+    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
+);
 
 ///**************** RESID calculation **************
-void Forces(SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, SPHState const& pnp1,
-	 OUTL const& outlist, /* DELTAP const& dp, */ real const& npd,
-	 vector<StateVecD>& RV, vector<real>& Rrho, std::vector<StateVecD>& Af, StateVecD& Force);
+void Forces(
+    SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, SPHState const& pnp1,
+    OUTL const& outlist, /* DELTAP const& dp, */ real const& npd, vector<StateVecD>& RV,
+    vector<real>& Rrho, std::vector<StateVecD>& Af
+);
 
+void Get_Aero_Velocity(
+    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
+    MESH const& cells, VLM const& vortex, size_t const& start, size_t& end_ng, OUTL& outlist,
+    LIMITS& limits, SPHState& pn, SPHState& pnp1, real& npd
+);
 #endif

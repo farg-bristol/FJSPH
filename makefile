@@ -33,12 +33,11 @@ TARGETDIR:=${HOME}/bin
 
 DIM=-DSIMDIM=2
 
-SRC := src/Add.cpp src/AsciiIO.cpp src/BinaryIO.cpp src/CDFIO.cpp src/Containment.cpp \
-	 	src/Droplet.cpp src/FJSPH.cpp src/FOAMIO.cpp src/Geometry.cpp src/H5IO.cpp src/Init.cpp \
-		src/Integration.cpp src/IO.cpp src/IPT.cpp src/Neighbours.cpp \
-	    src/Newmark_Beta.cpp src/Resid.cpp src/Runge_Kutta.cpp src/Shifting.cpp \
-	    src/Speedtest.cpp src/VLM.cpp src/shapes/arc.cpp src/shapes/circle.cpp \
-		src/shapes/cylinder.cpp src/shapes/inlet.cpp src/shapes/line.cpp src/shapes/square.cpp
+SRC := src/AsciiIO.cpp src/BinaryIO.cpp src/CDFIO.cpp src/Containment.cpp \
+ src/FJSPH.cpp src/FOAMIO.cpp src/Geometry.cpp src/H5IO.cpp src/Init.cpp src/Integration.cpp \
+ src/IO.cpp src/IPT.cpp src/Neighbours.cpp src/Newmark_Beta.cpp src/Resid.cpp src/Runge_Kutta.cpp \
+ src/Shifting.cpp src/VLM.cpp src/shapes/shapes.cpp src/shapes/arc.cpp src/shapes/circle.cpp \
+ src/shapes/cylinder.cpp src/shapes/inlet.cpp src/shapes/line.cpp src/shapes/square.cpp
 
 SRCDIR := src
 # Make the object directories in the excutable, so that it's not uploaded to cloud all the time.
@@ -101,7 +100,7 @@ all: 2D 3D
 
 # SET3D:
 # 	${eval DIM=-DSIMDIM=3}
-	
+		
 print-%  : ; @echo $* = ${$*}
 
 debug:
@@ -136,7 +135,7 @@ cleanALE:
 	${RM} ${3DDEPA}
 	${RM} ${TARGETDIR}/2DSPH.${ALEEXT}
 	${RM} ${TARGETDIR}/3DSPH.${ALEEXT}
-	
+
 cleanOBJ: 
 	${RM} ${2DOBJ}
 	${RM} ${3DOBJ}
@@ -221,7 +220,7 @@ ${3DALEDIR}/BinaryIO.o : ${SRCDIR}/BinaryIO.cpp makefile
 
 ${3DALEDIR}/CDFIO.o : ${SRCDIR}/CDFIO.cpp makefile
 	${CXX} -DSIMDIM=3 -DALE ${FLAGS} ${CXXFLAGS} ${EIGENINC} -MMD -MP -c $< -o $@ ${NETLIB} ${LIBS}
-	
+
 c2f:
 	${CXX} ${FLAGS} ${CXXFLAGS} ${INC} ${LLINK} ${TECINC} ${TECLINK} -o ${TARGETDIR}/Cell2Face src/Cell2Face.cpp ${TECLIB} ${NETLIB}
 

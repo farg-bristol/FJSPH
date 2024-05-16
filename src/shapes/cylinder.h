@@ -1,11 +1,16 @@
+/******     FJSPH (Fuel Jettison Smoothed Particles Hydrodynamics) Code ***********/
+/******          Created by Jamie MacLeod, University of Bristol        ***********/
+
 #ifndef CYLINDER_H
 #define CYLINDER_H
 
 #include "shapes.h"
 
-void check_cylinder_input(shape_block& bound, real& globalspacing, int& fault);
+namespace CylinderShape
+{
+void check_input(shape_block& block, real& globalspacing, int& fault);
 
-std::vector<StateVecD> create_cylinder(shape_block const& block, real const& globalspacing);
-
+std::vector<StateVecD> generate_points(shape_block const& block, real const& globalspacing);
+} // namespace CylinderShape
 
 #endif
