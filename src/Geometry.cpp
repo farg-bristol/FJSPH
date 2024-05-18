@@ -51,7 +51,7 @@ void Detect_Surface(
                 uint surf = 1; /*Begin by assuming a surface, and proving otherwise*/
                 for (neighbour_index const& jj : outlist[ii])
                 {
-                    if (jj.first == ii || pnp1[jj.first].b == GHOST)
+                    if (jj.first == ii)
                         continue;
 
                     SPHPart const& pj = pnp1[jj.first];
@@ -111,7 +111,7 @@ void Detect_Surface(
                 for (neighbour_index const& jj : outlist[ii])
                 {
                     SPHPart const& pj = pnp1[jj.first];
-                    if (jj.first == ii || pj.b == GHOST)
+                    if (jj.first == ii)
                         continue;
                     StateVecD const Rij = pi.xi - pj.xi;
                     real const r = sqrt(jj.second);
@@ -125,7 +125,7 @@ void Detect_Surface(
                 for (neighbour_index const& jj : outlist[ii])
                 {
                     SPHPart const& pj = pnp1[jj.first];
-                    if (jj.first == ii || pj.b == GHOST)
+                    if (jj.first == ii)
                         continue;
                     StateVecD const Rij = pi.xi - pj.xi;
                     real const r = sqrt(jj.second);
@@ -171,7 +171,7 @@ void Detect_Surface(
             for (neighbour_index const& jj : outlist[ii])
             {
                 SPHPart const& pj = pnp1[jj.first];
-                if (jj.first == ii || pj.b == GHOST)
+                if (jj.first == ii)
                     continue;
 
                 StateVecD const Rij = pj.xi - pi.xi;

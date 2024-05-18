@@ -60,9 +60,6 @@ void Newmark_Beta::Do_NB_Iter(
     /*Update the state at time n+1*/
 
     // cout << "Calculating forces" << endl;
-    vector<StateVecD> res(end, StateVecD::Zero());
-    vector<StateVecD> Af(end, StateVecD::Zero());
-    vector<real> Rrho(end, 0.0);
     vector<int> near_inlet(svar.bound_points, 0);
 
     real const& gamma_t1 = svar.nb_gamma;
@@ -106,9 +103,7 @@ void Newmark_Beta::Do_NB_Iter(
         {
         case DBC:
         {
-            Boundary_DBC(
-                fvar, limits[block].index.first, limits[block].index.second, outlist, pnp1, res
-            );
+            Boundary_DBC(fvar, limits[block].index.first, limits[block].index.second, outlist, pnp1);
             break;
         }
         case pressure_G:
@@ -121,8 +116,7 @@ void Newmark_Beta::Do_NB_Iter(
         case ghost:
         {
             Boundary_Ghost(
-                fvar, limits[block].index.first, limits[block].index.second, outlist, pnp1, Rrho,
-                near_inlet
+                fvar, limits[block].index.first, limits[block].index.second, outlist, pnp1, near_inlet
             );
             break;
         }
@@ -132,7 +126,7 @@ void Newmark_Beta::Do_NB_Iter(
     }
 
     /*Guess force at time n+1*/
-    Forces(svar, fvar, avar, cells, pnp1, outlist, npd, res, Rrho, Af);
+    get_acc_and_Rrho(svar, fvar, avar, cells, outlist, npd, pnp1);
 
 #pragma omp parallel default(shared)
     {
@@ -150,7 +144,7 @@ void Newmark_Beta::Do_NB_Iter(
                 { /****** BOUNDARY PARTICLES ***********/
                     real const rho = std::max(
                         fvar.rho_min, std::min(
-                                          fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] +
+                                          fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho +
                                                                            gamma_t2 * pn[ii].Rrho)
                                       )
                     );
@@ -158,7 +152,6 @@ void Newmark_Beta::Do_NB_Iter(
                     pnp1[ii].p = pressure_equation(
                         rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
                     );
-                    pnp1[ii].Rrho = Rrho[ii];
                 }
                 break;
             }
@@ -170,22 +163,23 @@ void Newmark_Beta::Do_NB_Iter(
                     if (near_inlet[ii])
                     { // Don't allow negative pressures
                         real const rho = std::max(
-                            fvar.rho_rest, std::min(
-                                               fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] +
-                                                                                gamma_t2 * pn[ii].Rrho)
-                                           )
+                            fvar.rho_rest,
+                            std::min(
+                                fvar.rho_max,
+                                pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho + gamma_t2 * pn[ii].Rrho)
+                            )
                         );
                         pnp1[ii].rho = rho;
                         pnp1[ii].p = pressure_equation(
                             rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
                         );
-                        pnp1[ii].Rrho = fmax(0.0, Rrho[ii]);
+                        pnp1[ii].Rrho = fmax(0.0, pnp1[ii].Rrho);
                     }
                     else
                     {
                         real const rho = std::max(
                             fvar.rho_min, std::min(
-                                              fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] +
+                                              fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho +
                                                                                gamma_t2 * pn[ii].Rrho)
                                           )
                         );
@@ -193,7 +187,6 @@ void Newmark_Beta::Do_NB_Iter(
                         pnp1[ii].p = pressure_equation(
                             rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
                         );
-                        pnp1[ii].Rrho = Rrho[ii];
                     }
                 }
                 break;
@@ -219,20 +212,17 @@ void Newmark_Beta::Do_NB_Iter(
 /*For any other particles, intergrate as normal*/
 #ifdef ALE
                     pnp1[ii].xi = pn[ii].xi + dt * (pn[ii].v + pnp1[ii].vPert) +
-                                  dt2 * (beta_t1 * res[ii] + beta_t2 * pn[ii].acc);
+                                  dt2 * (beta_t1 * pnp1[ii].acc + beta_t2 * pn[ii].acc);
 #else
-                    pnp1[ii].xi =
-                        pn[ii].xi + dt * pn[ii].v + dt2 * (beta_t2 * pn[ii].acc + beta_t1 * res[ii]);
+                    pnp1[ii].xi = pn[ii].xi + dt * pn[ii].v +
+                                  dt2 * (beta_t2 * pn[ii].acc + beta_t1 * pnp1[ii].acc);
 #endif
 
-                    pnp1[ii].v = pn[ii].v + dt * (gamma_t1 * res[ii] + gamma_t2 * pn[ii].acc);
-                    pnp1[ii].acc = res[ii];
-                    pnp1[ii].Af = Af[ii];
-                    pnp1[ii].Rrho = Rrho[ii];
+                    pnp1[ii].v = pn[ii].v + dt * (gamma_t1 * pnp1[ii].acc + gamma_t2 * pn[ii].acc);
 
                     real const rho = std::max(
                         fvar.rho_min, std::min(
-                                          fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] +
+                                          fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho +
                                                                            gamma_t2 * pn[ii].Rrho)
                                       )
                     );
@@ -287,12 +277,10 @@ void Newmark_Beta::Do_NB_Iter(
 
                             size_t const& buffID = limits[block].buffer[ii][jj];
 
-                            pnp1[buffID].Rrho = Rrho[buffID];
-
                             real const rho = std::max(
                                 fvar.rho_min,
                                 std::min(
-                                    fvar.rho_max, pn[buffID].rho + dt * (gamma_t1 * Rrho[buffID] +
+                                    fvar.rho_max, pn[buffID].rho + dt * (gamma_t1 * pnp1[buffID].Rrho +
                                                                          gamma_t2 * pn[buffID].Rrho)
                                 )
                             );

@@ -29,7 +29,7 @@
                                     SPH CFL condition: 0.9
                 SPH stable CFL count iteration factor: 0.76
                                   SPH initial spacing: 0.00005
-                                 SPH aerodynamic case: Induced-Pressure
+                                 SPH aerodynamic case: Induced_pressure
 
                                 SPH starting pressure: 000
                                    SPH speed of sound: 100

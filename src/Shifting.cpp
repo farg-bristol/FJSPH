@@ -24,7 +24,6 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
         {
             StateMatD Lmat_ = StateMatD::Zero();
             StateMatD Lmat_nb_ = StateMatD::Zero();
-            StateMatD Lmat_ng_ = StateMatD::Zero();
             StateVecD gradRho_ = StateVecD::Zero();
             // StateVecD gradRho_2 = StateVecD::Zero();
             StateVecD norm_ = StateVecD::Zero();
@@ -60,21 +59,14 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
                 {
                     Lmat_nb_ -= volj * Rji * Grad.transpose();
 
-                    if (pj.b != GHOST)
-                    { /* Ignore ghost particles */
-                        norm_ += volj * Grad;
-                        // avgV_ += pj.v * kern;
-                        kernsum_ += kern;
-                        colour_ += volj * kern;
-#ifdef PAIRWISE
-                        npd_ += kern;
-#endif
-                    }
-                }
+                    norm_ += volj * Grad;
 
-                if (pj.b != GHOST)
-                {
-                    Lmat_ng_ -= volj * Rji * Grad.transpose();
+                    // avgV_ += pj.v * kern;
+                    kernsum_ += kern;
+                    colour_ += volj * kern;
+#ifdef PAIRWISE
+                    npd_ += kern;
+#endif
                 }
             }
 
@@ -94,7 +86,6 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
             {
                 pnp1[ii].lam = 1.0;
                 pnp1[ii].lam_nb = 1.0;
-                pnp1[ii].lam_ng = 1.0;
             }
             else
             {
@@ -106,11 +97,6 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
                 /*L matrix computation for particle shifting, ignoring the boundary*/
                 es.computeDirect(Lmat_nb_);
                 pnp1[ii].lam_nb = ((es.eigenvalues()).minCoeff()); // 1 inside fluid, 0 outside fluid
-
-                /*L matrix computation for surface identification, ignoring ghost and boundary
-                 * particles*/
-                es.computeDirect(Lmat_ng_);
-                pnp1[ii].lam_ng = ((es.eigenvalues()).minCoeff()); // 1 inside fluid, 0 outside fluid
             }
 
             pnp1[ii].L = Linv;

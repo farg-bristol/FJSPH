@@ -559,7 +559,7 @@ void FirstCell(SIM& svar, Vec_Tree const& CELL_INDEX, MESH const& cells, SPHPart
             }
         }
 
-        if (cross == 0 && pi.b != GHOST)
+        if (cross == 0)
         {
 #pragma omp single
             {
@@ -591,7 +591,7 @@ vector<size_t> FindCell(
 #pragma omp for schedule(static) nowait
         for (size_t ii = start; ii < end; ++ii)
         {
-            if (pnp1[ii].b != FREE || pnp1[ii].lam_ng > avar.lam_cutoff)
+            if (pnp1[ii].b != FREE || pnp1[ii].lam_nb > avar.lam_cutoff)
             {
                 pnp1[ii].cellID = -1;
                 continue;
@@ -839,7 +839,7 @@ void Check_Pipe_Outlet(
                 if (pnp1[ii].xi.dot(limits[block].aero_norm) > limits[block].aeroconst)
                 {
                     pnp1[ii].b = FREE;
-                    if (pnp1[ii].lam_ng < avar.lam_cutoff && svar.Asource == meshInfl)
+                    if (pnp1[ii].lam_nb < avar.lam_cutoff && svar.Asource == meshInfl)
                     { /* Retrieve the cell it's in */
                         uint to_del = 0;
                         FirstCell(svar, CELL_TREE, cells, pnp1[ii], to_del);

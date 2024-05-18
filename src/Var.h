@@ -130,7 +130,6 @@ enum partType
     BUFFER,
     BACK,
     PIPE,
-    GHOST,
     FREE,
     OUTLET,
     LOST
@@ -666,7 +665,6 @@ struct SPHPart
         colour = 0.0;
         lam = 0.0;
         lam_nb = 0.0;
-        lam_ng = 0.0;
         kernsum = 0.0;
         bNorm = StateVecD::Zero();
         y = 0.0;
@@ -712,7 +710,6 @@ struct SPHPart
         colour = 0.0;
         lam = 0.0;
         lam_nb = 0.0;
-        lam_ng = 0.0;
         kernsum = 0.0;
         bNorm = StateVecD::Zero();
         y = 0.0;
@@ -759,8 +756,7 @@ struct SPHPart
     real colourG = 0.0; /* Colour gradient. */
     real colour = 0.0;  /* Kernel sum with volume considered. */
     real lam = 0.0;     /* Eigenvalues with all particles considered */
-    real lam_nb = 0.0;  /* Eigenvalues without boundary particles (and ghost particles) */
-    real lam_ng = 0.0;  /* Eigenvalues without ghost particles */
+    real lam_nb = 0.0;  /* Eigenvalues without boundary particles */
     real kernsum = 0.0; /* Summation of the kernel */
 
     /* Mesh surface repulsion */
