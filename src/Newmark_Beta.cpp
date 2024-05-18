@@ -149,14 +149,15 @@ void Newmark_Beta::Do_NB_Iter(
                 for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
                 { /****** BOUNDARY PARTICLES ***********/
                     real const rho = std::max(
-                        fvar.rhoMin,
-                        std::min(
-                            fvar.rhoMax, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] + gamma_t2 * pn[ii].Rrho)
-                        )
+                        fvar.rho_min, std::min(
+                                          fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] +
+                                                                           gamma_t2 * pn[ii].Rrho)
+                                      )
                     );
                     pnp1[ii].rho = rho;
-                    pnp1[ii].p =
-                        pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
+                    pnp1[ii].p = pressure_equation(
+                        rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
+                    );
                     pnp1[ii].Rrho = Rrho[ii];
                 }
                 break;
@@ -169,27 +170,29 @@ void Newmark_Beta::Do_NB_Iter(
                     if (near_inlet[ii])
                     { // Don't allow negative pressures
                         real const rho = std::max(
-                            fvar.rho0, std::min(
-                                           fvar.rhoMax, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] +
-                                                                           gamma_t2 * pn[ii].Rrho)
-                                       )
+                            fvar.rho_rest, std::min(
+                                               fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] +
+                                                                                gamma_t2 * pn[ii].Rrho)
+                                           )
                         );
                         pnp1[ii].rho = rho;
-                        pnp1[ii].p =
-                            pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
+                        pnp1[ii].p = pressure_equation(
+                            rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
+                        );
                         pnp1[ii].Rrho = fmax(0.0, Rrho[ii]);
                     }
                     else
                     {
                         real const rho = std::max(
-                            fvar.rhoMin, std::min(
-                                             fvar.rhoMax, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] +
-                                                                             gamma_t2 * pn[ii].Rrho)
-                                         )
+                            fvar.rho_min, std::min(
+                                              fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] +
+                                                                               gamma_t2 * pn[ii].Rrho)
+                                          )
                         );
                         pnp1[ii].rho = rho;
-                        pnp1[ii].p =
-                            pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
+                        pnp1[ii].p = pressure_equation(
+                            rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
+                        );
                         pnp1[ii].Rrho = Rrho[ii];
                     }
                 }
@@ -228,14 +231,15 @@ void Newmark_Beta::Do_NB_Iter(
                     pnp1[ii].Rrho = Rrho[ii];
 
                     real const rho = std::max(
-                        fvar.rhoMin,
-                        std::min(
-                            fvar.rhoMax, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] + gamma_t2 * pn[ii].Rrho)
-                        )
+                        fvar.rho_min, std::min(
+                                          fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * Rrho[ii] +
+                                                                           gamma_t2 * pn[ii].Rrho)
+                                      )
                     );
                     pnp1[ii].rho = rho;
-                    pnp1[ii].p =
-                        pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
+                    pnp1[ii].p = pressure_equation(
+                        rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
+                    );
                 }
                 else if (pnp1[ii].b == OUTLET)
                 { /* For the outlet zone, just perform euler integration of last info */
@@ -286,15 +290,16 @@ void Newmark_Beta::Do_NB_Iter(
                             pnp1[buffID].Rrho = Rrho[buffID];
 
                             real const rho = std::max(
-                                fvar.rhoMin,
+                                fvar.rho_min,
                                 std::min(
-                                    fvar.rhoMax, pn[buffID].rho + dt * (gamma_t1 * Rrho[buffID] +
-                                                                        gamma_t2 * pn[buffID].Rrho)
+                                    fvar.rho_max, pn[buffID].rho + dt * (gamma_t1 * Rrho[buffID] +
+                                                                         gamma_t2 * pn[buffID].Rrho)
                                 )
                             );
                             pnp1[buffID].rho = rho;
-                            pnp1[buffID].p =
-                                pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
+                            pnp1[buffID].p = pressure_equation(
+                                rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
+                            );
                             pnp1[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
                         }
                     }

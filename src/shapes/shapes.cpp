@@ -129,7 +129,7 @@ void read_shape_JSON(
 
     get_var(input_block, "Cole EOS gamma", new_block.gamma);
     get_var(input_block, "Speed of sound", new_block.speedOfSound);
-    get_var(input_block, "Rest density", new_block.rho0);
+    get_var(input_block, "Rest density", new_block.rho_rest);
     get_var(input_block, "Volume to target", new_block.renorm_vol);
 
     get_var(input_block, "Coordinate filename", new_block.filename);
@@ -341,12 +341,12 @@ void shape_block::check_input(SIM const& svar, FLUID const& fvar, real& globalsp
 
     if (press != 0)
     {
-        real Bconst = fvar.rho0 * (fvar.Cs * fvar.Cs) / fvar.gam;
-        dens = pow(((press - fvar.pPress) / Bconst + 1.0), fvar.gam) * fvar.rho0;
+        real Bconst = fvar.rho_rest * (fvar.speed_sound * fvar.speed_sound) / fvar.gam;
+        dens = pow(((press - fvar.press_pipe) / Bconst + 1.0), fvar.gam) * fvar.rho_rest;
     }
     else
     {
-        dens = fvar.rho0;
+        dens = fvar.rho_rest;
     }
 
     if (nu < 0)

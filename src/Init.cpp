@@ -148,7 +148,7 @@ void read_shapes_bmap(
 
         Get_Number(line, "Cole EOS gamma", shapes[block].gamma);
         Get_Number(line, "Speed of sound", shapes[block].speedOfSound);
-        Get_Number(line, "Resting density", shapes[block].rho0);
+        Get_Number(line, "Resting density", shapes[block].rho_rest);
         Get_Number(line, "Volume to target", shapes[block].renorm_vol);
 
         Get_String(line, "Time data filename", shapes[block].position_filename);
@@ -452,10 +452,10 @@ size_t Generate_Points(SIM const& svar, FLUID const& fvar, double const& globals
         if (svar.use_global_gas_law)
         { // Set block gas law properties as the global
           // properties
-            bound.rho0 = fvar.rho0;
+            bound.rho_rest = fvar.rho_rest;
             bound.gamma = fvar.gam;
-            bound.speedOfSound = fvar.Cs;
-            bound.backgroundP = fvar.pPress;
+            bound.speedOfSound = fvar.speed_sound;
+            bound.backgroundP = fvar.press_pipe;
         }
     }
     var.total_points = total_points;
@@ -508,7 +508,8 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
             {
                 pn.emplace_back(SPHPart(
                     boundvar.block[block].coords[ii], boundvar.block[block].vel,
-                    boundvar.block[block].dens, fvar.bndM, boundvar.block[block].press, BOUND, part_id
+                    boundvar.block[block].dens, fvar.bnd_mass, boundvar.block[block].press, BOUND,
+                    part_id
                 ));
                 part_id++;
             }
@@ -566,7 +567,7 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
                 {
                     pn.emplace_back(SPHPart(
                         fluvar.block[block].coords[ii], fluvar.block[block].vel,
-                        fluvar.block[block].dens, fvar.bndM, fluvar.block[block].press, PIPE, part_id
+                        fluvar.block[block].dens, fvar.bnd_mass, fluvar.block[block].press, PIPE, part_id
                     ));
                     part_id++;
                 }
@@ -596,7 +597,7 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
                     size_t pointID = fluvar.block[block].back[bID];
                     pn.emplace_back(SPHPart(
                         fluvar.block[block].coords[pointID], fluvar.block[block].vel,
-                        fluvar.block[block].dens, fvar.simM, fluvar.block[block].press, BACK, part_id
+                        fluvar.block[block].dens, fvar.sim_mass, fluvar.block[block].press, BACK, part_id
                     ));
 
                     limits.back().back.emplace_back(part_id);
@@ -616,7 +617,7 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
                         size_t pointID = fluvar.block[block].buffer[bID][buffID];
                         pn.emplace_back(SPHPart(
                             fluvar.block[block].coords[pointID], fluvar.block[block].vel,
-                            fluvar.block[block].dens, fvar.simM, fluvar.block[block].press, BUFFER,
+                            fluvar.block[block].dens, fvar.sim_mass, fluvar.block[block].press, BUFFER,
                             part_id
                         ));
 
@@ -636,7 +637,7 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
                 {
                     pn.emplace_back(SPHPart(
                         fluvar.block[block].coords[ii], fluvar.block[block].vel,
-                        fluvar.block[block].dens, fvar.simM, fluvar.block[block].press, FREE, part_id
+                        fluvar.block[block].dens, fvar.sim_mass, fluvar.block[block].press, FREE, part_id
                     ));
                     part_id++;
                 }
@@ -683,8 +684,11 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
 #pragma omp parallel for
         for (size_t ii = 0; ii < svar.total_points; ++ii)
         {
-            real press = std::max(0.0, -fvar.rho0 * svar.grav[1] * (svar.hydro_height - pn[ii].xi[1]));
-            real dens = density_equation(press, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
+            real press =
+                std::max(0.0, -fvar.rho_rest * svar.grav[1] * (svar.hydro_height - pn[ii].xi[1]));
+            real dens = density_equation(
+                press, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
+            );
             pn[ii].p = press;
             pn[ii].rho = dens;
         }
@@ -824,7 +828,7 @@ void Init_Surface(SIM const& svar, MESH const& cells, vector<SURF>& surf_marks)
         surf_marks[ii].output = svar.tau_bwrite[ii];
 
         size_t nFaces = faceIDs[ii].size();
-        surf_marks[ii].faceIDs = faceIDs[ii];
+        surf_marks[ii].face_IDs = faceIDs[ii];
         surf_marks[ii].face_count = vector<uint>(nFaces, 0);
         surf_marks[ii].face_beta = vector<real>(nFaces, 0.0);
         surf_marks[ii].face_area = vector<real>(nFaces, 0.0);

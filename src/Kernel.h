@@ -8,44 +8,44 @@
 
 #ifdef CUBIC
 ///******Cubic Spline Kernel*******///
-inline real Kernel(real const dist, real const H, real const correc)
+inline real Kernel(real const dist, real const H, real const W_correc)
 {
     real const q = dist / H;
 
     if (q < 1.0)
-        return correc * (1.0 - 1.5 * q * q * (1 - 0.5 * q));
+        return W_correc * (1.0 - 1.5 * q * q * (1 - 0.5 * q));
     else if (q < 2.0)
-        return correc * 0.25 * pow(2.0 - q, 3.0);
+        return W_correc * 0.25 * pow(2.0 - q, 3.0);
 
     return 0;
 }
 
-inline StateVecD GradK(StateVecD const& Rij, real const dist, real const H, real const correc)
+inline StateVecD GradK(StateVecD const& Rij, real const dist, real const H, real const W_correc)
 {
     real const q = dist / H;
 
     if (q < 1.0)
-        return Rij / (H * H) * correc * (3.0 * (0.75 * q - 1.0));
+        return Rij / (H * H) * W_correc * (3.0 * (0.75 * q - 1.0));
     else if (q < 2.0)
-        return Rij / (dist * H) * correc * -0.75 * (2.0 - q) * (2.0 - q);
+        return Rij / (dist * H) * W_correc * -0.75 * (2.0 - q) * (2.0 - q);
 
     return StateVecD::Zero();
 }
 
 #else
 ///******Wendland's C2 Quintic Kernel*******///
-inline real Kernel(real const& dist, real const& H, real const& correc)
+inline real Kernel(real const& dist, real const& H, real const& W_correc)
 {
     // if(dist/H > 2.0)
     // {
     // 	// cout << "Distance greater than 2H" << endl;
     // 	return 0.0;
     // }
-    return (pow(1 - 0.5 * dist / H, 4)) * (2 * dist / H + 1) * correc;
+    return (pow(1 - 0.5 * dist / H, 4)) * (2 * dist / H + 1) * W_correc;
 }
 
 /*Gradient*/
-inline StateVecD GradK(StateVecD const& Rij, real const& dist, real const& H, real const& correc)
+inline StateVecD GradK(StateVecD const& Rij, real const& dist, real const& H, real const& W_correc)
 {
     if (dist / H < 1e-12)
     {
@@ -57,7 +57,7 @@ inline StateVecD GradK(StateVecD const& Rij, real const& dist, real const& H, re
     // 	// cout << "Distance greater than 2H" << endl;
     // 	return StateVecD::Zero();
     // }
-    return 5.0 * (Rij / (H * H)) * pow(1 - 0.5 * dist / H, 3) * correc;
+    return 5.0 * (Rij / (H * H)) * pow(1 - 0.5 * dist / H, 3) * W_correc;
 }
 #endif
 
@@ -76,33 +76,34 @@ inline real BoundaryKernel(real const dist, real const H, real const beta)
 
 /* Consider making a member function of fvar. Then can use member variables and only have 1 input */
 inline real pressure_equation(
-    real const& rho, real const& B, real const& gam, real const& Cs, real const& rho0, real const& backP
+    real const& rho, real const& B, real const& gam, real const& speed_sound, real const& rho_rest,
+    real const& press_back
 )
 {
 #ifdef COLEEOS
-    (void)Cs;
-    return B * (pow(rho / rho0, gam) - 1) + backP; /* Cole EOS */
+    (void)speed_sound;
+    return B * (pow(rho / rho_rest, gam) - 1) + press_back; /* Cole EOS */
 #endif
 #ifdef ISOEOS
     (void)B;
     (void)gam;
-    return Cs * Cs * (rho - rho0) + backP; /* Isothermal EOS */
+    return speed_sound * speed_sound * (rho - rho_rest) + press_back; /* Isothermal EOS */
 #endif
 }
 
 inline real density_equation(
-    real const& press, real const& B, real const& gam, real const& Cs, real const& rho0,
-    real const& backP
+    real const& press, real const& B, real const& gam, real const& speed_sound, real const& rho_rest,
+    real const& press_back
 )
 {
 #ifdef COLEEOS
-    (void)Cs;
-    return rho0 * pow(((press - backP) / B) + 1.0, 1.0 / gam); /* Cole EOS */
+    (void)speed_sound;
+    return rho_rest * pow(((press - press_back) / B) + 1.0, 1.0 / gam); /* Cole EOS */
 #endif
 #ifdef ISOEOS
     (void)B;
     (void)gam;
-    return (press - backP) / (Cs * Cs) + rho0; /* Isothermal EOS */
+    return (press - press_back) / (speed_sound * speed_sound) + rho_rest; /* Isothermal EOS */
 #endif
 }
 
@@ -128,8 +129,8 @@ inline real pairwise_ST_fac(int const bA, int const bB)
 }
 
 // inline StateVecD SurfaceTens(StateVecD const& Rji, real const& r, real const& h, real const& sig, real
-// const& lam, 					real const& npdm2, real const& pi3o4, int const& bA, int const& bB, real const& voli, real
-// const& volj)
+// const& lam, 					real const& npdm2, real const& pi3o4, int const& bA, int
+// const& bB, real const& voli, real const& volj)
 inline StateVecD pairwise_ST(
     StateVecD const& Rji, real const& r, real const& h, real const& npdm2, real const& pi3o4,
     int const& bA, int const& bB
@@ -148,13 +149,13 @@ inline StateVecD pairwise_ST(
 #ifdef CSF
 inline void CSF_Curvature(
     FLUID const& fvar, DELTAP const& dp, SPHPart const& pi, SPHPart const& pj, StateVecD const& Rji,
-    StateVecD const& gradK, real const& volj, real const& r, real& curve, real& correc
+    StateVecD const& gradK, real const& volj, real const& r, real& curve, real& W_correc
 )
 {
     if (dp.lam[pj.part_id] < 0.75)
     {
         curve -= (pj.norm.normalized() - pi.norm.normalized()).dot(volj * gradK);
-        correc += volj * Kernel(r, fvar.H, fvar.correc) /*/dp.kernsum[ii]*/;
+        W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/dp.kernsum[ii]*/;
     }
 
     /* Consider imaginary particles to improve curvature representation */
@@ -163,7 +164,7 @@ inline void CSF_Curvature(
         /* Host particle is on the surface, but neighbour is not. Reflect stuff then */
         StateVecD normj = 2 * pi.norm.normalized() - pj.norm.normalized();
         curve += (normj.normalized() - pi.norm.normalized()).dot(volj * gradK);
-        correc += volj * Kernel(r, fvar.H, fvar.correc) /*/dp.kernsum[ii]*/;
+        W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/dp.kernsum[ii]*/;
     }
 
     if (pj.surf == 1 && pi.surf != 1)
@@ -173,10 +174,10 @@ inline void CSF_Curvature(
         if (r < fvar.H)
         { /* Assuming a support radius of 2h, if the current particle is within h */
             /* it will still be in the neighbourhood if distance is doubled */
-            StateVecD gradK2 = GradK(2 * Rji, 2 * r, fvar.H, fvar.correc);
+            StateVecD gradK2 = GradK(2 * Rji, 2 * r, fvar.H, fvar.W_correc);
             StateVecD normj = 2 * pj.norm.normalized() - pi.norm.normalized();
             curve -= (normj.normalized() - pi.norm.normalized()).dot(volj * gradK2);
-            correc += volj * Kernel(r, fvar.H, fvar.correc) /*/dp.kernsum[ii]*/;
+            W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/dp.kernsum[ii]*/;
         }
     }
 }
@@ -230,7 +231,7 @@ inline real ALECont2ndterm(SPHPart const& pi, SPHPart const& pj, real const& Vj,
 /* delta-SPH dissipation term in the continuity equation*/
 #ifndef NODSPH
 inline real Continuity_dSPH(
-    StateVecD const& Rji, real const& idist2, real const& HSQ, StateVecD const& Grad, real const& volj,
+    StateVecD const& Rji, real const& idist2, real const& H_sq, StateVecD const& Grad, real const& volj,
     StateVecD const& gRho_i, StateVecD const& gRho_j, SPHPart const& pi, SPHPart const& pj
 )
 {
@@ -238,7 +239,7 @@ inline real Continuity_dSPH(
 }
 
 inline real Continuity_dSPH(
-    StateVecD const& Rji, real const& idist2, real const& HSQ, StateVecD const& Grad, real const& volj,
+    StateVecD const& Rji, real const& idist2, real const& H_sq, StateVecD const& Grad, real const& volj,
     SPHPart const& pi, SPHPart const& pj
 )
 {
@@ -266,10 +267,10 @@ inline StateVecD ArtVisc(
         real const cbar =
             0.5 * (sqrt((fvar.B * fvar.gam) / pi.rho) + sqrt((fvar.B * fvar.gam) / pj.rho));
         // real const alphv = 2 * nu * (SIMDIM + 2)/(fvar.H*cbar);
-        // real const alpha = std::max(fvar.alpha,alphv);
-        real const alpha = fvar.alpha;
+        // real const visc_alpha = std::max(fvar.visc_alpha,alphv);
+        real const visc_alpha = fvar.visc_alpha;
 
-        return gradK * alpha * cbar * muij / rhoij;
+        return gradK * visc_alpha * cbar * muij / rhoij;
     }
     // }
     return StateVecD::Zero();
@@ -285,10 +286,10 @@ inline StateVecD Linear_ArtVisc(
 
 /*Laminar Viscosity - Morris (2003)*/
 /*Apparently divergent at free surfaces - consider removing.*/
-// StateVecD Viscosity(real const& mu, real const& HSQ, SPHPart const& pi, SPHPart const& pj,
+// StateVecD Viscosity(real const& mu, real const& H_sq, SPHPart const& pi, SPHPart const& pj,
 // 	StateVecD const& Rji, StateVecD const& Vji, real const& r, StateVecD const& gradK)
 // {
-// 	return Vji*(mu/(pi.rho*pj.rho))*(1.0/(r*r+0.01*HSQ))*Rji.dot(gradK);
+// 	return Vji*(mu/(pi.rho*pj.rho))*(1.0/(r*r+0.01*H_sq))*Rji.dot(gradK);
 // }
 
 inline StateVecD Viscosity(
@@ -303,9 +304,9 @@ inline StateVecD Viscosity(
 /*Repulsion for interacting with mesh surface - saves generating particles on surface*/
 inline StateVecD NormalBoundaryRepulsion(FLUID const& fvar, MESH const& cells, SPHPart const& pi)
 {
-    real beta = 4 * fvar.Cs * fvar.Cs;
+    real beta = 4 * fvar.speed_sound * fvar.speed_sound;
     real kern = BoundaryKernel(pi.y, fvar.H, beta);
-    return fvar.bndM / (fvar.bndM + fvar.simM) * kern * pi.bNorm;
+    return fvar.bnd_mass / (fvar.bnd_mass + fvar.sim_mass) * kern * pi.bNorm;
 }
 
 #endif

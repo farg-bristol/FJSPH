@@ -122,12 +122,12 @@ int main(int argc, char* argv[])
         {
             for (size_t ii = 0; ii < pnp1.size(); ++ii)
             {
-                pn[ii].cellRho = avar.rhog;
-                pn[ii].cellP = avar.pRef;
-                pnp1[ii].cellRho = avar.rhog;
-                pnp1[ii].cellP = avar.pRef;
-                pn[ii].cellV = avar.vInf;
-                pnp1[ii].cellV = avar.vInf;
+                pn[ii].cellRho = avar.rho_g;
+                pn[ii].cellP = avar.p_ref;
+                pnp1[ii].cellRho = avar.rho_g;
+                pnp1[ii].cellP = avar.p_ref;
+                pn[ii].cellV = avar.v_inf;
+                pnp1[ii].cellV = avar.v_inf;
             }
         }
 
@@ -143,17 +143,6 @@ int main(int argc, char* argv[])
     // Check if cells have been initialsed before making a tree off it
     if (cells.cCentre.size() == 0)
         cells.cCentre.emplace_back(StateVecD::Zero());
-
-    if (cells.fNum.size() == 0)
-    {
-        cells.fNum.emplace_back();
-        cells.fMass.emplace_back();
-        cells.vFn.emplace_back();
-        cells.vFnp1.emplace_back();
-        cells.cRho.emplace_back();
-        cells.cPertn.emplace_back();
-        cells.cPertnp1.emplace_back();
-    }
 
     cout << "Starting counts: " << endl;
     cout << "Boundary: " << svar.bound_points << "  Sim: " << svar.fluid_points << endl << endl;

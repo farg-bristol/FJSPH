@@ -58,7 +58,7 @@ struct shape_block
     real mass = -1;         /* Starting mass (derived from spacing and density) */
     real renorm_vol = -1;   /* Volume to renormalise mass using */
     real nu = -1;           /* Kinematic viscosity */
-    real rho0 = 1000;       /* Resting density */
+    real rho_rest = 1000;   /* Resting density */
     real gamma = 7;         /* Cole gamma value */
     real speedOfSound = -1; /* Speed of sound */
     real backgroundP = 0;   /* Background pressure */

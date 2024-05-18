@@ -783,8 +783,8 @@ namespace TAU
         // #pragma omp parallel for
         // for (uint ii = 0; ii < press.size(); ++ii)
         // {
-        // 	press[ii] -= avar.pRef; /* Want value to be gauge pressure */
-        // 	// dens[ii] = fvar.rho0 * pow((press[ii] / fvar.B + 1), 1 / fvar.gam);
+        // 	press[ii] -= avar.p_ref; /* Want value to be gauge pressure */
+        // 	// dens[ii] = fvar.rho_rest * pow((press[ii] / fvar.B + 1), 1 / fvar.gam);
         // }
 
         if (press.size() == 0)

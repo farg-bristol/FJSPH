@@ -407,43 +407,43 @@ struct FLUID
 {
     // EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    real H = -1.0;      /* Support radius */
-    real HSQ = -1.0;    /* Support radius squared */
-    real sr = -1.0;     /* Search radius (support radius * factor)*/
-    real Hfac = 2.0;    /* Search radius factor */
-    real Wdx = -1.0;    /* Kernel value at the initial particle spacing distance.*/
-    real rho0 = 1000.0; /* Resting fluid density */
-    real rhoJ = 1000.0; /* Pipe starting density */
-    real pPress = 0.0;  /* Starting pressure in pipe*/
-    real backP = 0.0;   /* Background pressure */
+    real H = -1.0;          /* Support radius */
+    real H_sq = -1.0;       /* Support radius squared */
+    real sr = -1.0;         /* Search radius (support radius * factor)*/
+    real H_fac = 2.0;       /* Search radius factor */
+    real W_dx = -1.0;       /* Kernel value at the initial particle spacing distance.*/
+    real rho_rest = 1000.0; /* Resting fluid density */
+    real rho_pipe = 1000.0; /* Pipe starting density */
+    real press_pipe = 0.0;  /* Starting pressure in pipe*/
+    real press_back = 0.0;  /* Background pressure */
 
     /* Allow a large variation by default */
     /* making it essentially unbounded other */
     /* than truly unphysical pressures */
-    real rhoMax = 1500.0;  /* Maximum density value */
-    real rhoMin = 500.0;   /* Minimum density */
-    real rhoVar = 50.0;    /* Maximum density variation allowed (in %) */
-    real rhoMaxIter = 1.0; /* Maximum value to reduce the timestep */
+    real rho_max = 1500.0;   /* Maximum density value */
+    real rho_min = 500.0;    /* Minimum density value */
+    real rho_var = 50.0;     /* Maximum density variation allowed (in %) */
+    real rho_max_iter = 1.0; /* Maximum value to reduce the timestep */
 
-    real simM = -1.0;    /* SPH fluid particle mass */
-    real bndM = -1.0;    /* SPH boundary mass */
-    real correc = -1.0;  /* Smoothing Kernel Correction*/
-    real alpha = 0.1;    /* Artificial viscosity factor */
-    real Cs = 300.0;     /* Speed of sound */
-    real mu = 8.94e-4;   /* Dynamic viscosity */
-    real nu = mu / rho0; /* Kinematic viscosity */
-    real sig = 0.0708;   /* Surface tension coefficient */
-    real gam = 7.0;      /* Tait equation gamma power*/
-    real B = -1.0;       /* Tait equation speed of sound factor */
+    real sim_mass = -1.0;     /* SPH fluid particle mass */
+    real bnd_mass = -1.0;     /* SPH boundary mass */
+    real W_correc = -1.0;     /* Smoothing Kernel Correction*/
+    real visc_alpha = 0.1;    /* Artificial viscosity factor */
+    real speed_sound = 300.0; /* Speed of sound */
+    real mu = 8.94e-4;        /* Dynamic viscosity */
+    real nu = mu / rho_rest;  /* Kinematic viscosity */
+    real sig = 0.0708;        /* Surface tension coefficient */
+    real gam = 7.0;           /* Tait equation gamma power*/
+    real B = -1.0;            /* Tait equation speed of sound factor */
 
     real contangb = 150.0; /* Boundary contact angle */
-    real resVel = 0.0;     /* Reservoir velocity */
+    real res_vel = 0.0;    /* Reservoir velocity */
     // real front, height, height0; /* Dam Break validation parameters*/
 
     /* delta SPH terms */
-    real delta = 0.1;  /* delta-SPH contribution */
-    real dCont = -1.0; /* delta-SPH continuity constant term */
-    real dMom = -1.0;  /* delta-SPH momentum constant term (dCont * rho0) */
+    real dsph_delta = 0.1; /* delta-SPH contribution */
+    real dsph_cont = -1.0; /* delta-SPH continuity constant term */
+    real dsph_mom = -1.0;  /* delta-SPH momentum constant term (dsph_cont * rho0) */
 };
 
 /*Aerodynamic Properties*/
@@ -455,30 +455,30 @@ struct AERO
     {
 #if SIMDIM == 3
         L = diam * std::cbrt(3.0 / (4.0 * M_PI));
-        aSphere = M_PI * L * L;
-        aPlate = diam * diam;
+        A_sphere = M_PI * L * L;
+        A_plate = diam * diam;
 #else
         L = diam / sqrt(M_PI);
-        aSphere = 2 * L;
-        aPlate = diam;
+        A_sphere = 2 * L;
+        A_plate = diam;
 #endif
 
-        td = (2.0 * fvar.rho0 * pow(L, SIMDIM - 1)) / (Cd * fvar.mu);
+        td = (2.0 * fvar.rho_rest * pow(L, SIMDIM - 1)) / (Cd * fvar.mu);
 
-        omega = sqrt((Ck * fvar.sig) / (fvar.rho0 * pow(L, SIMDIM)) - 1.0 / pow(td, 2.0));
+        omega = sqrt((Ck * fvar.sig) / (fvar.rho_rest * pow(L, SIMDIM)) - 1.0 / pow(td, 2.0));
 
         tmax = -2.0 * (atan(sqrt(pow(td * omega, 2.0) + 1) + td * omega) - M_PI) / omega;
 
         Cdef = 1.0 - exp(-tmax / td) * (cos(omega * tmax) + 1 / (omega * td) * sin(omega * tmax));
-        ycoef = 0.5 * Cdef * (Cf / (Ck * Cb)) * (rhog * L) / fvar.sig;
+        ycoef = 0.5 * Cdef * (Cf / (Ck * Cb)) * (rho_g * L) / fvar.sig;
 
         // cout << ycoef << "  " << Cdef << "  " << tmax << "  " << endl;
     }
 
-    StateVecD vInf = StateVecD::Zero(); /* Freestream velocity*/
+    StateVecD v_inf = StateVecD::Zero(); /* Freestream velocity */
 
     /*Gissler Parameters*/
-    real L = -1.0;
+    real L = -1.0; /* Aerodynamic length */
     real td = -1.0;
     real omega = -1.0;
     real tmax = -1.0;
@@ -489,34 +489,34 @@ struct AERO
     real Cb = 0.5;
     real Cdef = -1.0;
 
-    real aSphere = -1.0; /* Area of a sphere/cylinder */
-    real aPlate = -1.0;  /* Area of a plate*/
+    real A_sphere = -1.0; /* Area of a sphere/cylinder */
+    real A_plate = -1.0;  /* Area of a plate*/
 
     /* Gas Properties*/
-    real vRef = 0.0;                   /* Reference velocity */
-    real pRef = 101353.0;              /* Reference pressure */
-    real rhog = 1.29251;               /* Gas density */
-    real mug = 1.716e-5;               /* Gas dynamic viscosity */
-    real gasM = -1.0;                  /* Gas particle mass */
-    real T = 298.0;                    /* Gas temperature */
-    real Rgas = 287.0;                 /* Specific gas constant */
-    real gamma = 1.403;                /* Ratio of specific heats */
-    real sos = sqrt(T * Rgas * gamma); /* Speed of sound */
-    real isossqr = 1.0 / (sos * sos);  /* Inverse speed of sound squared */
-    real MRef = -1.0;                  /* Reference Mach */
+    real v_ref = 0.0;                      /* Reference velocity */
+    real p_ref = 101353.0;                 /* Reference pressure */
+    real rho_g = 1.29251;                  /* Gas density */
+    real mu_g = 1.716e-5;                  /* Gas dynamic viscosity */
+    real mass_g = -1.0;                    /* Gas particle mass */
+    real temp_g = 298.0;                   /* Gas temperature */
+    real R_g = 287.0;                      /* Specific gas constant */
+    real gamma = 1.403;                    /* Ratio of specific heats */
+    real sos = sqrt(temp_g * R_g * gamma); /* Speed of sound */
+    real i_sos_sq = 1.0 / (sos * sos);     /* Inverse speed of sound squared */
+    real M_ref = -1.0;                     /* Reference Mach */
 
-    real cutoff = 0.75;                         /* Lambda value cutoff */
-    real interp_fac = 2.0;                      /* Factor for the interpolation value */
-    real iinterp_fac = 0.5;                     /* Inverse factor for the interpolation */
-    real nfull = SIMDIM == 2 ? 30 : 200;        /* 2/3ds full neighbourhood count */
-    real infull = 1.0 / nfull;                  /* inverse of nfull */
-    real incount = 1.0 / (iinterp_fac * nfull); /* inverse nfull * factor */
+    real lam_cutoff = 0.75;                         /* Lambda value cutoff */
+    real interp_fac = 2.0;                          /* Factor for the interpolation value */
+    real i_interp_fac = 0.5;                        /* Inverse factor for the interpolation */
+    real n_full = SIMDIM == 2 ? 30 : 200;           /* 2/3ds full neighbourhood count */
+    real i_n_full = 1.0 / n_full;                   /* inverse of n_full */
+    real i_n_count = 1.0 / (i_interp_fac * n_full); /* inverse nfull * factor */
 
-    string aero_case;   /* String input to define aero force type */
-    int acase = NoAero; /* Aerodynamic force case */
-    int use_lam = 1;    /* Use lambda value for aero interpolation */
-    int useDef = 0;     /* Use TAB deformation estimate  */
-    int use_dx = 0;     /* Use particle spacing or support radius for aero force. */
+    string aero_case;    /* String input to define aero force type */
+    int acase = NoAero;  /* Aerodynamic force case */
+    int use_lam = 1;     /* Use lambda value for aero interpolation */
+    int use_TAB_def = 0; /* Use TAB deformation estimate  */
+    int use_dx = 0;      /* Use particle spacing or support radius for aero force. */
 };
 
 struct MESH
@@ -547,44 +547,33 @@ struct MESH
     }
 
     /*Zone info*/
-    string zone;
-    size_t nPnts, nElem, nFace, nSurf;
-    real scale;
+    size_t nPnts = 0; /* Number of points */
+    size_t nElem = 0; /* Number of elements */
+    size_t nFace = 0; /* Number of faces (internal and boundary) */
+    size_t nSurf = 0; /* Number of boundary faces */
+    real scale;       /* Coordinate scale */
 
-    real maxlength;
-    real minlength;
+    real maxlength; /* Max cell edge length */
+    real minlength; /* Min cell edge length */
 
     /*Point based data*/
-    vector<StateVecD> verts;
+    vector<StateVecD> verts; /* Point coordinates */
 
     /*Face based data*/
-    vector<vector<size_t>> faces;
-    vector<std::pair<int, int>> leftright;
-    vector<std::pair<size_t, int>> smarkers;
+    vector<vector<size_t>> faces;            /* Face indexes */
+    vector<std::pair<int, int>> leftright;   /* Face cell left/right indexes */
+    vector<std::pair<size_t, int>> smarkers; /* Surface indicators; cell, and bmap ID */
 
     /*Cell based data*/
     // vector<vector<size_t>> elems;
-    vector<StateVecD> cCentre;
-    vector<vector<size_t>> cFaces;
+    vector<StateVecD> cCentre;     /* Cell centriod coordinates */
+    vector<vector<size_t>> cFaces; /* Cell face IDs  */
 
     /*Solution vectors*/
-    vector<StateVecD> cVel;
-    vector<real> cCp;
-    vector<real> cP;
-    vector<real> cRho;
-    // vector<real> cRho_SPH;
-
-    // Cell information for the momentum balance
-    vector<StateVecD> cPertn;
-    vector<StateVecD> cPertnp1;
-    // vector<real> cVol;
-    // vector<real> cMass;
-
-    vector<size_t> fNum; // number of fluid particles in cell
-    vector<real> fMass;
-
-    vector<StateVecD> vFn;
-    vector<StateVecD> vFnp1;
+    vector<StateVecD> cVel; /* Cell velocities */
+    vector<real> cCp;       /* Cell coefficient of pressure */
+    vector<real> cP;        /* Cell pressure */
+    vector<real> cRho;      /* Cell density */
 };
 
 /* Structure to track impacts and data for a surface marker of the mesh */
@@ -608,8 +597,8 @@ struct SURF
         output = in.output;
         marker_count = 0;
 
-        faceIDs = in.faceIDs;
-        face_count = vector<uint>(faceIDs.size(), 0);
+        face_IDs = in.face_IDs;
+        face_count = vector<uint>(face_IDs.size(), 0);
     }
 
     /* Marker data */
@@ -626,7 +615,7 @@ struct SURF
     vector<StateVecD> start_pos;
 
     /* Face data */
-    vector<size_t> faceIDs;
+    vector<size_t> face_IDs;
     vector<uint> face_count;
     vector<real> face_beta;
     vector<real> face_area;
@@ -660,7 +649,7 @@ struct SPHPart
         p = press;
         m = Mi;
         curve = 0.0;
-        s = 0.0;
+        norm_curve = 0.0;
         woccl = 0.0;
         pDist = 0.0;
         deltaD = 0.0;
@@ -706,7 +695,7 @@ struct SPHPart
         p = pj.p;
         m = pj.m;
         curve = 0.0;
-        s = 0.0;
+        norm_curve = 0.0;
         woccl = 0.0;
         pDist = 0.0;
         deltaD = 0.0;
@@ -730,48 +719,55 @@ struct SPHPart
         vPert = StateVecD::Zero();
     }
 
-    SPHPart()
-        : part_id(0), faceID(0), cellID(-1), b(0), surf(0), surfzone(0), ipt_n_failed(0),
-          xi(StateVecD::Zero()), v(StateVecD::Zero()), acc(StateVecD::Zero()), Af(StateVecD::Zero()),
-          aVisc(StateVecD::Zero()), Rrho(0.0), rho(0.0), p(0.0), m(0.0), curve(0.0), s(0.0), woccl(0.0),
-          pDist(0.0), deltaD(0.0), cellV(StateVecD::Zero()), cellP(0.0), cellRho(0.0), internal(0),
-          L(StateMatD::Zero()), gradRho(StateVecD::Zero()), norm(StateVecD::Zero()), colourG(0.0),
-          colour(0.0), lam(0.0), lam_nb(0.0), lam_ng(0.0), kernsum(0.0), bNorm(StateVecD::Zero()),
-          y(0.0), vPert(StateVecD::Zero()){};
+    SPHPart(){};
 
     inline int size() const { /* Return size of xi vector*/ return xi.size(); }
 
     inline real operator[](int a) const { /* Return index of xi vector*/ return xi[a]; }
 
-    size_t part_id, faceID;
-    long int cellID;   // Make it signed so that it can be used for checks.
-    uint b;            // What state is a particle. See PartState above for possible options
-    uint surf;         /*Is a particle a surface? 1 = yes, 0 = no*/
-    uint surfzone;     /* Is particle in the surface area? */
-    uint ipt_n_failed; /* How many times has the containment query failed */
+    size_t part_id = 0;    /* Particle ID */
+    size_t faceID = 0;     /* Mesh face ID */
+    long int cellID = -1;  /* Cell ID. -1 is not in a cell. */
+    uint b = 0;            /* Status flag. See PartState above for possible options */
+    uint surf = 0;         /* Is a particle a surface? 1 = yes, 0 = no */
+    uint surfzone = 0;     /* Is particle in the surface area? */
+    uint ipt_n_failed = 0; /* How many times has the containment query failed */
 
-    StateVecD xi, v, acc, Af, aVisc;
-    real Rrho, rho, p, m, curve, s, woccl, pDist, deltaD;
-    StateVecD cellV;
-    real cellP, cellRho;
-    uint internal;
+    StateVecD xi = StateVecD::Zero();    /* Particle position */
+    StateVecD v = StateVecD::Zero();     /* Particle velocity */
+    StateVecD acc = StateVecD::Zero();   /* Particle acceleration */
+    StateVecD Af = StateVecD::Zero();    /* Particle aerodynamic force. */
+    StateVecD aVisc = StateVecD::Zero(); /* Artificial viscosity contribution */
+    real Rrho = 0.0;                     /* Density gradient */
+    real rho = 0.0;                      /* Density */
+    real p = 0.0;                        /* Pressure */
+    real m = 0.0;                        /* Mass */
+    real curve = 0.0;                    /* Surface curvature */
+    real norm_curve = 0.0;               /* Normalised curvature */
+    real woccl = 0.0;                    /* Occlusion factor */
+    real pDist = 0.0;                    /* Particle distance */
+    real deltaD = 0.0;                   /* delta-SPH contribution */
+    StateVecD cellV = StateVecD::Zero(); /* Cell velocity */
+    real cellP = 0.0;                    /* Cell pressure */
+    real cellRho = 0.0;                  /* Cell density */
+    uint internal = 0;                   /* Is particle across an internal mesh boundary? */
 
-    StateMatD L;
-    StateVecD gradRho;
-    StateVecD norm;
+    StateMatD L = StateMatD::Zero();       /* L gradient renormalisation matrix */
+    StateVecD gradRho = StateVecD::Zero(); /* Density Gradient Jacobian */
+    StateVecD norm = StateVecD::Zero();    /* Surface normal */
 
-    real colourG;
-    real colour;  /* Kernel sum with volume considered. */
-    real lam;     /* Eigenvalues with all particles considered */
-    real lam_nb;  /* Eigenvalues without boundary particles (and ghost particles) */
-    real lam_ng;  /* Eigenvalues without ghost particles */
-    real kernsum; /* Summation of the kernel */
+    real colourG = 0.0; /* Colour gradient. */
+    real colour = 0.0;  /* Kernel sum with volume considered. */
+    real lam = 0.0;     /* Eigenvalues with all particles considered */
+    real lam_nb = 0.0;  /* Eigenvalues without boundary particles (and ghost particles) */
+    real lam_ng = 0.0;  /* Eigenvalues without ghost particles */
+    real kernsum = 0.0; /* Summation of the kernel */
 
-    /*Mesh surface repulsion */
-    StateVecD bNorm;
-    real y;
+    /* Mesh surface repulsion */
+    StateVecD bNorm = StateVecD::Zero(); /* Boundary normal value. */
+    real y = 0.0;                        /* Distance from boundary */
 
-    StateVecD vPert;
+    StateVecD vPert = StateVecD::Zero(); /* ALE velocity perturbation */
 };
 
 struct IPTPart
@@ -981,28 +977,29 @@ struct bound_block
         block_type = 0;
     }
 
-    string name;
-    std::pair<size_t, size_t> index;
+    string name;                     /* Block name */
+    std::pair<size_t, size_t> index; /* boundary left and right */
 
-    StateVecD delete_norm; // Deletion plane
-    real delconst;
-    StateVecD insert_norm; // Insertion plane
-    real insconst;
-    StateVecD aero_norm;
-    real aeroconst;
+    StateVecD delete_norm; /* Deletion plane */
+    real delconst;         /* Deletion constant to adjust plane */
+    StateVecD insert_norm; /* Insertion plane */
+    real insconst;         /* Insertion constant to adjust plane */
+    StateVecD aero_norm;   /* Aerodynamic beginning plane */
+    real aeroconst;        /* Aerodynamic constant to adjust plane */
 
     vector<size_t> back;           /* Particles at the back of the pipe */
     vector<vector<size_t>> buffer; /* ID of particles inside the buffer zone */
 
-    vector<real> times;
-    vector<StateVecD> vels;
+    vector<real> times;     /* Times for boundary motion */
+    vector<StateVecD> vels; /* Velocities for boundary motion */
 
-    size_t nTimes;
-    int fixed_vel_or_dynamic; // Used for inlets, but also for boundaries to identify if moving or static
-    int particle_order;
-    int no_slip;
-    int bound_solver;
-    int block_type;
+    size_t nTimes;            /* Number of times for boundary motion */
+    int fixed_vel_or_dynamic; /* Used for inlets, but also for boundaries to identify if moving or static
+                               */
+    int particle_order;       /* Use regular grid or HCP packing */
+    int no_slip;              /* Is wall no slip */
+    int bound_solver;         /* Solver to use for boundaries */
+    int block_type;           /* Block type from definition files. */
 };
 
 typedef std::vector<bound_block> LIMITS;
