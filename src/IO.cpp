@@ -203,7 +203,7 @@ void Print_Settings(FILE* out, SIM const& svar, FLUID const& fvar, AERO const& a
     /* Simulation settings */
     fprintf(out, " Time integration settings ------------------: -\n");
     fprintf(out, "                       SPH integration solver: %s\n", svar.solver_name.c_str());
-    fprintf(out, " SPH compressibility solver (0=WCSPH,1=ACSPH): %s\n", svar.compressibility_solver);
+    fprintf(out, " SPH compressibility solver (0=WCSPH,1=ACSPH): %u\n", svar.compressibility_solver);
     fprintf(out, "  SPH equation of state (0=Cole/1=Isothermal): %u\n", fvar.pressure_rel);
     fprintf(out, "     SPH boundary solver (0=pressure/1=ghost): %u\n", svar.bound_solver);
     fprintf(out, "                  SPH solver minimum residual: %g\n", svar.min_residual);
