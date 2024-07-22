@@ -149,9 +149,7 @@ void Newmark_Beta::Do_NB_Iter(
                                       )
                     );
                     pnp1[ii].rho = rho;
-                    pnp1[ii].p = pressure_equation(
-                        rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                    );
+                    pnp1[ii].p = fvar.get_pressure(rho);
                 }
                 break;
             }
@@ -170,9 +168,7 @@ void Newmark_Beta::Do_NB_Iter(
                             )
                         );
                         pnp1[ii].rho = rho;
-                        pnp1[ii].p = pressure_equation(
-                            rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                        );
+                        pnp1[ii].p = fvar.get_pressure(rho);
                         pnp1[ii].Rrho = fmax(0.0, pnp1[ii].Rrho);
                     }
                     else
@@ -184,9 +180,7 @@ void Newmark_Beta::Do_NB_Iter(
                                           )
                         );
                         pnp1[ii].rho = rho;
-                        pnp1[ii].p = pressure_equation(
-                            rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                        );
+                        pnp1[ii].p = fvar.get_pressure(rho);
                     }
                 }
                 break;
@@ -227,9 +221,7 @@ void Newmark_Beta::Do_NB_Iter(
                                       )
                     );
                     pnp1[ii].rho = rho;
-                    pnp1[ii].p = pressure_equation(
-                        rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                    );
+                    pnp1[ii].p = fvar.get_pressure(rho);
                 }
                 else if (pnp1[ii].b == OUTLET)
                 { /* For the outlet zone, just perform euler integration of last info */
@@ -285,9 +277,7 @@ void Newmark_Beta::Do_NB_Iter(
                                 )
                             );
                             pnp1[buffID].rho = rho;
-                            pnp1[buffID].p = pressure_equation(
-                                rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                            );
+                            pnp1[buffID].p = fvar.get_pressure(rho);
                             pnp1[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
                         }
                     }

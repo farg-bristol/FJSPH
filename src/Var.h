@@ -49,10 +49,6 @@ std::ofstream dambreak("Dam_Data.log", std::ios::out);
 #define PAIRWISE
 #endif
 
-#if !defined(ISOEOS) && !defined(COLEEOS)
-#define COLEEOS
-#endif
-
 // Define pi
 #ifndef M_PI
 #define M_PI (4.0 * atan(1.0))
@@ -166,11 +162,17 @@ enum integrate_type
     runge_kutta
 };
 
-enum solve_type
+enum bound_solve_type
 {
     DBC = 0,
     pressure_G,
     ghost
+};
+
+enum pressure_solver
+{
+    COLE_EOS = 0,
+    ISO_EOS
 };
 
 enum inlet_vel_type
@@ -205,6 +207,7 @@ enum mesh_source
     TAU_CDF = 0,
     OpenFOAM
 };
+
 enum plane_axis
 {
     no_offset = 0,
@@ -352,6 +355,7 @@ struct SIM
     /* Integration parameters */
     string solver_name = "";         /* Name of solver */
     uint solver_type = newmark_beta; /* Use Runge-Kutta or Newmark-Beta. */
+    uint compressibility_solver = 0; /* Use weakly compressible or artificial compressible SPH. */
     uint max_subits = 20;            /* Max number of sub-iterations. */
     uint max_frames = -1;            /* Max number of frames to output. Must be specified. */
     uint current_frame = 0;          /* Current frame number. */
@@ -406,6 +410,8 @@ struct FLUID
 {
     // EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
+    uint pressure_rel = COLE_EOS;
+
     real H = -1.0;          /* Support radius */
     real H_sq = -1.0;       /* Support radius squared */
     real sr = -1.0;         /* Search radius (support radius * factor)*/
@@ -443,6 +449,42 @@ struct FLUID
     real dsph_delta = 0.1; /* delta-SPH contribution */
     real dsph_cont = -1.0; /* delta-SPH continuity constant term */
     real dsph_mom = -1.0;  /* delta-SPH momentum constant term (dsph_cont * rho0) */
+
+    /* Find the pressure given a particle density. */
+    inline real const get_pressure(real const& rho) const
+    {
+        switch (pressure_rel)
+        {
+        case COLE_EOS:
+            return B * (pow(rho / rho_rest, gam) - 1) + press_back;
+            break;
+        case ISO_EOS:
+
+            return speed_sound * speed_sound * (rho - rho_rest) + press_back;
+            break;
+        default:
+            printf("Invalid option for pressure relationship.\n");
+            exit(-1);
+        }
+    };
+
+    /* Find the density given a particle pressure. */
+    inline real const get_density(real const& press) const
+    {
+        switch (pressure_rel)
+        {
+        case COLE_EOS:
+            return rho_rest * pow(((press - press_back) / B) + 1.0, 1.0 / gam);
+            break;
+        case ISO_EOS:
+
+            return (press - press_back) / (speed_sound * speed_sound) + rho_rest;
+            break;
+        default:
+            printf("Invalid option for pressure relationship.\n");
+            exit(-1);
+        }
+    };
 };
 
 /*Aerodynamic Properties*/

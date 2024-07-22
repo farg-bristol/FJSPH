@@ -32,8 +32,7 @@ void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex)
     fvar.B = fvar.rho_rest * pow(fvar.speed_sound, 2) / fvar.gam; /*Factor for Cole's Eq*/
 
     /*Pipe Pressure calc*/
-    fvar.rho_pipe =
-        density_equation(fvar.press_pipe, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back);
+    fvar.rho_pipe = fvar.get_density(fvar.press_pipe);
 
     /* Upper and lower limits for density */
     if (fvar.rho_max == 1500 && fvar.rho_min == 500)
@@ -204,6 +203,8 @@ void Print_Settings(FILE* out, SIM const& svar, FLUID const& fvar, AERO const& a
     /* Simulation settings */
     fprintf(out, " Time integration settings ------------------: -\n");
     fprintf(out, "                       SPH integration solver: %s\n", svar.solver_name.c_str());
+    fprintf(out, " SPH compressibility solver (0=WCSPH,1=ACSPH): %s\n", svar.compressibility_solver);
+    fprintf(out, "  SPH equation of state (0=Cole/1=Isothermal): %u\n", fvar.pressure_rel);
     fprintf(out, "     SPH boundary solver (0=pressure/1=ghost): %u\n", svar.bound_solver);
     fprintf(out, "                  SPH solver minimum residual: %g\n", svar.min_residual);
     fprintf(out, "                         SPH maximum timestep: %g\n", svar.delta_t_max);
@@ -374,6 +375,8 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vo
 
         /* Simulation settings */
         Get_String(line, "SPH integration solver", svar.solver_name);
+        Get_Number(line, "SPH compressibility solver (0=WCSPH,1=ACSPH)", svar.compressibility_solver);
+        Get_Number(line, "SPH equation of state (0=Cole/1=Isothermal)", fvar.pressure_rel);
         Get_Number(line, "SPH boundary solver (0=pressure/1=ghost)", svar.bound_solver);
         Get_Number(line, "SPH solver minimum residual", svar.min_residual);
         Get_Number(line, "SPH maximum timestep", svar.delta_t_max);

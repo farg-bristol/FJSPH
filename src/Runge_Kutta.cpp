@@ -82,9 +82,7 @@ SPHState do_runge_kutta_intermediate_step(
                     fvar.rho_min, std::min(fvar.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
                 );
                 part_inter[ii].rho = rho;
-                part_inter[ii].p = pressure_equation(
-                    rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                );
+                part_inter[ii].p = fvar.get_pressure(rho);
             }
             break;
         }
@@ -114,9 +112,7 @@ SPHState do_runge_kutta_intermediate_step(
                         std::min(fvar.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
                     );
                     part_inter[ii].rho = rho;
-                    part_inter[ii].p = pressure_equation(
-                        rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                    );
+                    part_inter[ii].p = fvar.get_pressure(rho);
                 }
                 else
                 { // Don't allow negative pressures
@@ -125,9 +121,7 @@ SPHState do_runge_kutta_intermediate_step(
                         std::min(fvar.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
                     );
                     part_inter[ii].rho = rho;
-                    part_inter[ii].p = pressure_equation(
-                        rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                    );
+                    part_inter[ii].p = fvar.get_pressure(rho);
                     part_inter[ii].Rrho = fmax(0.0, part_inter[ii].Rrho);
                 }
             }
@@ -171,9 +165,7 @@ SPHState do_runge_kutta_intermediate_step(
                         std::min(fvar.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
                     );
                     part_inter[ii].rho = rho;
-                    part_inter[ii].p = pressure_equation(
-                        rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                    );
+                    part_inter[ii].p = fvar.get_pressure(rho);
                 }
             }
 
@@ -223,9 +215,7 @@ SPHState do_runge_kutta_intermediate_step(
                                 )
                             );
                             part_inter[buffID].rho = rho;
-                            part_inter[buffID].p = pressure_equation(
-                                rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                            );
+                            part_inter[buffID].p = fvar.get_pressure(rho);
                             part_inter[buffID].xi = part_n[buffID].xi + dt_inter * part_n[buffID].v;
                         }
                     }
@@ -295,9 +285,7 @@ SPHState do_runge_kutta_final_step(
                     )
                 );
                 part_np1[ii].rho = rho;
-                part_np1[ii].p = pressure_equation(
-                    rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                );
+                part_np1[ii].p = fvar.get_pressure(rho);
                 part_np1[ii].Rrho = st_3[ii].Rrho;
             }
             break;
@@ -331,9 +319,7 @@ SPHState do_runge_kutta_final_step(
                         )
                     );
                     part_np1[ii].rho = rho;
-                    part_np1[ii].p = pressure_equation(
-                        rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                    );
+                    part_np1[ii].p = fvar.get_pressure(rho);
                 }
                 else
                 { // Don't allow negative pressures
@@ -346,9 +332,7 @@ SPHState do_runge_kutta_final_step(
                         )
                     );
                     part_np1[ii].rho = rho;
-                    part_np1[ii].p = pressure_equation(
-                        rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                    );
+                    part_np1[ii].p = fvar.get_pressure(rho);
                     part_np1[ii].Rrho = fmax(0.0, part_np1[ii].Rrho);
                 }
             }
@@ -392,9 +376,7 @@ SPHState do_runge_kutta_final_step(
                     );
                     part_np1[ii].rho = rho;
 
-                    part_np1[ii].p = pressure_equation(
-                        rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                    );
+                    part_np1[ii].p = fvar.get_pressure(rho);
                 }
                 else if (part_np1[ii].b == OUTLET)
                 { /* For the outlet zone, just perform euler integration of last info */
@@ -451,9 +433,7 @@ SPHState do_runge_kutta_final_step(
                                 )
                             );
                             part_np1[buffID].rho = rho;
-                            part_np1[buffID].p = pressure_equation(
-                                rho, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-                            );
+                            part_np1[buffID].p = fvar.get_pressure(rho);
                             part_np1[buffID].xi = part_n[buffID].xi + dt * part_n[buffID].v;
                         }
                     }

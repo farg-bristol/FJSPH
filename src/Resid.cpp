@@ -71,9 +71,7 @@ void Get_Boundary_Pressure(
     for (size_t ii = start; ii < end; ++ii)
     {
         pnp1[ii].p = pressure[ii - start];
-        pnp1[ii].rho = density_equation(
-            pressure[ii - start], fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-        );
+        pnp1[ii].rho = fvar.get_density(pressure[ii - start]);
     }
 }
 

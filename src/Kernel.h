@@ -74,39 +74,6 @@ inline real BoundaryKernel(real const dist, real const H, real const beta)
     return 0;
 }
 
-/* Consider making a member function of fvar. Then can use member variables and only have 1 input */
-inline real pressure_equation(
-    real const& rho, real const& B, real const& gam, real const& speed_sound, real const& rho_rest,
-    real const& press_back
-)
-{
-#ifdef COLEEOS
-    (void)speed_sound;
-    return B * (pow(rho / rho_rest, gam) - 1) + press_back; /* Cole EOS */
-#endif
-#ifdef ISOEOS
-    (void)B;
-    (void)gam;
-    return speed_sound * speed_sound * (rho - rho_rest) + press_back; /* Isothermal EOS */
-#endif
-}
-
-inline real density_equation(
-    real const& press, real const& B, real const& gam, real const& speed_sound, real const& rho_rest,
-    real const& press_back
-)
-{
-#ifdef COLEEOS
-    (void)speed_sound;
-    return rho_rest * pow(((press - press_back) / B) + 1.0, 1.0 / gam); /* Cole EOS */
-#endif
-#ifdef ISOEOS
-    (void)B;
-    (void)gam;
-    return (press - press_back) / (speed_sound * speed_sound) + rho_rest; /* Isothermal EOS */
-#endif
-}
-
 #ifdef HESF
 /*Diffuse interface method from He et al (2014) for surface tension*/
 inline StateVecD HeST(StateVecD const& cgradi, StateVecD const& cgradj, StateVecD const& diffK)

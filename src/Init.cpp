@@ -686,9 +686,7 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
         {
             real press =
                 std::max(0.0, -fvar.rho_rest * svar.grav[1] * (svar.hydro_height - pn[ii].xi[1]));
-            real dens = density_equation(
-                press, fvar.B, fvar.gam, fvar.speed_sound, fvar.rho_rest, fvar.press_back
-            );
+            real dens = fvar.get_density(press);
             pn[ii].p = press;
             pn[ii].rho = dens;
         }
