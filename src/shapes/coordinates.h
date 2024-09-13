@@ -1,9 +1,9 @@
-#ifndef ARC_H
-#define ARC_H
+#ifndef COORDINATES_H
+#define COORDINATES_H
 
 #include "shapes.h"
 
-class ArcShape : public ShapeBlock
+class CoordShape : public ShapeBlock
 {
   public:
     void check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault);

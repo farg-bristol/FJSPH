@@ -3,11 +3,12 @@
 
 #include "shapes.h"
 
-namespace CircleShape
+class CircleShape : public ShapeBlock
 {
-    void check_input(shape_block &block, real &globalspacing, int &fault);
+  public:
+    void check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault);
 
-    std::vector<StateVecD> generate_points(shape_block const &block, real const &globalspacing);
-}
+    void generate_points(real const& globalspacing);
+};
 
 #endif

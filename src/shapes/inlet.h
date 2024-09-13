@@ -6,12 +6,13 @@
 
 #include "shapes.h"
 
-namespace InletShape
+class InletShape : public ShapeBlock
 {
-void check_input(shape_block& block, real& globalspacing, int& fault);
+  public:
+    void check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault);
 
-std::vector<StateVecD> generate_points(shape_block& block, real const& globalspacing);
-} // namespace InletShape
+    void generate_points(real const& globalspacing);
+};
 
 uint update_buffer_region(SIM& svar, LIMITS& limits, SPHState& pnp1, size_t& end, size_t& end_ng);
 
