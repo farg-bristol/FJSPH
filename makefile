@@ -237,7 +237,7 @@ tau2zcfd:
 	${CXX} -g -DDEBUG ${FLAGS} ${CXXFLAGS} ${H5INC} -o ${TARGETDIR}/TAU2zCFD src/TAUtozCFD.cpp ${NETLIB} ${H5LINK} ${H5LIB}
 
 convert:
-	${CXX} ${FLAGS} ${CXXFLAGS} ${TECINC} ${H5INC} -o ${TARGETDIR}/${TARGET}_conv src/convert_tec.cpp ${TECLINK} ${TECLIB} ${H5LINK} ${H5LIB}
+	${CXX} ${FLAGS} ${CXXFLAGS} ${TECINC} ${H5INC} -o ${TARGETDIR}/${TARGET}_conv src/SZPLTtoH5PART.cpp ${TECLINK} ${TECLIB} ${H5LINK} ${H5LIB}
 
 # mesh:
 # 	${CXX} ${FLAGS} ${CXXFLAGS} ${INC} -o ${TARGETDIR}/MakeMesh src/MakeMesh.cpp -lnetcdf
