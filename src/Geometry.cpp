@@ -51,7 +51,7 @@ void Detect_Surface(
                 uint surf = 1; /*Begin by assuming a surface, and proving otherwise*/
                 for (neighbour_index const& jj : outlist[ii])
                 {
-                    if (jj.first == ii || pnp1[jj.first].b == GHOST)
+                    if (jj.first == ii)
                         continue;
 
                     SPHPart const& pj = pnp1[jj.first];
@@ -91,7 +91,7 @@ void Detect_Surface(
 
                     // #if defined(CSF) || defined(HESF)
                     // norm -= volj * (dp.colour[jj.first] -
-                    // dp.colour[ii])*GradK(Rij,r,fvar.H,fvar.correc); #endif
+                    // dp.colour[ii])*GradK(Rij,r,fvar.H,fvar.W_correc); #endif
                 }
 
                 pi.surf = surf;
@@ -102,7 +102,7 @@ void Detect_Surface(
                 pi.surf = 0;
             }
 
-            // if(pi.lam_nb <  avar.cutoff || pi.surf == 1)
+            // if(pi.lam_nb <  avar.lam_cutoff || pi.surf == 1)
             // {
             /* Calculate normal using eigenvalue gradients */
 
@@ -111,13 +111,13 @@ void Detect_Surface(
                 for (neighbour_index const& jj : outlist[ii])
                 {
                     SPHPart const& pj = pnp1[jj.first];
-                    if (jj.first == ii || pj.b == GHOST)
+                    if (jj.first == ii)
                         continue;
                     StateVecD const Rij = pi.xi - pj.xi;
                     real const r = sqrt(jj.second);
                     real const volj = pj.m / pj.rho;
 
-                    norm += volj * (pj.lam - pi.lam) * (GradK(Rij, r, fvar.H, fvar.correc));
+                    norm += volj * (pj.lam - pi.lam) * (GradK(Rij, r, fvar.H, fvar.W_correc));
                 }
             }
             else
@@ -125,13 +125,13 @@ void Detect_Surface(
                 for (neighbour_index const& jj : outlist[ii])
                 {
                     SPHPart const& pj = pnp1[jj.first];
-                    if (jj.first == ii || pj.b == GHOST)
+                    if (jj.first == ii)
                         continue;
                     StateVecD const Rij = pi.xi - pj.xi;
                     real const r = sqrt(jj.second);
                     real const volj = pj.m / pj.rho;
 
-                    norm += volj * pj.lam * (GradK(Rij, r, fvar.H, fvar.correc));
+                    norm += volj * pj.lam * (GradK(Rij, r, fvar.H, fvar.W_correc));
                 }
             }
 
@@ -163,7 +163,7 @@ void Detect_Surface(
 #endif
                 else
                 {
-                    Vdiff = avar.vInf - pi.v;
+                    Vdiff = avar.v_inf - pi.v;
                 }
             }
 
@@ -171,7 +171,7 @@ void Detect_Surface(
             for (neighbour_index const& jj : outlist[ii])
             {
                 SPHPart const& pj = pnp1[jj.first];
-                if (jj.first == ii || pj.b == GHOST)
+                if (jj.first == ii)
                     continue;
 
                 StateVecD const Rij = pj.xi - pi.xi;
@@ -183,10 +183,10 @@ void Detect_Surface(
 // if(pi.lam > 0.7)
 // {
 //     curve += volj * (pi.L*(norms[jj.first] - norms[ii])).dot
-//                 (GradK(Rij,r,fvar.H,fvar.correc));
+//                 (GradK(Rij,r,fvar.H,fvar.W_correc));
 //     // curve += volj * (dp.L[ii]*(dp.norm[jj.first].normalized() -
 //     pi.norm.normalized())).dot
-//     //         (GradK(Rij,r,fvar.H,fvar.correc));
+//     //         (GradK(Rij,r,fvar.H,fvar.W_correc));
 // }
 // else
 // {
@@ -198,11 +198,11 @@ void Detect_Surface(
 //     {
 //         // curve += volj * (dp.L[ii]*(dp.norm[jj.first].normalized() -
 //         pi.norm.normalized())).dot
-//         //     (GradK(Rij,r,fvar.H,fvar.correc));
+//         //     (GradK(Rij,r,fvar.H,fvar.W_correc));
 //         curve += volj * (pi.L*(norms[jj.first] - norms[ii])).dot
-//                 (GradK(Rij,r,fvar.H,fvar.correc));
+//                 (GradK(Rij,r,fvar.H,fvar.W_correc));
 //         // curve += volj * ((norms[jj.first] - norms[ii])).dot
-//         //         (pi.L*GradK(Rij,r,fvar.H,fvar.correc));
+//         //         (pi.L*GradK(Rij,r,fvar.H,fvar.W_correc));
 //     }
 // }
 
@@ -218,20 +218,20 @@ void Detect_Surface(
                 {
                     // curve += volj * (dp.L[ii]*(dp.norm[jj.first].normalized() -
                     // pi.norm.normalized())).dot
-                    //     (GradK(Rij,r,fvar.H,fvar.correc));
+                    //     (GradK(Rij,r,fvar.H,fvar.W_correc));
                     curve +=
                         volj *
-                        (pi.L * (norms[jj.first] - norms[ii])).dot(GradK(Rij, r, fvar.H, fvar.correc));
+                        (pi.L * (norms[jj.first] - norms[ii])).dot(GradK(Rij, r, fvar.H, fvar.W_correc));
                     // curve += volj * ((norms[jj.first] - norms[ii])).dot
-                    //         (pi.L*GradK(Rij,r,fvar.H,fvar.correc));
+                    //         (pi.L*GradK(Rij,r,fvar.H,fvar.W_correc));
                 }
 
                 // curve += volj * ((dp.norm[jj.first].normalized() -
                 // pi.norm.normalized())).dot
-                //             (/* dp.L[ii]* */GradK(Rij,r,fvar.H,fvar.correc));
+                //             (/* dp.L[ii]* */GradK(Rij,r,fvar.H,fvar.W_correc));
 
                 // curve -= volj * ((norms[jj.first] - norms[ii])).dot
-                //         (/* dp.L[ii]* */GradK(Rij,r,fvar.H,fvar.correc));
+                //         (/* dp.L[ii]* */GradK(Rij,r,fvar.H,fvar.W_correc));
 
                 /*Occlusion for Gissler Aero Method*/
                 if (pi.b == FREE && avar.acase == Gissler)
@@ -245,7 +245,7 @@ void Detect_Surface(
                 }
             }
 
-            if (pi.lam_nb < avar.cutoff)
+            if (pi.lam_nb < avar.lam_cutoff)
             {
                 pi.woccl = std::max(0.0, std::min(woccl_, 1.0));
             }
@@ -255,8 +255,8 @@ void Detect_Surface(
             }
 
             pi.norm = norms[ii];
-            pi.curve = curve /* /correc */;
-            pi.s = svar.dx * curve /* / correc */;
+            pi.curve = curve /* /W_correc */;
+            pi.norm_curve = svar.dx * curve /* / W_correc */;
             pi.pDist = pi.lam;
         } /* end particle loop */
 
@@ -743,62 +743,6 @@ void RayNormalIntersection(
     }
 }
 
-/* Check for the distance from the face the point lies. It is already assumed
- * that the ray crosses */
-/* Used for implicit particle tracking */
-// void RayNormalIntersection(MESH const& cells, StateVecD const& rayOrigin,
-// StateVecD const& rayVector,
-//                            vector<size_t> const& face, int const& cellID,
-//                            real& dt, real& denom)
-// {
-//     /* find the normal vector of the face */
-//     StateVecD norm;
-//     if(face.size() == 3)
-//     {   /* Cross two edges of the triangle */
-//         norm =
-//         (cells.verts[face[1]]-cells.verts[face[0]]).cross(cells.verts[face[2]]-cells.verts[face[0]]);
-//     }
-//     else
-//     {   /* Cross the two diagonals of the square */
-//         norm =
-//         (cells.verts[face[3]]-cells.verts[face[1]]).cross(cells.verts[face[2]]-cells.verts[face[0]]);
-//     }
-
-//     /* Check for normal orientation */
-//     StateVecD celldir;
-
-//     /* Use the face centre as the second part for the direction */
-//     StateVecD face_c = StateVecD::Zero();
-//     for(size_t ii = 0; ii < face.size(); ii++)
-//     {
-//         face_c += cells.verts[face[ii]];
-//     }
-
-//     face_c /= real(face.size());
-
-//     celldir = face_c - cells.cCentre[cellID];
-
-//     if(norm.dot(celldir) < 0)
-//     {
-//         /* Normal points inwards to the cell , so flip it*/
-//         norm = -1.0 * norm;
-//     }
-
-//     StateVecD temp_p = StateVecD::Zero();
-
-//     /* Find the most distant point from the current point */
-//     for(size_t ii = 0; ii < face.size(); ii++)
-//     {
-//         if( (cells.verts[face[ii]] - rayOrigin).squaredNorm() >
-//         temp_p.squaredNorm())
-//             temp_p = (cells.verts[face[ii]] - rayOrigin);
-//     }
-
-//     /* Find numerator */
-//     denom = rayVector.dot(norm);
-//     dt = temp_p.dot(norm)/denom;
-// }
-
 #endif
 
 // Need cell elements to check size, and do the tet case.
@@ -867,121 +811,4 @@ real Cell_Volume(
     return sum;
 
 #endif
-}
-
-void Make_Cell(FLUID const& fvar, AERO const& avar, MESH& cells)
-{
-#if SIMDIM == 3
-
-    cells.verts.emplace_back(StateVecD(-0.5, -0.5, -0.5));
-    cells.verts.emplace_back(StateVecD(-0.5, -0.5, 0.5));
-    cells.verts.emplace_back(StateVecD(-0.5, 0.5, 0.5));
-    cells.verts.emplace_back(StateVecD(-0.5, 0.5, -0.5));
-    cells.verts.emplace_back(StateVecD(0.5, -0.5, -0.5));
-    cells.verts.emplace_back(StateVecD(0.5, -0.5, 0.5));
-    cells.verts.emplace_back(StateVecD(0.5, 0.5, 0.5));
-    cells.verts.emplace_back(StateVecD(0.5, 0.5, -0.5));
-    cells.verts.emplace_back(StateVecD(1.5, -0.5, -0.5));
-    cells.verts.emplace_back(StateVecD(1.5, -0.5, 0.5));
-    cells.verts.emplace_back(StateVecD(1.5, 0.5, 0.5));
-    cells.verts.emplace_back(StateVecD(1.5, 0.5, -0.5));
-
-    // Cell 1
-    cells.faces.emplace_back(vector<size_t>{0, 1, 2});
-    cells.faces.emplace_back(vector<size_t>{0, 2, 3});
-    cells.faces.emplace_back(vector<size_t>{0, 3, 7});
-    cells.faces.emplace_back(vector<size_t>{0, 7, 4});
-    cells.faces.emplace_back(vector<size_t>{0, 5, 1});
-    cells.faces.emplace_back(vector<size_t>{0, 4, 5});
-    cells.faces.emplace_back(vector<size_t>{1, 5, 6});
-    cells.faces.emplace_back(vector<size_t>{1, 6, 2});
-    cells.faces.emplace_back(vector<size_t>{3, 2, 6});
-    cells.faces.emplace_back(vector<size_t>{3, 6, 7});
-
-    // Interface
-    cells.faces.emplace_back(vector<size_t>{4, 6, 5});
-    cells.faces.emplace_back(vector<size_t>{4, 7, 6});
-
-    // Cell 2
-    cells.faces.emplace_back(vector<size_t>{4, 7, 11});
-    cells.faces.emplace_back(vector<size_t>{4, 11, 8});
-    cells.faces.emplace_back(vector<size_t>{4, 9, 5});
-    cells.faces.emplace_back(vector<size_t>{4, 8, 9});
-    cells.faces.emplace_back(vector<size_t>{5, 9, 10});
-    cells.faces.emplace_back(vector<size_t>{5, 10, 6});
-    cells.faces.emplace_back(vector<size_t>{8, 10, 9});
-    cells.faces.emplace_back(vector<size_t>{8, 11, 10});
-    cells.faces.emplace_back(vector<size_t>{7, 6, 10});
-    cells.faces.emplace_back(vector<size_t>{7, 10, 11});
-
-    // cells.elems.emplace_back(vector<size_t>{0,1,2,3,4,5,6,7});
-    // cells.elems.emplace_back(vector<size_t>{4,5,6,7,8,9,10,11});
-
-    cells.cFaces.emplace_back(vector<size_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11});
-    cells.cFaces.emplace_back(vector<size_t>{10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21});
-
-    cells.cCentre.emplace_back(StateVecD(0.0, 0.0, 0.0));
-    cells.cCentre.emplace_back(StateVecD(1.0, 0.0, 0.0));
-
-    for (uint ii = 0; ii < 10; ++ii)
-        cells.leftright.emplace_back(std::pair<int, int>(0, -2));
-
-    cells.leftright.emplace_back(std::pair<int, int>(0, 1));
-    cells.leftright.emplace_back(std::pair<int, int>(0, 1));
-
-    for (uint ii = 0; ii < 10; ++ii)
-        cells.leftright.emplace_back(std::pair<int, int>(1, -2));
-
-#else
-    cells.verts.emplace_back(StateVecD(0.0, 0.0));
-    cells.verts.emplace_back(StateVecD(0.0, 1.0));
-    cells.verts.emplace_back(StateVecD(1.0, 1.0));
-    cells.verts.emplace_back(StateVecD(1.0, 0.0));
-
-    cells.faces.emplace_back(vector<size_t>{0, 1});
-    cells.faces.emplace_back(vector<size_t>{1, 2});
-    cells.faces.emplace_back(vector<size_t>{2, 3});
-    cells.faces.emplace_back(vector<size_t>{3, 0});
-
-    // cells.elems.emplace_back(vector<size_t>{0,1,2,3});
-
-    cells.cFaces.emplace_back(vector<size_t>{0, 1, 2, 3});
-
-    cells.cCentre.emplace_back(StateVecD(0.5, 0.5));
-
-    for (uint ii = 0; ii < 4; ++ii)
-        cells.leftright.emplace_back(std::pair<int, int>(0, -2));
-#endif
-
-    // Generate the solution vectors
-    cells.cVel.emplace_back(avar.vInf);
-    cells.cP.emplace_back(avar.pRef);
-    // cells.SPHRho.emplace_back(fvar.rho0 * pow((fvar.gasPress/fvar.B +
-    // 1),1/fvar.gam));
-
-    cells.fNum.emplace_back(0);
-    cells.fMass.emplace_back(fvar.simM);
-    cells.vFn.emplace_back(StateVecD::Zero());
-    cells.vFnp1.emplace_back(StateVecD::Zero());
-
-    cells.cRho.emplace_back(avar.rhog);
-
-    cells.cPertn.emplace_back(StateVecD::Zero());
-    cells.cPertnp1.emplace_back(StateVecD::Zero());
-
-    // Second cell
-    cells.cVel.emplace_back(avar.vInf);
-    cells.cP.emplace_back(avar.pRef);
-    // cells.SPHRho.emplace_back(fvar.rho0 * pow((fvar.gasPress/fvar.B +
-    // 1),1/fvar.gam));
-
-    cells.fNum.emplace_back(0);
-    cells.fMass.emplace_back(fvar.simM);
-    cells.vFn.emplace_back(StateVecD::Zero());
-    cells.vFnp1.emplace_back(StateVecD::Zero());
-
-    cells.cRho.emplace_back(avar.rhog);
-
-    cells.cPertn.emplace_back(StateVecD::Zero());
-    cells.cPertnp1.emplace_back(StateVecD::Zero());
 }

@@ -28,7 +28,7 @@ inline int Combine_SZPLT(string& file)
 }
 
 void Write_Binary_Timestep(
-    SIM const& svar, real const& rho0, SPHState const& pnp1, bound_block const& limits,
+    SIM const& svar, real const& rho_rest, SPHState const& pnp1, bound_block const& limits,
     char const* group, int32_t const& strandID, void* const& fileHandle
 );
 

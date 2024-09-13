@@ -19,7 +19,7 @@ inline real GetCd(real const& Re)
 
 inline StateVecD AeroForce(StateVecD const& Vdiff, AERO const& avar, real const mass)
 {
-    real const Re = 2.0 * avar.rhog * Vdiff.norm() * avar.L / avar.mug;
+    real const Re = 2.0 * avar.rho_g * Vdiff.norm() * avar.L / avar.mu_g;
     real const Cdi = GetCd(Re);
 
 #if SIMDIM == 3
@@ -30,23 +30,23 @@ inline StateVecD AeroForce(StateVecD const& Vdiff, AERO const& avar, real const 
     // acc[1] = 1.0*acc[1];
     // std::cout << "Reynolds: " << Re  << " Cd: " << Cd << " acc: " << acc[0] << " " << acc[1] <<
     // std::endl;
-    return (0.5 * avar.rhog * Vdiff.norm() * Vdiff * Cdi * Ai);
+    return (0.5 * avar.rho_g * Vdiff.norm() * Vdiff * Cdi * Ai);
 }
 
 /*Sphere-Plate interpolation method - Gissler et al (2017)*/
-inline StateVecD GisslerForce(
+inline StateVecD gissler_force(
     AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, real const& rho, real const& press,
     real const& mass, real const& lam, real const& nnieghb, real const& woccl
 )
 {
-    // real const nfull = avar.nfull;
-    real const Re = 2.0 * rho * Vdiff.norm() * avar.L / avar.mug;
+    // real const n_full = avar.n_full;
+    real const Re = 2.0 * rho * Vdiff.norm() * avar.L / avar.mu_g;
 
     real frac2 = 0.0;
     if (avar.use_lam)
         frac2 = std::min(avar.interp_fac * lam, 1.0);
     else
-        frac2 = std::min(avar.interp_fac * nnieghb * avar.infull, 1.0);
+        frac2 = std::min(avar.interp_fac * nnieghb * avar.i_n_full, 1.0);
 
     real const frac1 = (1.0 - frac2);
 
@@ -55,7 +55,7 @@ inline StateVecD GisslerForce(
     real Cdl, Adrop;
 
 #if SIMDIM == 3
-    if (avar.useDef)
+    if (avar.use_TAB_def)
     {
         real ymax = Vdiff.squaredNorm() * avar.ycoef;
         if (ymax > 1.0)
@@ -66,30 +66,30 @@ inline StateVecD GisslerForce(
     else
     {
         Cdl = Cds;
-        Adrop = avar.aSphere;
+        Adrop = avar.A_sphere;
     }
 #else
-    if (avar.useDef)
+    if (avar.use_TAB_def)
     {
         real ymax = Vdiff.squaredNorm() * avar.ycoef;
         if (ymax > 1.0)
             ymax = 1.0;
         Cdl = Cds * (1 + 2.632 * ymax);
-        Adrop = avar.aSphere + 2 * (avar.Cb * avar.L * ymax) /** pow(avar.L,1)*/;
+        Adrop = avar.A_sphere + 2 * (avar.Cb * avar.L * ymax) /** pow(avar.L,1)*/;
     }
     else
     {
         Cdl = Cds;
-        Adrop = avar.aSphere;
+        Adrop = avar.A_sphere;
     }
 #endif
 
     real const Cdi = frac1 * Cdl + /* 0.5* */ /*1.37**/ frac2;
-    real const Aunocc = (frac1 * Adrop + frac2 * avar.aPlate);
+    real const Aunocc = (frac1 * Adrop + frac2 * avar.A_plate);
     real const Ai = (1.0 - woccl) * Aunocc;
 
     // cout << "Fractions: " << frac1 << "  " << frac2 << endl;
-    // cout << "Areas: " << Ai << "  " << Adrop << "  " << avar.aPlate << endl;
+    // cout << "Areas: " << Ai << "  " << Adrop << "  " << avar.A_plate << endl;
     // cout << "Re: " << Re << "  Cds: " << Cdi << "  "  << Cdl << "  " << Cds  << endl;
     // cout << "F: " << F(0) << "  " << F(1) << endl << endl;
 
@@ -97,7 +97,13 @@ inline StateVecD GisslerForce(
     return 0.5 * Vdiff.norm() * Vdiff / (avar.sos * avar.sos) * avar.gamma * press * Cdi * Ai / mass;
 }
 
-inline StateVecD InducedPressure(
+/*
+Find the aerodynamic force via the induced pressure method. This calcualtes...
+
+Returns:
+    Aerodynamic force on a particle
+*/
+inline StateVecD induced_pressure(
     AERO const& avar, StateVecD const& Vdiff, StateVecD const& norm, real const& Pbasei, real const& lam,
     real const& nnieghb, real const& dx, SPHPart const& pi
 )
@@ -135,7 +141,7 @@ inline StateVecD InducedPressure(
         Cp_b = 0.0;
 
     /* Overall Cp (Ideal to machine learn at some point) */
-    real const normCurve = pi.s;
+    real const normCurve = pi.norm_curve;
     real const fac1 = 0.25;
     real const ifac1 = 1 / fac1;
 
@@ -156,7 +162,7 @@ inline StateVecD InducedPressure(
     else
         Cp_tot = Cp_s;
 
-    // real Plocali = 0.5*avar.rhog*Vdiff.squaredNorm()*Cp_tot;
+    // real Plocali = 0.5*avar.rho_g*Vdiff.squaredNorm()*Cp_tot;
 
     /* Compressible dynamic pressure */
     real const Plocali =
@@ -165,7 +171,7 @@ inline StateVecD InducedPressure(
 
     real const Pi = (Plocali /* + Pbasei */);
 
-    real const Re = pi.cellRho * Vdiff.norm() * avar.L / avar.mug;
+    real const Re = pi.cellRho * Vdiff.norm() * avar.L / avar.mu_g;
     real const Cdi = GetCd(Re);
 
     /* Pure droplet force */
@@ -173,23 +179,23 @@ inline StateVecD InducedPressure(
                                pi.cellP * (M_PI * avar.L * avar.L * 0.25) * Cdi / pi.m;
 
     /* Induce pressure force */
-    StateVecD const acc_kern = -/*0.5 **/ Pi * avar.aPlate * norm.normalized() / pi.m;
+    StateVecD const acc_kern = -/*0.5 **/ Pi * avar.A_plate * norm.normalized() / pi.m;
 
     /*Next, consider a skin friction force acting parallel to the surface*/
     real const Vnorm = Vdiff.dot(norm.normalized());
 
     /*Prandtl seventh power law for turbulent BL*/
     StateVecD const Vpar = Vdiff - Vnorm * norm.normalized();
-    real const Re_par = pi.cellRho * Vpar.norm() * avar.L / avar.mug;
+    real const Re_par = pi.cellRho * Vpar.norm() * avar.L / avar.mu_g;
     real const Cf = 0.027 / pow(Re_par + 1e-6, 1.0 / 7.0);
     StateVecD const acc_skin = 0.5 * Vpar.norm() * Vpar / (avar.sos * avar.sos) * avar.gamma * pi.cellP *
-                               Cf * avar.aPlate / pi.m;
+                               Cf * avar.A_plate / pi.m;
 
     real frac1 = 0.0;
     if (avar.use_lam)
         frac1 = std::min(avar.interp_fac * lam, 1.0);
     else
-        frac1 = std::min(avar.interp_fac * nnieghb * avar.infull, 1.0);
+        frac1 = std::min(avar.interp_fac * nnieghb * avar.i_n_full, 1.0);
     // real const frac2 = std::min(exp(pi.curve*0.001+200),1.0);
 
     return (frac1 * /*frac2**/ (acc_kern + acc_skin) + (1.0 - frac1) * acc_drop);
@@ -207,12 +213,12 @@ inline StateVecD CalcAeroAcc(
     {
     case Gissler: /* Original Gissler */
     {
-        acc = GisslerForce(avar, Vdiff, norm, pi.cellRho, pi.cellP, pi.m, lam, nneigh, pi.woccl);
+        acc = gissler_force(avar, Vdiff, norm, pi.cellRho, pi.cellP, pi.m, lam, nneigh, pi.woccl);
         break;
     }
-    case Induced_Pressure: /* Induced pressure based model */
+    case InducedPressure: /* Induced pressure based model */
     {
-        acc = InducedPressure(avar, Vdiff, norm, Pbasei, lam, nneigh, dx, pi);
+        acc = induced_pressure(avar, Vdiff, norm, Pbasei, lam, nneigh, dx, pi);
         break;
     }
     case SkinFric: /*Skin Friction Method*/
@@ -222,18 +228,18 @@ inline StateVecD CalcAeroAcc(
 
         if (Vnorm > 0.001)
         {
-            real const Re = avar.rhog * Vdiff.norm() * avar.L / avar.mug;
+            real const Re = avar.rho_g * Vdiff.norm() * avar.L / avar.mu_g;
 
             /*Consider that pressure force is the stagnation of a velocity normal to the surface*/
             /*i.e. enforcing no parallel flow pressure and Cp = 1. */
             StateVecD acc_press =
-                0.5 * avar.rhog * Vnorm * Vnorm * avar.aPlate * norm.normalized() / pi.m;
+                0.5 * avar.rho_g * Vnorm * Vnorm * avar.A_plate * norm.normalized() / pi.m;
 
             /*Next, consider a skin friction force acting parallel to the surface*/
             StateVecD Vpar = Vdiff - abs(Vnorm) * norm.normalized();
             real Cf = 0.027 / pow(Re, 1.0 / 7.0); /*Prandtl seventh power law for turbulent BL*/
 
-            StateVecD acc_skin = 0.5 * avar.rhog * Vpar.norm() * Cf * avar.aPlate * Vpar / pi.m;
+            StateVecD acc_skin = 0.5 * avar.rho_g * Vpar.norm() * Cf * avar.A_plate * Vpar / pi.m;
 
             real const frac2 = std::min(1.5 * lam, 1.0);
             real const frac1 = (1.0 - frac2);
@@ -241,7 +247,7 @@ inline StateVecD CalcAeroAcc(
             /*Droplet force*/
             real const Cdi = GetCd(Re);
             StateVecD const acc_drop =
-                0.5 * avar.rhog * Vdiff.norm() * Vdiff * (M_PI * avar.L * avar.L / 4) * Cdi / pi.m;
+                0.5 * avar.rho_g * Vdiff.norm() * Vdiff * (M_PI * avar.L * avar.L / 4) * Cdi / pi.m;
 
             // cout << Fpress(0) << "  " << Fpress(1) << "  " << Fskin(0) << "  " << Fskin(1) << endl;
 

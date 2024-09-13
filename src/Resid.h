@@ -22,13 +22,12 @@ void Get_Boundary_Pressure(
 );
 
 void Boundary_DBC(
-    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1,
-    vector<StateVecD>& RV
+    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
 );
 
 void Boundary_Ghost(
     FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1,
-    vector<real>& Rrho, vector<int>& near_inlet
+    vector<int>& near_inlet
 );
 
 void Set_No_Slip(
@@ -36,13 +35,12 @@ void Set_No_Slip(
 );
 
 ///**************** RESID calculation **************
-void Forces(
-    SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, SPHState const& pnp1,
-    OUTL const& outlist, /* DELTAP const& dp, */ real const& npd, vector<StateVecD>& RV,
-    vector<real>& Rrho, std::vector<StateVecD>& Af
+void get_acc_and_Rrho(
+    SIM const& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, OUTL const& outlist,
+    real const& npd, SPHState& pnp1
 );
 
-void Get_Aero_Velocity(
+void get_aero_velocity(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
     MESH const& cells, VLM const& vortex, size_t const& start, size_t& end_ng, OUTL& outlist,
     LIMITS& limits, SPHState& pn, SPHState& pnp1, real& npd

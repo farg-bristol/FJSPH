@@ -593,9 +593,9 @@ namespace IPT
 
         for (size_t ii = 0; ii < surfaces_to_write.size(); ++ii)
         {
-            for (size_t jj = 0; jj < surfaces_to_write[ii].faceIDs.size(); ++jj)
+            for (size_t jj = 0; jj < surfaces_to_write[ii].face_IDs.size(); ++jj)
             {
-                size_t faceID = surfaces_to_write[ii].faceIDs[jj];
+                size_t faceID = surfaces_to_write[ii].face_IDs[jj];
                 faces[ii].emplace_back(cells.faces[faceID]);
             }
 
@@ -772,12 +772,12 @@ namespace IPT
                         surface_data[surf].start_pos.emplace_back(time_record[0].xi);
                     }
                     auto const index2 = std::find(
-                        surface_data[surf].faceIDs.begin(), surface_data[surf].faceIDs.end(), face
+                        surface_data[surf].face_IDs.begin(), surface_data[surf].face_IDs.end(), face
                     );
 
-                    if (index2 != surface_data[surf].faceIDs.end())
+                    if (index2 != surface_data[surf].face_IDs.end())
                     {
-                        size_t fIndex = index2 - surface_data[surf].faceIDs.begin();
+                        size_t fIndex = index2 - surface_data[surf].face_IDs.begin();
 #pragma omp critical
                         {
                             surface_data[surf].face_count[fIndex]++;
@@ -828,10 +828,10 @@ namespace IPT
 
     inline real AeroForce(StateVecD const& Vdiff, FLUID const& fvar, AERO const& avar, IPTPart const& pi)
     {
-        real const Re = 2.0 * pi.faceRho * Vdiff.norm() * pi.d / avar.mug;
+        real const Re = 2.0 * pi.faceRho * Vdiff.norm() * pi.d / avar.mu_g;
         real const Cd = GetCd(Re);
 
-        return Vdiff.norm() * (3.0 * Cd * pi.faceRho) / (4.0 * pi.d * fvar.rho0);
+        return Vdiff.norm() * (3.0 * Cd * pi.faceRho) / (4.0 * pi.d * fvar.rho_rest);
     }
 
     inline void BFD1(

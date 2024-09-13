@@ -24,7 +24,6 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
         {
             StateMatD Lmat_ = StateMatD::Zero();
             StateMatD Lmat_nb_ = StateMatD::Zero();
-            StateMatD Lmat_ng_ = StateMatD::Zero();
             StateVecD gradRho_ = StateVecD::Zero();
             // StateVecD gradRho_2 = StateVecD::Zero();
             StateVecD norm_ = StateVecD::Zero();
@@ -39,8 +38,8 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
                 /*Check if the position is the same, and skip the particle if yes*/
                 if (ii == jj.first)
                 {
-                    kernsum_ += fvar.correc;
-                    // avgV_ += pi.v * fvar.correc;
+                    kernsum_ += fvar.W_correc;
+                    // avgV_ += pi.v * fvar.W_correc;
 
                     continue;
                 }
@@ -49,8 +48,8 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
                 StateVecD const Rji = pj.xi - pi.xi;
                 real const r = sqrt(jj.second);
                 real const volj = pj.m / pj.rho;
-                real const kern = Kernel(r, fvar.H, fvar.correc);
-                StateVecD const Grad = GradK(-Rji, r, fvar.H, fvar.correc);
+                real const kern = Kernel(r, fvar.H, fvar.W_correc);
+                StateVecD const Grad = GradK(-Rji, r, fvar.H, fvar.W_correc);
 
                 Lmat_ -= volj * Rji * Grad.transpose();
 
@@ -60,21 +59,14 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
                 {
                     Lmat_nb_ -= volj * Rji * Grad.transpose();
 
-                    if (pj.b != GHOST)
-                    { /* Ignore ghost particles */
-                        norm_ += volj * Grad;
-                        // avgV_ += pj.v * kern;
-                        kernsum_ += kern;
-                        colour_ += volj * kern;
-#ifdef PAIRWISE
-                        npd_ += kern;
-#endif
-                    }
-                }
+                    norm_ += volj * Grad;
 
-                if (pj.b != GHOST)
-                {
-                    Lmat_ng_ -= volj * Rji * Grad.transpose();
+                    // avgV_ += pj.v * kern;
+                    kernsum_ += kern;
+                    colour_ += volj * kern;
+#ifdef PAIRWISE
+                    npd_ += kern;
+#endif
                 }
             }
 
@@ -94,7 +86,6 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
             {
                 pnp1[ii].lam = 1.0;
                 pnp1[ii].lam_nb = 1.0;
-                pnp1[ii].lam_ng = 1.0;
             }
             else
             {
@@ -106,11 +97,6 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
                 /*L matrix computation for particle shifting, ignoring the boundary*/
                 es.computeDirect(Lmat_nb_);
                 pnp1[ii].lam_nb = ((es.eigenvalues()).minCoeff()); // 1 inside fluid, 0 outside fluid
-
-                /*L matrix computation for surface identification, ignoring ghost and boundary
-                 * particles*/
-                es.computeDirect(Lmat_ng_);
-                pnp1[ii].lam_ng = ((es.eigenvalues()).minCoeff()); // 1 inside fluid, 0 outside fluid
             }
 
             pnp1[ii].L = Linv;
@@ -165,11 +151,11 @@ void dissipation_terms(
             StateVecD const Vji = pj.v - pi.v;
             real const rr = jj.second;
             real const r = sqrt(rr);
-            real const idist2 = 1.0 / (rr + 0.0001 * fvar.HSQ);
+            real const idist2 = 1.0 / (rr + 0.0001 * fvar.H_sq);
             // #ifndef NODSPH
             real const volj = pj.m / pj.rho;
             // #endif
-            StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.correc);
+            StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.W_correc);
 
             if (pj.b > PISTON)
 #ifdef LINEAR
@@ -181,20 +167,20 @@ void dissipation_terms(
 #ifndef NODSPH
             if (pj.b > PISTON)
                 Rrhod +=
-                    Continuity_dSPH(Rji, idist2, fvar.HSQ, gradK, volj, pi.gradRho, pj.gradRho, pi, pj);
+                    Continuity_dSPH(Rji, idist2, fvar.H_sq, gradK, volj, pi.gradRho, pj.gradRho, pi, pj);
             else
-                Rrhod += Continuity_dSPH(Rji, idist2, fvar.HSQ, gradK, volj, pi, pj);
+                Rrhod += Continuity_dSPH(Rji, idist2, fvar.H_sq, gradK, volj, pi, pj);
 #endif
         }
 
 #ifdef LINEAR
-        artViscI *= fvar.alpha * fvar.H * fvar.Cs * fvar.rho0 / pi.rho;
+        artViscI *= fvar.visc_alpha * fvar.H * fvar.speed_sound * fvar.rho_rest / pi.rho;
 #endif
 
         pnp1[ii].aVisc = artViscI;
 
 #ifndef NODSPH
-        pnp1[ii].deltaD = fvar.dCont * Rrhod;
+        pnp1[ii].deltaD = fvar.dsph_cont * Rrhod;
 #endif
     }
 }
@@ -244,10 +230,10 @@ void particle_shift(
                 StateVecD const Rji = pj.xi - pi.xi;
                 real const r = sqrt(jj.second);
                 real const volj = pj.m / pj.rho;
-                real const kern = Kernel(r, fvar.H, fvar.correc);
-                StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.correc);
+                real const kern = Kernel(r, fvar.H, fvar.W_correc);
+                StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.W_correc);
 
-                deltaU += (1.0 + 0.2 * pow(kern / fvar.Wdx, 4.0)) * gradK * volj;
+                deltaU += (1.0 + 0.2 * pow(kern / fvar.W_dx, 4.0)) * gradK * volj;
                 // deltaU +=
                 // gradLam -= (dp.lam[jj.first]-dp.lam[ii]) * dp.L[ii] * gradK * volj;
 
@@ -264,7 +250,7 @@ void particle_shift(
                 }
             }
 
-            // deltaR *= -1 * fvar.sr * maxU / fvar.Cs;
+            // deltaR *= -1 * fvar.sr * maxU / fvar.speed_sound;
             deltaU *= -2.0 * fvar.H * pi.v.norm();
 
             deltaU = std::min(deltaU.norm(), std::min(maxUij / 2.0, svar.max_shift_vel)) *
@@ -327,7 +313,7 @@ void particle_shift(
 // 				}
 
 // 				real const r = (pj.xi-pi.xi).norm();;
-// 				real const kern = Kernel(r,fvar.H,fvar.correc);
+// 				real const kern = Kernel(r,fvar.H,fvar.W_correc);
 // 				real rho_ij = 0.5*(pi.rho + pj.rho);
 
 // 				vPert_ -= 0.5 * pj.m/rho_ij * (pi.v-pj.v) * kern/*/dp.kernsum[ii]*/;

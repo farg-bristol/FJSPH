@@ -7,8 +7,9 @@
 #include "../Var.h"
 #include <random>
 
-struct shape_block
+class ShapeBlock
 { /* Basically everything needs to be defined. Provide defaults to check against */
+  public:
     /* Boolean parameters */
     bool write_data = false;
     bool no_slip = false;
@@ -58,7 +59,7 @@ struct shape_block
     real mass = -1;         /* Starting mass (derived from spacing and density) */
     real renorm_vol = -1;   /* Volume to renormalise mass using */
     real nu = -1;           /* Kinematic viscosity */
-    real rho0 = 1000;       /* Resting density */
+    real rho_rest = 1000;   /* Resting density */
     real gamma = 7;         /* Cole gamma value */
     real speedOfSound = -1; /* Speed of sound */
     real backgroundP = 0;   /* Background pressure */
@@ -98,13 +99,15 @@ struct shape_block
 
     std::vector<StateVecD> coords; /* Coordinates */
 
+    // Placeholder functions, that will be overridden by the specific shape classes
     void check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault);
+
     void generate_points(real const& globalspacing);
 };
 
 struct Shapes
 {
-    std::vector<shape_block> block;
+    std::vector<ShapeBlock*> block;
     size_t total_points = 0; /* Total boundary points */
     size_t nblocks = 0;      /* Number of boundaries */
 
@@ -114,10 +117,16 @@ struct Shapes
         nblocks++;
     }
 
-    inline shape_block& back() { return block.back(); }
+    inline ShapeBlock* back() { return block.back(); }
 };
+
+ShapeBlock* create_shape(string const& shape, int& fault);
 
 Shapes
 read_shapes_JSON(std::string const& filename, SIM const& svar, FLUID const& fvar, real& globalspacing);
+
+void read_shapes_bmap(
+    Shapes& var, real& globalspacing, SIM const& svar, FLUID const& fvar, std::string const& filename
+);
 
 #endif

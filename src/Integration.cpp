@@ -44,7 +44,7 @@ real Integrator::integrate_no_update(
 
     dSPH_PreStep(fvar, svar.total_points, pnp1, outlist, npd);
 
-    Get_Aero_Velocity(
+    get_aero_velocity(
         SPH_TREE, CELL_TREE, svar, fvar, avar, cells, vortex, start_index, end_index, outlist, limits,
         pn, pnp1, npd
     );
@@ -81,7 +81,7 @@ real Integrator::integrate_no_update(
 
     dSPH_PreStep(fvar, end_index, pnp1, outlist, npd);
 
-    Get_Aero_Velocity(
+    get_aero_velocity(
         SPH_TREE, CELL_TREE, svar, fvar, avar, cells, vortex, start_index, end_index, outlist, limits,
         pn, pnp1, npd
     );
@@ -254,12 +254,12 @@ real Integrator::integrate(
     for (size_t ii = start_index; ii < end_index; ++ii)
     {
         maxAf = std::max(maxAf, pnp1[ii].Af.norm());
-        maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - fvar.rho0));
+        maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - fvar.rho_rest));
 #ifdef ALE
         maxShift = std::max(maxShift, pnp1[ii].vPert.norm());
 #endif
     }
-    maxRho = 100 * maxRhoi / fvar.rho0;
+    maxRho = 100 * maxRhoi / fvar.rho_rest;
     real cfl = svar.delta_t / safe_dt;
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(t2 - t1).count();
@@ -280,7 +280,7 @@ real Integrator::integrate(
     svar.current_time += svar.delta_t;
 
     /* Check the error and adjust the CFL to try and keep convergence */
-    if (step_error > svar.min_residual || maxRho > fvar.rhoMaxIter)
+    if (step_error > svar.min_residual || maxRho > fvar.rho_max_iter)
     {
         if (step_error > 0.6 * svar.min_residual)
         { // If really unstable, immediately reduce the timestep
@@ -430,11 +430,11 @@ real Integrator::find_timestep(
     timestep_factors.emplace_back(0.25 * sqrt(fvar.H / maxf)); /* Force timestep constraint */
     timestep_factors.emplace_back(2 * fvar.H / (maxU));        /* Velocity constraint */
     timestep_factors.emplace_back(
-        0.125 * fvar.HSQ * fvar.rho0 / fvar.mu
+        0.125 * fvar.H_sq * fvar.rho_rest / fvar.mu
     );                                                           /* Viscosity timestep constraint */
     timestep_factors.emplace_back(0.067 * minST);                /* Surface tension constraint */
     timestep_factors.emplace_back(0.5 * sqrt(fvar.H / maxdrho)); /* Density gradient constraint */
-    timestep_factors.emplace_back(1.5 * fvar.H / fvar.Cs);
+    timestep_factors.emplace_back(1.5 * fvar.H / fvar.speed_sound);
     /* Acoustic constraint */ /* 2* can't be used without delta-SPH it seems. Divergent in tensile
                                  instability */
 

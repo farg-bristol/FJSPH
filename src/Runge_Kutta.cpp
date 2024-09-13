@@ -32,9 +32,6 @@ SPHState do_runge_kutta_intermediate_step(
 )
 {
     SPHState part_inter = part_prev;
-    vector<StateVecD> res_inter(end, StateVecD::Zero());
-    vector<real> Rrho_inter(end, 0.0);
-    vector<StateVecD> Af_inter(end, StateVecD::Zero());
 
     for (size_t block = 0; block < svar.n_bound_blocks; block++)
     {
@@ -75,20 +72,17 @@ SPHState do_runge_kutta_intermediate_step(
         case DBC:
         {
             Boundary_DBC(
-                fvar, limits[block].index.first, limits[block].index.second, outlist, part_inter,
-                res_inter
+                fvar, limits[block].index.first, limits[block].index.second, outlist, part_inter
             );
 
 #pragma omp for schedule(static) nowait
             for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
             { /****** BOUNDARY PARTICLES ***********/
                 real const rho = std::max(
-                    fvar.rhoMin, std::min(fvar.rhoMax, part_n[ii].rho + dt_inter * Rrho_inter[ii])
+                    fvar.rho_min, std::min(fvar.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
                 );
                 part_inter[ii].rho = rho;
-                part_inter[ii].p =
-                    pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
-                part_inter[ii].Rrho = Rrho_inter[ii];
+                part_inter[ii].p = fvar.get_pressure(rho);
             }
             break;
         }
@@ -105,7 +99,7 @@ SPHState do_runge_kutta_intermediate_step(
             vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
             Boundary_Ghost(
                 fvar, limits[block].index.first, limits[block].index.second, outlist, part_inter,
-                Rrho_inter, near_inlet
+                near_inlet
             );
 
 #pragma omp for schedule(static) nowait
@@ -114,22 +108,21 @@ SPHState do_runge_kutta_intermediate_step(
                 if (!near_inlet[ii - limits[block].index.first])
                 {
                     real const rho = std::max(
-                        fvar.rhoMin, std::min(fvar.rhoMax, part_n[ii].rho + dt_inter * Rrho_inter[ii])
+                        fvar.rho_min,
+                        std::min(fvar.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
                     );
                     part_inter[ii].rho = rho;
-                    part_inter[ii].p =
-                        pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
-                    part_inter[ii].Rrho = Rrho_inter[ii];
+                    part_inter[ii].p = fvar.get_pressure(rho);
                 }
                 else
                 { // Don't allow negative pressures
                     real const rho = std::max(
-                        fvar.rho0, std::min(fvar.rhoMax, part_n[ii].rho + dt_inter * Rrho_inter[ii])
+                        fvar.rho_rest,
+                        std::min(fvar.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
                     );
                     part_inter[ii].rho = rho;
-                    part_inter[ii].p =
-                        pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
-                    part_inter[ii].Rrho = fmax(0.0, Rrho_inter[ii]);
+                    part_inter[ii].p = fvar.get_pressure(rho);
+                    part_inter[ii].Rrho = fmax(0.0, part_inter[ii].Rrho);
                 }
             }
             break;
@@ -137,7 +130,7 @@ SPHState do_runge_kutta_intermediate_step(
         }
     }
 
-    Forces(svar, fvar, avar, cells, part_inter, outlist, npd, res_inter, Rrho_inter, Af_inter);
+    get_acc_and_Rrho(svar, fvar, avar, cells, outlist, npd, part_inter);
 
 #pragma omp parallel default(shared) // shared(svar,part_n,st_2) /*reduction(+:Force,dropVel)*/
     {
@@ -166,16 +159,13 @@ SPHState do_runge_kutta_intermediate_step(
                     part_inter[ii].xi = part_n[ii].xi + dt_inter * part_inter[ii].v;
 #endif
 
-                    part_inter[ii].v = part_n[ii].v + dt_inter * res_inter[ii];
+                    part_inter[ii].v = part_n[ii].v + dt_inter * part_inter[ii].acc;
                     real const rho = std::max(
-                        fvar.rhoMin, std::min(fvar.rhoMax, part_n[ii].rho + dt_inter * Rrho_inter[ii])
+                        fvar.rho_min,
+                        std::min(fvar.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
                     );
                     part_inter[ii].rho = rho;
-                    part_inter[ii].p =
-                        pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
-                    part_inter[ii].acc = res_inter[ii];
-                    part_inter[ii].Af = Af_inter[ii];
-                    part_inter[ii].Rrho = Rrho_inter[ii];
+                    part_inter[ii].p = fvar.get_pressure(rho);
                 }
             }
 
@@ -218,15 +208,14 @@ SPHState do_runge_kutta_intermediate_step(
 
                             size_t const& buffID = limits[jj].buffer[ii][jj];
 
-                            part_inter[buffID].Rrho = Rrho_inter[buffID];
-
                             real const rho = std::max(
-                                fvar.rhoMin,
-                                std::min(fvar.rhoMax, part_n[buffID].rho + dt_inter * Rrho_inter[buffID])
+                                fvar.rho_min,
+                                std::min(
+                                    fvar.rho_max, part_n[buffID].rho + dt_inter * part_inter[buffID].Rrho
+                                )
                             );
                             part_inter[buffID].rho = rho;
-                            part_inter[buffID].p =
-                                pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
+                            part_inter[buffID].p = fvar.get_pressure(rho);
                             part_inter[buffID].xi = part_n[buffID].xi + dt_inter * part_n[buffID].v;
                         }
                     }
@@ -246,9 +235,6 @@ SPHState do_runge_kutta_final_step(
 )
 {
     SPHState part_np1 = st_3;
-    vector<StateVecD> res_4(end, StateVecD::Zero());
-    vector<real> Rrho_4(end, 0.0);
-    vector<StateVecD> Af(end, StateVecD::Zero());
 
     for (size_t block = 0; block < svar.n_bound_blocks; block++)
     {
@@ -285,24 +271,21 @@ SPHState do_runge_kutta_final_step(
         {
         case DBC:
         {
-            Boundary_DBC(
-                fvar, limits[block].index.first, limits[block].index.second, outlist, part_np1, res_4
-            );
+            Boundary_DBC(fvar, limits[block].index.first, limits[block].index.second, outlist, part_np1);
 
 #pragma omp for schedule(static) nowait
             for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
             { /****** BOUNDARY PARTICLES ***********/
                 real const rho = std::max(
-                    fvar.rhoMin,
+                    fvar.rho_min,
                     std::min(
-                        fvar.rhoMax,
+                        fvar.rho_max,
                         part_n[ii].rho + (dt / 6.0) * (part_n[ii].Rrho + 2.0 * st_1[ii].Rrho +
                                                        2.0 * st_2[ii].Rrho + st_3[ii].Rrho)
                     )
                 );
                 part_np1[ii].rho = rho;
-                part_np1[ii].p =
-                    pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
+                part_np1[ii].p = fvar.get_pressure(rho);
                 part_np1[ii].Rrho = st_3[ii].Rrho;
             }
             break;
@@ -318,7 +301,7 @@ SPHState do_runge_kutta_final_step(
         {
             vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
             Boundary_Ghost(
-                fvar, limits[block].index.first, limits[block].index.second, outlist, part_np1, Rrho_4,
+                fvar, limits[block].index.first, limits[block].index.second, outlist, part_np1,
                 near_inlet
             );
 
@@ -328,32 +311,29 @@ SPHState do_runge_kutta_final_step(
                 if (!near_inlet[ii - limits[block].index.first])
                 {
                     real const rho = std::max(
-                        fvar.rhoMin,
+                        fvar.rho_min,
                         std::min(
-                            fvar.rhoMax,
+                            fvar.rho_max,
                             part_n[ii].rho + (dt / 6.0) * (part_n[ii].Rrho + 2.0 * st_1[ii].Rrho +
                                                            2.0 * st_2[ii].Rrho + st_3[ii].Rrho)
                         )
                     );
                     part_np1[ii].rho = rho;
-                    part_np1[ii].p =
-                        pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
-                    part_np1[ii].Rrho = Rrho_4[ii];
+                    part_np1[ii].p = fvar.get_pressure(rho);
                 }
                 else
                 { // Don't allow negative pressures
                     real const rho = std::max(
-                        fvar.rho0,
+                        fvar.rho_rest,
                         std::min(
-                            fvar.rhoMax,
+                            fvar.rho_max,
                             part_n[ii].rho + (dt / 6.0) * (part_n[ii].Rrho + 2.0 * st_1[ii].Rrho +
                                                            2.0 * st_2[ii].Rrho + st_3[ii].Rrho)
                         )
                     );
                     part_np1[ii].rho = rho;
-                    part_np1[ii].p =
-                        pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
-                    part_np1[ii].Rrho = fmax(0.0, Rrho_4[ii]);
+                    part_np1[ii].p = fvar.get_pressure(rho);
+                    part_np1[ii].Rrho = fmax(0.0, part_np1[ii].Rrho);
                 }
             }
             break;
@@ -361,7 +341,7 @@ SPHState do_runge_kutta_final_step(
         }
     }
 
-    Forces(svar, fvar, avar, cells, part_np1, outlist, npd, res_4, Rrho_4, Af);
+    get_acc_and_Rrho(svar, fvar, avar, cells, outlist, npd, part_np1);
 
 #pragma omp parallel default(shared)
     {
@@ -387,21 +367,16 @@ SPHState do_runge_kutta_final_step(
                                                                   2.0 * st_2[ii].acc + st_3[ii].acc);
 
                     real const rho = std::max(
-                        fvar.rhoMin,
+                        fvar.rho_min,
                         std::min(
-                            fvar.rhoMax,
+                            fvar.rho_max,
                             part_n[ii].rho + (dt / 6.0) * (part_n[ii].Rrho + 2.0 * st_1[ii].Rrho +
                                                            2.0 * st_2[ii].Rrho + st_3[ii].Rrho)
                         )
                     );
                     part_np1[ii].rho = rho;
 
-                    part_np1[ii].p =
-                        pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
-
-                    part_np1[ii].acc = res_4[ii];
-                    part_np1[ii].Af = Af[ii];
-                    part_np1[ii].Rrho = Rrho_4[ii];
+                    part_np1[ii].p = fvar.get_pressure(rho);
                 }
                 else if (part_np1[ii].b == OUTLET)
                 { /* For the outlet zone, just perform euler integration of last info */
@@ -449,17 +424,16 @@ SPHState do_runge_kutta_final_step(
                             size_t const& buffID = limits[jj].buffer[ii][jj];
 
                             real const rho = std::max(
-                                fvar.rhoMin,
+                                fvar.rho_min,
                                 std::min(
-                                    fvar.rhoMax,
+                                    fvar.rho_max,
                                     part_n[buffID].rho +
                                         (dt / 6.0) * (part_n[ii].Rrho + 2.0 * st_1[ii].Rrho +
                                                       2.0 * st_2[ii].Rrho + st_3[ii].Rrho)
                                 )
                             );
                             part_np1[buffID].rho = rho;
-                            part_np1[buffID].p =
-                                pressure_equation(rho, fvar.B, fvar.gam, fvar.Cs, fvar.rho0, fvar.backP);
+                            part_np1[buffID].p = fvar.get_pressure(rho);
                             part_np1[buffID].xi = part_n[buffID].xi + dt * part_n[buffID].v;
                         }
                     }

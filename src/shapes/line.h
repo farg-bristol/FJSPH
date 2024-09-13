@@ -6,12 +6,12 @@
 
 #include "shapes.h"
 
-namespace LineShape
+class LineShape : public ShapeBlock
 {
-void check_input(shape_block& block, real& globalspacing, int& fault);
+  public:
+    void check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault);
 
-// Create line with n thick particles or a given thickness.
-std::vector<StateVecD> generate_points(shape_block const& block, real const& globalspacing);
-} // namespace LineShape
+    void generate_points(real const& globalspacing);
+};
 
 #endif

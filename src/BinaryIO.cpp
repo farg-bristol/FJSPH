@@ -348,7 +348,7 @@ inline void Write_UInt_Value(
 /*************************** BINARY OUTPUTS ******************************/
 /*************************************************************************/
 inline void Write_Zone(
-    SPHState const& pnp1, real const& rho0, real const& scale, OutputMap const& output_variables,
+    SPHState const& pnp1, real const& rho_rest, real const& scale, OutputMap const& output_variables,
     size_t const& start, size_t const& end, void* const& fileHandle, int32_t const& outputZone
 )
 {
@@ -449,7 +449,7 @@ inline void Write_Zone(
     {
 #pragma omp parallel for
         for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = 100.0 * (pnp1[ii].rho / rho0 - 1.0);
+            vec[ii - start] = 100.0 * (pnp1[ii].rho / rho_rest - 1.0);
         Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Density Variation");
     }
 
@@ -632,7 +632,7 @@ inline void Write_Zone(
 }
 
 void Write_Binary_Timestep(
-    SIM const& svar, real const& rho0, SPHState const& pnp1, bound_block const& limits,
+    SIM const& svar, real const& rho_rest, SPHState const& pnp1, bound_block const& limits,
     char const* group, int32_t const& strandID, void* const& fileHandle
 )
 {
@@ -665,7 +665,7 @@ void Write_Binary_Timestep(
             exit(-1);
         }
 
-    Write_Zone(pnp1, rho0, svar.scale, svar.output_variables, start, end, fileHandle, outputZone);
+    Write_Zone(pnp1, rho_rest, svar.scale, svar.output_variables, start, end, fileHandle, outputZone);
 
     // Write some auxiliary data, such as mass
     add_zone_aux_data(fileHandle, outputZone, "Particle mass", pnp1[start].m);
@@ -804,9 +804,9 @@ void Init_Binary_PLT(
     add_file_aux_data(fileHandle, "Variable list", svar.output_names);
 
     /* Fluid data */
-    add_file_aux_data(fileHandle, "Reference density", avar.rhog);
-    add_file_aux_data(fileHandle, "Reference dispersed density", fvar.rho0);
-    add_file_aux_data(fileHandle, "Sutherland reference viscosity", avar.mug);
+    add_file_aux_data(fileHandle, "Reference density", avar.rho_g);
+    add_file_aux_data(fileHandle, "Reference dispersed density", fvar.rho_rest);
+    add_file_aux_data(fileHandle, "Sutherland reference viscosity", avar.mu_g);
     add_file_aux_data(fileHandle, "Reference dispersed viscosity", fvar.mu);
     add_file_aux_data(fileHandle, "Reference surface tension", fvar.sig);
     add_file_aux_data(fileHandle, "SPH surface tension contact angle", fvar.contangb);
@@ -814,10 +814,10 @@ void Init_Binary_PLT(
     add_file_aux_data(fileHandle, "Hydrostatic height", svar.hydro_height);
 
     /* Aerodynamic data */
-    add_file_aux_data(fileHandle, "Reference velocity", avar.vRef);
-    add_file_aux_data(fileHandle, "Reference pressure", avar.pRef);
-    add_file_aux_data(fileHandle, "Reference Mach number", avar.MRef);
-    add_file_aux_data(fileHandle, "Reference temperature", avar.T);
+    add_file_aux_data(fileHandle, "Reference velocity", avar.v_ref);
+    add_file_aux_data(fileHandle, "Reference pressure", avar.p_ref);
+    add_file_aux_data(fileHandle, "Reference Mach number", avar.M_ref);
+    add_file_aux_data(fileHandle, "Reference temperature", avar.temp_g);
     add_file_aux_data(fileHandle, "Gas constant gamma", avar.gamma);
 
     /* Simulation settings */
@@ -835,28 +835,28 @@ void Init_Binary_PLT(
     add_file_aux_data(fileHandle, "SPH stable CFL count iteration factor", svar.subits_factor);
     add_file_aux_data(fileHandle, "SPH maximum shifting velocity", svar.max_shift_vel);
 
-    add_file_aux_data(fileHandle, "SPH background pressure", fvar.backP);
-    add_file_aux_data(fileHandle, "SPH starting pressure", fvar.pPress);
-    add_file_aux_data(fileHandle, "SPH density variation", fvar.rhoVar);
-    add_file_aux_data(fileHandle, "SPH maximum density", fvar.rhoMax);
-    add_file_aux_data(fileHandle, "SPH minimum density", fvar.rhoMin);
-    add_file_aux_data(fileHandle, "SPH delta coefficient", fvar.delta);
+    add_file_aux_data(fileHandle, "SPH background pressure", fvar.press_back);
+    add_file_aux_data(fileHandle, "SPH starting pressure", fvar.press_pipe);
+    add_file_aux_data(fileHandle, "SPH density variation", fvar.rho_var);
+    add_file_aux_data(fileHandle, "SPH maximum density", fvar.rho_max);
+    add_file_aux_data(fileHandle, "SPH minimum density", fvar.rho_min);
+    add_file_aux_data(fileHandle, "SPH delta coefficient", fvar.dsph_delta);
 
-    add_file_aux_data(fileHandle, "SPH artificial viscosity factor", fvar.alpha);
-    add_file_aux_data(fileHandle, "SPH speed of sound", fvar.Cs);
+    add_file_aux_data(fileHandle, "SPH artificial viscosity factor", fvar.visc_alpha);
+    add_file_aux_data(fileHandle, "SPH speed of sound", fvar.speed_sound);
     add_file_aux_data(fileHandle, "SPH Newmark Beta iteration limit", svar.max_subits);
     add_file_aux_data(fileHandle, "SPH gravity vector", svar.grav);
 
     add_file_aux_data(fileHandle, "SPH initial spacing", svar.particle_step);
     add_file_aux_data(fileHandle, "SPH boundary spacing factor", svar.bound_step_factor);
-    add_file_aux_data(fileHandle, "SPH smoothing length factor", fvar.Hfac);
+    add_file_aux_data(fileHandle, "SPH smoothing length factor", fvar.H_fac);
     add_file_aux_data(fileHandle, "SPH aerodynamic case", avar.aero_case);
     add_file_aux_data(fileHandle, "SPH SP diameter definition", avar.use_dx);
-    add_file_aux_data(fileHandle, "SPH use TAB deformation", avar.useDef);
+    add_file_aux_data(fileHandle, "SPH use TAB deformation", avar.use_TAB_def);
     add_file_aux_data(fileHandle, "SPH global offset coordinate", svar.offset_vec);
     add_file_aux_data(fileHandle, "SPH maximum particle count", svar.max_points);
-    add_file_aux_data(fileHandle, "SPH aerodynamic cutoff value", avar.cutoff);
-    add_file_aux_data(fileHandle, "SPH freestream velocity", avar.vInf);
+    add_file_aux_data(fileHandle, "SPH aerodynamic cutoff value", avar.lam_cutoff);
+    add_file_aux_data(fileHandle, "SPH freestream velocity", avar.v_inf);
     add_file_aux_data(fileHandle, "SPH restart fit tolerance", svar.restart_tol);
 
     /* Particle tracking settings */

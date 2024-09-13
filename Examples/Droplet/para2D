@@ -23,13 +23,13 @@
                SPH output encoding (0=ascii/1=binary): 1
                                SPH ghost output (0/1): 0
 
-                               SPH integration solver: Runge-Kutta
+                              #  SPH integration solver: Runge-Kutta
                                  SPH maximum timestep: 1
                                  SPH minimum timestep: 1e-9
                                     SPH CFL condition: 0.9
                 SPH stable CFL count iteration factor: 0.76
                                   SPH initial spacing: 0.00005
-                                 SPH aerodynamic case: Gissler
+                                 SPH aerodynamic case: Induced_pressure
 
                                 SPH starting pressure: 000
                                    SPH speed of sound: 100

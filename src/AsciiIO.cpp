@@ -54,7 +54,7 @@ Write_ASCII_Vector(FILE* fp, vector<StateVecD> const& vec, size_t const& start, 
 }
 
 void Write_ASCII_Timestep(
-    SIM& svar, real const& rho0, SPHState const& pnp1, size_t const& start, size_t const& end,
+    SIM& svar, real const& rho_rest, SPHState const& pnp1, size_t const& start, size_t const& end,
     char const* name, uint const& strandID, FILE* fp
 )
 {
@@ -206,7 +206,7 @@ void Write_ASCII_Timestep(
         size_t newl = 0;
         for (size_t ii = start; ii < end; ++ii)
         {
-            fprintf(fp, "%3.7e", 100.0 * (pnp1[ii].rho / rho0 - 1.0));
+            fprintf(fp, "%3.7e", 100.0 * (pnp1[ii].rho / rho_rest - 1.0));
             if (newl > 4)
             {
                 fprintf(fp, "\n");
