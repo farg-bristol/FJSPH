@@ -374,13 +374,14 @@ read_shapes_JSON(std::string const& filename, SIM const& svar, FLUID const& fvar
     {
         string shape_name;
         get_var(input_block, "Shape", shape_name);
-        shapes.push_back(create_shape(shape_name, fault));
-        ShapeBlock* new_block = shapes.back();
+        ShapeBlock* new_block = create_shape(shape_name, fault);
         // JSON key is the name of the particle block.
         new_block->filename = filename;
         new_block->name = block_name;
 
         read_shape_JSON(input_block, svar, fvar, globalspacing, new_block, fault);
+
+        shapes.push_back(new_block);
     }
 
     if (fault)
