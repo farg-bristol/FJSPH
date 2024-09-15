@@ -14,8 +14,6 @@ class LineShape : public ShapeBlock
     void check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault) override;
 
     void generate_points(real const& globalspacing) override;
-
-    virtual ~LineShape(){};
 };
 
 #endif

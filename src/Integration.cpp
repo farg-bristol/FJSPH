@@ -393,7 +393,6 @@ real Integrator::solve_step(
     }
     case newmark_beta:
     {
-
         rms_error = Newmark_Beta::Newmark_Beta(
             SPH_TREE, CELL_TREE, svar, fvar, avar, start_index, end_index, npd, cells, limits, outlist,
             logbase, iteration, xih, pn, pnp1
