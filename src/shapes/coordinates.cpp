@@ -7,7 +7,8 @@
 
 void CoordShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault)
 {
-    bound_type = coordDef;
+    ShapeBlock::check_input(svar, fvar, globalspacing, fault);
+
     if (filename.empty())
     {
         if (coords.empty())
@@ -24,6 +25,8 @@ void CoordShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspa
             npts = coords.size();
         }
     }
+
+    ShapeBlock::check_input_post(globalspacing);
 }
 
 void CoordShape::generate_points(real const& globalspacing)

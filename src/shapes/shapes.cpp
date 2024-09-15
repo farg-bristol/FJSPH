@@ -141,11 +141,6 @@ void ShapeBlock::check_input(SIM const& svar, FLUID const& fvar, real& globalspa
         }
     }
 
-    globalspacing = std::max(dx, globalspacing);
-    npts = npts > 1 ? npts : 1;
-    if (bound_type != coordDef)
-        coords.reserve(npts);
-
     if (press != 0)
     {
         real Bconst = fvar.rho_rest * (fvar.speed_sound * fvar.speed_sound) / fvar.gam;
@@ -162,14 +157,22 @@ void ShapeBlock::check_input(SIM const& svar, FLUID const& fvar, real& globalspa
     }
 }
 
+void ShapeBlock::check_input_post(real& globalspacing)
+{
+    globalspacing = std::max(dx, globalspacing);
+    npts = npts > 1 ? npts : 1;
+    if (bound_type != coordDef)
+        coords.reserve(npts);
+}
+
 void ShapeBlock::generate_points(real const& globalspacing)
 {
     // Base function to get overridden, but needs to exist first. Do nothing.
 }
 
+// Create a new class for the shape, based on the input.
 ShapeBlock* create_shape(string const& shape, int& fault)
 {
-
 #if SIMDIM == 2
     if (shape == "Line")
 #else
@@ -354,7 +357,6 @@ void read_shape_JSON(
 Shapes
 read_shapes_JSON(std::string const& filename, SIM const& svar, FLUID const& fvar, real& globalspacing)
 {
-
     /* Read shapes from file */
     std::ifstream input_file(filename);
     if (!input_file.is_open())
@@ -366,16 +368,14 @@ read_shapes_JSON(std::string const& filename, SIM const& svar, FLUID const& fvar
     json data = json::parse(input_file);
 
     // Create an empty vector of shapes. This will be filled as the file is read.
-    Shapes shapes;
+    std::vector<ShapeBlock*> shapes;
     int fault = 0;
     for (auto& [block_name, input_block] : data.items())
     {
-        shapes.emplace_back();
-
-        string shape;
-        get_var(input_block, "Shape", shape);
-        ShapeBlock* new_block = create_shape(shape, fault);
-
+        string shape_name;
+        get_var(input_block, "Shape", shape_name);
+        shapes.push_back(create_shape(shape_name, fault));
+        ShapeBlock* new_block = shapes.back();
         // JSON key is the name of the particle block.
         new_block->filename = filename;
         new_block->name = block_name;
@@ -390,12 +390,21 @@ read_shapes_JSON(std::string const& filename, SIM const& svar, FLUID const& fvar
         exit(-1);
     }
 
-    return shapes;
+    Shapes var;
+    var.nblocks = shapes.size();
+    var.block = shapes;
+
+    // Estimate the number of particles in each Block
+    for (size_t ii = 0; ii < var.nblocks; ++ii)
+    {
+        var.total_points += var.block[ii]->npts;
+    }
+
+    return var;
 }
 
-void read_shapes_bmap(
-    Shapes& var, real& globalspacing, SIM const& svar, FLUID const& fvar, std::string const& filename
-)
+Shapes
+read_shapes_bmap(std::string const& filename, SIM const& svar, FLUID const& fvar, real& globalspacing)
 {
     /* Read shapes from file */
     std::ifstream input_file(filename);
@@ -410,7 +419,7 @@ void read_shapes_bmap(
 
     /* Find number of blocks to initialise */
     std::vector<ShapeBlock*> shapes;
-    string shape;
+    string shape_name;
     int fault = 0;
     while (getline(input_file, line))
     {
@@ -418,23 +427,16 @@ void read_shapes_bmap(
         if (end != std::string::npos)
             line = line.substr(0, end + 1);
 
-        Get_String(line, "Shape", shape);
+        Get_String(line, "Shape", shape_name);
 
         if (line.find("block end") != std::string::npos)
         {
-            shapes.push_back(create_shape(shape, fault));
-            shape.clear();
+            shapes.push_back(create_shape(shape_name, fault));
+            shape_name.clear();
 
             nblocks++;
         }
     }
-
-    // if (fault)
-    // {
-    //     printf("An unrecognised shape was defined.\n");
-    //     printf("See output for details.\n");
-    //     exit(-1);
-    // }
 
     input_file.clear();
     input_file.seekg(0);
@@ -446,73 +448,73 @@ void read_shapes_bmap(
         if (end != std::string::npos)
             line = line.substr(0, end);
 
-        Get_String(line, "Name", shapes[block]->name);
-        Get_String(line, "Shape", shapes[block]->shape);
-        Get_String(line, "Sub-shape", shapes[block]->subshape);
-        Get_String(line, "Boundary solver", shapes[block]->solver_name);
+        ShapeBlock* new_block = shapes[block];
 
-        Get_Bool(line, "Write surface data (0/1)", shapes[block]->write_data);
-        Get_Number(
-            line, "Fixed velocity or dynamic inlet BC (0/1)", shapes[block]->fixed_vel_or_dynamic
-        );
+        Get_String(line, "Name", new_block->name);
+        Get_String(line, "Shape", new_block->shape);
+        Get_String(line, "Sub-shape", new_block->subshape);
+        Get_String(line, "Boundary solver", new_block->solver_name);
+
+        Get_Bool(line, "Write surface data (0/1)", new_block->write_data);
+        Get_Number(line, "Fixed velocity or dynamic inlet BC (0/1)", new_block->fixed_vel_or_dynamic);
 
         // Pipe exit plane.
-        Get_Vector(line, "Aerodynamic entry normal", shapes[block]->aero_norm);
-        Get_Vector(line, "Deletion normal", shapes[block]->delete_norm);
-        Get_Vector(line, "Insertion normal", shapes[block]->insert_norm);
-        Get_Number(line, "Aerodynamic entry plane constant", shapes[block]->aeroconst);
-        Get_Number(line, "Deletion plane constant", shapes[block]->delconst);
-        Get_Number(line, "Insertion plane constant", shapes[block]->insconst);
-        Get_Number(line, "Pipe depth", shapes[block]->thickness);
+        Get_Vector(line, "Aerodynamic entry normal", new_block->aero_norm);
+        Get_Vector(line, "Deletion normal", new_block->delete_norm);
+        Get_Vector(line, "Insertion normal", new_block->insert_norm);
+        Get_Number(line, "Aerodynamic entry plane constant", new_block->aeroconst);
+        Get_Number(line, "Deletion plane constant", new_block->delconst);
+        Get_Number(line, "Insertion plane constant", new_block->insconst);
+        Get_Number(line, "Pipe depth", new_block->thickness);
 
-        Get_Number(line, "i-direction count", shapes[block]->ni);
-        Get_Number(line, "j-direction count", shapes[block]->nj);
-        Get_Number(line, "k-direction count", shapes[block]->nk);
+        Get_Number(line, "i-direction count", new_block->ni);
+        Get_Number(line, "j-direction count", new_block->nj);
+        Get_Number(line, "k-direction count", new_block->nk);
 
-        Get_Vector(line, "Stretching factor", shapes[block]->stretch);
+        Get_Vector(line, "Stretching factor", new_block->stretch);
 
         // Rotation definitions
-        Get_Vector(line, "Normal vector", shapes[block]->normal);
-        Get_Vector(line, "Rotation angles", shapes[block]->angles);
-        Get_Number(line, "Rotation angle", shapes[block]->angles[0]);
+        Get_Vector(line, "Normal vector", new_block->normal);
+        Get_Vector(line, "Rotation angles", new_block->angles);
+        Get_Number(line, "Rotation angle", new_block->angles[0]);
 
         // Square block definitions
-        Get_Vector(line, "Start coordinate", shapes[block]->start);
-        Get_Vector(line, "End coordinate", shapes[block]->end);
-        Get_Vector(line, "Right coordinate", shapes[block]->right);
+        Get_Vector(line, "Start coordinate", new_block->start);
+        Get_Vector(line, "End coordinate", new_block->end);
+        Get_Vector(line, "Right coordinate", new_block->right);
 
         // Circle/arc definitions
-        Get_Vector(line, "Midpoint coordinate", shapes[block]->mid);
-        Get_Vector(line, "Centre coordinate", shapes[block]->centre);
-        Get_Vector(line, "Arch normal", shapes[block]->right);
-        Get_Number(line, "Radius", shapes[block]->radius);
-        Get_Number(line, "Length", shapes[block]->length);
-        Get_Number(line, "Arc start (degree)", shapes[block]->arc_start);
-        Get_Number(line, "Arc end (degree)", shapes[block]->arc_end);
-        Get_Number(line, "Arc length (degree)", shapes[block]->arclength);
-        Get_Number(line, "Starting straight length", shapes[block]->sstraight);
-        Get_Number(line, "Ending straight length", shapes[block]->estraight);
+        Get_Vector(line, "Midpoint coordinate", new_block->mid);
+        Get_Vector(line, "Centre coordinate", new_block->centre);
+        Get_Vector(line, "Arch normal", new_block->right);
+        Get_Number(line, "Radius", new_block->radius);
+        Get_Number(line, "Length", new_block->length);
+        Get_Number(line, "Arc start (degree)", new_block->arc_start);
+        Get_Number(line, "Arc end (degree)", new_block->arc_end);
+        Get_Number(line, "Arc length (degree)", new_block->arclength);
+        Get_Number(line, "Starting straight length", new_block->sstraight);
+        Get_Number(line, "Ending straight length", new_block->estraight);
 
-        Get_Number(line, "Particle spacing", shapes[block]->dx);
-        Get_Bool(line, "Particle ordering (0=grid,1=HCP)", shapes[block]->particle_order);
-        Get_Number(line, "Wall thickness", shapes[block]->thickness);
-        Get_Number(line, "Wall radial particle count", shapes[block]->nk);
-        Get_Bool(line, "Wall is no slip (0/1)", shapes[block]->no_slip);
+        Get_Number(line, "Particle spacing", new_block->dx);
+        Get_Bool(line, "Particle ordering (0=grid,1=HCP)", new_block->particle_order);
+        Get_Number(line, "Wall thickness", new_block->thickness);
+        Get_Number(line, "Wall radial particle count", new_block->nk);
+        Get_Bool(line, "Wall is no slip (0/1)", new_block->no_slip);
 
-        Get_String(line, "Coordinate filename", shapes[block]->filename);
+        Get_String(line, "Coordinate filename", new_block->filename);
 
-        Get_Vector(line, "Starting velocity", shapes[block]->vel);
-        Get_Number(line, "Starting jet velocity", shapes[block]->vmag);
-        Get_Number(line, "Starting pressure", shapes[block]->press);
-        Get_Number(line, "Starting density", shapes[block]->dens);
-        // Get_Number(line, "Starting mass", shapes[block]->mass);
+        Get_Vector(line, "Starting velocity", new_block->vel);
+        Get_Number(line, "Starting jet velocity", new_block->vmag);
+        Get_Number(line, "Starting pressure", new_block->press);
+        Get_Number(line, "Starting density", new_block->dens);
+        // Get_Number(line, "Starting mass", new_block->mass);
 
-        Get_Number(line, "Cole EOS gamma", shapes[block]->gamma);
-        Get_Number(line, "Speed of sound", shapes[block]->speedOfSound);
-        Get_Number(line, "Resting density", shapes[block]->rho_rest);
-        Get_Number(line, "Volume to target", shapes[block]->renorm_vol);
+        Get_Number(line, "Cole EOS gamma", new_block->gamma);
+        Get_Number(line, "Speed of sound", new_block->speedOfSound);
+        Get_Number(line, "Resting density", new_block->rho_rest);
+        Get_Number(line, "Volume to target", new_block->renorm_vol);
 
-        Get_String(line, "Time data filename", shapes[block]->position_filename);
+        Get_String(line, "Time data filename", new_block->position_filename);
 
         if (line.find("Coordinate data:") != std::string::npos)
         {
@@ -520,14 +522,14 @@ void read_shapes_bmap(
             getline(input_file, tmp); /* Go to the next line and get data */
             size_t npts;
             input_file >> npts;
-            shapes[block]->npts = npts;
-            shapes[block]->coords = std::vector<StateVecD>(npts);
+            new_block->npts = npts;
+            new_block->coords = std::vector<StateVecD>(npts);
 
-            for (size_t ii = 0; ii < shapes[block]->npts; ++ii)
+            for (size_t ii = 0; ii < new_block->npts; ++ii)
             {
                 for (size_t dim = 0; dim < SIMDIM; ++dim)
                 {
-                    input_file >> shapes[block]->coords[ii][dim];
+                    input_file >> new_block->coords[ii][dim];
                 }
             }
         }
@@ -540,18 +542,18 @@ void read_shapes_bmap(
             std::istringstream iss(tmp);
             iss >> ntimes;
             // input_file >> ntimes;
-            shapes[block]->ntimes = ntimes;
-            shapes[block]->times = std::vector<real>(ntimes);
-            shapes[block]->pos = std::vector<StateVecD>(ntimes);
+            new_block->ntimes = ntimes;
+            new_block->times = std::vector<real>(ntimes);
+            new_block->pos = std::vector<StateVecD>(ntimes);
 
             for (size_t ii = 0; ii < ntimes; ++ii)
             {
                 getline(input_file, tmp); /* Go to the next line and get data */
                 std::istringstream iss2(tmp);
-                iss2 >> shapes[block]->times[ii];
+                iss2 >> new_block->times[ii];
                 for (size_t dim = 0; dim < SIMDIM; ++dim)
                 {
-                    iss2 >> shapes[block]->pos[ii][dim];
+                    iss2 >> new_block->pos[ii][dim];
                 }
             }
         }
@@ -564,18 +566,18 @@ void read_shapes_bmap(
             std::istringstream iss(tmp);
             iss >> ntimes;
             // input_file >> ntimes;
-            shapes[block]->ntimes = ntimes;
-            shapes[block]->times = std::vector<real>(ntimes);
-            shapes[block]->vels = std::vector<StateVecD>(ntimes);
+            new_block->ntimes = ntimes;
+            new_block->times = std::vector<real>(ntimes);
+            new_block->vels = std::vector<StateVecD>(ntimes);
 
             for (size_t ii = 0; ii < ntimes; ++ii)
             {
                 getline(input_file, tmp); /* Go to the next line and get data */
                 std::istringstream iss2(tmp);
-                iss2 >> shapes[block]->times[ii];
+                iss2 >> new_block->times[ii];
                 for (size_t dim = 0; dim < SIMDIM; ++dim)
                 {
-                    iss2 >> shapes[block]->vels[ii][dim];
+                    iss2 >> new_block->vels[ii][dim];
                 }
             }
         }
@@ -610,6 +612,7 @@ void read_shapes_bmap(
         exit(-1);
     }
 
+    Shapes var;
     var.nblocks = nblocks;
     var.block = shapes;
 
@@ -619,5 +622,5 @@ void read_shapes_bmap(
         var.total_points += var.block[ii]->npts;
     }
 
-    return;
+    return var;
 }

@@ -7,8 +7,6 @@
 
 void LineShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault)
 {
-    bound_type = linePlane;
-
     // Do common input checks.
     ShapeBlock::check_input(svar, fvar, globalspacing, fault);
 
@@ -75,7 +73,6 @@ void LineShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspac
             std::cout << "ERROR: Block \"" << name
                       << "\" line thickness has not been correctly defined. Stopping." << std::endl;
             fault = 1;
-            return;
         }
     }
     else if (nk < 0)
@@ -97,9 +94,8 @@ void LineShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspac
         if (nj < 1)
         {
             std::cout << "WARNING: ni defined, but nj not." << std::endl;
-            size_t nj = static_cast<size_t>(ceil((end - right).norm() / globalspacing));
+            nj = static_cast<size_t>(ceil((end - right).norm() / globalspacing));
             nj = nj > 1 ? nj : 1;
-            nj = nj;
         }
         npts = ni * nj * nk;
 #endif
@@ -108,12 +104,11 @@ void LineShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspac
     { /* Need to find it */
 /* Need to estimate the number of points on the line */
 #if SIMDIM == 2
-        size_t ni = static_cast<size_t>(ceil((end - start).norm() / globalspacing));
+        ni = static_cast<size_t>(ceil((end - start).norm() / globalspacing));
         ni = ni > 1 ? ni : 1;
         npts = ni * nk;
 #else
-        size_t ni = static_cast<size_t>(ceil((right - start).norm() / globalspacing));
-        size_t nj = 0;
+        ni = static_cast<size_t>(ceil((right - start).norm() / globalspacing));
         if (particle_order == 1)
             nj = static_cast<int>(ceil((end - right).norm() / globalspacing / sqrt(3.0) * 2.0));
         else
@@ -124,6 +119,8 @@ void LineShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspac
         npts = ni * nj * nk;
 #endif
     }
+
+    ShapeBlock::check_input_post(globalspacing);
 }
 
 void LineShape::generate_points(real const& globalspacing)

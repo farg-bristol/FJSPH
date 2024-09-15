@@ -6,14 +6,22 @@
 #include "Kernel.h"
 #include "Neighbours.h"
 
-#include "shapes/arc.h"
-#include "shapes/circle.h"
-#include "shapes/cylinder.h"
-#include "shapes/inlet.h"
-#include "shapes/line.h"
-#include "shapes/square.h"
+#include "shapes/shapes.h"
 
+#include <cctype>
 #include <filesystem>
+
+// Case insensitive comparison for single character.
+bool ichar_equals(char a, char b)
+{
+    return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+}
+
+// Cast insensitive comparison for strings.
+bool iequals(const std::string& a, const std::string& b)
+{
+    return std::equal(a.begin(), a.end(), b.begin(), b.end(), ichar_equals);
+}
 
 void get_boundary_velocity(ShapeBlock* boundvar)
 {
@@ -265,22 +273,18 @@ void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& 
     // Read boundary blocks
     Shapes boundvar;
     printf("Reading boundary settings...\n");
-
-    // Get the extension of the files. If it's JSON, then use the new functions.
-    if (std::filesystem::path(svar.input_bound_file).extension() == ".json" ||
-        std::filesystem::path(svar.input_bound_file).extension() == ".JSON")
+    if (iequals(std::filesystem::path(svar.input_bound_file).extension(), ".json"))
         boundvar = read_shapes_JSON(svar.input_bound_file, svar, fvar, dx);
     else
-        read_shapes_bmap(boundvar, dx, svar, fvar, svar.input_bound_file);
+        boundvar = read_shapes_bmap(svar.input_bound_file, svar, fvar, dx);
 
     // Read fluid
     Shapes fluvar;
     printf("Reading fluid settings...\n");
-    if (std::filesystem::path(svar.input_fluid_file).extension() == ".json" ||
-        std::filesystem::path(svar.input_fluid_file).extension() == ".JSON")
+    if (iequals(std::filesystem::path(svar.input_fluid_file).extension(), ".json"))
         fluvar = read_shapes_JSON(svar.input_fluid_file, svar, fvar, dx);
     else
-        read_shapes_bmap(fluvar, dx, svar, fvar, svar.input_fluid_file);
+        fluvar = read_shapes_bmap(svar.input_fluid_file, svar, fvar, dx);
 
     // Now generate points and add to indexes
     Generate_Points(svar, fvar, svar.dx, boundvar);
@@ -501,20 +505,18 @@ void Init_Particles_Restart(SIM& svar, FLUID& fvar, LIMITS& limits)
     Shapes boundvar;
 
     // Get the extension of the files. If it's JSON, then use the new functions.
-    if (std::filesystem::path(svar.input_bound_file).extension() == ".json" ||
-        std::filesystem::path(svar.input_bound_file).extension() == ".JSON")
+    if (iequals(std::filesystem::path(svar.input_bound_file).extension(), ".json"))
         boundvar = read_shapes_JSON(svar.input_bound_file, svar, fvar, dx);
     else
-        read_shapes_bmap(boundvar, dx, svar, fvar, svar.input_bound_file);
+        boundvar = read_shapes_bmap(svar.input_bound_file, svar, fvar, dx);
 
     // Read fluid
     Shapes fluvar;
     printf("Reading fluid settings...\n");
-    if (std::filesystem::path(svar.input_fluid_file).extension() == ".json" ||
-        std::filesystem::path(svar.input_fluid_file).extension() == ".JSON")
+    if (iequals(std::filesystem::path(svar.input_fluid_file).extension(), ".json"))
         fluvar = read_shapes_JSON(svar.input_fluid_file, svar, fvar, dx);
     else
-        read_shapes_bmap(fluvar, dx, svar, fvar, svar.input_fluid_file);
+        fluvar = read_shapes_bmap(svar.input_fluid_file, svar, fvar, dx);
 
     limits.resize(boundvar.nblocks + fluvar.nblocks, bound_block(0));
 

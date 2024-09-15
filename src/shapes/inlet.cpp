@@ -6,8 +6,6 @@
 
 void InletShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault)
 {
-    bound_type = inletZone;
-
     // Do common input checks.
     ShapeBlock::check_input(svar, fvar, globalspacing, fault);
 
@@ -254,9 +252,7 @@ void InletShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspa
     real xlength = (end - start).norm();
 #endif
 
-    size_t ni, nk;
 #if SIMDIM == 3
-    size_t nj;
 #endif
 
     ni = static_cast<int>(ceil(xlength / globalspacing));
@@ -305,6 +301,8 @@ void InletShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspa
     {
         vel = vmag * insert_norm;
     }
+
+    ShapeBlock::check_input_post(globalspacing);
 }
 
 #if SIMDIM == 2
