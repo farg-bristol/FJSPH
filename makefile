@@ -37,7 +37,8 @@ SRC := src/AsciiIO.cpp src/BinaryIO.cpp src/CDFIO.cpp src/Containment.cpp \
  src/FJSPH.cpp src/FOAMIO.cpp src/Geometry.cpp src/H5IO.cpp src/Init.cpp src/Integration.cpp \
  src/IO.cpp src/IPT.cpp src/Neighbours.cpp src/Newmark_Beta.cpp src/Resid.cpp src/Runge_Kutta.cpp \
  src/Shifting.cpp src/VLM.cpp src/shapes/shapes.cpp src/shapes/arc.cpp src/shapes/circle.cpp \
- src/shapes/cylinder.cpp src/shapes/inlet.cpp src/shapes/line.cpp src/shapes/square.cpp
+ src/shapes/coordinates.cpp src/shapes/cylinder.cpp src/shapes/inlet.cpp src/shapes/line.cpp \
+ src/shapes/square.cpp
 
 SRCDIR := src
 # Make the object directories in the excutable, so that it's not uploaded to cloud all the time.

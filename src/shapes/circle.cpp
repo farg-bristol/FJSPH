@@ -5,8 +5,6 @@
 
 void CircleShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault)
 {
-    bound_type = circleSphere;
-
     // Do common input checks.
     ShapeBlock::check_input(svar, fvar, globalspacing, fault);
 
@@ -87,6 +85,8 @@ void CircleShape::check_input(SIM const& svar, FLUID const& fvar, real& globalsp
 #else
     npts = ceil(real(npts) * M_PI / 6.0);
 #endif
+
+    ShapeBlock::check_input_post(globalspacing);
 }
 
 #if SIMDIM == 2

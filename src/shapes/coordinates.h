@@ -6,9 +6,11 @@
 class CoordShape : public ShapeBlock
 {
   public:
-    void check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault);
+    CoordShape() { bound_type = coordDef; };
 
-    void generate_points(real const& globalspacing);
+    void check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault) override;
+
+    void generate_points(real const& globalspacing) override;
 };
 
 #endif

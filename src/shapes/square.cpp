@@ -5,8 +5,6 @@
 
 void SquareShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault)
 {
-    bound_type = squareCube;
-
     // Do common input checks.
     ShapeBlock::check_input(svar, fvar, globalspacing, fault);
 
@@ -65,10 +63,7 @@ void SquareShape::check_input(SIM const& svar, FLUID const& fvar, real& globalsp
     }
 
     /* Estimate how many points on the Block */
-    int npoints;
-    size_t ni, nj;
 #if SIMDIM == 3
-    size_t nk;
 #endif
     if (particle_order == 1)
     {
@@ -96,12 +91,12 @@ void SquareShape::check_input(SIM const& svar, FLUID const& fvar, real& globalsp
 #if SIMDIM == 3
     nk = nk > 1 ? nk : 1;
     nk = nk;
-    npoints = ni * nk * nj;
+    npts = ni * nk * nj;
 #else
-    npoints = ni * nj;
+    npts = ni * nj;
 #endif
-    npoints = npoints > 1 ? npoints : 1;
-    npts = npoints;
+
+    ShapeBlock::check_input_post(globalspacing);
 }
 
 void SquareShape::generate_points(real const& globalspacing)
@@ -113,37 +108,7 @@ void SquareShape::generate_points(real const& globalspacing)
 
     /* To check if any points end up too close to each other */
     // real searchDist = pow2(0.5 * globalspacing - 2.0 * tol * globalspacing);
-
-    /* Find integer counts of sizes alone each dimension */
-    int ni;
-    int nj;
 #if SIMDIM == 3
-    int nk;
-#endif
-
-    if (particle_order == 1)
-    {
-#if SIMDIM == 2
-        ni = static_cast<int>(ceil((end[0] - start[0]) / globalspacing));
-        nj = static_cast<int>(ceil((end[1] - start[1]) / globalspacing / sqrt(3.0) * 2.0));
-#else
-        ni = static_cast<int>(ceil((end[0] - start[0]) / globalspacing));
-        nj = static_cast<int>(ceil((end[1] - start[1]) / globalspacing / sqrt(3.0) * 2.0));
-        nk = static_cast<int>(ceil((end[2] - start[2]) / globalspacing / sqrt(6.0) * 3.0));
-#endif
-    }
-    else
-    {
-        ni = static_cast<int>(ceil((end[0] - start[0]) / globalspacing));
-        nj = static_cast<int>(ceil((end[1] - start[1]) / globalspacing));
-#if SIMDIM == 3
-        nk = static_cast<int>(ceil((end[2] - start[2]) / globalspacing));
-#endif
-    }
-    ni = ni > 1 ? ni : 1;
-    nj = nj > 1 ? nj : 1;
-#if SIMDIM == 3
-    nk = nk > 1 ? nk : 1;
     for (int k = 0; k < nk; ++k)
     {
 #endif

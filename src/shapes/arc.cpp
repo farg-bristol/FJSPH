@@ -355,7 +355,6 @@ inline std::vector<StateVecD> make_arch(
 
 void ArcShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault)
 {
-    bound_type = arcSection;
     // Do common input checks.
     ShapeBlock::check_input(svar, fvar, globalspacing, fault);
 
@@ -544,6 +543,8 @@ void ArcShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspaci
     }
     npts *= nj;
 #endif
+
+    ShapeBlock::check_input_post(globalspacing);
 }
 
 void ArcShape::generate_points(real const& globalspacing)

@@ -6,8 +6,6 @@
 
 void CylinderShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault)
 {
-    bound_type = cylinder;
-
     // Do common input checks.
     ShapeBlock::check_input(svar, fvar, globalspacing, fault);
 
@@ -312,12 +310,11 @@ void CylinderShape::check_input(SIM const& svar, FLUID const& fvar, real& global
 #if SIMDIM == 3
         real dtheta = globalspacing / radius;
 
-        int ni = static_cast<int>(ceil((2 * M_PI) / dtheta));
+        ni = static_cast<int>(ceil((2 * M_PI) / dtheta));
         ni = ni > 1 ? ni : 1;
-        ni = ni;
 #endif
 
-        int nj = ceil(length / globalspacing) + 1;
+        nj = ceil(length / globalspacing) + 1;
         nj = nj > 1 ? nj : 1;
 
         npts = nj * nk;
@@ -345,6 +342,8 @@ void CylinderShape::check_input(SIM const& svar, FLUID const& fvar, real& global
         npts = ni * nj;
 #endif
     }
+
+    ShapeBlock::check_input_post(globalspacing);
 }
 
 #if SIMDIM == 2
