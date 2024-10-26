@@ -823,7 +823,7 @@ vector<size_t> FindCell(
 
 void Check_Pipe_Outlet(
     Vec_Tree const& CELL_TREE, SIM& svar, AERO const& avar, MESH const& cells, LIMITS& limits,
-    /* DELTAP& dp, */ SPHState& pn, SPHState& pnp1, size_t& end, size_t& end_ng
+    SPHState& pn, SPHState& pnp1, size_t& end
 )
 {
     vector<size_t> del;
@@ -863,7 +863,6 @@ void Check_Pipe_Outlet(
             pnp1.erase(pnp1.begin() + *itr);
             svar.total_points--;
             svar.fluid_points--;
-            end_ng--;
             end--;
             svar.delete_count++;
         }

@@ -194,7 +194,6 @@ int main(int argc, char* argv[])
     {
         size_t const start = svar.bound_points;
         size_t end = svar.total_points;
-        size_t end_ng = svar.bound_points + svar.fluid_points;
         real npd = 1.0;
         dSPH_PreStep(fvar, end, pnp1, outlist, npd);
 
@@ -204,17 +203,12 @@ int main(int argc, char* argv[])
             FindCell(svar, avar, CELL_TREE, cells, pn, pnp1);
         }
 
-        Detect_Surface(svar, fvar, avar, start, end_ng, outlist, cells, vortex, pn);
+        Detect_Surface(svar, fvar, avar, start, end, outlist, cells, vortex, pn);
 
 // Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
 #ifdef ALE
-        particle_shift(svar, fvar, start, end_ng, outlist, pn);
+        particle_shift(svar, fvar, start, end, outlist, pn);
 #endif
-
-        /* Update shifting velocity and surface data */
-        // SPHState::const_iterator first = pnp1.begin();
-        // SPHState::const_iterator last = pnp1.begin() + end_ng;
-        // pn = SPHState(first,last);
     }
 
     if (svar.using_ipt)

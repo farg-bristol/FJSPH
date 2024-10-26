@@ -59,7 +59,7 @@ real Integrator::integrate_no_update(
     particle_shift(svar, fvar, start_index, end_index, outlist, pnp1);
 #endif
 
-    Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end_index, end_index);
+    Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end_index);
 
     vector<StateVecD> xih(end_index - start_index);
 #pragma omp parallel for default(shared)
@@ -98,7 +98,7 @@ real Integrator::integrate_no_update(
     particle_shift(svar, fvar, start_index, end_index, outlist, pnp1);
 #endif
 
-    Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end_index, end_index);
+    Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end_index);
 
     /*Do time integration*/
     rms_error = solve_step(
@@ -115,7 +115,17 @@ size_t Integrator::update_data(
     vector<IPTState>& iptdata
 )
 {
-    uint nAdd = update_buffer_region(svar, limits, pnp1, end_index, end_index);
+    uint nAdd = update_buffer_region(svar, limits, pnp1, end_index);
+
+    for (size_t ii = start_index; ii < end_index; ++ii)
+    {
+        SPHPart& pi = pnp1[ii];
+        if (pi.rho < 0.0001)
+        {
+            printf("Warning: Particle density is zero after updating buffer region.\n");
+            pi.rho = fvar.rho_rest;
+        }
+    }
 
     /* Check if any particles need to be deleted, and turned to particle tracking */
     std::set<size_t> to_del;
@@ -253,12 +263,14 @@ real Integrator::integrate(
 #pragma omp parallel for reduction(max : maxAf, maxRhoi)
     for (size_t ii = start_index; ii < end_index; ++ii)
     {
-        maxAf = std::max(maxAf, pnp1[ii].Af.norm());
-        maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - fvar.rho_rest));
+        SPHPart const& pi = pnp1[ii];
+        maxAf = std::max(maxAf, pi.Af.norm());
+        maxRhoi = std::max(maxRhoi, abs(pi.rho - fvar.rho_rest));
 #ifdef ALE
-        maxShift = std::max(maxShift, pnp1[ii].vPert.norm());
+        maxShift = std::max(maxShift, pi.vPert.norm());
 #endif
     }
+
     maxRho = 100 * maxRhoi / fvar.rho_rest;
     real cfl = svar.delta_t / safe_dt;
     high_resolution_clock::time_point t2 = high_resolution_clock::now();

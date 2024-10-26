@@ -468,7 +468,7 @@ void get_acc_and_Rrho(
 
 void get_aero_velocity(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    MESH const& cells, VLM const& vortex, size_t const& start, size_t& end_ng, OUTL& outlist,
+    MESH const& cells, VLM const& vortex, size_t const& start, size_t& end, OUTL& outlist,
     LIMITS& limits, SPHState& pn, SPHState& pnp1, real& npd
 )
 {
@@ -514,7 +514,7 @@ void get_aero_velocity(
             svar.delete_count += nDel;
             svar.fluid_points -= nDel;
             svar.total_points -= nDel;
-            end_ng -= nDel;
+            end -= nDel;
             outlist = update_neighbours(SPH_TREE, fvar, pnp1);
             dSPH_PreStep(fvar, svar.total_points, pnp1, outlist, npd);
         }
@@ -528,7 +528,7 @@ void get_aero_velocity(
         case true:
         {
 #pragma omp parallel for
-            for (size_t ii = start; ii < end_ng; ii++)
+            for (size_t ii = start; ii < end; ii++)
             {
                 if (pnp1[ii].lam_nb < avar.lam_cutoff && pnp1[ii].b == FREE)
                 {
@@ -546,7 +546,7 @@ void get_aero_velocity(
         case false:
         {
 #pragma omp parallel for
-            for (size_t ii = start; ii < end_ng; ii++)
+            for (size_t ii = start; ii < end; ii++)
             {
                 if (outlist[ii].size() * avar.i_n_full < avar.lam_cutoff && pnp1[ii].b == FREE)
                 {
@@ -572,7 +572,7 @@ void get_aero_velocity(
         case true:
         {
 #pragma omp parallel for
-            for (size_t ii = start; ii < end_ng; ii++)
+            for (size_t ii = start; ii < end; ii++)
             {
                 if (pnp1[ii].lam_nb < avar.lam_cutoff && pnp1[ii].b == FREE)
                 {
@@ -590,7 +590,7 @@ void get_aero_velocity(
         case false:
         {
 #pragma omp parallel for
-            for (size_t ii = start; ii < end_ng; ii++)
+            for (size_t ii = start; ii < end; ii++)
             {
                 if (outlist[ii].size() * avar.i_n_full < avar.lam_cutoff && pnp1[ii].b == FREE)
                 {

@@ -575,49 +575,52 @@ void InletShape::generate_points(real const& globalspacing)
 
 #endif
 
-uint update_buffer_region(SIM& svar, LIMITS& limits, SPHState& pnp1, size_t& end, size_t& end_ng)
+uint update_buffer_region(SIM& svar, LIMITS& limits, SPHState& pnp1, size_t& end)
 {
     uint nAdd = 0;
     /*Check if more particles need to be created*/
-    for (size_t block = svar.n_bound_blocks; block < svar.n_bound_blocks + svar.n_fluid_blocks; block++)
+    for (size_t block_id = svar.n_bound_blocks; block_id < svar.n_bound_blocks + svar.n_fluid_blocks;
+         block_id++)
     {
-        if (limits[block].block_type == inletZone)
+        bound_block& block = limits[block_id];
+        if (block.block_type == inletZone)
         {
             size_t& part_id = svar.part_id;
             /* Check if any buffer particles have become pipe particles */
-            for (size_t ii = 0; ii < limits[block].back.size(); ++ii)
+            for (size_t ii = 0; ii < block.back.size(); ++ii)
             {
-                size_t const& pID = limits[block].back[ii];
+                size_t const& pID = block.back[ii];
                 StateVecD const& pos = pnp1[pID].xi;
-                /*Check that the starting area is clear first...*/
-                if (pos.dot(limits[block].insert_norm) > limits[block].insconst)
+                if (pos.dot(block.insert_norm) > block.insconst)
                 {
-                    /* particle has cleared the back zone */
+                    /* Old particle has cleared the back zone, a new particle can be added. */
                     pnp1[pID].b = PIPE;
 
                     /* Update the back vector */
-                    pnp1[limits[block].buffer[ii][0]].b = BACK;
-                    limits[block].back[ii] = limits[block].buffer[ii][0];
+                    pnp1[block.buffer[ii][0]].b = BACK;
+                    block.back[ii] = block.buffer[ii][0];
 
                     /* Update the buffer vector */
-                    for (size_t jj = 0; jj < limits[block].buffer[0].size() - 1; ++jj)
-                        limits[block].buffer[ii][jj] = limits[block].buffer[ii][jj + 1];
+                    for (size_t jj = 0; jj < block.buffer[0].size() - 1; ++jj)
+                        block.buffer[ii][jj] = block.buffer[ii][jj + 1];
 
                     /* Create a new particle */
                     if (svar.total_points < svar.max_points)
                     {
-                        StateVecD xi = pnp1[limits[block].buffer[ii].back()].xi -
-                                       svar.dx * limits[block].insert_norm;
+                        StateVecD xi = pnp1[block.buffer[ii].back()].xi - svar.dx * block.insert_norm;
 
-                        pnp1.insert(
-                            pnp1.begin() + limits[block].index.second,
-                            SPHPart(xi, pnp1[limits[block].buffer[ii].back()], BUFFER, part_id)
-                        );
-                        limits[block].buffer[ii].back() = limits[block].index.second;
+                        // Insert the new particle, using the properties of the old particle.
+                        // Use insert to keep particles closer together in memory.
+                        SPHPart new_part = SPHPart(xi, pnp1[block.buffer[ii].back()], BUFFER, part_id);
+                        pnp1.insert(pnp1.begin() + block.index.second, new_part);
 
-                        limits[block].index.second++;
+                        block.buffer[ii].back() = block.index.second;
+
+                        // Adjust block indexes
+                        block.index.second++;
                         // Also need to adjust all blocks after the current
-                        for (size_t jj = block + 1; jj < svar.n_bound_blocks + svar.n_fluid_blocks; jj++)
+                        for (size_t jj = block_id + 1; jj < svar.n_bound_blocks + svar.n_fluid_blocks;
+                             jj++)
                         {
                             limits[jj].index.first++;
                             limits[jj].index.second++;
@@ -625,7 +628,6 @@ uint update_buffer_region(SIM& svar, LIMITS& limits, SPHState& pnp1, size_t& end
 
                         svar.fluid_points++;
                         svar.total_points++;
-                        end_ng++;
                         end++;
                         part_id++;
                         nAdd++;

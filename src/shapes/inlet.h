@@ -16,6 +16,6 @@ class InletShape : public ShapeBlock
     void generate_points(real const& globalspacing) override;
 };
 
-uint update_buffer_region(SIM& svar, LIMITS& limits, SPHState& pnp1, size_t& end, size_t& end_ng);
+uint update_buffer_region(SIM& svar, LIMITS& limits, SPHState& pnp1, size_t& end);
 
 #endif
