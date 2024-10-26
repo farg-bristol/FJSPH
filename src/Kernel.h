@@ -115,14 +115,14 @@ inline StateVecD pairwise_ST(
 
 #ifdef CSF
 inline void CSF_Curvature(
-    FLUID const& fvar, DELTAP const& dp, SPHPart const& pi, SPHPart const& pj, StateVecD const& Rji,
-    StateVecD const& gradK, real const& volj, real const& r, real& curve, real& W_correc
+    DELTAP const& dp, SPHPart const& pi, SPHPart const& pj, StateVecD const& Rji, StateVecD const& gradK,
+    real const& volj, real const& r, real& curve, real& W_correc
 )
 {
     if (dp.lam[pj.part_id] < 0.75)
     {
         curve -= (pj.norm.normalized() - pi.norm.normalized()).dot(volj * gradK);
-        W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/dp.kernsum[ii]*/;
+        W_correc += volj * Kernel(r, svar.fluid.H, svar.fluid.W_correc) /*/dp.kernsum[ii]*/;
     }
 
     /* Consider imaginary particles to improve curvature representation */
@@ -131,20 +131,20 @@ inline void CSF_Curvature(
         /* Host particle is on the surface, but neighbour is not. Reflect stuff then */
         StateVecD normj = 2 * pi.norm.normalized() - pj.norm.normalized();
         curve += (normj.normalized() - pi.norm.normalized()).dot(volj * gradK);
-        W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/dp.kernsum[ii]*/;
+        W_correc += volj * Kernel(r, svar.fluid.H, svar.fluid.W_correc) /*/dp.kernsum[ii]*/;
     }
 
     if (pj.surf == 1 && pi.surf != 1)
     {
         /* Neighbour particle is on the surface, but host is not. Not as easy */
         /* Need to check if extended particle is still in the neighbourhood */
-        if (r < fvar.H)
+        if (r < svar.fluid.H)
         { /* Assuming a support radius of 2h, if the current particle is within h */
             /* it will still be in the neighbourhood if distance is doubled */
-            StateVecD gradK2 = GradK(2 * Rji, 2 * r, fvar.H, fvar.W_correc);
+            StateVecD gradK2 = GradK(2 * Rji, 2 * r, svar.fluid.H, svar.fluid.W_correc);
             StateVecD normj = 2 * pj.norm.normalized() - pi.norm.normalized();
             curve -= (normj.normalized() - pi.norm.normalized()).dot(volj * gradK2);
-            W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/dp.kernsum[ii]*/;
+            W_correc += volj * Kernel(r, svar.fluid.H, svar.fluid.W_correc) /*/dp.kernsum[ii]*/;
         }
     }
 }
@@ -215,8 +215,8 @@ inline real Continuity_dSPH(
 #endif
 
 inline StateVecD ArtVisc(
-    real const& nu, SPHPart const& pi, SPHPart const& pj, FLUID const& fvar, StateVecD const& Rji,
-    StateVecD const& Vji, real const idist2, StateVecD const& gradK
+    real const& nu, SPHPart const& pi, SPHPart const& pj, StateVecD const& Rji, StateVecD const& Vji,
+    real const idist2, StateVecD const& gradK
 )
 {
     // if(pj.b != BOUND)
@@ -229,13 +229,13 @@ inline StateVecD ArtVisc(
     }
     else
     {
-        real const muij = fvar.H * vdotr * idist2;
+        real const muij = svar.fluid.H * vdotr * idist2;
         real const rhoij = 0.5 * (pi.rho + pj.rho);
-        real const cbar =
-            0.5 * (sqrt((fvar.B * fvar.gam) / pi.rho) + sqrt((fvar.B * fvar.gam) / pj.rho));
-        // real const alphv = 2 * nu * (SIMDIM + 2)/(fvar.H*cbar);
-        // real const visc_alpha = std::max(fvar.visc_alpha,alphv);
-        real const visc_alpha = fvar.visc_alpha;
+        real const cbar = 0.5 * (sqrt((svar.fluid.B * svar.fluid.gam) / pi.rho) +
+                                 sqrt((svar.fluid.B * svar.fluid.gam) / pj.rho));
+        // real const alphv = 2 * nu * (SIMDIM + 2)/(svar.fluid.H*cbar);
+        // real const visc_alpha = std::max(svar.fluid.visc_alpha,alphv);
+        real const visc_alpha = svar.fluid.visc_alpha;
 
         return gradK * visc_alpha * cbar * muij / rhoij;
     }
@@ -269,11 +269,11 @@ inline StateVecD Viscosity(
 }
 
 /*Repulsion for interacting with mesh surface - saves generating particles on surface*/
-inline StateVecD NormalBoundaryRepulsion(FLUID const& fvar, MESH const& cells, SPHPart const& pi)
+inline StateVecD NormalBoundaryRepulsion(MESH const& cells, SPHPart const& pi)
 {
-    real beta = 4 * fvar.speed_sound * fvar.speed_sound;
-    real kern = BoundaryKernel(pi.y, fvar.H, beta);
-    return fvar.bnd_mass / (fvar.bnd_mass + fvar.sim_mass) * kern * pi.bNorm;
+    real beta = 4 * svar.fluid.speed_sound * svar.fluid.speed_sound;
+    real kern = BoundaryKernel(pi.y, svar.fluid.H, beta);
+    return svar.fluid.bnd_mass / (svar.fluid.bnd_mass + svar.fluid.sim_mass) * kern * pi.bNorm;
 }
 
 #endif

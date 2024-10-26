@@ -653,7 +653,7 @@ namespace TAU
     /*****************************************************************************/
 
     void Read_SOLUTION(
-        SIM const& svar, FLUID const& fvar, AERO const& avar, uint const ignored, MESH& cells,
+        SIM const& svar, AERO const& svar.air, uint const ignored, MESH& cells,
         vector<uint> const& usedVerts
     )
     {
@@ -783,8 +783,9 @@ namespace TAU
         // #pragma omp parallel for
         // for (uint ii = 0; ii < press.size(); ++ii)
         // {
-        // 	press[ii] -= avar.p_ref; /* Want value to be gauge pressure */
-        // 	// dens[ii] = fvar.rho_rest * pow((press[ii] / fvar.B + 1), 1 / fvar.gam);
+        // 	press[ii] -= svar.air.p_ref; /* Want value to be gauge pressure */
+        // 	// dens[ii] = svar.fluid.rho_rest * pow((press[ii] / svar.fluid.B + 1), 1 /
+        // svar.fluid.gam);
         // }
 
         if (press.size() == 0)
@@ -991,8 +992,7 @@ namespace TAU
 #endif
     }
 
-    void
-    Read_tau_mesh_EDGE(SIM& svar, MESH& cells, FLUID const& fvar, AERO const& avar, vector<uint>& uVerts)
+    void Read_tau_mesh_EDGE(SIM& svar, MESH& cells, AERO const& svar.air, vector<uint>& uVerts)
     {
         string meshIn = svar.tau_mesh;
         string solIn = svar.tau_sol;
@@ -1228,7 +1228,7 @@ namespace TAU
 #endif
     }
 
-    void Read_tau_mesh_FACE(SIM& svar, MESH& cells, FLUID const& fvar, AERO const& avar)
+    void Read_tau_mesh_FACE(SIM& svar, MESH& cells, AERO const& svar.air)
     {
         string meshIn = svar.tau_mesh;
         string solIn = svar.tau_sol;

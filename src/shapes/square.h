@@ -11,7 +11,7 @@ class SquareShape : public ShapeBlock
   public:
     SquareShape() { bound_type = squareCube; };
 
-    void check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault) override;
+    void check_input(SIM const& svar, real& globalspacing, int& fault) override;
 
     void generate_points(real const& globalspacing) override;
 };

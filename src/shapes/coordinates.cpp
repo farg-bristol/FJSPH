@@ -5,9 +5,9 @@
 
 // Public functions
 
-void CoordShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault)
+void CoordShape::check_input(SIM const& svar, real& globalspacing, int& fault)
 {
-    ShapeBlock::check_input(svar, fvar, globalspacing, fault);
+    ShapeBlock::check_input(svar, globalspacing, fault);
 
     if (filename.empty())
     {

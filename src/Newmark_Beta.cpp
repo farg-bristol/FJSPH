@@ -8,9 +8,9 @@
 #include "Resid.h"
 
 int Newmark_Beta::Check_Error(
-    Sim_Tree& SPH_TREE, SIM& svar, FLUID const& fvar, size_t const& start, size_t const& end,
-    real& rms_error, real& logbase, OUTL& outlist, vector<StateVecD> const& xih, SPHState const& pn,
-    SPHState& pnp1, uint& iteration
+    Sim_Tree& SPH_TREE, SIM& svar, size_t const& start, size_t const& end, real& rms_error,
+    real& logbase, OUTL& outlist, vector<StateVecD> const& xih, SPHState const& pn, SPHState& pnp1,
+    uint& iteration
 )
 {
     /****** FIND ERROR ***********/
@@ -35,7 +35,7 @@ int Newmark_Beta::Check_Error(
         {
             pnp1 = pn;
 
-            outlist = update_neighbours(SPH_TREE, fvar, pnp1);
+            outlist = update_neighbours(SPH_TREE, svar.fluid, pnp1);
 
             svar.delta_t = 0.5 * svar.delta_t;
             cout << "Unstable timestep. New dt: " << svar.delta_t << endl;
@@ -52,9 +52,9 @@ int Newmark_Beta::Check_Error(
 }
 
 void Newmark_Beta::Do_NB_Iter(
-    Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start,
-    size_t& end, real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist,
-    SPHState const& pn, SPHState& pnp1
+    Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, size_t const& start, size_t& end,
+    real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState const& pn,
+    SPHState& pnp1
 )
 {
     /*Update the state at time n+1*/
@@ -97,26 +97,32 @@ void Newmark_Beta::Do_NB_Iter(
         }
 
         if (limits[block].no_slip)
-            Set_No_Slip(fvar, limits[block].index.first, limits[block].index.second, outlist, pnp1);
+            Set_No_Slip(
+                svar.fluid, limits[block].index.first, limits[block].index.second, outlist, pnp1
+            );
 
         switch (limits[block].bound_solver)
         {
         case DBC:
         {
-            Boundary_DBC(fvar, limits[block].index.first, limits[block].index.second, outlist, pnp1);
+            Boundary_DBC(
+                svar.fluid, limits[block].index.first, limits[block].index.second, outlist, pnp1
+            );
             break;
         }
         case pressure_G:
         {
             Get_Boundary_Pressure(
-                svar.grav, fvar, limits[block].index.first, limits[block].index.second, outlist, pnp1
+                svar.grav, svar.fluid, limits[block].index.first, limits[block].index.second, outlist,
+                pnp1
             );
             break;
         }
         case ghost:
         {
             Boundary_Ghost(
-                fvar, limits[block].index.first, limits[block].index.second, outlist, pnp1, near_inlet
+                svar.fluid, limits[block].index.first, limits[block].index.second, outlist, pnp1,
+                near_inlet
             );
             break;
         }
@@ -126,7 +132,7 @@ void Newmark_Beta::Do_NB_Iter(
     }
 
     /*Guess force at time n+1*/
-    get_acc_and_Rrho(svar, fvar, avar, cells, outlist, npd, pnp1);
+    get_acc_and_Rrho(svar, cells, outlist, npd, pnp1);
 
 #pragma omp parallel default(shared)
     {
@@ -143,13 +149,14 @@ void Newmark_Beta::Do_NB_Iter(
                 for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
                 { /****** BOUNDARY PARTICLES ***********/
                     real const rho = std::max(
-                        fvar.rho_min, std::min(
-                                          fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho +
-                                                                           gamma_t2 * pn[ii].Rrho)
-                                      )
+                        svar.fluid.rho_min,
+                        std::min(
+                            svar.fluid.rho_max,
+                            pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho + gamma_t2 * pn[ii].Rrho)
+                        )
                     );
                     pnp1[ii].rho = rho;
-                    pnp1[ii].p = fvar.get_pressure(rho);
+                    pnp1[ii].p = svar.fluid.get_pressure(rho);
                 }
                 break;
             }
@@ -161,26 +168,27 @@ void Newmark_Beta::Do_NB_Iter(
                     if (near_inlet[ii])
                     { // Don't allow negative pressures
                         real const rho = std::max(
-                            fvar.rho_rest,
+                            svar.fluid.rho_rest,
                             std::min(
-                                fvar.rho_max,
+                                svar.fluid.rho_max,
                                 pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho + gamma_t2 * pn[ii].Rrho)
                             )
                         );
                         pnp1[ii].rho = rho;
-                        pnp1[ii].p = fvar.get_pressure(rho);
+                        pnp1[ii].p = svar.fluid.get_pressure(rho);
                         pnp1[ii].Rrho = fmax(0.0, pnp1[ii].Rrho);
                     }
                     else
                     {
                         real const rho = std::max(
-                            fvar.rho_min, std::min(
-                                              fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho +
-                                                                               gamma_t2 * pn[ii].Rrho)
-                                          )
+                            svar.fluid.rho_min,
+                            std::min(
+                                svar.fluid.rho_max,
+                                pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho + gamma_t2 * pn[ii].Rrho)
+                            )
                         );
                         pnp1[ii].rho = rho;
-                        pnp1[ii].p = fvar.get_pressure(rho);
+                        pnp1[ii].p = svar.fluid.get_pressure(rho);
                     }
                 }
                 break;
@@ -215,13 +223,14 @@ void Newmark_Beta::Do_NB_Iter(
                     pnp1[ii].v = pn[ii].v + dt * (gamma_t1 * pnp1[ii].acc + gamma_t2 * pn[ii].acc);
 
                     real const rho = std::max(
-                        fvar.rho_min, std::min(
-                                          fvar.rho_max, pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho +
-                                                                           gamma_t2 * pn[ii].Rrho)
-                                      )
+                        svar.fluid.rho_min,
+                        std::min(
+                            svar.fluid.rho_max,
+                            pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho + gamma_t2 * pn[ii].Rrho)
+                        )
                     );
                     pnp1[ii].rho = rho;
-                    pnp1[ii].p = fvar.get_pressure(rho);
+                    pnp1[ii].p = svar.fluid.get_pressure(rho);
                 }
                 else if (pnp1[ii].b == OUTLET)
                 { /* For the outlet zone, just perform euler integration of last info */
@@ -270,14 +279,15 @@ void Newmark_Beta::Do_NB_Iter(
                             size_t const& buffID = limits[block].buffer[ii][jj];
 
                             real const rho = std::max(
-                                fvar.rho_min,
+                                svar.fluid.rho_min,
                                 std::min(
-                                    fvar.rho_max, pn[buffID].rho + dt * (gamma_t1 * pnp1[buffID].Rrho +
-                                                                         gamma_t2 * pn[buffID].Rrho)
+                                    svar.fluid.rho_max,
+                                    pn[buffID].rho +
+                                        dt * (gamma_t1 * pnp1[buffID].Rrho + gamma_t2 * pn[buffID].Rrho)
                                 )
                             );
                             pnp1[buffID].rho = rho;
-                            pnp1[buffID].p = fvar.get_pressure(rho);
+                            pnp1[buffID].p = svar.fluid.get_pressure(rho);
                             pnp1[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
                         }
                     }
@@ -291,10 +301,9 @@ void Newmark_Beta::Do_NB_Iter(
 }
 
 real Newmark_Beta::Newmark_Beta(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    size_t const& start, size_t& end, real const& npd, MESH const& cells, LIMITS const& limits,
-    OUTL& outlist, real& logbase, uint& iteration, vector<StateVecD>& xih, SPHState const& pn,
-    SPHState& pnp1
+    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, size_t const& start,
+    size_t& end, real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist, real& logbase,
+    uint& iteration, vector<StateVecD>& xih, SPHState const& pn, SPHState& pnp1
 )
 {
     real rms_error = 0.0;
@@ -305,10 +314,10 @@ real Newmark_Beta::Newmark_Beta(
         for (size_t ii = start; ii < end; ++ii)
             xih[ii - start] = pnp1[ii].xi;
 
-        Do_NB_Iter(CELL_TREE, svar, fvar, avar, start, end, npd, cells, limits, outlist, pn, pnp1);
+        Do_NB_Iter(CELL_TREE, svar, start, end, npd, cells, limits, outlist, pn, pnp1);
 
         int errstate = Check_Error(
-            SPH_TREE, svar, fvar, start, end, rms_error, logbase, outlist, xih, pn, pnp1, iteration
+            SPH_TREE, svar, start, end, rms_error, logbase, outlist, xih, pn, pnp1, iteration
         );
 
         if (errstate == 0) /*Continue as normal*/

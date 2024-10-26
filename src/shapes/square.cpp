@@ -3,10 +3,10 @@
 
 #include "square.h"
 
-void SquareShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault)
+void SquareShape::check_input(SIM const& svar, real& globalspacing, int& fault)
 {
     // Do common input checks.
-    ShapeBlock::check_input(svar, fvar, globalspacing, fault);
+    ShapeBlock::check_input(svar, globalspacing, fault);
 
     if (!check_vector(start))
     {

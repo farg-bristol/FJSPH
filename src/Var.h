@@ -15,6 +15,8 @@
 #include <string.h>
 #include <vector>
 
+#include "VLM.h"
+
 // Third party includes
 #include "Third_Party/Eigen/Core"
 #include "Third_Party/Eigen/StdVector"
@@ -249,33 +251,47 @@ struct OutputVariable
 
 typedef std::map<string, OutputVariable> OutputMap;
 
-struct SIM
+struct INTEG_SETT
 {
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    SIM()
-    {
-        // If OMP_NUM_THREADS exists, use it to set the threads,
-        // but if not, use get num threads.
-        if (std::getenv("OMP_NUM_THREADS"))
-            numThreads = std::max(atoi(std::getenv("OMP_NUM_THREADS")), 1);
-        else
-            numThreads = omp_get_num_threads();
+    /* Integration parameters */
+    string solver_name = "";         /* Name of solver */
+    uint solver_type = newmark_beta; /* Use Runge-Kutta or Newmark-Beta. */
+    uint compressibility_solver = 0; /* Use weakly compressible or artificial compressible SPH. */
+    uint max_subits = 20;            /* Max number of sub-iterations. */
+    uint max_frames = -1;            /* Max number of frames to output. Must be specified. */
+    uint current_frame = 0;          /* Current frame number. */
+    uint bound_solver = 0;           /* Use boundary pressure or ghost particles. */
+    uint n_stable = 0;               /* Count for number of overly stable timesteps to alter CFL */
+    uint n_stable_limit = 10;        /* Limit before changing CFL */
+    uint n_unstable = 0;             /* Count for number of unstable timestep to alter CFL */
+    uint n_unstable_limit = 3;       /* Limit before changing CFL */
+    real subits_factor = 0.333;   /* Factor * max subits, under which is considered overly stable CFL */
+    double cfl = 1.0;             /* CFL criterion number. */
+    double cfl_step = 0.05;       /* CFL step to perform if unstable. */
+    double cfl_max = 2.0;         /* Maximum CFL for the simulation. */
+    double cfl_min = 0.1;         /* Minimum CFL for the simulation. */
+    double current_time = 0.0;    /* Simulation time. */
+    double last_frame_time = 0.0; /* Last written frame time. */
+    real frame_time_interval;     /* Frame time interval. */
+    real min_residual = -7.0;     /* Minimum solver residual. */
+    real delta_t = 2e-10;         /* Integration timestep. */
+    real delta_t_max = 1.0;       /* Maximum timestep. */
+    real delta_t_min = 0.0;       /* Minimum timestep. */
+    real nb_beta = 0.25;          /* Newmark-Beta beta parameter. */
+    real nb_gamma = 0.5;          /* Newmark-Beta gamma parameter. */
+    real max_shift_vel = 9999999; /* Maximum shifting velocity. */
+};
 
+struct IN_OUT_SETT
+{
+    IN_OUT_SETT()
+    {
 #if SIMDIM == 3
         offset_axis = 0;
 #else
         offset_axis = 2; /* Default to XZ plane in 2D */
 #endif
-
-/*Gravity Vector*/
-#if SIMDIM == 3
-        grav = StateVecD(0.0, 0.0, -9.81);
-#else
-        grav = StateVecD(0.0, -9.81);
-#endif
     }
-
-    uint numThreads; /* Number of threads that the simulation will use. */
 
     /* File input parameters */
     string input_file = "";       /* Input settings file. */
@@ -327,89 +343,12 @@ struct SIM
     uint single_file = 1;            /* Write timesteps to a single file or a file for each. */
     uint restart_header_written = 0; /* Whether the restart header has been written yet */
     uint restart = 0;                /* If starting from existing solution */
-    real scale = 1.0;                /* Simulation scale */
-
-    /* SPHPart counts */
-    size_t n_bound_blocks = 0;   /* Number of boundary blocks */
-    size_t n_fluid_blocks = 0;   /* Number of fluid blocks */
-    size_t part_id = 0;          /* Track the particle ID separately */
-    size_t total_points = 0;     /* Total count */
-    size_t fluid_points = 0;     /* Fluid count */
-    size_t bound_points = 0;     /* Boundary count */
-    size_t max_points = 9999999; /* End count */
-    size_t delete_count = 0;     /* Number of deleted particles */
-    size_t internal_count = 0;   /* Number of internal particles */
-
-    /* Particle size value */
-    real particle_step = -1.0;    /* Particle step for creating particle blocks. Must be specified. */
-    real bound_step_factor = 1.0; /* Boundary spacing factor of dx */
-    real dx = -1.0;               /* Initial spacings for particles and boundary. Must be specified. */
-
-    /* Geometry parameters */
-    StateVecD offset_vec = StateVecD::Zero(); /* Global offset coordinate */
-    int Asource = constVel;                   /* Source of aerodynamic solution */
-    int init_hydro_pressure = 0;              /* Initialise fluid with hydrostatic pressure? */
-    int use_global_gas_law = 1; /* Whether to use block specific gas laws (Currently not active) */
-    real hydro_height = -1;     /* Hydrostatic height to initialise using */
-
-    /* Integration parameters */
-    string solver_name = "";         /* Name of solver */
-    uint solver_type = newmark_beta; /* Use Runge-Kutta or Newmark-Beta. */
-    uint compressibility_solver = 0; /* Use weakly compressible or artificial compressible SPH. */
-    uint max_subits = 20;            /* Max number of sub-iterations. */
-    uint max_frames = -1;            /* Max number of frames to output. Must be specified. */
-    uint current_frame = 0;          /* Current frame number. */
-    uint bound_solver = 0;           /* Use boundary pressure or ghost particles. */
-    uint n_stable = 0;               /* Count for number of overly stable timesteps to alter CFL */
-    uint n_stable_limit = 10;        /* Limit before changing CFL */
-    uint n_unstable = 0;             /* Count for number of unstable timestep to alter CFL */
-    uint n_unstable_limit = 3;       /* Limit before changing CFL */
-    real subits_factor = 0.333;   /* Factor * max subits, under which is considered overly stable CFL */
-    double cfl = 1.0;             /* CFL criterion number. */
-    double cfl_step = 0.05;       /* CFL step to perform if unstable. */
-    double cfl_max = 2.0;         /* Maximum CFL for the simulation. */
-    double cfl_min = 0.1;         /* Minimum CFL for the simulation. */
-    double current_time = 0.0;    /* Simulation time. */
-    double last_frame_time = 0.0; /* Last written frame time. */
-    real frame_time_interval;     /* Frame time interval. */
-    real min_residual = -7.0;     /* Minimum solver residual. */
-    real delta_t = 2e-10;         /* Integration timestep. */
-    real delta_t_max = 1.0;       /* Maximum timestep. */
-    real delta_t_min = 0.0;       /* Minimum timestep. */
-    real nb_beta = 0.25;          /* Newmark-Beta beta parameter. */
-    real nb_gamma = 0.5;          /* Newmark-Beta gamma parameter. */
-    real max_shift_vel = 9999999; /* Maximum shifting velocity. */
-    StateVecD grav;               /* Gravity vector (assumed to be on z-axis). */
-
-    real restart_tol = 0.001; /* Tolerance on buffer particles fitting. */
-
-    /* Particle tracking settings */
-    int using_ipt = 0;        /* Transition to IPT after reaching a point. */
-    int ipt_eq_order = 2;     /* Order of equation to use for IPT. */
-    real max_x_sph = 9999999; /* Transition x-coordinate to convert to IPT. */
-    real max_x = 9999999; /* Transition distance for sph (naive assumption) and termination for IPT */
-    size_t ipt_n_success = 0;   /* Number of successful IPT particles. */
-    size_t ipt_n_failed = 0;    /* Number of failed IPT particles. */
-    real ipt_diam = 0.0;        /* Diameter of IPT particle. */
-    real ipt_area = 0.0;        /* Cross-sectional area of IPT particle. */
-    real relax = 0.6;           /* Relaxation factor for IPT iteration. */
-    real n_relax = 5;           /* Number of relaxation steps to try. */
-    uint cells_out = 0;         /* IPT output cells traversed by particle. */
-    uint streak_out = 1;        /* IPT output streamlines. */
-    uint part_out = 0;          /* Whether to output for particle tracking. */
-    FILE* cell_file = NULL;     /* ACSII file handle for IPT cells intersected. */
-    FILE* streak_file = NULL;   /* ASCII file handle for IPT streamlines. */
-    FILE* part_file = NULL;     /* ASCII file handle for IPT particle scatter data. */
-    void* cell_handle = NULL;   /* TECIO file handle for IPT cells intersected. */
-    void* streak_handle = NULL; /* TECIO file handle for IPT streamlines. */
-    void* part_handle = NULL;   /* TECIO file handle for IPT particle scatter data. */
+    real restart_tol = 0.001;        /* Tolerance on buffer particles fitting. */
 };
 
 /*Fluid and smoothing parameters*/
 struct FLUID
 {
-    // EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
     uint pressure_rel = COLE_EOS;
 
     real H = -1.0;          /* Support radius */
@@ -558,6 +497,89 @@ struct AERO
     int use_lam = 1;     /* Use lambda value for aero interpolation */
     int use_TAB_def = 0; /* Use TAB deformation estimate  */
     int use_dx = 0;      /* Use particle spacing or support radius for aero force. */
+};
+
+struct IPT_SETT
+{
+    /* Particle tracking settings */
+    int using_ipt = 0;        /* Transition to IPT after reaching a point. */
+    int ipt_eq_order = 2;     /* Order of equation to use for IPT. */
+    real max_x_sph = 9999999; /* Transition x-coordinate to convert to IPT. */
+    real max_x = 9999999; /* Transition distance for sph (naive assumption) and termination for IPT */
+    size_t ipt_n_success = 0;   /* Number of successful IPT particles. */
+    size_t ipt_n_failed = 0;    /* Number of failed IPT particles. */
+    real ipt_diam = 0.0;        /* Diameter of IPT particle. */
+    real ipt_area = 0.0;        /* Cross-sectional area of IPT particle. */
+    real relax = 0.6;           /* Relaxation factor for IPT iteration. */
+    real n_relax = 5;           /* Number of relaxation steps to try. */
+    uint cells_out = 0;         /* IPT output cells traversed by particle. */
+    uint streak_out = 1;        /* IPT output streamlines. */
+    uint part_out = 0;          /* Whether to output for particle tracking. */
+    FILE* cell_file = NULL;     /* ACSII file handle for IPT cells intersected. */
+    FILE* streak_file = NULL;   /* ASCII file handle for IPT streamlines. */
+    FILE* part_file = NULL;     /* ASCII file handle for IPT particle scatter data. */
+    void* cell_handle = NULL;   /* TECIO file handle for IPT cells intersected. */
+    void* streak_handle = NULL; /* TECIO file handle for IPT streamlines. */
+    void* part_handle = NULL;   /* TECIO file handle for IPT particle scatter data. */
+};
+
+struct SIM
+{
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    SIM()
+    {
+        // If OMP_NUM_THREADS exists, use it to set the threads,
+        // but if not, use get num threads.
+        if (std::getenv("OMP_NUM_THREADS"))
+            numThreads = std::max(atoi(std::getenv("OMP_NUM_THREADS")), 1);
+        else
+            numThreads = omp_get_num_threads();
+
+/*Gravity Vector*/
+#if SIMDIM == 3
+        grav = StateVecD(0.0, 0.0, -9.81);
+#else
+        grav = StateVecD(0.0, -9.81);
+#endif
+    }
+
+    // Global settings
+    uint numThreads; /* Number of threads that the simulation will use. */
+
+    real scale = 1.0; /* Simulation scale */
+
+    /* SPHPart counts */
+    size_t n_bound_blocks = 0;   /* Number of boundary blocks */
+    size_t n_fluid_blocks = 0;   /* Number of fluid blocks */
+    size_t part_id = 0;          /* Track the particle ID separately */
+    size_t total_points = 0;     /* Total count */
+    size_t fluid_points = 0;     /* Fluid count */
+    size_t bound_points = 0;     /* Boundary count */
+    size_t max_points = 9999999; /* End count */
+    size_t delete_count = 0;     /* Number of deleted particles */
+    size_t internal_count = 0;   /* Number of internal particles */
+
+    /* Particle size value */
+    real particle_step = -1.0;    /* Particle step for creating particle blocks. Must be specified. */
+    real bound_step_factor = 1.0; /* Boundary spacing factor of dx */
+    real dx = -1.0;               /* Initial spacings for particles and boundary. Must be specified. */
+
+    /* Geometry parameters */
+    StateVecD offset_vec = StateVecD::Zero(); /* Global offset coordinate */
+    int Asource = constVel;                   /* Source of aerodynamic solution */
+    int init_hydro_pressure = 0;              /* Initialise fluid with hydrostatic pressure? */
+    int use_global_gas_law = 1; /* Whether to use block specific gas laws (Currently not active) */
+    real hydro_height = -1;     /* Hydrostatic height to initialise using */
+
+    StateVecD grav; /* Gravity vector (assumed to be on z-axis). */
+
+    // Settings for more localised components.
+    IN_OUT_SETT io;
+    INTEG_SETT integrator;
+    FLUID fluid;
+    AERO air;
+    IPT_SETT ipt;
+    VLM vlm;
 };
 
 struct MESH

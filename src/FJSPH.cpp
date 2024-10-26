@@ -16,7 +16,6 @@
 #include "Integration.h"
 #include "Neighbours.h"
 #include "Shifting.h"
-#include "VLM.h"
 #include "Var.h"
 
 #ifdef DEBUG
@@ -48,8 +47,8 @@ int main(int argc, char* argv[])
 
     /******* Define the global simulation parameters ******/
     SIM svar;
-    FLUID fvar;
-    AERO avar;
+    FLUID svar.fluid;
+    AERO svar.air;
     LIMITS limits;
     OUTL outlist;
     MESH cells;
@@ -63,7 +62,7 @@ int main(int argc, char* argv[])
     // SPHState airP;
     // DELTAP dp;
 
-    GetInput(argc, argv, svar, fvar, avar, vortex);
+    GetInput(argc, argv, svar, vortex);
 
     omp_set_num_threads(svar.numThreads);
 
@@ -80,8 +79,8 @@ int main(int argc, char* argv[])
         {
             vector<uint> empty;
             TAU::Read_BMAP(svar);
-            TAU::Read_tau_mesh_FACE(svar, cells, fvar, avar);
-            TAU::Read_SOLUTION(svar, fvar, avar, svar.offset_axis, cells, empty);
+            TAU::Read_tau_mesh_FACE(svar, cells, svar.fluid, svar.air);
+            TAU::Read_SOLUTION(svar, svar.offset_axis, cells, empty);
         }
         else
         {
@@ -92,8 +91,8 @@ int main(int argc, char* argv[])
         {
             vector<uint> used_verts;
             TAU::Read_BMAP(svar);
-            TAU::Read_tau_mesh_EDGE(svar, cells, fvar, avar, used_verts);
-            TAU::Read_SOLUTION(svar, fvar, avar, svar.offset_axis, cells, used_verts);
+            TAU::Read_tau_mesh_EDGE(svar, cells, svar.fluid, svar.air, used_verts);
+            TAU::Read_SOLUTION(svar, svar.offset_axis, cells, used_verts);
         }
         else
         {
@@ -113,21 +112,21 @@ int main(int argc, char* argv[])
     if (!svar.restart)
     {
         svar.current_time = 0.0; /*Total simulation time*/
-        Init_Particles(svar, fvar, avar, pn, pnp1, limits);
+        Init_Particles(svar, pn, pnp1, limits);
 
         // Redefine the mass and spacing to make sure the required mass is conserved
         // if(svar.Scase == SPHERE || svar.Scase == JET)
-        // 	Set_Mass(svar,fvar,avar,pn,pnp1);
+        // 	Set_Mass(svar,svar.fluid,svar.air,pn,pnp1);
         if (svar.Asource != meshInfl)
         {
             for (size_t ii = 0; ii < pnp1.size(); ++ii)
             {
-                pn[ii].cellRho = avar.rho_g;
-                pn[ii].cellP = avar.p_ref;
-                pnp1[ii].cellRho = avar.rho_g;
-                pnp1[ii].cellP = avar.p_ref;
-                pn[ii].cellV = avar.v_inf;
-                pnp1[ii].cellV = avar.v_inf;
+                pn[ii].cellRho = svar.air.rho_g;
+                pn[ii].cellP = svar.air.p_ref;
+                pnp1[ii].cellRho = svar.air.rho_g;
+                pnp1[ii].cellP = svar.air.p_ref;
+                pn[ii].cellV = svar.air.v_inf;
+                pnp1[ii].cellV = svar.air.v_inf;
             }
         }
 
@@ -135,9 +134,9 @@ int main(int argc, char* argv[])
     }
     else
     {
-        Init_Particles_Restart(svar, fvar, limits);
+        Init_Particles_Restart(svar, limits);
         /* Read the files */
-        Read_HDF5(svar, fvar, avar, vortex, pn, pnp1, limits);
+        Read_HDF5(svar, vortex, pn, pnp1, limits);
     }
 
     // Check if cells have been initialsed before making a tree off it
@@ -149,7 +148,7 @@ int main(int argc, char* argv[])
 
     ///********* Tree algorithm stuff ************/
     Sim_Tree SPH_TREE(SIMDIM, pnp1, 20);
-    outlist = update_neighbours(SPH_TREE, fvar, pnp1);
+    outlist = update_neighbours(SPH_TREE, svar.fluid, pnp1);
 
     Vec_Tree CELL_TREE(SIMDIM, cells.cCentre, 10);
     CELL_TREE.index->buildIndex();
@@ -173,21 +172,21 @@ int main(int argc, char* argv[])
     if (svar.single_file)
     {
         if (svar.write_tecio)
-            Write_Tec_Headers(ff, fb, fg, svar, fvar, avar, svar.output_prefix);
+            Write_Tec_Headers(ff, fb, fg, svar, svar.output_prefix);
         if (svar.write_h5part)
-            Write_h5part_Headers(svar, fvar, avar, svar.output_prefix);
+            Write_h5part_Headers(svar, svar.output_prefix);
     }
 
     if (!svar.restart)
     {
-        Write_Timestep(ff, fb, fg, svar, fvar, avar, limits, pnp1);
+        Write_Timestep(ff, fb, fg, svar, limits, pnp1);
     }
 
     ///*** Perform an iteration to populate the vectors *****/
     if (!svar.restart)
     {
         integrator.integrate_no_update(
-            SPH_TREE, CELL_TREE, svar, fvar, avar, vortex, cells, limits, outlist, pn, pnp1
+            SPH_TREE, CELL_TREE, svar, vortex, cells, limits, outlist, pn, pnp1
         );
     }
     else
@@ -196,19 +195,19 @@ int main(int argc, char* argv[])
         size_t end = svar.total_points;
         size_t end_ng = svar.bound_points + svar.fluid_points;
         real npd = 1.0;
-        dSPH_PreStep(fvar, end, pnp1, outlist, npd);
+        dSPH_PreStep(svar.fluid, end, pnp1, outlist, npd);
 
         if (svar.Asource == meshInfl)
         {
             // cout << "Finding cells" << endl;
-            FindCell(svar, avar, CELL_TREE, cells, pn, pnp1);
+            FindCell(svar, CELL_TREE, cells, pn, pnp1);
         }
 
-        Detect_Surface(svar, fvar, avar, start, end_ng, outlist, cells, vortex, pn);
+        Detect_Surface(svar, start, end_ng, outlist, cells, vortex, pn);
 
-// Apply_XSPH(fvar,start,end,outlist,dp,pnp1);
+// Apply_XSPH(svar.fluid,start,end,outlist,dp,pnp1);
 #ifdef ALE
-        particle_shift(svar, fvar, start, end_ng, outlist, pn);
+        particle_shift(svar, start, end_ng, outlist, pn);
 #endif
 
         /* Update shifting velocity and surface data */
@@ -264,8 +263,8 @@ int main(int argc, char* argv[])
     const real b = svar.nb_gamma;
     const real c = 0.5 * (1 - 2 * svar.nb_beta);
     const real d = svar.nb_beta;
-    const real B = fvar.B;
-    const real gam = fvar.gam;
+    const real B = svar.fluid.B;
+    const real gam = svar.fluid.gam;
     fprintf(dbout, "Newmark Beta integration parameters\n");
     fprintf(dbout, "a: %f b: %f\n", a, b);
     fprintf(dbout, "c: %f d: %f\n", c, d);
@@ -288,8 +287,7 @@ int main(int argc, char* argv[])
 #endif
 
             error = integrator.integrate(
-                SPH_TREE, CELL_TREE, svar, fvar, avar, vortex, cells, surf_marks, limits, outlist, pn,
-                pnp1, iptdata
+                SPH_TREE, CELL_TREE, svar, vortex, cells, surf_marks, limits, outlist, pn, pnp1, iptdata
             );
             stept += svar.delta_t;
             ++stepits;
@@ -326,8 +324,8 @@ int main(int argc, char* argv[])
             break;
         }
 
-        Write_Timestep(ff, fb, fg, svar, fvar, avar, limits, pnp1);
-        Write_HDF5(svar, fvar, avar, pnp1, limits);
+        Write_Timestep(ff, fb, fg, svar, limits, pnp1);
+        Write_HDF5(svar, pnp1, limits);
         if (svar.using_ipt)
             IPT::Write_Data(svar, cells, iptdata);
 

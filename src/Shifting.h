@@ -8,24 +8,23 @@
 
 /*L matrix for delta-SPH calculation*/
 void dSPH_PreStep(
-    FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL const& outlist,
-    real& npd /* , DELTAP& dp */
+    size_t const& end, SPHState& pnp1, OUTL const& outlist, real& npd /* , DELTAP& dp */
 );
 
 /* Calculate dissipation terms before freezing. */
 void dissipation_terms(
-    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
+    size_t const& start, size_t const& end, OUTL const& outlist,
     /* DELTAP const& dp, */ SPHState& pnp1
 );
 
 #ifdef ALE
 void particle_shift(
-    SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
+    SIM const& svar, size_t const& start, size_t const& end, OUTL const& outlist,
     /* DELTAP const& dp, */ SPHState& pnp1
 );
 #endif
 
-// void Apply_XSPH(FLUID const& fvar, size_t const& start, size_t const& end,
+// void Apply_XSPH( size_t const& start, size_t const& end,
 // 				OUTL const& outlist, DELTAP const& dp, SPHState& pnp1);
 
 #endif

@@ -576,7 +576,7 @@ void FirstCell(SIM& svar, Vec_Tree const& CELL_INDEX, MESH const& cells, SPHPart
 /* It is assumed that the particle does have a previous cell defined, and checks this cell */
 /* before going to the KD Tree to find the nearest cells to iterate through. </summary> */
 vector<size_t> FindCell(
-    SIM& svar, AERO const& avar, Vec_Tree const& CELL_TREE, MESH const& cells,
+    SIM& svar, AERO const& svar.air, Vec_Tree const& CELL_TREE, MESH const& cells,
     /* DELTAP const& dp, */ SPHState& pn, SPHState& pnp1
 )
 {
@@ -591,7 +591,7 @@ vector<size_t> FindCell(
 #pragma omp for schedule(static) nowait
         for (size_t ii = start; ii < end; ++ii)
         {
-            if (pnp1[ii].b != FREE || pnp1[ii].lam_nb > avar.lam_cutoff)
+            if (pnp1[ii].b != FREE || pnp1[ii].lam_nb > svar.air.lam_cutoff)
             {
                 pnp1[ii].cellID = -1;
                 continue;
@@ -822,7 +822,7 @@ vector<size_t> FindCell(
 }
 
 void Check_Pipe_Outlet(
-    Vec_Tree const& CELL_TREE, SIM& svar, AERO const& avar, MESH const& cells, LIMITS& limits,
+    Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, MESH const& cells, LIMITS& limits,
     /* DELTAP& dp, */ SPHState& pn, SPHState& pnp1, size_t& end, size_t& end_ng
 )
 {
@@ -839,7 +839,7 @@ void Check_Pipe_Outlet(
                 if (pnp1[ii].xi.dot(limits[block].aero_norm) > limits[block].aeroconst)
                 {
                     pnp1[ii].b = FREE;
-                    if (pnp1[ii].lam_nb < avar.lam_cutoff && svar.Asource == meshInfl)
+                    if (pnp1[ii].lam_nb < svar.air.lam_cutoff && svar.Asource == meshInfl)
                     { /* Retrieve the cell it's in */
                         uint to_del = 0;
                         FirstCell(svar, CELL_TREE, cells, pnp1[ii], to_del);

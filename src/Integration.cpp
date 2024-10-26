@@ -25,8 +25,8 @@ to use a fixed timestep) and do not update the new timestep. This should be used
 write files with starting forces.
 */
 real Integrator::integrate_no_update(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    VLM const& vortex, MESH const& cells, LIMITS& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1
+    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, VLM const& vortex,
+    MESH const& cells, LIMITS& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1
 )
 {
     start_index = svar.bound_points;
@@ -38,28 +38,27 @@ real Integrator::integrate_no_update(
     real npd = 1.0;
 
     // Find maximum safe timestep
-    svar.delta_t = find_timestep(svar, fvar, cells, pnp1, start_index, end_index);
+    svar.delta_t = find_timestep(svar, cells, pnp1, start_index, end_index);
 
-    outlist = update_neighbours(SPH_TREE, fvar, pnp1);
+    outlist = update_neighbours(SPH_TREE, svar.fluid, pnp1);
 
-    dSPH_PreStep(fvar, svar.total_points, pnp1, outlist, npd);
+    dSPH_PreStep(svar.fluid, svar.total_points, pnp1, outlist, npd);
 
     get_aero_velocity(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, vortex, start_index, end_index, outlist, limits,
-        pn, pnp1, npd
+        SPH_TREE, CELL_TREE, svar, cells, vortex, start_index, end_index, outlist, limits, pn, pnp1, npd
     );
 
-    Detect_Surface(svar, fvar, avar, start_index, end_index, outlist, cells, vortex, pnp1);
+    Detect_Surface(svar, start_index, end_index, outlist, cells, vortex, pnp1);
 
 #ifndef NOFROZEN
-    dissipation_terms(fvar, start_index, end_index, outlist, pnp1);
+    dissipation_terms(svar.fluid, start_index, end_index, outlist, pnp1);
 #endif
 
 #ifdef ALE
-    particle_shift(svar, fvar, start_index, end_index, outlist, pnp1);
+    particle_shift(svar, start_index, end_index, outlist, pnp1);
 #endif
 
-    Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end_index, end_index);
+    Check_Pipe_Outlet(CELL_TREE, svar, cells, limits, pn, pnp1, end_index, end_index);
 
     vector<StateVecD> xih(end_index - start_index);
 #pragma omp parallel for default(shared)
@@ -70,49 +69,46 @@ real Integrator::integrate_no_update(
 
     /*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
     logbase = solve_prestep(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pn, pnp1, xih, start_index,
-        end_index, npd
+        SPH_TREE, CELL_TREE, svar, cells, limits, outlist, pn, pnp1, xih, start_index, end_index, npd
     );
 
     // cout << "Error: " << error1 << endl;
 
     /****** UPDATE NEIGHBOURS AND TREE ***********/
-    outlist = update_neighbours(SPH_TREE, fvar, pnp1);
+    outlist = update_neighbours(SPH_TREE, svar.fluid, pnp1);
 
-    dSPH_PreStep(fvar, end_index, pnp1, outlist, npd);
+    dSPH_PreStep(svar.fluid, end_index, pnp1, outlist, npd);
 
     get_aero_velocity(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, vortex, start_index, end_index, outlist, limits,
-        pn, pnp1, npd
+        SPH_TREE, CELL_TREE, svar, cells, vortex, start_index, end_index, outlist, limits, pn, pnp1, npd
     );
 
-    Detect_Surface(svar, fvar, avar, start_index, end_index, outlist, cells, vortex, pnp1);
+    Detect_Surface(svar, start_index, end_index, outlist, cells, vortex, pnp1);
 
 #ifndef NOFROZEN
-    dissipation_terms(fvar, start_index, end_index, outlist, pnp1);
+    dissipation_terms(svar.fluid, start_index, end_index, outlist, pnp1);
 #endif
 
-    // Apply_XSPH(fvar,start_index,end_index,outlist,pnp1);
+    // Apply_XSPH(svar.fluid,start_index,end_index,outlist,pnp1);
 
 #ifdef ALE
-    particle_shift(svar, fvar, start_index, end_index, outlist, pnp1);
+    particle_shift(svar, start_index, end_index, outlist, pnp1);
 #endif
 
-    Check_Pipe_Outlet(CELL_TREE, svar, avar, cells, limits, pn, pnp1, end_index, end_index);
+    Check_Pipe_Outlet(CELL_TREE, svar, cells, limits, pn, pnp1, end_index, end_index);
 
     /*Do time integration*/
     rms_error = solve_step(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, cells, limits, outlist, pn, pnp1, xih, start_index,
-        end_index, logbase, npd
+        SPH_TREE, CELL_TREE, svar, cells, limits, outlist, pn, pnp1, xih, start_index, end_index,
+        logbase, npd
     );
 
     return rms_error;
 }
 
 size_t Integrator::update_data(
-    Sim_Tree& SPH_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
-    LIMITS& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1, SURFS& surf_marks,
-    vector<IPTState>& iptdata
+    Sim_Tree& SPH_TREE, SIM& svar, AERO const& svar.air, MESH const& cells, LIMITS& limits,
+    OUTL& outlist, SPHState& pn, SPHState& pnp1, SURFS& surf_marks, vector<IPTState>& iptdata
 )
 {
     uint nAdd = update_buffer_region(svar, limits, pnp1, end_index, end_index);
@@ -156,9 +152,7 @@ size_t Integrator::update_data(
 #pragma omp parallel for default(shared)
         for (size_t ii = 0; ii < IPT_np1.size(); ++ii)
         {
-            IPT::Integrate(
-                svar, fvar, avar, cells, ii, IPT_nm1[ii], IPT_n[ii], IPT_np1[ii], surf_marks, iptdata
-            );
+            IPT::Integrate(svar, cells, ii, IPT_nm1[ii], IPT_n[ii], IPT_np1[ii], surf_marks, iptdata);
         }
     }
 
@@ -200,7 +194,7 @@ size_t Integrator::update_data(
 
     if (nAdd != 0 || nDel != 0)
     {
-        outlist = update_neighbours(SPH_TREE, fvar, pnp1);
+        outlist = update_neighbours(SPH_TREE, svar.fluid, pnp1);
     }
 
     /****** UPDATE TIME N ***********/
@@ -225,19 +219,17 @@ Solve the forces and pressures for particles according to a calculated stable ti
 to use a fixed timestep) and update the data of time n.
  */
 real Integrator::integrate(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    VLM const& vortex, MESH const& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist, SPHState& pn,
-    SPHState& pnp1, vector<IPTState>& ipt_data
+    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, VLM const& vortex,
+    MESH const& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1,
+    vector<IPTState>& ipt_data
 )
 {
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
 
-    real step_error = integrate_no_update(
-        SPH_TREE, CELL_TREE, svar, fvar, avar, vortex, cells, limits, outlist, pn, pnp1
-    );
+    real step_error =
+        integrate_no_update(SPH_TREE, CELL_TREE, svar, vortex, cells, limits, outlist, pn, pnp1);
 
-    size_t npts =
-        update_data(SPH_TREE, svar, fvar, avar, cells, limits, outlist, pn, pnp1, surf_marks, ipt_data);
+    size_t npts = update_data(SPH_TREE, svar, cells, limits, outlist, pn, pnp1, surf_marks, ipt_data);
 
     // If there are no particles then exit early.
     if (npts == 0)
@@ -254,12 +246,12 @@ real Integrator::integrate(
     for (size_t ii = start_index; ii < end_index; ++ii)
     {
         maxAf = std::max(maxAf, pnp1[ii].Af.norm());
-        maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - fvar.rho_rest));
+        maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - svar.fluid.rho_rest));
 #ifdef ALE
         maxShift = std::max(maxShift, pnp1[ii].vPert.norm());
 #endif
     }
-    maxRho = 100 * maxRhoi / fvar.rho_rest;
+    maxRho = 100 * maxRhoi / svar.fluid.rho_rest;
     real cfl = svar.delta_t / safe_dt;
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(t2 - t1).count();
@@ -280,7 +272,7 @@ real Integrator::integrate(
     svar.current_time += svar.delta_t;
 
     /* Check the error and adjust the CFL to try and keep convergence */
-    if (step_error > svar.min_residual || maxRho > fvar.rho_max_iter)
+    if (step_error > svar.min_residual || maxRho > svar.fluid.rho_max_iter)
     {
         if (step_error > 0.6 * svar.min_residual)
         { // If really unstable, immediately reduce the timestep
@@ -336,9 +328,9 @@ real Integrator::integrate(
 
 /* Internal pre-step for the integration methods to find base error for the timestep. */
 real Integrator::solve_prestep(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1,
-    vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& npd
+    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, MESH const& cells,
+    LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1, vector<StateVecD>& xih,
+    size_t const& start_index, size_t& end_index, real& npd
 )
 {
     /*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
@@ -348,20 +340,17 @@ real Integrator::solve_prestep(
     {
     case runge_kutta:
     {
-        logbase = Get_First_RK(
-            svar, fvar, avar, start_index, end_index, npd, cells, limits, outlist, pn, pnp1
-        );
+        logbase = Get_First_RK(svar, start_index, end_index, npd, cells, limits, outlist, pn, pnp1);
         break;
     }
     case newmark_beta:
     {
         Newmark_Beta::Do_NB_Iter(
-            CELL_TREE, svar, fvar, avar, start_index, end_index, npd, cells, limits, outlist, pn, pnp1
+            CELL_TREE, svar, start_index, end_index, npd, cells, limits, outlist, pn, pnp1
         );
 
         void(Newmark_Beta::Check_Error(
-            SPH_TREE, svar, fvar, start_index, end_index, rms_error, logbase, outlist, xih, pn, pnp1,
-            iteration
+            SPH_TREE, svar, start_index, end_index, rms_error, logbase, outlist, xih, pn, pnp1, iteration
         ));
         iteration++; // Update iteration count
         break;
@@ -372,9 +361,9 @@ real Integrator::solve_prestep(
 
 /* Internal funtion to solve the timestep given a base error from the pre-step. */
 real Integrator::solve_step(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1,
-    vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& logbase, real& npd
+    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, MESH const& cells,
+    LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1, vector<StateVecD>& xih,
+    size_t const& start_index, size_t& end_index, real& logbase, real& npd
 )
 {
     /*Do time integration*/
@@ -386,16 +375,15 @@ real Integrator::solve_step(
         SPHState st_1 = pnp1;
 
         rms_error = Runge_Kutta4(
-            svar, fvar, avar, start_index, end_index, npd, cells, limits, outlist, logbase, pn, st_1,
-            pnp1
+            svar, start_index, end_index, npd, cells, limits, outlist, logbase, pn, st_1, pnp1
         );
         break;
     }
     case newmark_beta:
     {
         rms_error = Newmark_Beta::Newmark_Beta(
-            SPH_TREE, CELL_TREE, svar, fvar, avar, start_index, end_index, npd, cells, limits, outlist,
-            logbase, iteration, xih, pn, pnp1
+            SPH_TREE, CELL_TREE, svar, start_index, end_index, npd, cells, limits, outlist, logbase,
+            iteration, xih, pn, pnp1
         );
         break;
     }
@@ -404,8 +392,8 @@ real Integrator::solve_step(
 }
 
 real Integrator::find_timestep(
-    SIM const& svar, FLUID const& fvar, MESH const& cells, SPHState const& pnp1,
-    size_t const& start_index, size_t const& end_index
+    SIM const& svar, MESH const& cells, SPHState const& pnp1, size_t const& start_index,
+    size_t const& end_index
 )
 {
     // Find maximum safe timestep (avoiding a div by zero)
@@ -421,19 +409,19 @@ real Integrator::find_timestep(
         maxU = std::max(maxU, pnp1[ii].v.norm());
         minST = std::min(
             minST,
-            sqrt(pnp1[ii].rho * svar.dx * svar.dx / (2.0 * M_PI * fvar.sig * fabs(pnp1[ii].curve)))
+            sqrt(pnp1[ii].rho * svar.dx * svar.dx / (2.0 * M_PI * svar.fluid.sig * fabs(pnp1[ii].curve)))
         );
     }
 
     vector<real> timestep_factors;
-    timestep_factors.emplace_back(0.25 * sqrt(fvar.H / maxf)); /* Force timestep constraint */
-    timestep_factors.emplace_back(2 * fvar.H / (maxU));        /* Velocity constraint */
+    timestep_factors.emplace_back(0.25 * sqrt(svar.fluid.H / maxf)); /* Force timestep constraint */
+    timestep_factors.emplace_back(2 * svar.fluid.H / (maxU));        /* Velocity constraint */
     timestep_factors.emplace_back(
-        0.125 * fvar.H_sq * fvar.rho_rest / fvar.mu
-    );                                                           /* Viscosity timestep constraint */
-    timestep_factors.emplace_back(0.067 * minST);                /* Surface tension constraint */
-    timestep_factors.emplace_back(0.5 * sqrt(fvar.H / maxdrho)); /* Density gradient constraint */
-    timestep_factors.emplace_back(1.5 * fvar.H / fvar.speed_sound);
+        0.125 * svar.fluid.H_sq * svar.fluid.rho_rest / svar.fluid.mu
+    );                                            /* Viscosity timestep constraint */
+    timestep_factors.emplace_back(0.067 * minST); /* Surface tension constraint */
+    timestep_factors.emplace_back(0.5 * sqrt(svar.fluid.H / maxdrho)); /* Density gradient constraint */
+    timestep_factors.emplace_back(1.5 * svar.fluid.H / svar.fluid.speed_sound);
     /* Acoustic constraint */ /* 2* can't be used without delta-SPH it seems. Divergent in tensile
                                  instability */
 

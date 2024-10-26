@@ -19,8 +19,7 @@
 /* Boundary pressure calculation - Adami, Hu, and Adams, 2012 -
  * https://doi.org/10.1016/j.jcp.2012.05.005*/
 void Get_Boundary_Pressure(
-    StateVecD const& grav, FLUID const& fvar, size_t const& start, size_t const& end,
-    OUTL const& outlist, SPHState& pnp1
+    StateVecD const& grav, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
 )
 {
     std::vector<real> pressure(end - start, 0.0);
@@ -45,7 +44,7 @@ void Get_Boundary_Pressure(
                 real const rr = jj.second;
                 real const r = sqrt(rr);
                 real const volj = pj.m / pj.rho;
-                real kern = volj * Kernel(r, fvar.H, fvar.W_correc);
+                real kern = volj * Kernel(r, svar.fluid.H, svar.fluid.W_correc);
 
                 kernsum += kern;
                 pkern += pj.p * kern;
@@ -71,15 +70,13 @@ void Get_Boundary_Pressure(
     for (size_t ii = start; ii < end; ++ii)
     {
         pnp1[ii].p = pressure[ii - start];
-        pnp1[ii].rho = fvar.get_density(pressure[ii - start]);
+        pnp1[ii].rho = svar.fluid.get_density(pressure[ii - start]);
     }
 }
 
-void Boundary_DBC(
-    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
-)
+void Boundary_DBC(size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1)
 {
-    real const c2 = fvar.speed_sound * fvar.speed_sound;
+    real const c2 = svar.fluid.speed_sound * svar.fluid.speed_sound;
     /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
     vector<StateVecD> RV_(end, StateVecD::Zero());
 #pragma omp parallel default(shared)
@@ -98,13 +95,15 @@ void Boundary_DBC(
                 StateVecD const Vji = pj.v - pi.v;
                 real const rr = jj.second;
                 real const r = sqrt(rr);
-                real const idist2 = 1.0 / (rr + 0.001 * fvar.H_sq);
+                real const idist2 = 1.0 / (rr + 0.001 * svar.fluid.H_sq);
                 // real const volj = pj.m/pj.rho;
-                real const kern = Kernel(r, fvar.H, fvar.W_correc);
-                StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.W_correc);
-                StateVecD art_visc_ = pj.m * ArtVisc(fvar.nu, pi, pj, fvar, Rji, Vji, idist2, gradK);
+                real const kern = Kernel(r, svar.fluid.H, svar.fluid.W_correc);
+                StateVecD const gradK = GradK(Rji, r, svar.fluid.H, svar.fluid.W_correc);
+                StateVecD art_visc_ =
+                    pj.m * ArtVisc(svar.fluid.nu, pi, pj, svar.fluid, Rji, Vji, idist2, gradK);
                 /*Base WCSPH continuity drho/dt*/
-                RV_[jj.first] -= 2.0 * c2 * kern / pow(kern + fvar.W_correc, 2.0) * gradK + art_visc_;
+                RV_[jj.first] -=
+                    2.0 * c2 * kern / pow(kern + svar.fluid.W_correc, 2.0) * gradK + art_visc_;
             } /*End of neighbours*/
         } /*End of boundary parts*/
 
@@ -120,8 +119,7 @@ void Boundary_DBC(
  * all equations */
 /* Just don't have the position, velocity, and acceleration updated */
 void Boundary_Ghost(
-    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1,
-    vector<int>& near_inlet
+    size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1, vector<int>& near_inlet
 )
 {
 /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
@@ -147,7 +145,7 @@ void Boundary_Ghost(
                 real const rr = jj.second;
                 real const r = sqrt(rr);
                 real const volj = pj.m / pj.rho;
-                StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.W_correc);
+                StateVecD const gradK = GradK(Rji, r, svar.fluid.H, svar.fluid.W_correc);
 
                 /*Base WCSPH continuity drho/dt*/
                 Rrhoi -= volj * Vji.dot(gradK);
@@ -159,9 +157,7 @@ void Boundary_Ghost(
     }
 }
 
-void Set_No_Slip(
-    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
-)
+void Set_No_Slip(size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1)
 {
 #pragma omp for schedule(static) nowait /*Reduction defs in Var.h*/
     for (size_t ii = start; ii < end; ++ii)
@@ -174,7 +170,7 @@ void Set_No_Slip(
             if (ii == jj.first || pj.b <= PISTON)
                 continue;
             real r = sqrt(jj.second);
-            real kern = Kernel(r, fvar.H, fvar.W_correc);
+            real kern = Kernel(r, svar.fluid.H, svar.fluid.W_correc);
             kernsum += kern;
             velsum += pj.v * kern;
         }
@@ -240,7 +236,7 @@ inline StateVecD SurfTenContrib(
 
 /* Find the acceleration and density gradient for an individual particle from its neighbourhood. */
 void get_acc_and_Rrho_on_i(
-    SIM const& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
+    SIM const& svar, AERO const& svar.air, MESH const& cells,
     std::vector<neighbour_index> const& outlist_i, SPHState const& pnp1, real const& npdm2,
     real const& pi3o4, StateVecD const& grav_vec, SPHPart const& pi, StateVecD& acc_i,
     StateVecD& acc_aero_i, real& Rrho_i
@@ -264,13 +260,14 @@ void get_acc_and_Rrho_on_i(
 #endif
 #endif
 
-    if (pi.cellID != -1 /* pi.lam_nb < avar.lam_cutoff && pi.b == FREE */)
+    if (pi.cellID != -1 /* pi.lam_nb < svar.air.lam_cutoff && pi.b == FREE */)
     {
         StateVecD const V_diff = pi.cellV - pi.v;
         real Pbasei = 0.0;
 
-        StateVecD const aero =
-            CalcAeroAcc(avar, pi, V_diff, pi.norm, pi.lam_nb, real(outlist_i.size()), Pbasei, svar.dx);
+        StateVecD const aero = CalcAeroAcc(
+            svar.air, pi, V_diff, pi.norm, pi.lam_nb, real(outlist_i.size()), Pbasei, svar.dx
+        );
         acc_ += aero;
         acc_aero_i = aero;
     }
@@ -286,14 +283,14 @@ void get_acc_and_Rrho_on_i(
         StateVecD const Vji = pj.v - pi.v;
         real const rr = jj.second;
         real const r = sqrt(rr);
-        real const idist2 = 1.0 / (rr + 0.001 * fvar.H_sq);
+        real const idist2 = 1.0 / (rr + 0.001 * svar.fluid.H_sq);
 
         // #if defined(CSF) || defined(HESF) || (!defined(NODSPH) && defined(NOFROZEN))
         real const volj = pj.m / pj.rho;
         // #endif
 
-        // StateVecD const gradK = GradK(Rji,r,fvar.H,fvar.W_correc);
-        StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.W_correc); /* gradK;*/
+        // StateVecD const gradK = GradK(Rji,r,svar.fluid.H,svar.fluid.W_correc);
+        StateVecD const gradK = GradK(Rji, r, svar.fluid.H, svar.fluid.W_correc); /* gradK;*/
 
         StateVecD const contrib = PressureContrib(pi, pj, volj, gradK);
 
@@ -302,11 +299,11 @@ void get_acc_and_Rrho_on_i(
 #endif
 
         /*Laminar Viscosity - Morris (2003)*/
-        StateVecD const visc = Viscosity(fvar.nu, pi, pj, Rji, Vji, idist2, gradK);
+        StateVecD const visc = Viscosity(svar.fluid.nu, pi, pj, Rji, Vji, idist2, gradK);
         visc_ += pj.m * visc;
 
         /* Surface tension options */
-        surf_t_ += SurfTenContrib(pi, pj, volj, gradK, Rji, r, fvar.H, npdm2, pi3o4);
+        surf_t_ += SurfTenContrib(pi, pj, volj, gradK, Rji, r, svar.fluid.H, npdm2, pi3o4);
 
         acc_ -= contrib;
 #ifdef ALE
@@ -326,19 +323,20 @@ void get_acc_and_Rrho_on_i(
         if (pj.b > PISTON)
         {
 #ifndef NODSPH
-            Rrho_d_ +=
-                Continuity_dSPH(Rji, idist2, fvar.H_sq, gradK, volj, pi.gradRho, pj.gradRho, pi, pj);
+            Rrho_d_ += Continuity_dSPH(
+                Rji, idist2, svar.fluid.H_sq, gradK, volj, pi.gradRho, pj.gradRho, pi, pj
+            );
 #endif
 #ifdef LINEAR
             art_visc_ += Linear_ArtVisc(Rji, Vji, idist2, gradK, volj);
 #else
-            art_visc_ += pj.m * ArtVisc(fvar.nu, pi, pj, fvar, Rji, Vji, idist2, gradK);
+            art_visc_ += pj.m * ArtVisc(svar.fluid.nu, pi, pj, svar.fluid, Rji, Vji, idist2, gradK);
 #endif
         }
         else
         {
 #ifndef NODSPH
-            Rrho_d_ += Continuity_dSPH(Rji, idist2, fvar.H_sq, gradK, volj, pi, pj);
+            Rrho_d_ += Continuity_dSPH(Rji, idist2, svar.fluid.H_sq, gradK, volj, pi, pj);
 #endif
         }
 #endif
@@ -350,23 +348,23 @@ void get_acc_and_Rrho_on_i(
 
     if (pi.internal == 1)
     { // Apply the normal boundary force
-        acc_ += NormalBoundaryRepulsion(fvar, cells, pi);
+        acc_ += NormalBoundaryRepulsion(svar.fluid, cells, pi);
     }
 
 #ifdef CSF
 // if(dp.lam[ii] < 0.75 /* pi.surf == 1 */)
 // {
-// 	acc_ += (fvar.sig/pi.rho * curve * pi.norm)/W_correc;
+// 	acc_ += (svar.fluid.sig/pi.rho * curve * pi.norm)/W_correc;
 // }
 // if(pi.surf == 1)
 // {	/* lambda tuning factor supposedly = 3 */
-// 	acc_ += 3.0*(fvar.sig * pi.curve * pi.norm);
+// 	acc_ += 3.0*(svar.fluid.sig * pi.curve * pi.norm);
 // }
-// surf_t_ -= fvar.sig * pi.curve * pi.norm * dp.colourG[ii];
+// surf_t_ -= svar.fluid.sig * pi.curve * pi.norm * dp.colourG[ii];
 #ifdef ALE
 // if(pi.surfzone == 1)
 #endif
-    acc_ += 1.0 / pi.rho * fvar.sig * pi.curve * pi.norm * pi.colourG;
+    acc_ += 1.0 / pi.rho * svar.fluid.sig * pi.curve * pi.norm * pi.colourG;
 #endif
 
 #ifdef HESF
@@ -375,7 +373,8 @@ void get_acc_and_Rrho_on_i(
 
 #ifdef NOFROZEN
 #ifdef LINEAR
-    art_visc_ *= fvar.visc_alpha * fvar.H * fvar.speed_sound * fvar.rho0 / pi.rho;
+    art_visc_ *=
+        svar.fluid.visc_alpha * svar.fluid.H * svar.fluid.speed_sound * svar.fluid.rho0 / pi.rho;
 #endif
 
 #ifdef ALE
@@ -386,9 +385,9 @@ void get_acc_and_Rrho_on_i(
 
 #ifndef NODSPH
 #ifdef ALE
-    Rrho_i = Rrho_ * pi.rho + Rrhoc_ + fvar.dsph_cont * Rrho_d_;
+    Rrho_i = Rrho_ * pi.rho + Rrhoc_ + svar.fluid.dsph_cont * Rrho_d_;
 #else
-    Rrho_i = Rrho_ * pi.rho + fvar.dsph_cont * Rrho_d_;
+    Rrho_i = Rrho_ * pi.rho + svar.fluid.dsph_cont * Rrho_d_;
 #endif
 #else
     Rrho_i = Rrho_ * pi.rho;
@@ -421,8 +420,8 @@ Calculate all forces (and represent as acceleration) due to pressure, viscosity,
 aerodynamic coupling.
   */
 void get_acc_and_Rrho(
-    SIM const& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, OUTL const& outlist,
-    real const& npd, SPHState& pnp1
+    SIM const& svar, AERO const& svar.air, MESH const& cells, OUTL const& outlist, real const& npd,
+    SPHState& pnp1
 )
 {
 
@@ -433,17 +432,17 @@ void get_acc_and_Rrho(
 
     /*Surface tension factor*/
     real const lam =
-        (6.0 / 81.0 * pow((2.0 * fvar.H), 3.0) / pow(M_PI, 4.0) *
+        (6.0 / 81.0 * pow((2.0 * svar.fluid.H), 3.0) / pow(M_PI, 4.0) *
          (9.0 / 4.0 * pow(M_PI, 3.0) - 6.0 * M_PI - 4.0));
     // #if SIMDIM==2
-    // real const lam = 8.0/81.0*pow(fvar.H,4)/pow(M_PI,4)*(9.0/4.0*pow(M_PI,3)-6.0*M_PI-4.0);
+    // real const lam = 8.0/81.0*pow(svar.fluid.H,4)/pow(M_PI,4)*(9.0/4.0*pow(M_PI,3)-6.0*M_PI-4.0);
 
     // #else
     // real const lam = 3.0 / (4.0 * pow(M_PI, 4.0)) * (pow(2.0, 7) - 9.0 * pow(2.0, 4)
-    //              * M_PI * M_PI + 9.0 * 3.0 * pow(M_PI, 4)) * pow(fvar.H / 3.0, 5);
+    //              * M_PI * M_PI + 9.0 * 3.0 * pow(M_PI, 4)) * pow(svar.fluid.H / 3.0, 5);
     // #endif
 
-    real const npdm2 = (0.5 * fvar.sig / lam) / (npd * npd);
+    real const npdm2 = (0.5 * svar.fluid.sig / lam) / (npd * npd);
     real const pi3o4 = 3.0 * M_PI / 4.0;
 #endif
 
@@ -458,8 +457,8 @@ void get_acc_and_Rrho(
         {
             SPHPart const& pi = pnp1[ii];
             get_acc_and_Rrho_on_i(
-                svar, fvar, avar, cells, outlist[ii], pnp1, npdm2, pi3o4, grav_vec, pi, pnp1[ii].acc,
-                pnp1[ii].Af, pnp1[ii].Rrho
+                svar, cells, outlist[ii], pnp1, npdm2, pi3o4, grav_vec, pi, pnp1[ii].acc, pnp1[ii].Af,
+                pnp1[ii].Rrho
             );
         } /*End of sim parts*/
 
@@ -467,9 +466,9 @@ void get_acc_and_Rrho(
 }
 
 void get_aero_velocity(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    MESH const& cells, VLM const& vortex, size_t const& start, size_t& end_ng, OUTL& outlist,
-    LIMITS& limits, SPHState& pn, SPHState& pnp1, real& npd
+    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, MESH const& cells,
+    VLM const& vortex, size_t const& start, size_t& end_ng, OUTL& outlist, LIMITS& limits, SPHState& pn,
+    SPHState& pnp1, real& npd
 )
 {
     // Check if the particle has moved to a new cell
@@ -478,7 +477,7 @@ void get_aero_velocity(
     case meshInfl:
     {
         // cout << "Finding cells" << endl;
-        vector<size_t> toDelete = FindCell(svar, avar, CELL_TREE, cells, pn, pnp1);
+        vector<size_t> toDelete = FindCell(svar, CELL_TREE, cells, pn, pnp1);
 
         if (!toDelete.empty())
         {
@@ -515,22 +514,22 @@ void get_aero_velocity(
             svar.fluid_points -= nDel;
             svar.total_points -= nDel;
             end_ng -= nDel;
-            outlist = update_neighbours(SPH_TREE, fvar, pnp1);
-            dSPH_PreStep(fvar, svar.total_points, pnp1, outlist, npd);
+            outlist = update_neighbours(SPH_TREE, svar.fluid, pnp1);
+            dSPH_PreStep(svar.fluid, svar.total_points, pnp1, outlist, npd);
         }
         break;
     }
 #if SIMDIM == 3
     case VLMInfl:
     {
-        switch (avar.use_lam)
+        switch (svar.air.use_lam)
         {
         case true:
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end_ng; ii++)
             {
-                if (pnp1[ii].lam_nb < avar.lam_cutoff && pnp1[ii].b == FREE)
+                if (pnp1[ii].lam_nb < svar.air.lam_cutoff && pnp1[ii].b == FREE)
                 {
                     pnp1[ii].cellV = vortex.getVelocity(pnp1[ii].xi);
                     pnp1[ii].cellID = 1;
@@ -548,7 +547,7 @@ void get_aero_velocity(
 #pragma omp parallel for
             for (size_t ii = start; ii < end_ng; ii++)
             {
-                if (outlist[ii].size() * avar.i_n_full < avar.lam_cutoff && pnp1[ii].b == FREE)
+                if (outlist[ii].size() * svar.air.i_n_full < svar.air.lam_cutoff && pnp1[ii].b == FREE)
                 {
                     pnp1[ii].cellV = vortex.getVelocity(pnp1[ii].xi);
                     pnp1[ii].cellID = 1;
@@ -567,16 +566,16 @@ void get_aero_velocity(
 #endif
     case constVel:
     {
-        switch (avar.use_lam)
+        switch (svar.air.use_lam)
         {
         case true:
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end_ng; ii++)
             {
-                if (pnp1[ii].lam_nb < avar.lam_cutoff && pnp1[ii].b == FREE)
+                if (pnp1[ii].lam_nb < svar.air.lam_cutoff && pnp1[ii].b == FREE)
                 {
-                    pnp1[ii].cellV = avar.v_inf;
+                    pnp1[ii].cellV = svar.air.v_inf;
                     pnp1[ii].cellID = 1;
                 }
                 else
@@ -592,9 +591,9 @@ void get_aero_velocity(
 #pragma omp parallel for
             for (size_t ii = start; ii < end_ng; ii++)
             {
-                if (outlist[ii].size() * avar.i_n_full < avar.lam_cutoff && pnp1[ii].b == FREE)
+                if (outlist[ii].size() * svar.air.i_n_full < svar.air.lam_cutoff && pnp1[ii].b == FREE)
                 {
-                    pnp1[ii].cellV = avar.v_inf;
+                    pnp1[ii].cellV = svar.air.v_inf;
                     pnp1[ii].cellID = 1;
                 }
                 else

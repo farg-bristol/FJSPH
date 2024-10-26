@@ -14,8 +14,8 @@ namespace IPT
     void Write_Data(SIM& svar, MESH& cells, vector<IPTState>& time_record);
 
     void Integrate(
-        SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, size_t const& ii,
-        IPTPart& pnm1, IPTPart& pn, IPTPart& pnp1, vector<SURF>& marker_data, vector<IPTState>& iptdata
+        SIM& svar, AERO const& svar.air, MESH const& cells, size_t const& ii, IPTPart& pnm1, IPTPart& pn,
+        IPTPart& pnp1, vector<SURF>& marker_data, vector<IPTState>& iptdata
     );
 } // namespace IPT
 #endif

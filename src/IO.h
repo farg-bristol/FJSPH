@@ -7,23 +7,21 @@
 #include "VLM.h"
 #include "Var.h"
 
-
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
 /*************************************************************************/
-void Set_Values(SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex);
+void Set_Values(SIM& svar, FLUID& svar.fluid, AERO& svar.air, VLM& vortex);
 
-void GetInput(int argc, char** argv, SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex);
+void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.air, VLM& vortex);
 
 void Write_Tec_Headers(
-    FILE* ff, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar,
-    std::string const& prefix
+    FILE* ff, FILE* fb, FILE* fg, SIM& svar, AERO const& svar.air, std::string const& prefix
 );
 
-void Write_h5part_Headers(SIM& svar, FLUID const& fvar, AERO const& avar, std::string const& prefix);
+void Write_h5part_Headers(SIM& svar, AERO const& svar.air, std::string const& prefix);
 
 void Write_Timestep(
-    FILE* ff, FILE* fb, FILE* fg, SIM& svar, FLUID const& fvar, AERO const& avar, LIMITS const& limits,
+    FILE* ff, FILE* fb, FILE* fg, SIM& svar, AERO const& svar.air, LIMITS const& limits,
     SPHState const& pnp1
 );
 

@@ -742,7 +742,7 @@ void Write_Binary_Timestep(
 }
 
 void Init_Binary_PLT(
-    SIM& svar, FLUID const& fvar, AERO const& avar, string const& prefix, string const& filename,
+    SIM& svar, AERO const& svar.air, string const& prefix, string const& filename,
     string const& zoneName, void*& fileHandle
 )
 {
@@ -804,21 +804,21 @@ void Init_Binary_PLT(
     add_file_aux_data(fileHandle, "Variable list", svar.output_names);
 
     /* Fluid data */
-    add_file_aux_data(fileHandle, "Reference density", avar.rho_g);
-    add_file_aux_data(fileHandle, "Reference dispersed density", fvar.rho_rest);
-    add_file_aux_data(fileHandle, "Sutherland reference viscosity", avar.mu_g);
-    add_file_aux_data(fileHandle, "Reference dispersed viscosity", fvar.mu);
-    add_file_aux_data(fileHandle, "Reference surface tension", fvar.sig);
-    add_file_aux_data(fileHandle, "SPH surface tension contact angle", fvar.contangb);
+    add_file_aux_data(fileHandle, "Reference density", svar.air.rho_g);
+    add_file_aux_data(fileHandle, "Reference dispersed density", svar.fluid.rho_rest);
+    add_file_aux_data(fileHandle, "Sutherland reference viscosity", svar.air.mu_g);
+    add_file_aux_data(fileHandle, "Reference dispersed viscosity", svar.fluid.mu);
+    add_file_aux_data(fileHandle, "Reference surface tension", svar.fluid.sig);
+    add_file_aux_data(fileHandle, "SPH surface tension contact angle", svar.fluid.contangb);
     add_file_aux_data(fileHandle, "Init hydrostatic pressure", svar.init_hydro_pressure);
     add_file_aux_data(fileHandle, "Hydrostatic height", svar.hydro_height);
 
     /* Aerodynamic data */
-    add_file_aux_data(fileHandle, "Reference velocity", avar.v_ref);
-    add_file_aux_data(fileHandle, "Reference pressure", avar.p_ref);
-    add_file_aux_data(fileHandle, "Reference Mach number", avar.M_ref);
-    add_file_aux_data(fileHandle, "Reference temperature", avar.temp_g);
-    add_file_aux_data(fileHandle, "Gas constant gamma", avar.gamma);
+    add_file_aux_data(fileHandle, "Reference velocity", svar.air.v_ref);
+    add_file_aux_data(fileHandle, "Reference pressure", svar.air.p_ref);
+    add_file_aux_data(fileHandle, "Reference Mach number", svar.air.M_ref);
+    add_file_aux_data(fileHandle, "Reference temperature", svar.air.temp_g);
+    add_file_aux_data(fileHandle, "Gas constant gamma", svar.air.gamma);
 
     /* Simulation settings */
     add_file_aux_data(fileHandle, "SPH integration solver", svar.solver_name);
@@ -835,28 +835,28 @@ void Init_Binary_PLT(
     add_file_aux_data(fileHandle, "SPH stable CFL count iteration factor", svar.subits_factor);
     add_file_aux_data(fileHandle, "SPH maximum shifting velocity", svar.max_shift_vel);
 
-    add_file_aux_data(fileHandle, "SPH background pressure", fvar.press_back);
-    add_file_aux_data(fileHandle, "SPH starting pressure", fvar.press_pipe);
-    add_file_aux_data(fileHandle, "SPH density variation", fvar.rho_var);
-    add_file_aux_data(fileHandle, "SPH maximum density", fvar.rho_max);
-    add_file_aux_data(fileHandle, "SPH minimum density", fvar.rho_min);
-    add_file_aux_data(fileHandle, "SPH delta coefficient", fvar.dsph_delta);
+    add_file_aux_data(fileHandle, "SPH background pressure", svar.fluid.press_back);
+    add_file_aux_data(fileHandle, "SPH starting pressure", svar.fluid.press_pipe);
+    add_file_aux_data(fileHandle, "SPH density variation", svar.fluid.rho_var);
+    add_file_aux_data(fileHandle, "SPH maximum density", svar.fluid.rho_max);
+    add_file_aux_data(fileHandle, "SPH minimum density", svar.fluid.rho_min);
+    add_file_aux_data(fileHandle, "SPH delta coefficient", svar.fluid.dsph_delta);
 
-    add_file_aux_data(fileHandle, "SPH artificial viscosity factor", fvar.visc_alpha);
-    add_file_aux_data(fileHandle, "SPH speed of sound", fvar.speed_sound);
+    add_file_aux_data(fileHandle, "SPH artificial viscosity factor", svar.fluid.visc_alpha);
+    add_file_aux_data(fileHandle, "SPH speed of sound", svar.fluid.speed_sound);
     add_file_aux_data(fileHandle, "SPH Newmark Beta iteration limit", svar.max_subits);
     add_file_aux_data(fileHandle, "SPH gravity vector", svar.grav);
 
     add_file_aux_data(fileHandle, "SPH initial spacing", svar.particle_step);
     add_file_aux_data(fileHandle, "SPH boundary spacing factor", svar.bound_step_factor);
-    add_file_aux_data(fileHandle, "SPH smoothing length factor", fvar.H_fac);
-    add_file_aux_data(fileHandle, "SPH aerodynamic case", avar.aero_case);
-    add_file_aux_data(fileHandle, "SPH SP diameter definition", avar.use_dx);
-    add_file_aux_data(fileHandle, "SPH use TAB deformation", avar.use_TAB_def);
+    add_file_aux_data(fileHandle, "SPH smoothing length factor", svar.fluid.H_fac);
+    add_file_aux_data(fileHandle, "SPH aerodynamic case", svar.air.aero_case);
+    add_file_aux_data(fileHandle, "SPH SP diameter definition", svar.air.use_dx);
+    add_file_aux_data(fileHandle, "SPH use TAB deformation", svar.air.use_TAB_def);
     add_file_aux_data(fileHandle, "SPH global offset coordinate", svar.offset_vec);
     add_file_aux_data(fileHandle, "SPH maximum particle count", svar.max_points);
-    add_file_aux_data(fileHandle, "SPH aerodynamic cutoff value", avar.lam_cutoff);
-    add_file_aux_data(fileHandle, "SPH freestream velocity", avar.v_inf);
+    add_file_aux_data(fileHandle, "SPH aerodynamic cutoff value", svar.air.lam_cutoff);
+    add_file_aux_data(fileHandle, "SPH freestream velocity", svar.air.v_inf);
     add_file_aux_data(fileHandle, "SPH restart fit tolerance", svar.restart_tol);
 
     /* Particle tracking settings */

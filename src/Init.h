@@ -6,9 +6,11 @@
 
 #include "Var.h"
 
-void Init_Particles(SIM& svar, FLUID& fvar, AERO& avar, SPHState& pn, SPHState& pnp1, LIMITS& limits);
+void Init_Particles(
+    SIM& svar, FLUID& svar.fluid, AERO& svar.air, SPHState& pn, SPHState& pnp1, LIMITS& limits
+);
 
-void Init_Particles_Restart(SIM& svar, FLUID& fvar, LIMITS& limits);
+void Init_Particles_Restart(SIM& svar, FLUID& svar.fluid, LIMITS& limits);
 
 void Init_Surface(SIM const& svar, MESH const& cells, vector<SURF>& surf_marks);
 

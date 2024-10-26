@@ -337,7 +337,7 @@ namespace IPT
         }
 
         void Write_Impacts(
-            SIM const& svar, FLUID const& fvar, MESH const& cells, vector<SURF> const& surfaces_to_write,
+            SIM const& svar, MESH const& cells, vector<SURF> const& surfaces_to_write,
             vector<string> const& names, vector<vector<real>> const& beta_data,
             vector<vector<StateVecD>> const& usedVerts, vector<vector<vector<size_t>>> const& faces
         )
@@ -545,7 +545,7 @@ namespace IPT
     }
 
     void Get_Impact_Data(
-        SIM const& svar, FLUID const& fvar, MESH const& cells, vector<SURF> const& surfs,
+        SIM const& svar, MESH const& cells, vector<SURF> const& surfs,
         vector<vector<real>> const& beta_data, vector<SURF>& surfaces_to_write, vector<string>& names,
         vector<vector<StateVecD>>& usedVerts, vector<vector<vector<size_t>>>& faces
     )
@@ -826,22 +826,20 @@ namespace IPT
         // }
     }
 
-    inline real AeroForce(StateVecD const& Vdiff, FLUID const& fvar, AERO const& avar, IPTPart const& pi)
+    inline real AeroForce(StateVecD const& Vdiff, AERO const& svar.air, IPTPart const& pi)
     {
-        real const Re = 2.0 * pi.faceRho * Vdiff.norm() * pi.d / avar.mu_g;
+        real const Re = 2.0 * pi.faceRho * Vdiff.norm() * pi.d / svar.air.mu_g;
         real const Cd = GetCd(Re);
 
-        return Vdiff.norm() * (3.0 * Cd * pi.faceRho) / (4.0 * pi.d * fvar.rho_rest);
+        return Vdiff.norm() * (3.0 * Cd * pi.faceRho) / (4.0 * pi.d * svar.fluid.rho_rest);
     }
 
-    inline void BFD1(
-        FLUID const& fvar, AERO const& avar, StateVecD const& g, real const& dt, IPTPart const& pn,
-        IPTPart& pnp1
-    )
+    inline void
+    BFD1(AERO const& svar.air, StateVecD const& g, real const& dt, IPTPart const& pn, IPTPart& pnp1)
     {
         StateVecD const Vdiff = pnp1.faceV - pnp1.v;
 
-        real res = AeroForce(Vdiff, fvar, avar, pnp1);
+        real res = AeroForce(Vdiff, svar.fluid, svar.air, pnp1);
 
         pnp1.acc = res;
         pnp1.v = (pn.v + dt * res * pnp1.faceV + dt * g) / (1.0 + dt * res);
@@ -849,13 +847,13 @@ namespace IPT
     }
 
     inline void BFD2(
-        FLUID const& fvar, AERO const& avar, StateVecD const& g, real const& dt, real const& dtm1,
-        IPTPart const& pnm1, IPTPart const& pn, IPTPart& pnp1
+        AERO const& svar.air, StateVecD const& g, real const& dt, real const& dtm1, IPTPart const& pnm1,
+        IPTPart const& pn, IPTPart& pnp1
     )
     {
         StateVecD const Vdiff = pnp1.faceV - pnp1.v;
 
-        real res = AeroForce(Vdiff, fvar, avar, pnp1);
+        real res = AeroForce(Vdiff, svar.fluid, svar.air, pnp1);
 
         pnp1.acc = res;
         /* Second order velocity calculation */
@@ -868,8 +866,8 @@ namespace IPT
     }
 
     void Integrate(
-        SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, size_t const& ii,
-        IPTPart& pnm1, IPTPart& pn, IPTPart& pnp1, vector<SURF>& marker_data, vector<IPTState>& iptdata
+        SIM& svar, AERO const& svar.air, MESH const& cells, size_t const& ii, IPTPart& pnm1, IPTPart& pn,
+        IPTPart& pnp1, vector<SURF>& marker_data, vector<IPTState>& iptdata
     )
     {
         /* Do the first step */
@@ -919,10 +917,10 @@ namespace IPT
             if (svar.ipt_eq_order == 2)
             {
                 real const dtm1 = pnp1.dt;
-                BFD2(fvar, avar, svar.grav, dt, dtm1, pnm1, pn, pnp1);
+                BFD2(svar.fluid, svar.air, svar.grav, dt, dtm1, pnm1, pn, pnp1);
             }
             else
-                BFD1(fvar, avar, svar.grav, dt, pn, pnp1);
+                BFD1(svar.fluid, svar.air, svar.grav, dt, pn, pnp1);
 
             real dt_temp = FindFace(svar, cells, pn, pnp1);
             pnp1.dt = (1.0 - svar.relax) * dt_temp + svar.relax * pnp1.dt;
@@ -1026,10 +1024,10 @@ namespace IPT
                 if (svar.ipt_eq_order == 2)
                 {
                     real dtm1 = iter > 0 ? pn.dt : pnp1.dt;
-                    BFD2(fvar, avar, svar.grav, dt, dtm1, pnm1, pn, pnp1);
+                    BFD2(svar.fluid, svar.air, svar.grav, dt, dtm1, pnm1, pn, pnp1);
                 }
                 else
-                    BFD1(fvar, avar, svar.grav, dt, pn, pnp1);
+                    BFD1(svar.fluid, svar.air, svar.grav, dt, pn, pnp1);
 
                 real dt_temp = FindFace(svar, cells, pn, pnp1);
 

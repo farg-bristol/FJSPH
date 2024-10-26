@@ -1057,7 +1057,7 @@ namespace HDF5
     }
 } // namespace HDF5
 
-void Write_HDF5_Attributes(int64_t const& file, SIM const& svar, FLUID const& fvar, AERO const& avar)
+void Write_HDF5_Attributes(int64_t const& file, SIM const& svar, AERO const& svar.air)
 {
 
     // Write crucial simulation auxiliary data. Potential to expand
@@ -1100,21 +1100,21 @@ void Write_HDF5_Attributes(int64_t const& file, SIM const& svar, FLUID const& fv
     HDF5::Write_String_Attribute(file, "Variable list", svar.output_names);
 
     /* Fluid data */
-    HDF5::Write_Real_Attribute(file, "Reference density", avar.rho_g);
-    HDF5::Write_Real_Attribute(file, "Reference dispersed density", fvar.rho_rest);
-    HDF5::Write_Real_Attribute(file, "Sutherland reference viscosity", avar.mu_g);
-    HDF5::Write_Real_Attribute(file, "Reference dispersed viscosity", fvar.mu);
-    HDF5::Write_Real_Attribute(file, "Reference surface tension", fvar.sig);
-    HDF5::Write_Real_Attribute(file, "SPH surface tension contact angle", fvar.contangb);
+    HDF5::Write_Real_Attribute(file, "Reference density", svar.air.rho_g);
+    HDF5::Write_Real_Attribute(file, "Reference dispersed density", svar.fluid.rho_rest);
+    HDF5::Write_Real_Attribute(file, "Sutherland reference viscosity", svar.air.mu_g);
+    HDF5::Write_Real_Attribute(file, "Reference dispersed viscosity", svar.fluid.mu);
+    HDF5::Write_Real_Attribute(file, "Reference surface tension", svar.fluid.sig);
+    HDF5::Write_Real_Attribute(file, "SPH surface tension contact angle", svar.fluid.contangb);
     HDF5::Write_Int_Attribute(file, "Init hydrostatic pressure", svar.init_hydro_pressure);
     HDF5::Write_Real_Attribute(file, "Hydrostatic height", svar.hydro_height);
 
     /* Aerodynamic data */
-    HDF5::Write_Real_Attribute(file, "Reference velocity", avar.v_ref);
-    HDF5::Write_Real_Attribute(file, "Reference pressure", avar.p_ref);
-    HDF5::Write_Real_Attribute(file, "Reference Mach number", avar.M_ref);
-    HDF5::Write_Real_Attribute(file, "Reference temperature", avar.temp_g);
-    HDF5::Write_Real_Attribute(file, "Gas constant gamma", avar.gamma);
+    HDF5::Write_Real_Attribute(file, "Reference velocity", svar.air.v_ref);
+    HDF5::Write_Real_Attribute(file, "Reference pressure", svar.air.p_ref);
+    HDF5::Write_Real_Attribute(file, "Reference Mach number", svar.air.M_ref);
+    HDF5::Write_Real_Attribute(file, "Reference temperature", svar.air.temp_g);
+    HDF5::Write_Real_Attribute(file, "Gas constant gamma", svar.air.gamma);
 
     /* Simulation settings */
     HDF5::Write_String_Attribute(file, "SPH integration solver", svar.solver_name);
@@ -1133,28 +1133,28 @@ void Write_HDF5_Attributes(int64_t const& file, SIM const& svar, FLUID const& fv
     HDF5::Write_Uint_Attribute(file, "SPH stable CFL count", svar.n_stable);
     HDF5::Write_Uint_Attribute(file, "SPH unstable CFL count", svar.n_unstable);
 
-    HDF5::Write_Real_Attribute(file, "SPH background pressure", fvar.press_back);
-    HDF5::Write_Real_Attribute(file, "SPH starting pressure", fvar.press_pipe);
-    HDF5::Write_Real_Attribute(file, "SPH density variation", fvar.rho_var);
-    HDF5::Write_Real_Attribute(file, "SPH maximum density", fvar.rho_max);
-    HDF5::Write_Real_Attribute(file, "SPH minimum density", fvar.rho_min);
-    HDF5::Write_Real_Attribute(file, "SPH delta coefficient", fvar.dsph_delta);
+    HDF5::Write_Real_Attribute(file, "SPH background pressure", svar.fluid.press_back);
+    HDF5::Write_Real_Attribute(file, "SPH starting pressure", svar.fluid.press_pipe);
+    HDF5::Write_Real_Attribute(file, "SPH density variation", svar.fluid.rho_var);
+    HDF5::Write_Real_Attribute(file, "SPH maximum density", svar.fluid.rho_max);
+    HDF5::Write_Real_Attribute(file, "SPH minimum density", svar.fluid.rho_min);
+    HDF5::Write_Real_Attribute(file, "SPH delta coefficient", svar.fluid.dsph_delta);
 
-    HDF5::Write_Real_Attribute(file, "SPH artificial viscosity factor", fvar.visc_alpha);
-    HDF5::Write_Real_Attribute(file, "SPH speed of sound", fvar.speed_sound);
+    HDF5::Write_Real_Attribute(file, "SPH artificial viscosity factor", svar.fluid.visc_alpha);
+    HDF5::Write_Real_Attribute(file, "SPH speed of sound", svar.fluid.speed_sound);
     HDF5::Write_Uint_Attribute(file, "SPH Newmark Beta iteration limit", svar.max_subits);
     HDF5::Write_Vector_Attribute(file, "SPH gravity vector", svar.grav);
 
     HDF5::Write_Real_Attribute(file, "SPH initial spacing", svar.particle_step);
     HDF5::Write_Real_Attribute(file, "SPH boundary spacing factor", svar.bound_step_factor);
-    HDF5::Write_Real_Attribute(file, "SPH smoothing length factor", fvar.H_fac);
-    HDF5::Write_String_Attribute(file, "SPH aerodynamic case", avar.aero_case);
-    HDF5::Write_Int_Attribute(file, "SPH SP diameter definition", avar.use_dx);
-    HDF5::Write_Int_Attribute(file, "SPH use TAB deformation", avar.use_TAB_def);
+    HDF5::Write_Real_Attribute(file, "SPH smoothing length factor", svar.fluid.H_fac);
+    HDF5::Write_String_Attribute(file, "SPH aerodynamic case", svar.air.aero_case);
+    HDF5::Write_Int_Attribute(file, "SPH SP diameter definition", svar.air.use_dx);
+    HDF5::Write_Int_Attribute(file, "SPH use TAB deformation", svar.air.use_TAB_def);
     HDF5::Write_Vector_Attribute(file, "SPH global offset coordinate", svar.offset_vec);
     HDF5::Write_Uint_Attribute(file, "SPH maximum particle count", svar.max_points);
-    HDF5::Write_Real_Attribute(file, "SPH aerodynamic cutoff value", avar.lam_cutoff);
-    HDF5::Write_Vector_Attribute(file, "SPH freestream velocity", avar.v_inf);
+    HDF5::Write_Real_Attribute(file, "SPH aerodynamic cutoff value", svar.air.lam_cutoff);
+    HDF5::Write_Vector_Attribute(file, "SPH freestream velocity", svar.air.v_inf);
     HDF5::Write_Real_Attribute(file, "SPH restart fit tolerance", svar.restart_tol);
 
     /* Particle tracking settings */
@@ -1238,9 +1238,7 @@ void Write_Zone_Attributes(int64_t const& zone, bound_block const& limits)
  * @param nGas number of gas blocks
  * @return void
  */
-void Write_HDF5(
-    SIM& svar, FLUID const& fvar, AERO const& avar, SPHState const& pnp1, LIMITS const& limits
-)
+void Write_HDF5(SIM& svar, AERO const& svar.air, SPHState const& pnp1, LIMITS const& limits)
 {
     // printf("Starting writing restart HDF5 file...\n");
     std::string filename = svar.output_prefix + "_particles.h5";
@@ -1257,7 +1255,7 @@ void Write_HDF5(
 
     // int64_t group = H5Gcreate2(file,"Particles", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-    Write_HDF5_Attributes(file, svar, fvar, avar);
+    Write_HDF5_Attributes(file, svar);
 
     /* Write the actual data */
     size_t blockID = 0;
@@ -1358,7 +1356,8 @@ void Write_HDF5(
 }
 
 void Read_HDF5(
-    SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex, SPHState& pn, SPHState& pnp1, LIMITS& limits
+    SIM& svar, FLUID& svar.fluid, AERO& svar.air, VLM& vortex, SPHState& pn, SPHState& pnp1,
+    LIMITS& limits
 )
 {
     printf("Starting reading restart HDF5 file...\n");
@@ -1395,7 +1394,7 @@ void Read_HDF5(
     HDF5::Read_Uint_Attribute(file, "SPH unstable CFL count", svar.n_unstable);
     svar.last_frame_time = svar.current_time;
 
-    Set_Values(svar, fvar, avar, vortex);
+    Set_Values(svar, vortex);
 
     size_t start = 0;
     size_t block = 0;
@@ -1837,8 +1836,8 @@ namespace h5part
 } // namespace h5part
 
 void open_h5part_files(
-    SIM const& svar, FLUID const& fvar, AERO const& avar, string const& prefix,
-    int64_t& h5part_fluid_file, int64_t& h5part_bound_file
+    SIM const& svar, AERO const& svar.air, string const& prefix, int64_t& h5part_fluid_file,
+    int64_t& h5part_bound_file
 )
 {
 
@@ -1853,7 +1852,7 @@ void open_h5part_files(
         else
         {
             h5part_fluid_file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-            Write_HDF5_Attributes(h5part_fluid_file, svar, fvar, avar);
+            Write_HDF5_Attributes(h5part_fluid_file, svar);
         }
     }
 
@@ -1868,7 +1867,7 @@ void open_h5part_files(
         else
         {
             h5part_bound_file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-            Write_HDF5_Attributes(h5part_bound_file, svar, fvar, avar);
+            Write_HDF5_Attributes(h5part_bound_file, svar);
         }
     }
 }
@@ -1887,8 +1886,7 @@ void open_h5part_files(
  * @return void
  */
 void write_h5part_data(
-    int64_t& h5part_fluid_file, int64_t& h5part_bound_file, SIM const& svar, FLUID const& fvar,
-    SPHState const& pnp1
+    int64_t& h5part_fluid_file, int64_t& h5part_bound_file, SIM const& svar, SPHState const& pnp1
 )
 {
     std::string zoneHeader = "Step#" + std::to_string(svar.current_frame);
@@ -1899,7 +1897,7 @@ void write_h5part_data(
             H5Gcreate2(h5part_fluid_file, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         h5part::Write_Zone_Data(
             fluzone, svar.scale, svar.current_time, pnp1, svar.bound_points, svar.total_points,
-            svar.output_variables, fvar.rho_rest
+            svar.output_variables, svar.fluid.rho_rest
         );
 
         if (H5Gclose(fluzone))
@@ -1923,7 +1921,7 @@ void write_h5part_data(
             H5Gcreate2(h5part_bound_file, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         h5part::Write_Zone_Data(
             bndzone, svar.scale, svar.current_time, pnp1, 0, svar.bound_points, svar.output_variables,
-            fvar.rho_rest
+            svar.fluid.rho_rest
         );
 
         if (H5Gclose(bndzone))

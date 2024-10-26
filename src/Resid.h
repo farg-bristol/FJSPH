@@ -17,32 +17,26 @@
 /* Boundary pressure calculation - Adami, Hu, and Adams, 2012 -
  * https://doi.org/10.1016/j.jcp.2012.05.005*/
 void Get_Boundary_Pressure(
-    StateVecD const& grav, FLUID const& fvar, size_t const& start, size_t const& end,
-    OUTL const& outlist, SPHState& pnp1
+    StateVecD const& grav, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
 );
 
-void Boundary_DBC(
-    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
-);
+void Boundary_DBC(size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1);
 
 void Boundary_Ghost(
-    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1,
-    vector<int>& near_inlet
+    size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1, vector<int>& near_inlet
 );
 
-void Set_No_Slip(
-    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
-);
+void Set_No_Slip(size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1);
 
 ///**************** RESID calculation **************
 void get_acc_and_Rrho(
-    SIM const& svar, FLUID const& fvar, AERO const& avar, MESH const& cells, OUTL const& outlist,
-    real const& npd, SPHState& pnp1
+    SIM const& svar, AERO const& svar.air, MESH const& cells, OUTL const& outlist, real const& npd,
+    SPHState& pnp1
 );
 
 void get_aero_velocity(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-    MESH const& cells, VLM const& vortex, size_t const& start, size_t& end_ng, OUTL& outlist,
-    LIMITS& limits, SPHState& pn, SPHState& pnp1, real& npd
+    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, MESH const& cells,
+    VLM const& vortex, size_t const& start, size_t& end_ng, OUTL& outlist, LIMITS& limits, SPHState& pn,
+    SPHState& pnp1, real& npd
 );
 #endif
