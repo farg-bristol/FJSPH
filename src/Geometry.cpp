@@ -12,8 +12,8 @@
 /*Surface detection as described by Marrone, Colagrossi, Le Touze, Graziani -
  * (2010)*/
 void Detect_Surface(
-    SIM& svar, AERO const& svar.air, size_t const& start, size_t const& end, OUTL const& outlist,
-    MESH const& cells, VLM const& vortex, SPHState& pnp1
+    SIM& svar, size_t const& start, size_t const& end, OUTL const& outlist, MESH const& cells,
+    SPHState& pnp1
 )
 {
 
@@ -158,7 +158,7 @@ void Detect_Surface(
 #if SIMDIM == 3
                 else if (svar.Asource == VLMInfl)
                 {
-                    StateVecD Vel = vortex.getVelocity(pi.xi);
+                    StateVecD Vel = svar.vlm.getVelocity(pi.xi);
                     Vdiff = Vel - pi.v;
                 }
 #endif

@@ -23,7 +23,7 @@ void VLM::Init(std::string input)
         exit(-1);
     }
 
-    string line;
+    std::string line;
     while (getline(fin, line))
     {
         Get_Vector(line, "VLM wing dimensions", coords);
@@ -140,10 +140,10 @@ StateVecD VLM::getVelocity(StateVecD const& pos) const
     return vel.normalized() * std::min(vel.norm(), maxVel);
 }
 
-void VLM::write_VLM_Panels(string& prefix)
+void VLM::write_VLM_Panels(std::string& prefix)
 {
     printf("Writing panels...\n");
-    string file1 = prefix;
+    std::string file1 = prefix;
     file1.append("_Panels.dat");
     FILE* fp = fopen(file1.c_str(), "w");
     if (fp == NULL)
@@ -166,7 +166,7 @@ void VLM::write_VLM_Panels(string& prefix)
     }
     fclose(fp);
 
-    string file2 = prefix;
+    std::string file2 = prefix;
     file2.append("_Vortices.dat");
     FILE* fq = fopen(file2.c_str(), "w");
     if (fq == NULL)
@@ -479,7 +479,7 @@ void VLM::Plot_Streamlines(std::string& prefix)
 
     printf("Writing streamlines...\n");
     /* Need to decide a file */
-    string file = prefix + "_Streams.dat";
+    std::string file = prefix + "_Streams.dat";
     FILE* streams = fopen(file.c_str(), "w");
     if (streams == NULL)
     {

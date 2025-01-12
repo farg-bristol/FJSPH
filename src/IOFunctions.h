@@ -3,6 +3,7 @@
 #define IOFUNCTIONS_H
 
 #include "Var.h"
+#include "VarDefs.h"
 #include <filesystem>
 
 inline void write_header()

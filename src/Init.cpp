@@ -267,26 +267,24 @@ size_t Generate_Points(SIM const& svar, double const& globalspacing, Shapes& var
     return diff;
 }
 
-void Init_Particles(
-    SIM& svar, FLUID& svar.fluid, AERO& svar.air, SPHState& pn, SPHState& pnp1, LIMITS& limits
-)
+void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
 {
     real dx = svar.dx;
     // Read boundary blocks
     Shapes boundvar;
     printf("Reading boundary settings...\n");
-    if (iequals(std::filesystem::path(svar.input_bound_file).extension(), ".json"))
-        boundvar = read_shapes_JSON(svar.input_bound_file, svar, dx);
+    if (iequals(std::filesystem::path(svar.io.input_bound_file).extension(), ".json"))
+        boundvar = read_shapes_JSON(svar.io.input_bound_file, svar, dx);
     else
-        boundvar = read_shapes_bmap(svar.input_bound_file, svar, dx);
+        boundvar = read_shapes_bmap(svar.io.input_bound_file, svar, dx);
 
     // Read fluid
     Shapes fluvar;
     printf("Reading fluid settings...\n");
-    if (iequals(std::filesystem::path(svar.input_fluid_file).extension(), ".json"))
-        fluvar = read_shapes_JSON(svar.input_fluid_file, svar, dx);
+    if (iequals(std::filesystem::path(svar.io.input_fluid_file).extension(), ".json"))
+        fluvar = read_shapes_JSON(svar.io.input_fluid_file, svar, dx);
     else
-        fluvar = read_shapes_bmap(svar.input_fluid_file, svar, dx);
+        fluvar = read_shapes_bmap(svar.io.input_fluid_file, svar, dx);
 
     // Now generate points and add to indexes
     Generate_Points(svar, svar.dx, boundvar);
@@ -499,7 +497,7 @@ void Init_Particles(
 
 /* Initialise the limits data for a restart, basically everything except actual
  * points */
-void Init_Particles_Restart(SIM& svar, FLUID& svar.fluid, LIMITS& limits)
+void Init_Particles_Restart(SIM& svar, LIMITS& limits)
 {
     real dx = svar.dx;
 
@@ -507,18 +505,18 @@ void Init_Particles_Restart(SIM& svar, FLUID& svar.fluid, LIMITS& limits)
     Shapes boundvar;
 
     // Get the extension of the files. If it's JSON, then use the new functions.
-    if (iequals(std::filesystem::path(svar.input_bound_file).extension(), ".json"))
-        boundvar = read_shapes_JSON(svar.input_bound_file, svar, dx);
+    if (iequals(std::filesystem::path(svar.io.input_bound_file).extension(), ".json"))
+        boundvar = read_shapes_JSON(svar.io.input_bound_file, svar, dx);
     else
-        boundvar = read_shapes_bmap(svar.input_bound_file, svar, dx);
+        boundvar = read_shapes_bmap(svar.io.input_bound_file, svar, dx);
 
     // Read fluid
     Shapes fluvar;
     printf("Reading fluid settings...\n");
-    if (iequals(std::filesystem::path(svar.input_fluid_file).extension(), ".json"))
-        fluvar = read_shapes_JSON(svar.input_fluid_file, svar, dx);
+    if (iequals(std::filesystem::path(svar.io.input_fluid_file).extension(), ".json"))
+        fluvar = read_shapes_JSON(svar.io.input_fluid_file, svar, dx);
     else
-        fluvar = read_shapes_bmap(svar.input_fluid_file, svar, dx);
+        fluvar = read_shapes_bmap(svar.io.input_fluid_file, svar, dx);
 
     limits.resize(boundvar.nblocks + fluvar.nblocks, bound_block(0));
 
@@ -593,17 +591,17 @@ void Init_Particles_Restart(SIM& svar, FLUID& svar.fluid, LIMITS& limits)
 
 void Init_Surface(SIM const& svar, MESH const& cells, vector<SURF>& surf_marks)
 {
-    surf_marks = vector<SURF>(svar.tau_markers.size());
+    surf_marks = vector<SURF>(svar.io.tau_markers.size());
 
-    vector<vector<size_t>> faceIDs(svar.tau_markers.size());
-    vector<vector<int>> tau_markers(svar.tau_markers.size());
+    vector<vector<size_t>> faceIDs(svar.io.tau_markers.size());
+    vector<vector<int>> tau_markers(svar.io.tau_markers.size());
     /* for each surface, find how many faces are in it. */
     for (std::pair<size_t, int> const& marker : cells.smarkers)
     {
-        auto index = find(svar.tau_markers.begin(), svar.tau_markers.end(), marker.second);
-        if (index != svar.tau_markers.end())
+        auto index = find(svar.io.tau_markers.begin(), svar.io.tau_markers.end(), marker.second);
+        if (index != svar.io.tau_markers.end())
         {
-            size_t mark = index - svar.tau_markers.begin();
+            size_t mark = index - svar.io.tau_markers.begin();
             faceIDs[mark].emplace_back(marker.first);
             tau_markers[mark].emplace_back(marker.second);
 
@@ -619,11 +617,11 @@ void Init_Surface(SIM const& svar, MESH const& cells, vector<SURF>& surf_marks)
         }
     }
 
-    for (size_t ii = 0; ii < svar.tau_markers.size(); ii++)
+    for (size_t ii = 0; ii < svar.io.tau_markers.size(); ii++)
     {
-        surf_marks[ii].name = svar.tau_bnames[ii];
-        surf_marks[ii].marker = svar.tau_markers[ii];
-        surf_marks[ii].output = svar.tau_bwrite[ii];
+        surf_marks[ii].name = svar.io.tau_bnames[ii];
+        surf_marks[ii].marker = svar.io.tau_markers[ii];
+        surf_marks[ii].output = svar.io.tau_bwrite[ii];
 
         size_t nFaces = faceIDs[ii].size();
         surf_marks[ii].face_IDs = faceIDs[ii];

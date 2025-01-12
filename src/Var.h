@@ -16,10 +16,9 @@
 #include <vector>
 
 #include "VLM.h"
+#include "VarDefs.h"
 
 // Third party includes
-#include "Third_Party/Eigen/Core"
-#include "Third_Party/Eigen/StdVector"
 #include "Third_Party/NanoFLANN/KDTreeVectorOfVectorsAdaptor.h"
 
 using std::cerr;
@@ -41,185 +40,6 @@ std::ofstream dambreak("Dam_Data.log", std::ios::out);
 #endif
 // std::ofstream pertLog("cellPert.log",std::ios::out);
 
-/* Define Simulation Dimension */
-#ifndef SIMDIM
-#define SIMDIM 2
-#endif
-
-/* Define the default surface tension model */
-#if !defined(HESF) && !defined(CSF) && !defined(PAIRWISE) && !defined(NOST)
-#define PAIRWISE
-#endif
-
-// Define pi
-#ifndef M_PI
-#define M_PI (4.0 * atan(1.0))
-#define M_PI_4 M_PI / 4.0
-#endif
-
-/* Define data type. */
-#ifndef FOD
-#define FOD 1 /*0 = float, 1 = double*/
-#endif
-
-#if FOD == 1
-// #define real double
-typedef double real;
-int32_t const static realType = 2;
-#else
-// #define real float
-typedef float real;
-int32_t const static realType = 1;
-#endif
-
-// Tecplot data types
-int32_t const static int32Type = 3;
-int32_t const static int16Type = 4;
-int32_t const static uint8Type = 5;
-
-typedef unsigned int uint;
-
-/*Get machine bit precision for Simulation of Simplicity*/
-#ifndef MEPSILON
-#define MEPSILON std::numeric_limits<real>::epsilon() /*For  float, power is -24*/
-#endif
-
-#ifndef MERROR
-#define MERROR (7 * MEPSILON + 56 * MEPSILON * MEPSILON)
-#endif
-
-/****** Eigen vector definitions ************/
-typedef Eigen::Matrix<real, SIMDIM, 1> StateVecD;
-typedef Eigen::Matrix<int, SIMDIM, 1> StateVecI;
-typedef Eigen::Matrix<real, SIMDIM, SIMDIM> StateMatD;
-
-/*Vector definitions for Density reinitialisation*/
-typedef Eigen::Matrix<real, SIMDIM + 1, 1> StateP1VecD;
-typedef Eigen::Matrix<real, SIMDIM + 1, SIMDIM + 1> StateP1MatD;
-
-const string WHITESPACE = " \n\r\t\f\v";
-
-#pragma omp declare reduction(+ : std::vector<StateVecD> : std::transform(                              \
-        omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(),                                \
-            [](StateVecD lhs, StateVecD rhs){return lhs + rhs;}                                         \
-)) initializer(omp_priv = omp_orig)
-
-#pragma omp declare reduction(+ : std::vector<real> : std::transform(                                   \
-        omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(),                                \
-            [](real lhs, real rhs){return lhs + rhs;}                                                   \
-)) initializer(omp_priv = omp_orig)
-
-#pragma omp declare reduction(+ : StateVecD : omp_out = omp_out + omp_in)                               \
-    initializer(omp_priv = omp_orig)
-
-#pragma omp declare reduction(                                                                          \
-        min:StateVecD : omp_out = omp_out.norm() < omp_in.norm() ? omp_in : omp_out                     \
-) initializer(omp_priv = omp_orig)
-
-#pragma omp declare reduction(                                                                          \
-        max:StateVecD : omp_out = omp_out.norm() > omp_in.norm() ? omp_in : omp_out                     \
-) initializer(omp_priv = omp_orig)
-
-/*Define particle type indexes*/
-enum partType
-{
-    BOUND = 0,
-    PISTON,
-    BUFFER,
-    BACK,
-    PIPE,
-    FREE,
-    OUTLET,
-    LOST
-};
-
-/* Define shapes for boundary and fluid initialisation */
-enum shapeType
-{
-    NONE = 0,
-    BOX,
-    CYLINDER,
-    SPHERE,
-    JET,
-    CONVJET
-};
-
-// Shapes for new intitialisation
-enum shape_type
-{
-    linePlane = 0,
-    squareCube,
-    circleSphere,
-    cylinder,
-    arcSection,
-    coordDef,
-    inletZone,
-    hollow,
-    solid
-};
-
-enum integrate_type
-{
-    newmark_beta = 0,
-    runge_kutta
-};
-
-enum bound_solve_type
-{
-    DBC = 0,
-    pressure_G,
-    ghost
-};
-
-enum pressure_solver
-{
-    COLE_EOS = 0,
-    ISO_EOS
-};
-
-enum inlet_vel_type
-{
-    fixedVel,
-    dynamicVel
-};
-
-enum particle_order
-{
-    grid = 0,
-    hcp
-};
-
-enum aero_force
-{
-    NoAero = 0,
-    Gissler,
-    InducedPressure,
-    SkinFric
-};
-
-enum aero_source
-{
-    constVel = 0,
-    meshInfl,
-    VLMInfl
-};
-
-enum mesh_source
-{
-    TAU_CDF = 0,
-    OpenFOAM
-};
-
-enum plane_axis
-{
-    no_offset = 0,
-    x_axis,
-    y_axis,
-    z_axis
-};
-
-real const static default_val = 9999999.0;
-
 inline bool check_vector(StateVecD const& v)
 {
     return (
@@ -229,13 +49,6 @@ inline bool check_vector(StateVecD const& v)
 #endif
     );
 }
-
-#ifndef TRUE
-#define TRUE 1
-#define FALSE 0
-#endif
-
-// PState PartState;
 
 inline real random(int const& interval) { return real(rand() % interval - interval / 2) * MERROR; }
 
@@ -251,6 +64,7 @@ struct OutputVariable
 
 typedef std::map<string, OutputVariable> OutputMap;
 
+/* Settings for the integration */
 struct INTEG_SETT
 {
     /* Integration parameters */
@@ -282,6 +96,7 @@ struct INTEG_SETT
     real max_shift_vel = 9999999; /* Maximum shifting velocity. */
 };
 
+/* File properties for input/outputs */
 struct IN_OUT_SETT
 {
     IN_OUT_SETT()
@@ -346,7 +161,7 @@ struct IN_OUT_SETT
     real restart_tol = 0.001;        /* Tolerance on buffer particles fitting. */
 };
 
-/*Fluid and smoothing parameters*/
+/* Fluid and smoothing parameters */
 struct FLUID
 {
     uint pressure_rel = COLE_EOS;
@@ -426,7 +241,7 @@ struct FLUID
     };
 };
 
-/*Aerodynamic Properties*/
+/* Aerodynamic Properties */
 struct AERO
 {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -499,9 +314,9 @@ struct AERO
     int use_dx = 0;      /* Use particle spacing or support radius for aero force. */
 };
 
+/* Implicit particle tracking settings */
 struct IPT_SETT
 {
-    /* Particle tracking settings */
     int using_ipt = 0;        /* Transition to IPT after reaching a point. */
     int ipt_eq_order = 2;     /* Order of equation to use for IPT. */
     real max_x_sph = 9999999; /* Transition x-coordinate to convert to IPT. */
@@ -523,6 +338,7 @@ struct IPT_SETT
     void* part_handle = NULL;   /* TECIO file handle for IPT particle scatter data. */
 };
 
+/* Global data structure, containing overarching settings, and subclasses of more specific settings. */
 struct SIM
 {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -684,7 +500,7 @@ struct SURF
     vector<real> face_area;
 };
 
-/*SPHPart data class*/
+/* SPHPart data class */
 struct SPHPart
 {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -695,7 +511,7 @@ struct SPHPart
     {
         part_id = p_id;
         faceID = 0;
-        cellID = -1;
+        cellID = c_no_cell;
         b = bound;
         surf = 0;
         surfzone = 0;
@@ -740,7 +556,7 @@ struct SPHPart
     {
         part_id = p_id;
         faceID = 0;
-        cellID = -1;
+        cellID = c_no_cell;
         b = bound;
         surf = 0;
         surfzone = 0;
@@ -786,13 +602,13 @@ struct SPHPart
 
     inline real operator[](int a) const { /* Return index of xi vector*/ return xi[a]; }
 
-    size_t part_id = 0;    /* Particle ID */
-    size_t faceID = 0;     /* Mesh face ID */
-    long int cellID = -1;  /* Cell ID. -1 is not in a cell. */
-    uint b = 0;            /* Status flag. See PartState above for possible options */
-    uint surf = 0;         /* Is a particle a surface? 1 = yes, 0 = no */
-    uint surfzone = 0;     /* Is particle in the surface area? */
-    uint ipt_n_failed = 0; /* How many times has the containment query failed */
+    size_t part_id = 0;          /* Particle ID */
+    size_t faceID = 0;           /* Mesh face ID */
+    long int cellID = c_no_cell; /* Cell ID. -1 is not in a cell. */
+    uint b = 0;                  /* Status flag. See PartState above for possible options */
+    uint surf = 0;               /* Is a particle a surface? 1 = yes, 0 = no */
+    uint surfzone = 0;           /* Is particle in the surface area? */
+    uint ipt_n_failed = 0;       /* How many times has the containment query failed */
 
     StateVecD xi = StateVecD::Zero();    /* Particle position */
     StateVecD v = StateVecD::Zero();     /* Particle velocity */
@@ -830,9 +646,11 @@ struct SPHPart
     StateVecD vPert = StateVecD::Zero(); /* ALE velocity perturbation */
 };
 
+/* Implicit particle tracking particle structure. */
 struct IPTPart
 {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    /* Base initialiser for an IPT particle. All values set to zero. */
     IPTPart()
     {
         part_id = 0;
@@ -843,7 +661,7 @@ struct IPTPart
         dt = 0;
 
         /* Set initial IDs to a nonsense value, so that they don't interfere */
-        faceID = -1;
+        faceID = c_no_face;
         faceV = StateVecD::Zero();
         faceRho = 0.0;
 
@@ -861,6 +679,7 @@ struct IPTPart
         A = 0.0;
     }
 
+    /* Initialise an IPT particle with position, mass, and diameter. Velocity considered zero. */
     IPTPart(StateVecD const xi_, real const mass_, real const d_)
     {
         part_id = 0;
@@ -871,11 +690,11 @@ struct IPTPart
         dt = 0;
 
         /* Set initial IDs to a nonsense value, so that they don't interfere */
-        faceID = -1;
+        faceID = c_no_face;
         faceV = StateVecD::Zero();
         faceRho = 0.0;
 
-        cellID = -3;
+        cellID = c_no_cell;
         cellV = StateVecD::Zero();
         cellRho = 0.0;
 
@@ -889,6 +708,7 @@ struct IPTPart
         A = M_PI * d_ * d_ / 4.0;
     }
 
+    /* Initialise a new particle from an existing IPT particle, with new position. */
     IPTPart(StateVecD const xi_, IPTPart const& pi_, size_t const& pID_)
     {
         part_id = pID_;
@@ -899,7 +719,7 @@ struct IPTPart
         dt = 0;
 
         /* Set initial IDs to a nonsense value, so that they don't interfere */
-        faceID = -1;
+        faceID = c_no_face;
         faceV = StateVecD::Zero();
         faceRho = 0.0;
 
@@ -917,6 +737,8 @@ struct IPTPart
         A = pi_.A;
     }
 
+    /* Initialise IPT particle from an existing SPH particle, at a given time.
+     Diameter can be different for IPT particles however. */
     IPTPart(SPHPart const& pi, real const& time, real const& diam, real const& area)
     {
         part_id = pi.part_id;
@@ -927,7 +749,7 @@ struct IPTPart
         dt = 0;
 
         /* Set initial IDs to a nonsense value, so that they don't interfere */
-        faceID = -1;
+        faceID = c_no_face;
         faceV = StateVecD::Zero();
         faceRho = 0.0;
 
@@ -947,6 +769,7 @@ struct IPTPart
         A = area;
     }
 
+    /* Reset an IPT particle if a timestep fails to converge. */
     void reset(SPHPart const& pi, real const& time)
     {
         part_id = pi.part_id;
@@ -957,7 +780,7 @@ struct IPTPart
         dt = 0;
 
         /* Set initial IDs to a nonsense value, so that they don't interfere */
-        faceID = -1;
+        faceID = c_no_face;
         faceV = StateVecD::Zero();
         faceRho = 0.0;
 
@@ -998,7 +821,7 @@ struct IPTPart
     real d, A; /* SPHPart diameter and area */
 };
 
-// Structure to define the inlet and outlet conditions for either fluid or boundaries
+/*  Structure to define the inlet and outlet conditions for either fluid or boundaries */
 struct bound_block
 {
     bound_block(size_t const& a) // Initialise starting index only first

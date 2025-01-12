@@ -9,7 +9,7 @@
 #include "Third_Party/Eigen/LU"
 
 /*L matrix for delta-SPH calculation*/
-void dSPH_PreStep(size_t const& end, SPHState& pnp1, OUTL const& outlist, real& npd)
+void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL const& outlist, real& npd)
 {
 /************   RENORMALISATION MATRIX CALCULATION    ************/
 #ifdef PAIRWISE
@@ -38,8 +38,8 @@ void dSPH_PreStep(size_t const& end, SPHState& pnp1, OUTL const& outlist, real& 
                 /*Check if the position is the same, and skip the particle if yes*/
                 if (ii == jj.first)
                 {
-                    kernsum_ += svar.fluid.W_correc;
-                    // avgV_ += pi.v * svar.fluid.W_correc;
+                    kernsum_ += fvar.W_correc;
+                    // avgV_ += pi.v * fvar.W_correc;
 
                     continue;
                 }
@@ -48,8 +48,8 @@ void dSPH_PreStep(size_t const& end, SPHState& pnp1, OUTL const& outlist, real& 
                 StateVecD const Rji = pj.xi - pi.xi;
                 real const r = sqrt(jj.second);
                 real const volj = pj.m / pj.rho;
-                real const kern = Kernel(r, svar.fluid.H, svar.fluid.W_correc);
-                StateVecD const Grad = GradK(-Rji, r, svar.fluid.H, svar.fluid.W_correc);
+                real const kern = Kernel(r, fvar.H, fvar.W_correc);
+                StateVecD const Grad = GradK(-Rji, r, fvar.H, fvar.W_correc);
 
                 Lmat_ -= volj * Rji * Grad.transpose();
 
@@ -123,7 +123,9 @@ void dSPH_PreStep(size_t const& end, SPHState& pnp1, OUTL const& outlist, real& 
 }
 
 /* Calculate dissipation terms before freezing. */
-void dissipation_terms(size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1)
+void dissipation_terms(
+    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
+)
 {
 
     for (size_t ii = start; ii < end; ++ii)
@@ -149,46 +151,43 @@ void dissipation_terms(size_t const& start, size_t const& end, OUTL const& outli
             StateVecD const Vji = pj.v - pi.v;
             real const rr = jj.second;
             real const r = sqrt(rr);
-            real const idist2 = 1.0 / (rr + 0.0001 * svar.fluid.H_sq);
+            real const idist2 = 1.0 / (rr + 0.0001 * fvar.H_sq);
             // #ifndef NODSPH
             real const volj = pj.m / pj.rho;
             // #endif
-            StateVecD const gradK = GradK(Rji, r, svar.fluid.H, svar.fluid.W_correc);
+            StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.W_correc);
 
             if (pj.b > PISTON)
 #ifdef LINEAR
                 artViscI += Linear_ArtVisc(Rji, Vji, idist2, gradK, volj);
 #else
-                artViscI += pj.m * ArtVisc(svar.fluid.nu, pi, pj, svar.fluid, Rji, Vji, idist2, gradK);
+                artViscI += pj.m * ArtVisc(fvar, pi, pj, Rji, Vji, idist2, gradK);
 #endif
 
 #ifndef NODSPH
             if (pj.b > PISTON)
-                Rrhod += Continuity_dSPH(
-                    Rji, idist2, svar.fluid.H_sq, gradK, volj, pi.gradRho, pj.gradRho, pi, pj
-                );
+                Rrhod +=
+                    Continuity_dSPH(Rji, idist2, fvar.H_sq, gradK, volj, pi.gradRho, pj.gradRho, pi, pj);
             else
-                Rrhod += Continuity_dSPH(Rji, idist2, svar.fluid.H_sq, gradK, volj, pi, pj);
+                Rrhod += Continuity_dSPH(Rji, idist2, fvar.H_sq, gradK, volj, pi, pj);
 #endif
         }
 
 #ifdef LINEAR
-        artViscI *=
-            svar.fluid.visc_alpha * svar.fluid.H * svar.fluid.speed_sound * svar.fluid.rho_rest / pi.rho;
+        artViscI *= fvar.visc_alpha * fvar.H * fvar.speed_sound * fvar.rho_rest / pi.rho;
 #endif
 
         pnp1[ii].aVisc = artViscI;
 
 #ifndef NODSPH
-        pnp1[ii].deltaD = svar.fluid.dsph_cont * Rrhod;
+        pnp1[ii].deltaD = fvar.dsph_cont * Rrhod;
 #endif
     }
 }
 
 #ifdef ALE
 void particle_shift(
-    SIM const& svar, size_t const& start, size_t const& end, OUTL const& outlist,
-    /* DELTAP const& dp, */ SPHState& pnp1
+    SIM const& svar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
 )
 {
     /*Implement particle shifting technique - Sun, Colagrossi, Marrone, Zhang (2018)*/
@@ -250,10 +249,10 @@ void particle_shift(
                 }
             }
 
-            // deltaR *= -1 * svar.fluid.sr * maxU / svar.fluid.speed_sound;
+            // deltaR *= -1 * fvar.sr * maxU / fvar.speed_sound;
             deltaU *= -2.0 * svar.fluid.H * pi.v.norm();
 
-            deltaU = std::min(deltaU.norm(), std::min(maxUij / 2.0, svar.max_shift_vel)) *
+            deltaU = std::min(deltaU.norm(), std::min(maxUij / 2.0, svar.integrator.max_shift_vel)) *
                      deltaU.normalized();
 
             // gradLam = gradLam.normalized();
@@ -293,7 +292,7 @@ void particle_shift(
 #endif
 
 // void Apply_XSPH( size_t const& start, size_t const& end,
-// 				OUTL const& outlist, DELTAP const& dp, SPHState& pnp1)
+// 				OUTL const& outlist, SPHState& pnp1)
 // {
 // 	#pragma omp parallel
 // 	{
@@ -313,10 +312,10 @@ void particle_shift(
 // 				}
 
 // 				real const r = (pj.xi-pi.xi).norm();;
-// 				real const kern = Kernel(r,svar.fluid.H,svar.fluid.W_correc);
+// 				real const kern = Kernel(r,fvar.H,fvar.W_correc);
 // 				real rho_ij = 0.5*(pi.rho + pj.rho);
 
-// 				vPert_ -= 0.5 * pj.m/rho_ij * (pi.v-pj.v) * kern/*/dp.kernsum[ii]*/;
+// 				vPert_ -= 0.5 * pj.m/rho_ij * (pi.v-pj.v) * kern/*/pi.kernsum*/;
 
 // 			}
 

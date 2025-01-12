@@ -29,16 +29,16 @@ int Newmark_Beta::Check_Error(
 
     rms_error = log_error - logbase;
 
-    if (iteration > svar.max_subits)
+    if (iteration > svar.integrator.max_subits)
     {
         if (rms_error > 0.0)
         {
             pnp1 = pn;
 
-            outlist = update_neighbours(SPH_TREE, svar.fluid, pnp1);
+            outlist = update_neighbours(svar.fluid, SPH_TREE, pnp1);
 
-            svar.delta_t = 0.5 * svar.delta_t;
-            cout << "Unstable timestep. New dt: " << svar.delta_t << endl;
+            svar.integrator.delta_t = 0.5 * svar.integrator.delta_t;
+            cout << "Unstable timestep. New dt: " << svar.integrator.delta_t << endl;
             iteration = 0;
             rms_error = 0.0;
             // RestartCount++;
@@ -52,9 +52,8 @@ int Newmark_Beta::Check_Error(
 }
 
 void Newmark_Beta::Do_NB_Iter(
-    Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, size_t const& start, size_t& end,
-    real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState const& pn,
-    SPHState& pnp1
+    Vec_Tree const& CELL_TREE, SIM& svar, size_t const& start, size_t& end, real const& npd,
+    MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState const& pn, SPHState& pnp1
 )
 {
     /*Update the state at time n+1*/
@@ -62,9 +61,9 @@ void Newmark_Beta::Do_NB_Iter(
     // cout << "Calculating forces" << endl;
     vector<int> near_inlet(svar.bound_points, 0);
 
-    real const& gamma_t1 = svar.nb_gamma;
+    real const& gamma_t1 = svar.integrator.nb_gamma;
     real const gamma_t2 = 1 - gamma_t1;
-    real const& beta_t1 = svar.nb_beta;
+    real const& beta_t1 = svar.integrator.nb_beta;
     real const beta_t2 = 0.5 * (1 - 2 * beta_t1);
 
     for (size_t block = 0; block < svar.n_bound_blocks; block++)
@@ -75,7 +74,7 @@ void Newmark_Beta::Do_NB_Iter(
             StateVecD vel = StateVecD::Zero();
             for (size_t time = 0; time < limits[block].nTimes; time++)
             {
-                if (svar.current_time > limits[block].times[time])
+                if (svar.integrator.current_time > limits[block].times[time])
                 {
                     vel = limits[block].vels[time];
                 }
@@ -98,7 +97,8 @@ void Newmark_Beta::Do_NB_Iter(
 
         if (limits[block].no_slip)
             Set_No_Slip(
-                svar.fluid, limits[block].index.first, limits[block].index.second, outlist, pnp1
+                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
+                svar.fluid.W_correc, pnp1
             );
 
         switch (limits[block].bound_solver)
@@ -113,7 +113,7 @@ void Newmark_Beta::Do_NB_Iter(
         case pressure_G:
         {
             Get_Boundary_Pressure(
-                svar.grav, svar.fluid, limits[block].index.first, limits[block].index.second, outlist,
+                svar.fluid, svar.grav, limits[block].index.first, limits[block].index.second, outlist,
                 pnp1
             );
             break;
@@ -121,8 +121,8 @@ void Newmark_Beta::Do_NB_Iter(
         case ghost:
         {
             Boundary_Ghost(
-                svar.fluid, limits[block].index.first, limits[block].index.second, outlist, pnp1,
-                near_inlet
+                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
+                svar.fluid.W_correc, pnp1, near_inlet
             );
             break;
         }
@@ -136,7 +136,7 @@ void Newmark_Beta::Do_NB_Iter(
 
 #pragma omp parallel default(shared)
     {
-        const real dt = svar.delta_t;
+        const real dt = svar.integrator.delta_t;
         const real dt2 = dt * dt;
 
         for (size_t block = 0; block < svar.n_bound_blocks; block++)
@@ -301,13 +301,13 @@ void Newmark_Beta::Do_NB_Iter(
 }
 
 real Newmark_Beta::Newmark_Beta(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, size_t const& start,
-    size_t& end, real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist, real& logbase,
+    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, size_t const& start, size_t& end,
+    real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist, real& logbase,
     uint& iteration, vector<StateVecD>& xih, SPHState const& pn, SPHState& pnp1
 )
 {
     real rms_error = 0.0;
-    while (rms_error > svar.min_residual)
+    while (rms_error > svar.integrator.min_residual)
     {
 /*Previous state for error calc*/
 #pragma omp parallel for shared(pnp1)

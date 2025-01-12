@@ -19,7 +19,8 @@
 /* Boundary pressure calculation - Adami, Hu, and Adams, 2012 -
  * https://doi.org/10.1016/j.jcp.2012.05.005*/
 void Get_Boundary_Pressure(
-    StateVecD const& grav, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
+    FLUID const& fvar, StateVecD const& grav, size_t const& start, size_t const& end,
+    OUTL const& outlist, SPHState& pnp1
 )
 {
     std::vector<real> pressure(end - start, 0.0);
@@ -44,7 +45,7 @@ void Get_Boundary_Pressure(
                 real const rr = jj.second;
                 real const r = sqrt(rr);
                 real const volj = pj.m / pj.rho;
-                real kern = volj * Kernel(r, svar.fluid.H, svar.fluid.W_correc);
+                real kern = volj * Kernel(r, fvar.H, fvar.W_correc);
 
                 kernsum += kern;
                 pkern += pj.p * kern;
@@ -70,13 +71,15 @@ void Get_Boundary_Pressure(
     for (size_t ii = start; ii < end; ++ii)
     {
         pnp1[ii].p = pressure[ii - start];
-        pnp1[ii].rho = svar.fluid.get_density(pressure[ii - start]);
+        pnp1[ii].rho = fvar.get_density(pressure[ii - start]);
     }
 }
 
-void Boundary_DBC(size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1)
+void Boundary_DBC(
+    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
+)
 {
-    real const c2 = svar.fluid.speed_sound * svar.fluid.speed_sound;
+    real const c2 = fvar.speed_sound * fvar.speed_sound;
     /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
     vector<StateVecD> RV_(end, StateVecD::Zero());
 #pragma omp parallel default(shared)
@@ -95,15 +98,13 @@ void Boundary_DBC(size_t const& start, size_t const& end, OUTL const& outlist, S
                 StateVecD const Vji = pj.v - pi.v;
                 real const rr = jj.second;
                 real const r = sqrt(rr);
-                real const idist2 = 1.0 / (rr + 0.001 * svar.fluid.H_sq);
+                real const idist2 = 1.0 / (rr + 0.001 * fvar.H_sq);
                 // real const volj = pj.m/pj.rho;
-                real const kern = Kernel(r, svar.fluid.H, svar.fluid.W_correc);
-                StateVecD const gradK = GradK(Rji, r, svar.fluid.H, svar.fluid.W_correc);
-                StateVecD art_visc_ =
-                    pj.m * ArtVisc(svar.fluid.nu, pi, pj, svar.fluid, Rji, Vji, idist2, gradK);
+                real const kern = Kernel(r, fvar.H, fvar.W_correc);
+                StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.W_correc);
+                StateVecD art_visc_ = pj.m * ArtVisc(fvar, pi, pj, Rji, Vji, idist2, gradK);
                 /*Base WCSPH continuity drho/dt*/
-                RV_[jj.first] -=
-                    2.0 * c2 * kern / pow(kern + svar.fluid.W_correc, 2.0) * gradK + art_visc_;
+                RV_[jj.first] -= 2.0 * c2 * kern / pow(kern + fvar.W_correc, 2.0) * gradK + art_visc_;
             } /*End of neighbours*/
         } /*End of boundary parts*/
 
@@ -119,7 +120,8 @@ void Boundary_DBC(size_t const& start, size_t const& end, OUTL const& outlist, S
  * all equations */
 /* Just don't have the position, velocity, and acceleration updated */
 void Boundary_Ghost(
-    size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1, vector<int>& near_inlet
+    size_t const& start, size_t const& end, OUTL const& outlist, real const& H, real const& W_correc,
+    SPHState& pnp1, vector<int>& near_inlet
 )
 {
 /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
@@ -145,7 +147,7 @@ void Boundary_Ghost(
                 real const rr = jj.second;
                 real const r = sqrt(rr);
                 real const volj = pj.m / pj.rho;
-                StateVecD const gradK = GradK(Rji, r, svar.fluid.H, svar.fluid.W_correc);
+                StateVecD const gradK = GradK(Rji, r, H, W_correc);
 
                 /*Base WCSPH continuity drho/dt*/
                 Rrhoi -= volj * Vji.dot(gradK);
@@ -157,7 +159,10 @@ void Boundary_Ghost(
     }
 }
 
-void Set_No_Slip(size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1)
+void Set_No_Slip(
+    size_t const& start, size_t const& end, OUTL const& outlist, real const& H, real const& W_correc,
+    SPHState& pnp1
+)
 {
 #pragma omp for schedule(static) nowait /*Reduction defs in Var.h*/
     for (size_t ii = start; ii < end; ++ii)
@@ -170,7 +175,7 @@ void Set_No_Slip(size_t const& start, size_t const& end, OUTL const& outlist, SP
             if (ii == jj.first || pj.b <= PISTON)
                 continue;
             real r = sqrt(jj.second);
-            real kern = Kernel(r, svar.fluid.H, svar.fluid.W_correc);
+            real kern = Kernel(r, H, W_correc);
             kernsum += kern;
             velsum += pj.v * kern;
         }
@@ -236,10 +241,9 @@ inline StateVecD SurfTenContrib(
 
 /* Find the acceleration and density gradient for an individual particle from its neighbourhood. */
 void get_acc_and_Rrho_on_i(
-    SIM const& svar, AERO const& svar.air, MESH const& cells,
-    std::vector<neighbour_index> const& outlist_i, SPHState const& pnp1, real const& npdm2,
-    real const& pi3o4, StateVecD const& grav_vec, SPHPart const& pi, StateVecD& acc_i,
-    StateVecD& acc_aero_i, real& Rrho_i
+    SIM const& svar, MESH const& cells, std::vector<neighbour_index> const& outlist_i,
+    SPHState const& pnp1, real const& npdm2, real const& pi3o4, StateVecD const& grav_vec,
+    SPHPart const& pi, StateVecD& acc_i, StateVecD& acc_aero_i, real& Rrho_i
 )
 {
     /* Internal accumulation values before assigning the final value. */
@@ -299,7 +303,7 @@ void get_acc_and_Rrho_on_i(
 #endif
 
         /*Laminar Viscosity - Morris (2003)*/
-        StateVecD const visc = Viscosity(svar.fluid.nu, pi, pj, Rji, Vji, idist2, gradK);
+        StateVecD const visc = Viscosity(svar.fluid, svar.fluid.nu, pi, pj, Rji, Vji, idist2, gradK);
         visc_ += pj.m * visc;
 
         /* Surface tension options */
@@ -330,7 +334,7 @@ void get_acc_and_Rrho_on_i(
 #ifdef LINEAR
             art_visc_ += Linear_ArtVisc(Rji, Vji, idist2, gradK, volj);
 #else
-            art_visc_ += pj.m * ArtVisc(svar.fluid.nu, pi, pj, svar.fluid, Rji, Vji, idist2, gradK);
+            art_visc_ += pj.m * ArtVisc(svar.fluid, pi, pj, Rji, Vji, idist2, gradK);
 #endif
         }
         else
@@ -420,8 +424,7 @@ Calculate all forces (and represent as acceleration) due to pressure, viscosity,
 aerodynamic coupling.
   */
 void get_acc_and_Rrho(
-    SIM const& svar, AERO const& svar.air, MESH const& cells, OUTL const& outlist, real const& npd,
-    SPHState& pnp1
+    SIM const& svar, MESH const& cells, OUTL const& outlist, real const& npd, SPHState& pnp1
 )
 {
 
@@ -466,9 +469,8 @@ void get_acc_and_Rrho(
 }
 
 void get_aero_velocity(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, MESH const& cells,
-    VLM const& vortex, size_t const& start, size_t& end_ng, OUTL& outlist, LIMITS& limits, SPHState& pn,
-    SPHState& pnp1, real& npd
+    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, MESH const& cells, size_t const& start,
+    size_t& end_ng, OUTL& outlist, LIMITS& limits, SPHState& pn, SPHState& pnp1, real& npd
 )
 {
     // Check if the particle has moved to a new cell
@@ -514,7 +516,7 @@ void get_aero_velocity(
             svar.fluid_points -= nDel;
             svar.total_points -= nDel;
             end_ng -= nDel;
-            outlist = update_neighbours(SPH_TREE, svar.fluid, pnp1);
+            outlist = update_neighbours(svar.fluid, SPH_TREE, pnp1);
             dSPH_PreStep(svar.fluid, svar.total_points, pnp1, outlist, npd);
         }
         break;
@@ -531,13 +533,13 @@ void get_aero_velocity(
             {
                 if (pnp1[ii].lam_nb < svar.air.lam_cutoff && pnp1[ii].b == FREE)
                 {
-                    pnp1[ii].cellV = vortex.getVelocity(pnp1[ii].xi);
+                    pnp1[ii].cellV = svar.vlm.getVelocity(pnp1[ii].xi);
                     pnp1[ii].cellID = 1;
                 }
                 else
                 {
                     pnp1[ii].cellV = StateVecD::Zero();
-                    pnp1[ii].cellID = -1;
+                    pnp1[ii].cellID = c_no_cell;
                 }
             }
             break;
@@ -549,13 +551,13 @@ void get_aero_velocity(
             {
                 if (outlist[ii].size() * svar.air.i_n_full < svar.air.lam_cutoff && pnp1[ii].b == FREE)
                 {
-                    pnp1[ii].cellV = vortex.getVelocity(pnp1[ii].xi);
+                    pnp1[ii].cellV = svar.vlm.getVelocity(pnp1[ii].xi);
                     pnp1[ii].cellID = 1;
                 }
                 else
                 {
                     pnp1[ii].cellV = StateVecD::Zero();
-                    pnp1[ii].cellID = -1;
+                    pnp1[ii].cellID = c_no_cell;
                 }
             }
             break;
@@ -581,7 +583,7 @@ void get_aero_velocity(
                 else
                 {
                     pnp1[ii].cellV = StateVecD::Zero();
-                    pnp1[ii].cellID = -1;
+                    pnp1[ii].cellID = c_no_cell;
                 }
             }
             break;
@@ -599,7 +601,7 @@ void get_aero_velocity(
                 else
                 {
                     pnp1[ii].cellV = StateVecD::Zero();
-                    pnp1[ii].cellID = -1;
+                    pnp1[ii].cellID = c_no_cell;
                 }
             }
             break;

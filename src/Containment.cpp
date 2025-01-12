@@ -131,7 +131,7 @@ void Write_Containment(
         }
     }
     cout << "Face intersections: " << intersects << endl;
-    string fout = svar.output_prefix;
+    string fout = svar.io.output_prefix;
     fout.append("_FailedCellContainment.dat");
 
     cout << "Writing to file: " << fout << endl;
@@ -301,7 +301,7 @@ void Write_Containment(
 
     cout << "Intersect? " << inside_flag << endl;
 
-    string fout = svar.output_prefix;
+    string fout = svar.io.output_prefix;
     fout.append("_FailedCellContainment.dat");
 
     cout << "Writing to file: " << fout << endl;
@@ -575,10 +575,8 @@ void FirstCell(SIM& svar, Vec_Tree const& CELL_INDEX, MESH const& cells, SPHPart
 /* <summary> Find the cells for all non-boundary particles. Checks for whether a paricle is free.  */
 /* It is assumed that the particle does have a previous cell defined, and checks this cell */
 /* before going to the KD Tree to find the nearest cells to iterate through. </summary> */
-vector<size_t> FindCell(
-    SIM& svar, AERO const& svar.air, Vec_Tree const& CELL_TREE, MESH const& cells,
-    /* DELTAP const& dp, */ SPHState& pn, SPHState& pnp1
-)
+vector<size_t>
+FindCell(SIM& svar, Vec_Tree const& CELL_TREE, MESH const& cells, SPHState& pn, SPHState& pnp1)
 {
     /*Find which cell the particle is in*/
     vector<size_t> toDelete;
@@ -593,7 +591,7 @@ vector<size_t> FindCell(
         {
             if (pnp1[ii].b != FREE || pnp1[ii].lam_nb > svar.air.lam_cutoff)
             {
-                pnp1[ii].cellID = -1;
+                pnp1[ii].cellID = c_no_cell;
                 continue;
             }
 
@@ -822,8 +820,8 @@ vector<size_t> FindCell(
 }
 
 void Check_Pipe_Outlet(
-    Vec_Tree const& CELL_TREE, SIM& svar, AERO const& svar.air, MESH const& cells, LIMITS& limits,
-    /* DELTAP& dp, */ SPHState& pn, SPHState& pnp1, size_t& end, size_t& end_ng
+    Vec_Tree const& CELL_TREE, SIM& svar, MESH const& cells, LIMITS& limits, SPHState& pn,
+    SPHState& pnp1, size_t& end, size_t& end_ng
 )
 {
     vector<size_t> del;

@@ -148,39 +148,45 @@ void Print_Settings(FILE* out, SIM const& svar)
 
     /* File Inputs */
     fprintf(out, " Input files --------------------------------: -\n");
-    fprintf(out, "              Input fluid definition filename: %s\n", svar.input_fluid_file.c_str());
-    fprintf(out, "           Input boundary definition filename: %s\n", svar.input_bound_file.c_str());
-    fprintf(out, "                           SPH restart prefix: %s\n", svar.restart_prefix.c_str());
-    fprintf(out, "                      VLM definition filename: %s\n\n", svar.vlm_file.c_str());
+    fprintf(
+        out, "              Input fluid definition filename: %s\n", svar.io.input_fluid_file.c_str()
+    );
+    fprintf(
+        out, "           Input boundary definition filename: %s\n", svar.io.input_bound_file.c_str()
+    );
+    fprintf(out, "                           SPH restart prefix: %s\n", svar.io.restart_prefix.c_str());
+    fprintf(out, "                      VLM definition filename: %s\n\n", svar.io.vlm_file.c_str());
 
     /* TAU files */
     fprintf(out, " TAU files ----------------------------------: -\n");
-    fprintf(out, "                   Primary grid face filename: %s\n", svar.tau_mesh.c_str());
-    fprintf(out, "                    Boundary mapping filename: %s\n", svar.tau_bmap.c_str());
-    fprintf(out, "                          Restart-data prefix: %s\n", svar.tau_sol.c_str());
+    fprintf(out, "                   Primary grid face filename: %s\n", svar.io.tau_mesh.c_str());
+    fprintf(out, "                    Boundary mapping filename: %s\n", svar.io.tau_bmap.c_str());
+    fprintf(out, "                          Restart-data prefix: %s\n", svar.io.tau_sol.c_str());
     fprintf(out, "                                   Grid scale: %f\n", svar.scale);
-    fprintf(out, "                         Angle alpha (degree): %f\n", svar.angle_alpha);
-    fprintf(out, "           2D offset vector (0 / x=1,y=2,z=3): %d\n\n", svar.offset_axis);
+    fprintf(out, "                         Angle alpha (degree): %f\n", svar.io.angle_alpha);
+    fprintf(out, "           2D offset vector (0 / x=1,y=2,z=3): %d\n\n", svar.io.offset_axis);
 
     /* OpenFOAM files */
     fprintf(out, " OpenFOAM files -----------------------------: -\n");
-    fprintf(out, "                     OpenFOAM input directory: %s\n", svar.foam_dir.c_str());
-    fprintf(out, "                  OpenFOAM solution directory: %s\n", svar.foam_sol.c_str());
-    fprintf(out, "                        OpenFOAM binary (0/1): %d\n", svar.foam_is_binary);
-    fprintf(out, "                           Label size (32/64): %d\n", svar.foam_label_size);
-    fprintf(out, "                          Scalar size (32/64): %d\n", svar.foam_scalar_size);
-    fprintf(out, "                       OpenFOAM buoyant (0/1): %d\n\n", svar.foam_buoyant_sim);
+    fprintf(out, "                     OpenFOAM input directory: %s\n", svar.io.foam_dir.c_str());
+    fprintf(out, "                  OpenFOAM solution directory: %s\n", svar.io.foam_sol.c_str());
+    fprintf(out, "                        OpenFOAM binary (0/1): %d\n", svar.io.foam_is_binary);
+    fprintf(out, "                           Label size (32/64): %d\n", svar.io.foam_label_size);
+    fprintf(out, "                          Scalar size (32/64): %d\n", svar.io.foam_scalar_size);
+    fprintf(out, "                       OpenFOAM buoyant (0/1): %d\n\n", svar.io.foam_buoyant_sim);
 
     /* File outputs */
     fprintf(out, " Output parameters --------------------------: -\n");
-    fprintf(out, "                 Single file for output (0/1): %u\n", svar.single_file);
-    fprintf(out, "                   Write Tecplot output (0/1): %u\n", svar.write_tecio);
-    fprintf(out, "                    Write H5Part output (0/1): %u\n", svar.write_h5part);
-    fprintf(out, "                          Output files prefix: %s\n", svar.output_prefix.c_str());
-    fprintf(out, "                      SPH frame time interval: %f\n", svar.frame_time_interval);
-    fprintf(out, "                              SPH frame count: %u\n", svar.max_frames);
-    fprintf(out, "       SPH output encoding (0=ascii/1=binary): %u\n", svar.out_encoding);
-    fprintf(out, "                                Variable list: %s\n\n", svar.output_names.c_str());
+    fprintf(out, "                 Single file for output (0/1): %u\n", svar.io.single_file);
+    fprintf(out, "                   Write Tecplot output (0/1): %u\n", svar.io.write_tecio);
+    fprintf(out, "                    Write H5Part output (0/1): %u\n", svar.io.write_h5part);
+    fprintf(out, "                          Output files prefix: %s\n", svar.io.output_prefix.c_str());
+    fprintf(
+        out, "                      SPH frame time interval: %f\n", svar.integrator.frame_time_interval
+    );
+    fprintf(out, "                              SPH frame count: %u\n", svar.integrator.max_frames);
+    fprintf(out, "       SPH output encoding (0=ascii/1=binary): %u\n", svar.io.out_encoding);
+    fprintf(out, "                                Variable list: %s\n\n", svar.io.output_names.c_str());
 
     /* Fluid data */
     fprintf(out, " Fluid parameters ---------------------------: -\n");
@@ -191,7 +197,7 @@ void Print_Settings(FILE* out, SIM const& svar)
     fprintf(out, "            SPH surface tension contact angle: %g\n", svar.fluid.contangb);
     fprintf(out, "              SPH artificial viscosity factor: %g\n", svar.fluid.visc_alpha);
     fprintf(out, "                        SPH delta coefficient: %g\n", svar.fluid.dsph_delta);
-    fprintf(out, "                SPH maximum shifting velocity: %g\n", svar.max_shift_vel);
+    fprintf(out, "                SPH maximum shifting velocity: %g\n", svar.integrator.max_shift_vel);
     fprintf(out, "                           SPH speed of sound: %g\n", svar.fluid.speed_sound);
     fprintf(out, "                      SPH background pressure: %g\n", svar.fluid.press_back);
     fprintf(out, "                        SPH starting pressure: %g\n", svar.fluid.press_pipe);
@@ -204,21 +210,28 @@ void Print_Settings(FILE* out, SIM const& svar)
 
     /* Simulation settings */
     fprintf(out, " Time integration settings ------------------: -\n");
-    fprintf(out, "                       SPH integration solver: %s\n", svar.solver_name.c_str());
-    fprintf(out, " SPH compressibility solver (0=WCSPH,1=ACSPH): %u\n", svar.compressibility_solver);
+    fprintf(
+        out, "                       SPH integration solver: %s\n", svar.integrator.solver_name.c_str()
+    );
+    fprintf(
+        out, " SPH compressibility solver (0=WCSPH,1=ACSPH): %u\n",
+        svar.integrator.compressibility_solver
+    );
     fprintf(out, "  SPH equation of state (0=Cole/1=Isothermal): %u\n", svar.fluid.pressure_rel);
-    fprintf(out, "     SPH boundary solver (0=pressure/1=ghost): %u\n", svar.bound_solver);
-    fprintf(out, "                  SPH solver minimum residual: %g\n", svar.min_residual);
-    fprintf(out, "                         SPH maximum timestep: %g\n", svar.delta_t_max);
-    fprintf(out, "                         SPH minimum timestep: %g\n", svar.delta_t_min);
-    fprintf(out, "                              SPH maximum CFL: %g\n", svar.cfl_max);
-    fprintf(out, "                              SPH minimum CFL: %g\n", svar.cfl_min);
-    fprintf(out, "                            SPH CFL condition: %g\n", svar.cfl);
-    fprintf(out, "                        SPH unstable CFL step: %g\n", svar.cfl_step);
-    fprintf(out, "             SPH Newmark-Beta iteration limit: %u\n", svar.max_subits);
-    fprintf(out, "                 SPH unstable CFL count limit: %u\n", svar.n_unstable_limit);
-    fprintf(out, "                   SPH stable CFL count limit: %u\n", svar.n_stable_limit);
-    fprintf(out, "        SPH stable CFL count iteration factor: %g\n", svar.subits_factor);
+    fprintf(out, "     SPH boundary solver (0=pressure/1=ghost): %u\n", svar.integrator.bound_solver);
+    fprintf(out, "                  SPH solver minimum residual: %g\n", svar.integrator.min_residual);
+    fprintf(out, "                         SPH maximum timestep: %g\n", svar.integrator.delta_t_max);
+    fprintf(out, "                         SPH minimum timestep: %g\n", svar.integrator.delta_t_min);
+    fprintf(out, "                              SPH maximum CFL: %g\n", svar.integrator.cfl_max);
+    fprintf(out, "                              SPH minimum CFL: %g\n", svar.integrator.cfl_min);
+    fprintf(out, "                            SPH CFL condition: %g\n", svar.integrator.cfl);
+    fprintf(out, "                        SPH unstable CFL step: %g\n", svar.integrator.cfl_step);
+    fprintf(out, "             SPH Newmark-Beta iteration limit: %u\n", svar.integrator.max_subits);
+    fprintf(
+        out, "                 SPH unstable CFL count limit: %u\n", svar.integrator.n_unstable_limit
+    );
+    fprintf(out, "                   SPH stable CFL count limit: %u\n", svar.integrator.n_stable_limit);
+    fprintf(out, "        SPH stable CFL count iteration factor: %g\n", svar.integrator.subits_factor);
     fprintf(out, "                   SPH maximum particle count: %zu\n\n", svar.max_points);
 
     fprintf(out, " Geometric parameters -----------------------: -\n");
@@ -232,7 +245,7 @@ void Print_Settings(FILE* out, SIM const& svar)
 #endif
     fprintf(out, "                          SPH initial spacing: %g\n", svar.particle_step);
     fprintf(out, "                  SPH boundary spacing factor: %g\n", svar.bound_step_factor);
-    fprintf(out, "                    SPH restart fit tolerance: %f\n", svar.restart_tol);
+    fprintf(out, "                    SPH restart fit tolerance: %f\n", svar.io.restart_tol);
     fprintf(out, "                  SPH smoothing length factor: %g\n", svar.fluid.H_fac);
 #if SIMDIM == 3
     fprintf(
@@ -278,18 +291,18 @@ void Print_Settings(FILE* out, SIM const& svar)
 
     /* Particle tracking settings */
     fprintf(out, " Particle tracking parameters ---------------: -\n");
-    fprintf(out, "                      Transition to IPT (0/1): %d\n", svar.using_ipt);
-    fprintf(out, "                Velocity equation order (1/2): %d\n", svar.ipt_eq_order);
-    fprintf(out, "         SPH tracking conversion x coordinate: %g\n", svar.max_x_sph);
-    fprintf(out, "              Maximum x trajectory coordinate: %g\n", svar.max_x);
-    fprintf(out, "              Particle scatter output (0/1/2): %u\n", svar.part_out);
-    fprintf(out, "               Particle streak output (0/1/2): %u\n", svar.streak_out);
-    fprintf(out, "    Particle cell intersection output (0/1/2): %u\n\n", svar.cells_out);
+    fprintf(out, "                      Transition to IPT (0/1): %d\n", svar.ipt.using_ipt);
+    fprintf(out, "                Velocity equation order (1/2): %d\n", svar.ipt.ipt_eq_order);
+    fprintf(out, "         SPH tracking conversion x coordinate: %g\n", svar.ipt.max_x_sph);
+    fprintf(out, "              Maximum x trajectory coordinate: %g\n", svar.ipt.max_x);
+    fprintf(out, "              Particle scatter output (0/1/2): %u\n", svar.ipt.part_out);
+    fprintf(out, "               Particle streak output (0/1/2): %u\n", svar.ipt.streak_out);
+    fprintf(out, "    Particle cell intersection output (0/1/2): %u\n\n", svar.ipt.cells_out);
 
     fflush(out);
 }
 
-void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.air, VLM& vortex)
+void GetInput(int argc, char** argv, SIM& svar)
 {
     if (argc > 2)
     { /*Check number of input arguments*/
@@ -308,7 +321,7 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
     // printf(argv[1], endl;
     string file = argv[1];
 
-    svar.input_file = file;
+    svar.io.input_file = file;
 
     FILE* fin = fopen(argv[1], "r");
     if (fin == NULL)
@@ -334,34 +347,34 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
 
         /* File Inputs */
         Get_Number(line, "Number of threads", svar.numThreads);
-        Get_String(line, "Input fluid definition filename", svar.input_fluid_file);
-        Get_String(line, "Input boundary definition filename", svar.input_bound_file);
-        Get_String(line, "Primary grid face filename", svar.tau_mesh);
-        Get_String(line, "Boundary mapping filename", svar.tau_bmap);
-        Get_String(line, "Restart-data prefix", svar.tau_sol);
-        Get_String(line, "SPH restart prefix", svar.restart_prefix);
+        Get_String(line, "Input fluid definition filename", svar.io.input_fluid_file);
+        Get_String(line, "Input boundary definition filename", svar.io.input_bound_file);
+        Get_String(line, "Primary grid face filename", svar.io.tau_mesh);
+        Get_String(line, "Boundary mapping filename", svar.io.tau_bmap);
+        Get_String(line, "Restart-data prefix", svar.io.tau_sol);
+        Get_String(line, "SPH restart prefix", svar.io.restart_prefix);
         Get_Number(line, "Grid scale", svar.scale);
-        Get_Number(line, "Angle alpha (degree)", svar.angle_alpha);
-        Get_Number(line, "2D offset vector (0 / x=1,y=2,z=3)", svar.offset_axis);
-        Get_String(line, "OpenFOAM input directory", svar.foam_dir);
-        Get_String(line, "OpenFOAM solution directory", svar.foam_sol);
-        Get_Bool(line, "OpenFOAM binary (0/1)", svar.foam_is_binary);
-        Get_Number(line, "Label size (32/64)", svar.foam_label_size);
-        Get_Number(line, "Scalar size (32/64)", svar.foam_scalar_size);
-        Get_Bool(line, "OpenFOAM buoyant (0/1)", svar.foam_buoyant_sim);
+        Get_Number(line, "Angle alpha (degree)", svar.io.angle_alpha);
+        Get_Number(line, "2D offset vector (0 / x=1,y=2,z=3)", svar.io.offset_axis);
+        Get_String(line, "OpenFOAM input directory", svar.io.foam_dir);
+        Get_String(line, "OpenFOAM solution directory", svar.io.foam_sol);
+        Get_Bool(line, "OpenFOAM binary (0/1)", svar.io.foam_is_binary);
+        Get_Number(line, "Label size (32/64)", svar.io.foam_label_size);
+        Get_Number(line, "Scalar size (32/64)", svar.io.foam_scalar_size);
+        Get_Bool(line, "OpenFOAM buoyant (0/1)", svar.io.foam_buoyant_sim);
 #if SIMDIM == 3
-        Get_String(line, "VLM definition filename", svar.vlm_file);
+        Get_String(line, "VLM definition filename", svar.io.vlm_file);
 #endif
 
         /* File outputs */
-        Get_Bool(line, "Write Tecplot output (0/1)", svar.write_tecio);
-        Get_Bool(line, "Write H5Part output (0/1)", svar.write_h5part);
-        Get_Number(line, "Single file for output (0/1)", svar.single_file);
-        Get_String(line, "Output files prefix", svar.output_prefix);
-        Get_Number(line, "SPH frame time interval", svar.frame_time_interval);
-        Get_Number(line, "SPH frame count", svar.max_frames);
-        Get_Number(line, "SPH output encoding (0=ascii/1=binary)", svar.out_encoding);
-        Get_String(line, "Variable list", svar.output_names);
+        Get_Bool(line, "Write Tecplot output (0/1)", svar.io.write_tecio);
+        Get_Bool(line, "Write H5Part output (0/1)", svar.io.write_h5part);
+        Get_Number(line, "Single file for output (0/1)", svar.io.single_file);
+        Get_String(line, "Output files prefix", svar.io.output_prefix);
+        Get_Number(line, "SPH frame time interval", svar.integrator.frame_time_interval);
+        Get_Number(line, "SPH frame count", svar.integrator.max_frames);
+        Get_Number(line, "SPH output encoding (0=ascii/1=binary)", svar.io.out_encoding);
+        Get_String(line, "Variable list", svar.io.output_names);
 
         // Get_String(line, "Particle surface impact filename", svar.ascii_surface_file);
 
@@ -377,21 +390,23 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
         /* Aerodynamic data */
 
         /* Simulation settings */
-        Get_String(line, "SPH integration solver", svar.solver_name);
-        Get_Number(line, "SPH compressibility solver (0=WCSPH,1=ACSPH)", svar.compressibility_solver);
+        Get_String(line, "SPH integration solver", svar.integrator.solver_name);
+        Get_Number(
+            line, "SPH compressibility solver (0=WCSPH,1=ACSPH)", svar.integrator.compressibility_solver
+        );
         Get_Number(line, "SPH equation of state (0=Cole/1=Isothermal)", svar.fluid.pressure_rel);
-        Get_Number(line, "SPH boundary solver (0=pressure/1=ghost)", svar.bound_solver);
-        Get_Number(line, "SPH solver minimum residual", svar.min_residual);
-        Get_Number(line, "SPH maximum timestep", svar.delta_t_max);
-        Get_Number(line, "SPH minimum timestep", svar.delta_t_min);
-        Get_Number(line, "SPH maximum CFL", svar.cfl_max);
-        Get_Number(line, "SPH minimum CFL", svar.cfl_min);
-        Get_Number(line, "SPH CFL condition", svar.cfl);
-        Get_Number(line, "SPH unstable CFL step", svar.cfl_step);
-        Get_Number(line, "SPH unstable CFL count limit", svar.n_unstable_limit);
-        Get_Number(line, "SPH stable CFL count limit", svar.n_stable_limit);
-        Get_Number(line, "SPH stable CFL count iteration factor", svar.subits_factor);
-        Get_Number(line, "SPH maximum shifting velocity", svar.max_shift_vel);
+        Get_Number(line, "SPH boundary solver (0=pressure/1=ghost)", svar.integrator.bound_solver);
+        Get_Number(line, "SPH solver minimum residual", svar.integrator.min_residual);
+        Get_Number(line, "SPH maximum timestep", svar.integrator.delta_t_max);
+        Get_Number(line, "SPH minimum timestep", svar.integrator.delta_t_min);
+        Get_Number(line, "SPH maximum CFL", svar.integrator.cfl_max);
+        Get_Number(line, "SPH minimum CFL", svar.integrator.cfl_min);
+        Get_Number(line, "SPH CFL condition", svar.integrator.cfl);
+        Get_Number(line, "SPH unstable CFL step", svar.integrator.cfl_step);
+        Get_Number(line, "SPH unstable CFL count limit", svar.integrator.n_unstable_limit);
+        Get_Number(line, "SPH stable CFL count limit", svar.integrator.n_stable_limit);
+        Get_Number(line, "SPH stable CFL count iteration factor", svar.integrator.subits_factor);
+        Get_Number(line, "SPH maximum shifting velocity", svar.integrator.max_shift_vel);
 
         Get_Number(line, "SPH background pressure", svar.fluid.press_back);
         Get_Number(line, "SPH starting pressure", svar.fluid.press_pipe);
@@ -403,7 +418,7 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
 
         Get_Number(line, "SPH artificial viscosity factor", svar.fluid.visc_alpha);
         Get_Number(line, "SPH speed of sound", svar.fluid.speed_sound);
-        Get_Number(line, "SPH Newmark-Beta iteration limit", svar.max_subits);
+        Get_Number(line, "SPH Newmark-Beta iteration limit", svar.integrator.max_subits);
         Get_Vector(line, "SPH gravity vector", svar.grav);
 
         Get_Number(line, "SPH initial spacing", svar.particle_step);
@@ -411,7 +426,7 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
         Get_Number(line, "SPH smoothing length factor", svar.fluid.H_fac);
         Get_Vector(line, "SPH global offset coordinate", svar.offset_vec);
         Get_Number(line, "SPH maximum particle count", svar.max_points);
-        Get_Number(line, "SPH restart fit tolerance", svar.restart_tol);
+        Get_Number(line, "SPH restart fit tolerance", svar.io.restart_tol);
 
         /* Aerodynamic coupling settings */
         Get_String(line, "SPH aerodynamic case", svar.air.aero_case);
@@ -429,13 +444,13 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
         Get_Number(line, "Gas constant gamma", svar.air.gamma);
 
         /* Particle tracking settings */
-        Get_Number(line, "Transition to IPT (0/1)", svar.using_ipt);
-        Get_Number(line, "Velocity equation order (1/2)", svar.ipt_eq_order);
-        Get_Number(line, "SPH tracking conversion x coordinate", svar.max_x_sph);
-        Get_Number(line, "Maximum x trajectory coordinate", svar.max_x);
-        Get_Number(line, "Particle scatter output (0/1/2)", svar.part_out);
-        Get_Number(line, "Particle streak output (0/1/2)", svar.streak_out);
-        Get_Number(line, "Particle cell intersection output (0/1/2)", svar.cells_out);
+        Get_Number(line, "Transition to IPT (0/1)", svar.ipt.using_ipt);
+        Get_Number(line, "Velocity equation order (1/2)", svar.ipt.ipt_eq_order);
+        Get_Number(line, "SPH tracking conversion x coordinate", svar.ipt.max_x_sph);
+        Get_Number(line, "Maximum x trajectory coordinate", svar.ipt.max_x);
+        Get_Number(line, "Particle scatter output (0/1/2)", svar.ipt.part_out);
+        Get_Number(line, "Particle streak output (0/1/2)", svar.ipt.streak_out);
+        Get_Number(line, "Particle cell intersection output (0/1/2)", svar.ipt.cells_out);
 
         cline_size = getline(&cline, &cline_buf_size, fin);
     }
@@ -447,19 +462,19 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
     int fault = 0;
 
     /* Need to check if inputs are correct */
-    if (svar.tau_mesh.empty())
+    if (svar.io.tau_mesh.empty())
     {
-        if (svar.foam_dir.empty())
+        if (svar.io.foam_dir.empty())
         {
 #if SIMDIM == 3
-            if (svar.vlm_file.empty())
+            if (svar.io.vlm_file.empty())
                 svar.Asource = constVel;
             else
             {
                 svar.Asource = VLMInfl;
 
-                if (svar.vlm_file == "(thisfile)")
-                    svar.vlm_file = svar.input_file;
+                if (svar.io.vlm_file == "(thisfile)")
+                    svar.io.vlm_file = svar.io.input_file;
             }
 
 #else
@@ -468,70 +483,71 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
         }
         else
         {
-            if (svar.foam_sol.empty())
+            if (svar.io.foam_sol.empty())
             {
                 printf("OpenFOAM solution directory not defined.\n");
                 fault = 1;
             }
 
-            svar.mesh_source = OpenFOAM;
+            svar.io.mesh_source = OpenFOAM;
             svar.Asource = meshInfl;
         }
     }
     else
     {
-        svar.mesh_source = TAU_CDF;
+        svar.io.mesh_source = TAU_CDF;
         svar.Asource = meshInfl;
-        if (svar.tau_bmap.empty())
+        if (svar.io.tau_bmap.empty())
         {
             printf("Input TAU bmap file not defined.\n");
             fault = 1;
         }
-        else if (svar.tau_bmap == "(thisfile)")
+        else if (svar.io.tau_bmap == "(thisfile)")
         {
             /* The para file is the boundary definition file, so set it so */
-            svar.tau_bmap = svar.input_file;
+            svar.io.tau_bmap = svar.io.input_file;
         }
         else
         {
             // Check files exist
-            if (!std::filesystem::exists(svar.tau_bmap))
+            if (!std::filesystem::exists(svar.io.tau_bmap))
             {
-                printf("Input TAU boundary file \"%s\" not found.\n", svar.tau_bmap.c_str());
+                printf("Input TAU boundary file \"%s\" not found.\n", svar.io.tau_bmap.c_str());
                 fault = 1;
             }
 
-            if (!std::filesystem::exists(svar.tau_mesh))
+            if (!std::filesystem::exists(svar.io.tau_mesh))
             {
-                printf("Input TAU mesh file \"%s\" not found.\n", svar.tau_mesh.c_str());
+                printf("Input TAU mesh file \"%s\" not found.\n", svar.io.tau_mesh.c_str());
                 fault = 1;
             }
         }
 
-        if (svar.tau_sol.empty())
+        if (svar.io.tau_sol.empty())
         {
             printf("Input TAU solution file not defined.\n");
             fault = 1;
         }
         else
         {
-            if (!std::filesystem::exists(svar.tau_sol))
+            if (!std::filesystem::exists(svar.io.tau_sol))
             {
-                printf("Input TAU solution file \"%s\" not found.\n", svar.tau_sol.c_str());
+                printf("Input TAU solution file \"%s\" not found.\n", svar.io.tau_sol.c_str());
                 fault = 1;
             }
         }
     }
 
     /* Check for restart data now boundary case is known */
-    if (!svar.restart_prefix.empty())
+    if (!svar.io.restart_prefix.empty())
     {
-        svar.restart = 1;
+        svar.io.restart = 1;
 
-        if (!std::filesystem::exists(svar.restart_prefix + "_particles.h5"))
+        if (!std::filesystem::exists(svar.io.restart_prefix + "_particles.h5"))
         {
             printf(
-                "SPH restart file \"%s\" not found.\n", (svar.restart_prefix + "_particles.h5").c_str()
+                "SPH restart file \"%s\" not found.\n",
+                (svar.io.restart_prefix + "_particles.h5").c_str()
             );
             fault = 1;
         }
@@ -539,43 +555,43 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
         // svar.output_prefix = svar.restart_prefix;
     }
 
-    if (svar.input_fluid_file.empty())
+    if (svar.io.input_fluid_file.empty())
     {
         printf("Input SPH fluid file not defined.\n");
         fault = 1;
     }
     else
     {
-        if (!std::filesystem::exists(svar.input_fluid_file))
+        if (!std::filesystem::exists(svar.io.input_fluid_file))
         {
-            printf("SPH fluid file \"%s\" not found.\n", svar.input_fluid_file.c_str());
+            printf("SPH fluid file \"%s\" not found.\n", svar.io.input_fluid_file.c_str());
             fault = 1;
         }
     }
 
-    if (svar.input_bound_file.empty())
+    if (svar.io.input_bound_file.empty())
     {
         printf("Input SPH boundary file not defined.\n");
         fault = 1;
     }
     else
     {
-        if (!std::filesystem::exists(svar.input_bound_file))
+        if (!std::filesystem::exists(svar.io.input_bound_file))
         {
-            printf("SPH boundary file \"%s\" not found.\n", svar.input_bound_file.c_str());
+            printf("SPH boundary file \"%s\" not found.\n", svar.io.input_bound_file.c_str());
             fault = 1;
         }
     }
 
-    if (!svar.solver_name.empty())
+    if (!svar.integrator.solver_name.empty())
     {
-        if (svar.solver_name == "Newmark-Beta")
+        if (svar.integrator.solver_name == "Newmark-Beta")
         {
-            svar.solver_type = newmark_beta;
+            svar.integrator.solver_type = newmark_beta;
         }
-        else if (svar.solver_name == "Runge-Kutta")
+        else if (svar.integrator.solver_name == "Runge-Kutta")
         {
-            svar.solver_type = runge_kutta;
+            svar.integrator.solver_type = runge_kutta;
         }
         else
         {
@@ -591,13 +607,13 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
         fault = 1;
     }
 
-    if (svar.max_frames < 0)
+    if (svar.integrator.max_frames < 0)
     {
         printf("Number of frames to output not defined.\n");
         fault = 1;
     }
 
-    if (svar.frame_time_interval < 0)
+    if (svar.integrator.frame_time_interval < 0)
     {
         printf("Frame time interval has not been defined.\n");
         fault = 1;
@@ -635,9 +651,9 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
         fault = 1;
     }
 
-    if (svar.delta_t_min > 0.0)
+    if (svar.integrator.delta_t_min > 0.0)
     {
-        svar.delta_t = svar.delta_t_min;
+        svar.integrator.delta_t = svar.integrator.delta_t_min;
     }
 
     if (svar.air.i_interp_fac < 0 || svar.air.i_interp_fac > 1.0)
@@ -647,19 +663,19 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
     }
 
     /* Particle Tracking Settings */
-    if (svar.using_ipt)
+    if (svar.ipt.using_ipt)
     {
-        if (svar.ipt_eq_order > 2 || svar.ipt_eq_order < 1)
+        if (svar.ipt.ipt_eq_order > 2 || svar.ipt.ipt_eq_order < 1)
         {
             printf("Equation order not 1 or 2. Please choose between these.\n");
             exit(-1);
         }
 
-        if (svar.max_x < svar.max_x_sph)
+        if (svar.ipt.max_x < svar.ipt.max_x_sph)
         {
             printf("WARNING: Maximum x coordinate for particle tracking is less than that for SPH.\n");
             printf("         No particle tracking will be performed.\n");
-            svar.using_ipt = 0;
+            svar.ipt.using_ipt = 0;
         }
 
         // svar.streakdir = svar.outfile;
@@ -667,22 +683,22 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
         // svar.streak_file.insert(pos,"_streak");
     }
 
-    if (svar.offset_axis != no_offset)
+    if (svar.io.offset_axis != no_offset)
     {
         if (SIMDIM != 2)
         {
             printf("WARNING: trying to use 3D code with a 2D settings file.\n");
-            svar.offset_axis = no_offset;
+            svar.io.offset_axis = no_offset;
         }
     }
-    else if (svar.offset_axis > z_axis)
+    else if (svar.io.offset_axis > z_axis)
     {
         printf("ERROR: 2D offset axis option out of bounds\n");
         fault = 1;
     }
 
 #if SIMDIM == 2
-    if (svar.offset_axis == no_offset)
+    if (svar.io.offset_axis == no_offset)
     {
         printf("ERROR: Offset axis has not been defined.\n");
         fault = 1;
@@ -697,7 +713,7 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
 
     Check_Output_Variables(svar);
 
-    Set_Values(svar, vortex);
+    Set_Values(svar);
 
     Print_Settings(stdout, svar);
 #ifdef DEBUG
@@ -706,15 +722,15 @@ void GetInput(int argc, char** argv, SIM& svar, FLUID& svar.fluid, AERO& svar.ai
 
 } /*End of GetInput()*/
 
-void Write_Tec_Headers(
-    FILE* ff, FILE* fb, FILE* fg, SIM& svar, AERO const& svar.air, std::string const& prefix
-)
+void Write_Tec_Headers(FILE* ff, FILE* fb, FILE* fg, SIM& svar, std::string const& prefix)
 {
-    if (svar.out_encoding == 1)
+    if (svar.io.out_encoding == 1)
     {
-        Init_Binary_PLT(svar, prefix, "_fluid.szplt", "Simulation Particles", svar.output_fluid_file);
+        Init_Binary_PLT(svar, prefix, "_fluid.szplt", "Simulation Particles", svar.io.output_fluid_file);
 
-        Init_Binary_PLT(svar, prefix, "_boundary.szplt", "Boundary Particles", svar.output_bound_file);
+        Init_Binary_PLT(
+            svar, prefix, "_boundary.szplt", "Boundary Particles", svar.io.output_bound_file
+        );
     }
     else
     {
@@ -744,35 +760,32 @@ void Write_Tec_Headers(
     }
 }
 
-void Write_h5part_Headers(SIM& svar, AERO const& svar.air, std::string const& prefix)
+void Write_h5part_Headers(SIM& svar, std::string const& prefix)
 {
-    open_h5part_files(svar, prefix, svar.h5part_fluid_file, svar.h5part_bound_file);
+    open_h5part_files(svar, prefix, svar.io.h5part_fluid_file, svar.io.h5part_bound_file);
 }
 
-void Write_Timestep(
-    FILE* ff, FILE* fb, FILE* fg, SIM& svar, AERO const& svar.air, LIMITS const& limits,
-    SPHState const& pnp1
-)
+void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limits, SPHState const& pnp1)
 {
-    if (svar.write_tecio)
+    if (svar.io.write_tecio)
     {
         std::ostringstream oss;
-        oss << svar.current_time;
-        if (!svar.single_file)
+        oss << svar.integrator.current_time;
+        if (!svar.io.single_file)
         {
-            string prefix = svar.output_prefix + "_time_" + oss.str();
+            string prefix = svar.io.output_prefix + "_time_" + oss.str();
             Write_Tec_Headers(ff, fb, fg, svar, prefix);
         }
 
-        if (svar.out_encoding == 1)
+        if (svar.io.out_encoding == 1)
         {
             for (size_t bound = 0; bound < svar.n_bound_blocks; bound++)
             {
                 string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name +
                                "_time_" + oss.str() + "s";
                 Write_Binary_Timestep(
-                    svar.rho_rest, pnp1, limits[bound], title.c_str(), static_cast<int32_t>(bound + 1),
-                    svar.output_bound_file
+                    svar, svar.fluid.rho_rest, pnp1, limits[bound], title.c_str(),
+                    static_cast<int32_t>(bound + 1), svar.io.output_bound_file
                 );
             }
 
@@ -782,8 +795,8 @@ void Write_Timestep(
                 string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name + "_time_" +
                                oss.str() + "s";
                 Write_Binary_Timestep(
-                    svar.rho_rest, pnp1, limits[block], title.c_str(), static_cast<int32_t>(block + 1),
-                    svar.output_fluid_file
+                    svar, svar.fluid.rho_rest, pnp1, limits[block], title.c_str(),
+                    static_cast<int32_t>(block + 1), svar.io.output_fluid_file
                 );
             }
         }
@@ -794,8 +807,8 @@ void Write_Timestep(
                 string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name +
                                "_time_" + oss.str() + "s";
                 Write_ASCII_Timestep(
-                    svar.rho_rest, pnp1, limits[bound].index.first, limits[bound].index.second,
-                    title.c_str(), bound + 1, fb
+                    svar, svar.fluid.rho_rest, pnp1, limits[bound].index.first,
+                    limits[bound].index.second, title.c_str(), bound + 1, fb
                 );
             }
 
@@ -806,13 +819,13 @@ void Write_Timestep(
                                oss.str() + "s";
 
                 Write_ASCII_Timestep(
-                    svar.rho_rest, pnp1, limits[block].index.first, limits[block].index.second,
-                    title.c_str(), block + 1, ff
+                    svar, svar.fluid.rho_rest, pnp1, limits[block].index.first,
+                    limits[block].index.second, title.c_str(), block + 1, ff
                 );
             }
         }
 
-        if (!svar.single_file)
+        if (!svar.io.single_file)
         { // Close files after use
             if (ff != NULL)
                 fclose(ff);
@@ -821,27 +834,27 @@ void Write_Timestep(
             if (fg != NULL)
                 fclose(fg);
 
-            if (svar.out_encoding == 1)
+            if (svar.io.out_encoding == 1)
             {
                 /*Combine the szplt files*/
-                close_file(&svar.output_fluid_file);
-                close_file(&svar.output_bound_file);
+                close_file(&svar.io.output_fluid_file);
+                close_file(&svar.io.output_bound_file);
             }
         }
     }
 
-    if (svar.write_h5part)
+    if (svar.io.write_h5part)
     {
-        string prefix = svar.output_prefix;
-        if (!svar.single_file)
+        string prefix = svar.io.output_prefix;
+        if (!svar.io.single_file)
         {
             std::ostringstream oss;
-            oss << svar.current_time;
-            prefix += "_" + std::to_string(svar.current_frame);
+            oss << svar.integrator.current_time;
+            prefix += "_" + std::to_string(svar.integrator.current_frame);
         }
 
         Write_h5part_Headers(svar, prefix);
-        write_h5part_data(svar.h5part_fluid_file, svar.h5part_bound_file, svar, pnp1);
+        write_h5part_data(svar.io.h5part_fluid_file, svar.io.h5part_bound_file, svar, pnp1);
         // Files are closed in the write function
     }
 }
@@ -849,16 +862,16 @@ void Write_Timestep(
 void Remove_Old_Files(SIM const& svar)
 {
     string dir;
-    string prefix = svar.output_prefix;
-    if (svar.output_prefix.find_last_of("/\\") != string::npos)
+    string prefix = svar.io.output_prefix;
+    if (svar.io.output_prefix.find_last_of("/\\") != string::npos)
     {
-        dir = svar.output_prefix.substr(0, svar.output_prefix.find_last_of("/\\"));
+        dir = svar.io.output_prefix.substr(0, svar.io.output_prefix.find_last_of("/\\"));
         // prefix = svar.output_prefix.substr(svar.output_prefix.find_last_of("/\\")+1);
     }
     else
     {
         dir = ".";
-        prefix = dir + "/" + svar.output_prefix;
+        prefix = dir + "/" + svar.io.output_prefix;
     }
 
     for (int ii = prefix.size() - 1; ii >= 0; ii--)
@@ -871,7 +884,7 @@ void Remove_Old_Files(SIM const& svar)
     }
 
     int fault = 0;
-    if (svar.write_tecio)
+    if (svar.io.write_tecio)
     {
         std::regex file_expr("(" + prefix + ")(.*)(\\.szplt\\.sz)(.*)$");
         // std::regex file_expr("(" + prefix + ")(.*)(\\.szplt)$");
@@ -906,7 +919,7 @@ void Remove_Old_Files(SIM const& svar)
         exit(-1);
     }
 
-    if (svar.write_h5part)
+    if (svar.io.write_h5part)
     {
         std::regex fluid_expr("(" + prefix + ")(.*)(\\.h5part)");
 
@@ -945,7 +958,7 @@ void Remove_Old_Files(SIM const& svar)
 
 void Check_Output_Variables(SIM& svar)
 {
-    OutputMap& outvars = svar.output_variables;
+    OutputMap& outvars = svar.io.output_variables;
     // Mandatory output parameters.
     outvars.insert({"pos-vec", OutputVariable("X", realType, true, true)});
     outvars.insert({"vel-vec", OutputVariable("V", realType, true, true)});
@@ -979,19 +992,19 @@ void Check_Output_Variables(SIM& svar)
     outvars.insert({"shiftV-mag", OutputVariable("shift-vel-mag", realType, false, false)});
     outvars.insert({"shiftV-vec", OutputVariable("shift-vel-vector", realType, false, true)});
 
-    if (!svar.output_names.empty())
+    if (!svar.io.output_names.empty())
     {
         // Split the names using underscore as a delimiter
         std::vector<std::string> vals;
         size_t start = 0;
-        size_t end = svar.output_names.find_first_of("_");
+        size_t end = svar.io.output_names.find_first_of("_");
         while (end != std::string::npos)
         {
-            vals.emplace_back(svar.output_names.substr(start, end - start));
+            vals.emplace_back(svar.io.output_names.substr(start, end - start));
             start = end + 1;
-            end = svar.output_names.find_first_of("_", start);
+            end = svar.io.output_names.find_first_of("_", start);
         }
-        vals.emplace_back(svar.output_names.substr(start)); // catch the final value
+        vals.emplace_back(svar.io.output_names.substr(start)); // catch the final value
 
         // Now check the variables for which ones want to be output
         for (std::string const& var : vals)
@@ -1013,7 +1026,7 @@ void Check_Output_Variables(SIM& svar)
     bool write_y = true;
     bool write_z = true;
 #if SIMDIM == 2
-    switch (svar.offset_axis)
+    switch (svar.io.offset_axis)
     {
     case x_axis:
         write_x = false;
@@ -1027,8 +1040,8 @@ void Check_Output_Variables(SIM& svar)
     }
 #endif
 
-    svar.var_names.clear();
-    svar.var_types.clear();
+    svar.io.var_names.clear();
+    svar.io.var_types.clear();
     for (auto const& [key, var] : outvars)
     {
         if (var.write)
@@ -1038,29 +1051,29 @@ void Check_Output_Variables(SIM& svar)
                 // Add variables for a vector
                 if (write_x)
                 {
-                    svar.var_names += var.output_name + "-x,";
-                    svar.var_types.emplace_back(var.data_type);
+                    svar.io.var_names += var.output_name + "-x,";
+                    svar.io.var_types.emplace_back(var.data_type);
                 }
                 if (write_y)
                 {
-                    svar.var_names += var.output_name + "-y,";
-                    svar.var_types.emplace_back(var.data_type);
+                    svar.io.var_names += var.output_name + "-y,";
+                    svar.io.var_types.emplace_back(var.data_type);
                 }
                 if (write_z)
                 {
-                    svar.var_names += var.output_name + "-z,";
-                    svar.var_types.emplace_back(var.data_type);
+                    svar.io.var_names += var.output_name + "-z,";
+                    svar.io.var_types.emplace_back(var.data_type);
                 }
             }
             else
             {
-                svar.var_names += var.output_name + ",";
-                svar.var_types.emplace_back(var.data_type);
+                svar.io.var_names += var.output_name + ",";
+                svar.io.var_types.emplace_back(var.data_type);
             }
         }
     }
 
     // Remove the trailing comma
-    if (svar.var_names.back() == ',')
-        svar.var_names.pop_back();
+    if (svar.io.var_names.back() == ',')
+        svar.io.var_names.pop_back();
 }

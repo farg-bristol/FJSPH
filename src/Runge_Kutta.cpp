@@ -26,9 +26,9 @@ real Check_RK_Error(
 }
 
 SPHState do_runge_kutta_intermediate_step(
-    SIM& svar, AERO const& svar.air, size_t const& start, size_t const& end, real const& npd,
-    MESH const& cells, LIMITS const& limits, OUTL const& outlist, SPHState const& part_n,
-    SPHState const& part_prev, real const& dt_inter
+    SIM& svar, size_t const& start, size_t const& end, real const& npd, MESH const& cells,
+    LIMITS const& limits, OUTL const& outlist, SPHState const& part_n, SPHState const& part_prev,
+    real const& dt_inter
 )
 {
     SPHState part_inter = part_prev;
@@ -42,7 +42,7 @@ SPHState do_runge_kutta_intermediate_step(
             StateVecD vel = StateVecD::Zero();
             for (size_t time = 0; time < limits[block].nTimes; time++)
             {
-                if (limits[block].times[time] > svar.current_time)
+                if (limits[block].times[time] > svar.integrator.current_time)
                 {
                     vel = limits[block].vels[time];
                 }
@@ -64,7 +64,8 @@ SPHState do_runge_kutta_intermediate_step(
 
         if (limits[block].no_slip)
             Set_No_Slip(
-                svar.fluid, limits[block].index.first, limits[block].index.second, outlist, part_inter
+                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
+                svar.fluid.W_correc, part_inter
             );
 
         switch (limits[block].bound_solver)
@@ -90,7 +91,7 @@ SPHState do_runge_kutta_intermediate_step(
         case pressure_G:
         {
             Get_Boundary_Pressure(
-                svar.grav, svar.fluid, limits[block].index.first, limits[block].index.second, outlist,
+                svar.fluid, svar.grav, limits[block].index.first, limits[block].index.second, outlist,
                 part_inter
             );
             break;
@@ -99,8 +100,8 @@ SPHState do_runge_kutta_intermediate_step(
         {
             vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
             Boundary_Ghost(
-                svar.fluid, limits[block].index.first, limits[block].index.second, outlist, part_inter,
-                near_inlet
+                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
+                svar.fluid.W_correc, part_inter, near_inlet
             );
 
 #pragma omp for schedule(static) nowait
@@ -231,8 +232,8 @@ SPHState do_runge_kutta_intermediate_step(
 }
 
 SPHState do_runge_kutta_final_step(
-    SIM& svar, AERO const& svar.air, size_t const& start, size_t& end, real const& npd,
-    MESH const& cells, LIMITS const& limits, OUTL const& outlist, real const& dt, SPHState const& part_n,
+    SIM& svar, size_t const& start, size_t& end, real const& npd, MESH const& cells,
+    LIMITS const& limits, OUTL const& outlist, real const& dt, SPHState const& part_n,
     SPHState const& st_1, SPHState const& st_2, SPHState const& st_3
 )
 {
@@ -246,7 +247,7 @@ SPHState do_runge_kutta_final_step(
             StateVecD vel = StateVecD::Zero();
             for (size_t time = 0; time < limits[block].nTimes; time++)
             {
-                if (limits[block].times[time] > svar.current_time)
+                if (limits[block].times[time] > svar.integrator.current_time)
                 {
                     vel = limits[block].vels[time];
                 }
@@ -268,7 +269,8 @@ SPHState do_runge_kutta_final_step(
 
         if (limits[block].no_slip)
             Set_No_Slip(
-                svar.fluid, limits[block].index.first, limits[block].index.second, outlist, part_np1
+                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
+                svar.fluid.W_correc, part_np1
             );
 
         switch (limits[block].bound_solver)
@@ -299,7 +301,7 @@ SPHState do_runge_kutta_final_step(
         case pressure_G:
         {
             Get_Boundary_Pressure(
-                svar.grav, svar.fluid, limits[block].index.first, limits[block].index.second, outlist,
+                svar.fluid, svar.grav, limits[block].index.first, limits[block].index.second, outlist,
                 part_np1
             );
             break;
@@ -308,8 +310,8 @@ SPHState do_runge_kutta_final_step(
         {
             vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
             Boundary_Ghost(
-                svar.fluid, limits[block].index.first, limits[block].index.second, outlist, part_np1,
-                near_inlet
+                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
+                svar.fluid.W_correc, part_np1, near_inlet
             );
 
 #pragma omp for schedule(static) nowait
@@ -458,11 +460,11 @@ SPHState do_runge_kutta_final_step(
 to get the first guess of time n+1 (regarded here as time n+1/4)
 to perform neighbour search and dissipation terms before freezing </summary */
 real Get_First_RK(
-    SIM& svar, AERO const& svar.air, size_t const& start, size_t const& end, real const& npd,
-    MESH const& cells, LIMITS const& limits, OUTL const& outlist, SPHState& part_n, SPHState& st_1
+    SIM& svar, size_t const& start, size_t const& end, real const& npd, MESH const& cells,
+    LIMITS const& limits, OUTL const& outlist, SPHState& part_n, SPHState& st_1
 )
 {
-    const real dt = 0.5 * svar.delta_t;
+    const real dt = 0.5 * svar.integrator.delta_t;
 
     st_1 = do_runge_kutta_intermediate_step(
         svar, start, end, npd, cells, limits, outlist, part_n, part_n, dt
@@ -476,17 +478,17 @@ real Get_First_RK(
 /* <summary> Perform the rest of the Runge-Kutta integration, assuming frozen
         dissipation terms. This will do step 2 to 4 (n+1/4 to n+1) </summary> */
 real Runge_Kutta4(
-    SIM& svar, AERO const& svar.air, size_t const& start, size_t& end, real const& npd,
-    MESH const& cells, LIMITS const& limits, OUTL const& outlist, real const& logbase, SPHState& part_n,
-    SPHState& st_1, SPHState& part_np1
+    SIM& svar, size_t const& start, size_t& end, real const& npd, MESH const& cells,
+    LIMITS const& limits, OUTL const& outlist, real const& logbase, SPHState& part_n, SPHState& st_1,
+    SPHState& part_np1
 )
 {
     /*Create the vectors*/
     SPHState st_2 = part_np1; /*Step 2*/
     SPHState st_3 = part_np1; /*Step 3*/
 
-    real const dt_inter = 0.5 * svar.delta_t;
-    real const dt_final = svar.delta_t;
+    real const dt_inter = 0.5 * svar.integrator.delta_t;
+    real const dt_final = svar.integrator.delta_t;
 
     /********************************************************************/
     /*************************  STEP 2  *********************************/

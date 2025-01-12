@@ -200,7 +200,7 @@ namespace TAU
 #ifdef DEBUG
         fprintf(dbout, "Entering Find_Bmap_Markers...\n");
 #endif
-        string const& bmapIn = svar.tau_bmap;
+        string const& bmapIn = svar.io.tau_bmap;
         std::ifstream fin(bmapIn, std::ios::in);
 
         if (!fin.is_open())
@@ -213,18 +213,18 @@ namespace TAU
         string line;
         while (getline(fin, line))
         {
-            Get_Number(line, "Angle alpha (degree)", svar.angle_alpha);
+            Get_Number(line, "Angle alpha (degree)", svar.io.angle_alpha);
         }
 
-        svar.angle_alpha *= M_PI / 180.0;
+        svar.io.angle_alpha *= M_PI / 180.0;
 
         StateVecD oldgrav = svar.grav;
 #if SIMDIM == 3
-        svar.grav[2] = oldgrav[2] * cos(svar.angle_alpha);
+        svar.grav[2] = oldgrav[2] * cos(svar.io.angle_alpha);
 #else
-        svar.grav[1] = oldgrav[1] * cos(svar.angle_alpha);
+        svar.grav[1] = oldgrav[1] * cos(svar.io.angle_alpha);
 #endif
-        svar.grav[0] = -oldgrav[1] * sin(svar.angle_alpha);
+        svar.grav[0] = -oldgrav[1] * sin(svar.io.angle_alpha);
 
 #ifdef DEBUG
         fprintf(dbout, "Exiting Find_Angle_Alpha...\n");
@@ -236,7 +236,7 @@ namespace TAU
 #ifdef DEBUG
         fprintf(dbout, "Entering Find_Bmap_Markers...\n");
 #endif
-        string const& bmapIn = svar.tau_bmap;
+        string const& bmapIn = svar.io.tau_bmap;
         std::ifstream fin(bmapIn, std::ios::in);
 
         if (!fin.is_open())
@@ -261,9 +261,9 @@ namespace TAU
 
         uint blockno = 0;
 
-        svar.tau_markers = vector<int>(nBlocks, 0);
-        svar.tau_bnames = vector<string>(nBlocks);
-        svar.tau_bwrite = vector<int>(nBlocks, 0);
+        svar.io.tau_markers = vector<int>(nBlocks, 0);
+        svar.io.tau_bnames = vector<string>(nBlocks);
+        svar.io.tau_bwrite = vector<int>(nBlocks, 0);
 
         vector<string> types(nBlocks);
 
@@ -275,11 +275,11 @@ namespace TAU
             if (line[0] == '#')
                 continue;
 
-            Get_Number(line, "Angle alpha (degree)", svar.angle_alpha);
-            Get_Number(line, "tau_markers", svar.tau_markers[blockno]);
-            Get_String(line, "Name", svar.tau_bnames[blockno]);
+            Get_Number(line, "Angle alpha (degree)", svar.io.angle_alpha);
+            Get_Number(line, "tau_markers", svar.io.tau_markers[blockno]);
+            Get_String(line, "Name", svar.io.tau_bnames[blockno]);
             Get_String(line, "Type", types[blockno]);
-            Get_Number(line, "Write surface data (0/1)", svar.tau_bwrite[blockno]);
+            Get_Number(line, "Write surface data (0/1)", svar.io.tau_bwrite[blockno]);
 
             if (line.find("block end") != string::npos)
             { /*We're on a new block*/
@@ -292,21 +292,21 @@ namespace TAU
         /* Check if the boundary has a name. If not, then give it the type name*/
         for (size_t ii = 0; ii < nBlocks; ++ii)
         {
-            if (svar.tau_bnames[ii].empty())
+            if (svar.io.tau_bnames[ii].empty())
             {
-                svar.tau_bnames[ii] = types[ii];
+                svar.io.tau_bnames[ii] = types[ii];
             }
         }
 
-        svar.angle_alpha *= M_PI / 180.0;
+        svar.io.angle_alpha *= M_PI / 180.0;
 
         StateVecD oldgrav = svar.grav;
 #if SIMDIM == 3
-        svar.grav[2] = oldgrav[2] * cos(svar.angle_alpha);
+        svar.grav[2] = oldgrav[2] * cos(svar.io.angle_alpha);
 #else
-        svar.grav[1] = oldgrav[1] * cos(svar.angle_alpha);
+        svar.grav[1] = oldgrav[1] * cos(svar.io.angle_alpha);
 #endif
-        svar.grav[0] = -oldgrav[1] * sin(svar.angle_alpha);
+        svar.grav[0] = -oldgrav[1] * sin(svar.io.angle_alpha);
 
 #ifdef DEBUG
         fprintf(dbout, "Exiting Find_Bmap_Markers...\n");
@@ -652,17 +652,14 @@ namespace TAU
     /***************** READING NETCDF SOLUTION DATA FUNCTIONS ********************/
     /*****************************************************************************/
 
-    void Read_SOLUTION(
-        SIM const& svar, AERO const& svar.air, uint const ignored, MESH& cells,
-        vector<uint> const& usedVerts
-    )
+    void Read_SOLUTION(SIM const& svar, uint const ignored, MESH& cells, vector<uint> const& usedVerts)
     {
         cout << "Reading solution file..." << endl;
 
 #ifdef DEBUG
         fprintf(dbout, "Opening solultion file.\n");
 #endif
-        string const& solIn = svar.tau_sol;
+        string const& solIn = svar.io.tau_sol;
         int retval;
         int solID;
 
@@ -992,10 +989,10 @@ namespace TAU
 #endif
     }
 
-    void Read_tau_mesh_EDGE(SIM& svar, MESH& cells, AERO const& svar.air, vector<uint>& uVerts)
+    void Read_tau_mesh_EDGE(SIM& svar, MESH& cells, vector<uint>& uVerts)
     {
-        string meshIn = svar.tau_mesh;
-        string solIn = svar.tau_sol;
+        string meshIn = svar.io.tau_mesh;
+        string solIn = svar.io.tau_sol;
 
 #ifdef DEBUG
         fprintf(dbout, "Attempting read of NetCDF file.\n");
@@ -1228,10 +1225,10 @@ namespace TAU
 #endif
     }
 
-    void Read_tau_mesh_FACE(SIM& svar, MESH& cells, AERO const& svar.air)
+    void Read_tau_mesh_FACE(SIM& svar, MESH& cells)
     {
-        string meshIn = svar.tau_mesh;
-        string solIn = svar.tau_sol;
+        string meshIn = svar.io.tau_mesh;
+        string solIn = svar.io.tau_sol;
 
 #ifdef DEBUG
         fprintf(dbout, "Attempting read of NetCDF file.\n");

@@ -47,22 +47,17 @@ int main(int argc, char* argv[])
 
     /******* Define the global simulation parameters ******/
     SIM svar;
-    FLUID svar.fluid;
-    AERO svar.air;
     LIMITS limits;
     OUTL outlist;
     MESH cells;
-    VLM vortex;
     SURFS surf_marks;
 
     ///****** Initialise the particles memory *********/
     SPHState pn;              /*Particles at n   */
     SPHState pnp1;            /*Particles at n+1 */
     vector<IPTState> iptdata; /* Particle tracking data */
-    // SPHState airP;
-    // DELTAP dp;
 
-    GetInput(argc, argv, svar, vortex);
+    GetInput(argc, argv, svar);
 
     omp_set_num_threads(svar.numThreads);
 
@@ -75,24 +70,24 @@ int main(int argc, char* argv[])
     if (svar.Asource == meshInfl)
     {
 #if SIMDIM == 3
-        if (svar.mesh_source == TAU_CDF)
+        if (svar.io.mesh_source == TAU_CDF)
         {
             vector<uint> empty;
             TAU::Read_BMAP(svar);
-            TAU::Read_tau_mesh_FACE(svar, cells, svar.fluid, svar.air);
-            TAU::Read_SOLUTION(svar, svar.offset_axis, cells, empty);
+            TAU::Read_tau_mesh_FACE(svar, cells);
+            TAU::Read_SOLUTION(svar, svar.io.offset_axis, cells, empty);
         }
         else
         {
             FOAM::Read_FOAM(svar, cells);
         }
 #else
-        if (svar.mesh_source == OpenFOAM)
+        if (svar.io.mesh_source == OpenFOAM)
         {
             vector<uint> used_verts;
             TAU::Read_BMAP(svar);
-            TAU::Read_tau_mesh_EDGE(svar, cells, svar.fluid, svar.air, used_verts);
-            TAU::Read_SOLUTION(svar, svar.offset_axis, cells, used_verts);
+            TAU::Read_tau_mesh_EDGE(svar, cells, used_verts);
+            TAU::Read_SOLUTION(svar, svar.io.offset_axis, cells, used_verts);
         }
         else
         {
@@ -109,9 +104,9 @@ int main(int argc, char* argv[])
     pn.reserve(svar.max_points);
     pnp1.reserve(svar.max_points);
 
-    if (!svar.restart)
+    if (!svar.io.restart)
     {
-        svar.current_time = 0.0; /*Total simulation time*/
+        svar.integrator.current_time = 0.0; /*Total simulation time*/
         Init_Particles(svar, pn, pnp1, limits);
 
         // Redefine the mass and spacing to make sure the required mass is conserved
@@ -136,7 +131,7 @@ int main(int argc, char* argv[])
     {
         Init_Particles_Restart(svar, limits);
         /* Read the files */
-        Read_HDF5(svar, vortex, pn, pnp1, limits);
+        Read_HDF5(svar, pn, pnp1, limits);
     }
 
     // Check if cells have been initialsed before making a tree off it
@@ -148,13 +143,13 @@ int main(int argc, char* argv[])
 
     ///********* Tree algorithm stuff ************/
     Sim_Tree SPH_TREE(SIMDIM, pnp1, 20);
-    outlist = update_neighbours(SPH_TREE, svar.fluid, pnp1);
+    outlist = update_neighbours(svar.fluid, SPH_TREE, pnp1);
 
     Vec_Tree CELL_TREE(SIMDIM, cells.cCentre, 10);
     CELL_TREE.index->buildIndex();
 
     ///********* Declare the time integrator ************/
-    Integrator integrator(svar.solver_type);
+    Integrator integrator(svar.integrator.solver_type);
 
     ///*************** Open simulation files ***************/
     FILE* ff = NULL;
@@ -162,32 +157,30 @@ int main(int argc, char* argv[])
     FILE* f3 = NULL;
     FILE* fb = NULL;
     FILE* fg = NULL;
-    string framef = svar.output_prefix;
+    string framef = svar.io.output_prefix;
     framef.append("_frame.info");
-    if (svar.restart == 1)
+    if (svar.io.restart == 1)
         f2 = fopen(framef.c_str(), "a");
     else
         f2 = fopen(framef.c_str(), "w");
 
-    if (svar.single_file)
+    if (svar.io.single_file)
     {
-        if (svar.write_tecio)
-            Write_Tec_Headers(ff, fb, fg, svar, svar.output_prefix);
-        if (svar.write_h5part)
-            Write_h5part_Headers(svar, svar.output_prefix);
+        if (svar.io.write_tecio)
+            Write_Tec_Headers(ff, fb, fg, svar, svar.io.output_prefix);
+        if (svar.io.write_h5part)
+            Write_h5part_Headers(svar, svar.io.output_prefix);
     }
 
-    if (!svar.restart)
+    if (!svar.io.restart)
     {
         Write_Timestep(ff, fb, fg, svar, limits, pnp1);
     }
 
     ///*** Perform an iteration to populate the vectors *****/
-    if (!svar.restart)
+    if (!svar.io.restart)
     {
-        integrator.integrate_no_update(
-            SPH_TREE, CELL_TREE, svar, vortex, cells, limits, outlist, pn, pnp1
-        );
+        integrator.integrate_no_update(SPH_TREE, CELL_TREE, svar, cells, limits, outlist, pn, pnp1);
     }
     else
     {
@@ -203,7 +196,7 @@ int main(int argc, char* argv[])
             FindCell(svar, CELL_TREE, cells, pn, pnp1);
         }
 
-        Detect_Surface(svar, start, end_ng, outlist, cells, vortex, pn);
+        Detect_Surface(svar, start, end_ng, outlist, cells, pn);
 
 // Apply_XSPH(svar.fluid,start,end,outlist,dp,pnp1);
 #ifdef ALE
@@ -216,7 +209,7 @@ int main(int argc, char* argv[])
         // pn = SPHState(first,last);
     }
 
-    if (svar.using_ipt)
+    if (svar.ipt.using_ipt)
     {
         IPT::Init_IPT_Files(svar);
         IPT::Write_Data(svar, cells, iptdata);
@@ -224,25 +217,25 @@ int main(int argc, char* argv[])
 
 // Make sure that inlets are injecting inside the mesh domain.
 #if SIMDIM == 3
-    if (!svar.restart && svar.Asource == 3)
-        vortex.write_VLM_Panels(svar.output_prefix);
+    if (!svar.io.restart && svar.Asource == 3)
+        svar.vlm.write_VLM_Panels(svar.io.output_prefix);
 #endif
 
     /*Timing calculation + error sum output*/
     t2 = high_resolution_clock::now();
     duration = duration_cast<seconds>(t2 - t1).count();
 
-    if (!svar.restart)
+    if (!svar.io.restart)
     {
-        svar.current_frame = 0;
-        fprintf(f2, "Frame: %u\n", svar.current_frame);
+        svar.integrator.current_frame = 0;
+        fprintf(f2, "Frame: %u\n", svar.integrator.current_frame);
         fprintf(
             f2, "Total Points: %zu Boundary Points: %zu Fluid Points: %zu\n", svar.total_points,
             svar.bound_points, svar.fluid_points
         );
         fprintf(
-            f2, "Sim Time:  %.7g Comp Time: %.6e Error: %.6f Sub-iterations: %d\n", svar.current_time,
-            duration, 0.0, 0
+            f2, "Sim Time:  %.7g Comp Time: %.6e Error: %.6f Sub-iterations: %d\n",
+            svar.integrator.current_time, duration, 0.0, 0
         );
         fprintf(
             f2, "Deleted particles: %zu Internal collisions: %zu\n", svar.delete_count,
@@ -252,17 +245,18 @@ int main(int argc, char* argv[])
     else
     {
         cout << "Restarting simulation..." << endl;
-        cout << "Frame: " << svar.current_frame << "  Sim Time: " << svar.current_time
-             << "  Compute Time: " << duration << "  Error: " << error << endl;
+        cout << "Frame: " << svar.integrator.current_frame
+             << "  Sim Time: " << svar.integrator.current_time << "  Compute Time: " << duration
+             << "  Error: " << error << endl;
     }
 
     ///************************* MAIN LOOP ********************/
 
 #ifdef DEBUG
-    const real a = 1 - svar.nb_gamma;
-    const real b = svar.nb_gamma;
-    const real c = 0.5 * (1 - 2 * svar.nb_beta);
-    const real d = svar.nb_beta;
+    const real a = 1 - svar.integrator.nb_gamma;
+    const real b = svar.integrator.nb_gamma;
+    const real c = 0.5 * (1 - 2 * svar.integrator.nb_beta);
+    const real d = svar.integrator.nb_beta;
     const real B = svar.fluid.B;
     const real gam = svar.fluid.gam;
     fprintf(dbout, "Newmark Beta integration parameters\n");
@@ -271,11 +265,12 @@ int main(int argc, char* argv[])
     fprintf(dbout, "B: %f gam: %f\n\n", B, gam);
 #endif
 
-    for (svar.current_frame = 0; svar.current_frame < svar.max_frames; ++svar.current_frame)
+    for (svar.integrator.current_frame = 0; svar.integrator.current_frame < svar.integrator.max_frames;
+         ++svar.integrator.current_frame)
     {
         int stepits = 0;
         real stept = 0.0;
-        while (stept + 0.1 * svar.delta_t_min < svar.frame_time_interval)
+        while (stept + 0.1 * svar.integrator.delta_t_min < svar.integrator.frame_time_interval)
         {
             if (stepits % 50 == 0)
 #ifdef ALE
@@ -287,9 +282,9 @@ int main(int argc, char* argv[])
 #endif
 
             error = integrator.integrate(
-                SPH_TREE, CELL_TREE, svar, vortex, cells, surf_marks, limits, outlist, pn, pnp1, iptdata
+                SPH_TREE, CELL_TREE, svar, cells, surf_marks, limits, outlist, pn, pnp1, iptdata
             );
-            stept += svar.delta_t;
+            stept += svar.integrator.delta_t;
             ++stepits;
         }
 
@@ -297,22 +292,23 @@ int main(int argc, char* argv[])
         duration = duration_cast<microseconds>(t2 - t1).count() / 1e6;
 
         /*Write each frame info to file*/
-        fprintf(f2, "\nFrame: %u\n", svar.current_frame);
+        fprintf(f2, "\nFrame: %u\n", svar.integrator.current_frame);
         fprintf(
             f2, "Total Points: %zu Boundary Points: %zu Fluid Points: %zu\n", svar.total_points,
             svar.bound_points, svar.fluid_points
         );
         fprintf(
-            f2, "Sim Time:  %.7g Comp Time: %.6e Error: %.6f Sub-iterations: %d\n", svar.current_time,
-            duration, error, stepits
+            f2, "Sim Time:  %.7g Comp Time: %.6e Error: %.6f Sub-iterations: %d\n",
+            svar.integrator.current_time, duration, error, stepits
         );
         fprintf(
             f2, "Deleted particles: %zu Internal collisions: %zu\n", svar.delete_count,
             svar.internal_count
         );
 
-        cout << "Frame: " << svar.current_frame << "  Sim Time: " << svar.current_time
-             << "  Compute Time: " << duration << "  Error: " << error << endl;
+        cout << "Frame: " << svar.integrator.current_frame
+             << "  Sim Time: " << svar.integrator.current_time << "  Compute Time: " << duration
+             << "  Error: " << error << endl;
         cout << "Boundary particles:  " << svar.bound_points
              << " Sim particles: " << svar.total_points - svar.bound_points
              << " Deleted particles: " << svar.delete_count
@@ -326,10 +322,11 @@ int main(int argc, char* argv[])
 
         Write_Timestep(ff, fb, fg, svar, limits, pnp1);
         Write_HDF5(svar, pnp1, limits);
-        if (svar.using_ipt)
+        if (svar.ipt.using_ipt)
             IPT::Write_Data(svar, cells, iptdata);
 
-        svar.last_frame_time += svar.frame_time_interval; /* March frame time forward */
+        svar.integrator.last_frame_time +=
+            svar.integrator.frame_time_interval; /* March frame time forward */
     }
 
     /*Wrap up simulation files and close them*/
@@ -344,20 +341,20 @@ int main(int argc, char* argv[])
     if (fg != NULL)
         fclose(fg);
 
-    if (svar.out_encoding == 1)
+    if (svar.io.out_encoding == 1)
     {
         /*Combine the szplt files*/
 
-        string outfile = svar.output_prefix + "_fluid.szplt";
+        string outfile = svar.io.output_prefix + "_fluid.szplt";
         Combine_SZPLT(outfile);
 
-        outfile = svar.output_prefix + "_boundary.szplt";
+        outfile = svar.io.output_prefix + "_boundary.szplt";
         Combine_SZPLT(outfile);
     }
 
     cout << "Simulation complete!" << endl;
     cout << "Time taken:\t" << duration << " seconds" << endl;
-    cout << "Total simulation time:\t" << svar.current_time << " seconds" << endl;
+    cout << "Total simulation time:\t" << svar.integrator.current_time << " seconds" << endl;
 
     return 0;
 }

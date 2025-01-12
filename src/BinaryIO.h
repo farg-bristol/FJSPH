@@ -33,8 +33,7 @@ void Write_Binary_Timestep(
 );
 
 void Init_Binary_PLT(
-    SIM& svar, AERO const& svar.air, string const& prefix, string const& filename,
-    string const& zoneName, void*& fileHandle
+    SIM& svar, string const& prefix, string const& filename, string const& zoneName, void*& fileHandle
 );
 
 void close_file(void* handle);
