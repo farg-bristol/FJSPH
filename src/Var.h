@@ -35,11 +35,6 @@ using std::vector;
 extern FILE* dbout;
 #endif
 
-#ifdef DAMBREAK
-std::ofstream dambreak("Dam_Data.log", std::ios::out);
-#endif
-// std::ofstream pertLog("cellPert.log",std::ios::out);
-
 inline bool check_vector(StateVecD const& v)
 {
     return (

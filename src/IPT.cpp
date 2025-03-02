@@ -633,7 +633,7 @@ namespace IPT
 
     void Init_IPT_Files(SIM& svar)
     {
-        if (svar.io.out_encoding == 0)
+        if (svar.io.out_encoding == ascii)
             ASCII::Init_IPT_Files(svar);
         else
             BINARY::Init_IPT_Files(svar);
@@ -641,7 +641,7 @@ namespace IPT
 
     void Write_Point(SIM& svar, IPTPart& pnp1)
     {
-        if (svar.io.out_encoding == 0)
+        if (svar.io.out_encoding == ascii)
             ASCII::Write_Point(svar.ipt.part_file, svar.scale, pnp1);
         else
             BINARY::Write_Point(svar, pnp1);
@@ -653,7 +653,7 @@ namespace IPT
         {
             // for(size_t ii = 0; ii < time_record.size(); ii++)
             // {
-            //     if(svar.io.out_encoding == 0)
+            //     if(svar.io.out_encoding == ascii)
             //         ASCII::Write_Timestep(svar.part_file,svar,time_record[ii]);
             //     else
             //         BINARY::
@@ -665,7 +665,7 @@ namespace IPT
             {
                 if (!time_record[ii].empty())
                 {
-                    if (svar.io.out_encoding == 0)
+                    if (svar.io.out_encoding == ascii)
                         ASCII::Write_Streaks(svar, time_record[ii]);
                     else
                     {
@@ -678,7 +678,7 @@ namespace IPT
 
             if (!time_record.empty())
             {
-                if (svar.io.out_encoding == 0)
+                if (svar.io.out_encoding == ascii)
                     fflush(svar.ipt.streak_file);
                 else
                 {
@@ -700,7 +700,7 @@ namespace IPT
                         svar, cells, time_record[ii], usedVerts, cellIndexes, faces, left, right,
                         totalNumFaceNodes
                     );
-                    if (svar.io.out_encoding == 0)
+                    if (svar.io.out_encoding == ascii)
                     {
                         ASCII::Write_Cells(
                             svar, cells, time_record[ii], totalNumFaceNodes, usedVerts, cellIndexes,
@@ -719,7 +719,7 @@ namespace IPT
 
             if (!time_record.empty())
             {
-                if (svar.io.out_encoding == 0)
+                if (svar.io.out_encoding == ascii)
                     fflush(svar.ipt.cell_file);
                 else
                 {

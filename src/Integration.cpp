@@ -237,36 +237,19 @@ real Integrator::integrate(
         return 0;
 
     // Process and output some useful information for each timestep
-    real maxRho = 0.0;
-    real maxAf = 0.0;
-    real maxRhoi = 0.0;
-#ifdef ALE
-    real maxShift = 0.0;
-#endif
-#pragma omp parallel for reduction(max : maxAf, maxRhoi)
-    for (size_t ii = start_index; ii < end_index; ++ii)
-    {
-        maxAf = std::max(maxAf, pnp1[ii].Af.norm());
-        maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - svar.fluid.rho_rest));
-#ifdef ALE
-        maxShift = std::max(maxShift, pnp1[ii].vPert.norm());
-#endif
-    }
-    maxRho = 100 * maxRhoi / svar.fluid.rho_rest;
     real cfl = integ_sett.delta_t / safe_dt;
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(t2 - t1).count();
 #ifdef ALE
     printf(
         "%9.3e | %7.2e | %4.2f | %8.4f | %7.3f | %9.3e | %9.3e | %9.3e | %14ld|\n",
-        integ_sett.current_time, integ_sett.delta_t, cfl, step_error, maxRho, maxf, maxAf, maxShift,
+        integ_sett.current_time, integ_sett.delta_t, cfl, step_error, maxRho_pc, maxf, maxAf, maxShift,
         duration
     );
-
 #else
     printf(
         "%9.3e | %7.2e | %4.2f | %9.4f | %3u | %8.3f | %9.3e | %9.3e | %14ld|\n",
-        integ_sett.current_time, integ_sett.delta_t, cfl, step_error, iteration, maxRho, maxf, maxAf,
+        integ_sett.current_time, integ_sett.delta_t, cfl, step_error, iteration, maxRho_pc, maxf, maxAf,
         duration
     );
 #endif
@@ -275,7 +258,7 @@ real Integrator::integrate(
     svar.integrator.current_time += svar.integrator.delta_t;
 
     /* Check the error and adjust the CFL to try and keep convergence */
-    if (step_error > svar.integrator.min_residual || maxRho > svar.fluid.rho_max_iter)
+    if (step_error > svar.integrator.min_residual || maxRho_pc > svar.fluid.rho_max_iter)
     {
         if (step_error > 0.6 * integ_sett.min_residual)
         { // If really unstable, immediately reduce the timestep
@@ -305,26 +288,6 @@ real Integrator::integrate(
     }
     else
         integ_sett.n_stable = 0;
-
-#ifdef DAMBREAK
-    /* Find max x and y coordinates of the fluid */
-    // Find maximum safe timestep
-    vector<SPHPart>::iterator maxXi = std::max_element(
-        pnp1.begin() + integ_sett.bound_points, pnp1.end_index(),
-        [](SPHPart const& p1, SPHPart const& p2) { return p1.xi[0] < p2.xi[0]; }
-    );
-
-    vector<SPHPart>::iterator maxYi = std::max_element(
-        pnp1.begin() + integ_sett.bound_points, pnp1.end_index(),
-        [](SPHPart const& p1, SPHPart const& p2) { return p1.xi[1] < p2.xi[1]; }
-    );
-
-    real maxX = maxXi->xi[0];
-    real maxY = maxYi->xi[1];
-
-    dambreak << integ_sett.current_time << "  " << maxX + 0.5 * integ_sett.particle_step << "  "
-             << maxY + 0.5 * integ_sett.particle_step << endl;
-#endif
 
     return step_error;
 }
@@ -402,21 +365,32 @@ real Integrator::find_timestep(
     INTEG_SETT const& integ_sett = svar.integrator;
 
     // Find maximum safe timestep (avoiding a div by zero)
-    real maxf = MEPSILON;
-    real maxdrho = MEPSILON;
-    real maxU = MEPSILON;
-    real minST = 9999999.0;
-#pragma omp parallel for reduction(max : maxf, maxU, maxdrho) reduction(min : minST)
+    maxf = MEPSILON;
+    maxAf = MEPSILON;
+    maxRhoi = MEPSILON;
+    maxdrho = MEPSILON;
+    maxU = MEPSILON;
+    minST = 9999999.0;
+#pragma omp parallel for reduction(max : maxf, maxU, maxdrho, maxAf, maxRhoi) reduction(min : minST)
     for (size_t ii = start_index; ii < end_index; ++ii)
     {
         maxf = std::max(maxf, pnp1[ii].acc.norm());
+        maxAf = std::max(maxAf, pnp1[ii].Af.norm());
+
         maxdrho = std::max(maxdrho, abs(pnp1[ii].Rrho));
-        maxU = std::max(maxU, pnp1[ii].v.norm());
+        maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - svar.fluid.rho_rest));
+
         minST = std::min(
             minST,
             sqrt(pnp1[ii].rho * svar.dx * svar.dx / (2.0 * M_PI * svar.fluid.sig * fabs(pnp1[ii].curve)))
         );
+
+        maxU = std::max(maxU, pnp1[ii].v.norm());
+#ifdef ALE
+        maxShift = std::max(maxShift, pnp1[ii].vPert.norm());
+#endif
     }
+    maxRho_pc = 100 * maxRhoi / svar.fluid.rho_rest;
 
     vector<real> timestep_factors;
     timestep_factors.emplace_back(0.25 * sqrt(svar.fluid.H / maxf)); /* Force timestep constraint */

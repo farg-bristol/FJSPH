@@ -12,66 +12,77 @@
 
 #define asize(array) (sizeof(array) / sizeof(array[0]))
 
+void Write_HDF5_Attributes(int64_t const& file, SIM const& svar);
+
 namespace HDF5
 {
-    void Write_Uint_Attribute(int64_t const& fout, std::string const& attr_name, size_t const& attr_data)
+    hid_t Open_HDF5_File(std::string const& filename, SIM const& svar)
+    {
+        hid_t file_handle;
+        if (std::filesystem::exists(filename))
+        {
+            file_handle = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+
+            if (file_handle == H5I_INVALID_HID)
+            {
+                printf("Failed to open new instance of HDF5 file: %s\n", filename.c_str());
+                exit(-1);
+            }
+        }
+        else
+        {
+            file_handle = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+
+            if (file_handle == H5I_INVALID_HID)
+            {
+                printf("Failed to open existing instance of HDF5 file: %s\n", filename.c_str());
+                exit(-1);
+            }
+
+            Write_HDF5_Attributes(file_handle, svar);
+        }
+
+        return file_handle;
+    }
+
+    template <typename T>
+    void Write_Attribute(
+        int64_t const& fout, std::string const& attr_name, T const& attr_data, hid_t const& var_type,
+        hid_t const& write_type
+    )
     {
         herr_t retval;
         int64_t aid = H5Screate(H5S_SCALAR);
-        int64_t attr =
-            H5Acreate(fout, (attr_name).c_str(), H5T_NATIVE_ULONG, aid, H5P_DEFAULT, H5P_DEFAULT);
-        if ((retval = H5Awrite(attr, H5T_NATIVE_ULONG, &attr_data)))
+        int64_t attr = H5Acreate(fout, (attr_name).c_str(), var_type, aid, H5P_DEFAULT, H5P_DEFAULT);
+        if ((retval = H5Awrite(attr, write_type, &attr_data)))
         {
-            printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
+            printf(
+                "\n\tError: Failed to write attribute \"%s\" to handle %ld\n", attr_name.c_str(), fout
+            );
             exit(-1);
         }
         retval = H5Sclose(aid);
         retval = H5Aclose(attr);
+    }
+
+    void Write_Uint_Attribute(int64_t const& fout, std::string const& attr_name, size_t const& attr_data)
+    {
+        Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_ULONG, H5T_NATIVE_ULONG);
     }
 
     void Write_Uint_Attribute(int64_t const& fout, std::string const& attr_name, uint const& attr_data)
     {
-        herr_t retval;
-        int64_t aid = H5Screate(H5S_SCALAR);
-        int64_t attr =
-            H5Acreate(fout, (attr_name).c_str(), H5T_NATIVE_UINT, aid, H5P_DEFAULT, H5P_DEFAULT);
-        if ((retval = H5Awrite(attr, H5T_NATIVE_UINT, &attr_data)))
-        {
-            printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(aid);
-        retval = H5Aclose(attr);
+        Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_UINT, H5T_NATIVE_UINT);
     }
 
     void Write_Int_Attribute(int64_t const& fout, std::string const& attr_name, int const& attr_data)
     {
-        herr_t retval;
-        int64_t aid = H5Screate(H5S_SCALAR);
-        int64_t attr =
-            H5Acreate(fout, (attr_name).c_str(), H5T_NATIVE_INT, aid, H5P_DEFAULT, H5P_DEFAULT);
-        if ((retval = H5Awrite(attr, H5T_NATIVE_INT, &attr_data)))
-        {
-            printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(aid);
-        retval = H5Aclose(attr);
+        Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_UINT, H5T_NATIVE_UINT);
     }
 
     void Write_Real_Attribute(int64_t const& fout, std::string const& attr_name, double const& attr_data)
     {
-        herr_t retval;
-        int64_t aid = H5Screate(H5S_SCALAR);
-        int64_t attr =
-            H5Acreate(fout, (attr_name).c_str(), H5T_IEEE_F64LE, aid, H5P_DEFAULT, H5P_DEFAULT);
-        if ((retval = H5Awrite(attr, H5T_NATIVE_DOUBLE, &attr_data)))
-        {
-            printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(aid);
-        retval = H5Aclose(attr);
+        Write_Attribute(fout, attr_name, attr_data, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE);
     }
 
     void
@@ -1253,11 +1264,7 @@ void Write_HDF5(SIM& svar, SPHState const& pnp1, LIMITS const& limits)
         std::filesystem::remove(filename);
     }
 
-    int64_t file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-
-    // int64_t group = H5Gcreate2(file,"Particles", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-
-    Write_HDF5_Attributes(file, svar);
+    hid_t file_handle = HDF5::Open_HDF5_File(filename, svar);
 
     /* Write the actual data */
     size_t blockID = 0;
@@ -1271,7 +1278,7 @@ void Write_HDF5(SIM& svar, SPHState const& pnp1, LIMITS const& limits)
 
             // Create the group
             int64_t bdrzone =
-                H5Gcreate2(file, (zoneHeader).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                H5Gcreate2(file_handle, (zoneHeader).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
             HDF5::Write_Zone_Data(
                 bdrzone, svar.scale, pnp1, limits[ii].index.first, limits[ii].index.second
@@ -1300,7 +1307,7 @@ void Write_HDF5(SIM& svar, SPHState const& pnp1, LIMITS const& limits)
 
             // Create the group
             int64_t fluzone =
-                H5Gcreate2(file, (zoneHeader).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                H5Gcreate2(file_handle, (zoneHeader).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
             HDF5::Write_Zone_Data(
                 fluzone, svar.scale, pnp1, limits[ii].index.first, limits[ii].index.second
@@ -1324,7 +1331,7 @@ void Write_HDF5(SIM& svar, SPHState const& pnp1, LIMITS const& limits)
     }
 
     // Close the files
-    if (H5Fclose(file))
+    if (H5Fclose(file_handle))
     {
         printf("Failed to close HDF file\n");
         exit(-1);
@@ -1387,7 +1394,6 @@ void Read_HDF5(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
     HDF5::Read_Uint_Attribute(file, "Number of fluid blocks", svar.n_fluid_blocks);
     HDF5::Read_Uint_Attribute(file, "Number of boundary points", svar.bound_points);
     HDF5::Read_Uint_Attribute(file, "Number of fluid points", svar.fluid_points);
-    HDF5::Read_Uint_Attribute(file, "Current frame", svar.integrator.current_frame);
     HDF5::Read_Uint_Attribute(file, "Particle index to add", svar.part_id);
     HDF5::Read_Uint_Attribute(file, "SPH stable CFL count", svar.integrator.n_stable);
     HDF5::Read_Uint_Attribute(file, "SPH unstable CFL count", svar.integrator.n_unstable);
@@ -1834,38 +1840,40 @@ namespace h5part
     }
 } // namespace h5part
 
-void open_h5part_files(
-    SIM const& svar, string const& prefix, int64_t& h5part_fluid_file, int64_t& h5part_bound_file
-)
+void open_h5part_files(SIM& svar, string const& prefix)
 {
-
     if (svar.fluid_points > 0)
     {
         std::string filename = prefix + "_fluid.h5part";
-
-        if (std::filesystem::exists(filename))
-        {
-            h5part_fluid_file = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
-        }
-        else
-        {
-            h5part_fluid_file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-            Write_HDF5_Attributes(h5part_fluid_file, svar);
-        }
+        svar.io.h5part_fluid_file = HDF5::Open_HDF5_File(filename, svar);
     }
 
     if (svar.bound_points > 0)
     {
         std::string filename = prefix + "_boundary.h5part";
+        svar.io.h5part_bound_file = HDF5::Open_HDF5_File(filename, svar);
+    }
+}
 
-        if (std::filesystem::exists(filename))
+void close_h5part_files(SIM& svar)
+{
+    // Close the file
+    if (svar.io.h5part_fluid_file != H5I_INVALID_HID)
+    {
+        if (H5Fclose(svar.io.h5part_fluid_file))
         {
-            h5part_bound_file = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+            printf("Failed to close fluid HDF file\n");
+            exit(-1);
         }
-        else
+    }
+
+    // Close the file
+    if (svar.io.h5part_bound_file != H5I_INVALID_HID)
+    {
+        if (H5Fclose(svar.io.h5part_bound_file))
         {
-            h5part_bound_file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-            Write_HDF5_Attributes(h5part_bound_file, svar);
+            printf("Failed to close boundary HDF file\n");
+            exit(-1);
         }
     }
 }
@@ -1883,16 +1891,23 @@ void open_h5part_files(
  * @param act_time Current time for the simulation
  * @return void
  */
-void write_h5part_data(
-    int64_t& h5part_fluid_file, int64_t& h5part_bound_file, SIM const& svar, SPHState const& pnp1
-)
+void write_h5part_data(SIM& svar, SPHState const& pnp1)
 {
+
     std::string zoneHeader = "Step#" + std::to_string(svar.integrator.current_frame);
     if (svar.n_fluid_blocks > 0)
     {
         // Create a group of the current timestep
-        int64_t fluzone =
-            H5Gcreate2(h5part_fluid_file, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t fluzone = H5Gcreate2(
+            svar.io.h5part_fluid_file, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
+        );
+
+        if (fluzone == H5I_INVALID_HID)
+        {
+            printf("Failed to create fluid zone in h5part file\n");
+            exit(-1);
+        }
+
         h5part::Write_Zone_Data(
             fluzone, svar.scale, svar.integrator.current_time, pnp1, svar.bound_points,
             svar.total_points, svar.io.output_variables, svar.fluid.rho_rest
@@ -1903,20 +1918,21 @@ void write_h5part_data(
             printf("Failed to close fluid HDF group\n");
             exit(-1);
         }
-
-        // Close the file
-        if (H5Fclose(h5part_fluid_file))
-        {
-            printf("Failed to close fluid HDF file\n");
-            exit(-1);
-        }
     }
 
     if (svar.n_bound_blocks > 0)
     {
         // Create a group of the current timestep
-        int64_t bndzone =
-            H5Gcreate2(h5part_bound_file, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t bndzone = H5Gcreate2(
+            svar.io.h5part_bound_file, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
+        );
+
+        if (bndzone == H5I_INVALID_HID)
+        {
+            printf("Failed to create fluid zone in h5part file\n");
+            exit(-1);
+        }
+
         h5part::Write_Zone_Data(
             bndzone, svar.scale, svar.integrator.current_time, pnp1, 0, svar.bound_points,
             svar.io.output_variables, svar.fluid.rho_rest
@@ -1925,13 +1941,6 @@ void write_h5part_data(
         if (H5Gclose(bndzone))
         {
             printf("Failed to close boundary HDF group\n");
-            exit(-1);
-        }
-
-        // Close the file
-        if (H5Fclose(h5part_bound_file))
-        {
-            printf("Failed to close boundary HDF file\n");
             exit(-1);
         }
     }

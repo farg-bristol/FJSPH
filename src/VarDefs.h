@@ -186,6 +186,12 @@ enum plane_axis
     z_axis
 };
 
+enum output_encoding
+{
+    ascii = 0,
+    binary
+};
+
 real const static default_val = 9999999.0;
 int const static c_no_face = -1;
 int const static c_no_cell = -3;

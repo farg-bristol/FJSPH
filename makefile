@@ -1,6 +1,6 @@
 # Compiler to use. In C++, so g++.
 CC:=gcc
-CXX:=g++-12
+CXX:=g++-14
 
 NPROCS = ${shell grep -c 'processor' /proc/cpuinfo}
 MAKEFLAGS += -j${NPROCS}
@@ -21,11 +21,11 @@ CXXFLAGS:=-std=c++17 -Wall -ffast-math -funroll-loops -O3 -fopenmp -march=native
 # TECINC:=-I/usr/local/tecplot/360ex_2021r2/include/
 # TECLINK:=-L/usr/local/tecplot/360ex_2021r2/bin/
 
-TECINC:=-I/usr/local/tecplot/360ex_2022r1/include/
-TECLINK:=-L/usr/local/tecplot/360ex_2022r1/bin/
+TECINC:=-I/usr/local/tecplot/360ex_2024r1/include/
+TECLINK:=-L/usr/local/tecplot/360ex_2024r1/bin/
 
-H5INC=-I/usr/include/hdf5/serial/
-H5LINK=-L/usr/lib/x86_64-linux-gnu/hdf5/serial/
+H5INC=-I/HDF_Group/HDF5/1.14.6/include
+H5LINK=-L/HDF_Group/HDF5/1.14.6/lib
 
 EIGENINC=-I${HOME}/Eigen
 TARGET:=FJSPH

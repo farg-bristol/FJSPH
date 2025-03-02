@@ -169,7 +169,7 @@ int main(int argc, char* argv[])
         if (svar.io.write_tecio)
             Write_Tec_Headers(ff, fb, fg, svar, svar.io.output_prefix);
         if (svar.io.write_h5part)
-            Write_h5part_Headers(svar, svar.io.output_prefix);
+            open_h5part_files(svar, svar.io.output_prefix);
     }
 
     if (!svar.io.restart)
@@ -265,7 +265,7 @@ int main(int argc, char* argv[])
     fprintf(dbout, "B: %f gam: %f\n\n", B, gam);
 #endif
 
-    for (svar.integrator.current_frame = 0; svar.integrator.current_frame < svar.integrator.max_frames;
+    for (svar.integrator.current_frame = 1; svar.integrator.current_frame < svar.integrator.max_frames;
          ++svar.integrator.current_frame)
     {
         int stepits = 0;
@@ -341,7 +341,7 @@ int main(int argc, char* argv[])
     if (fg != NULL)
         fclose(fg);
 
-    if (svar.io.out_encoding == 1)
+    if (svar.io.out_encoding == binary)
     {
         /*Combine the szplt files*/
 
@@ -350,6 +350,8 @@ int main(int argc, char* argv[])
 
         outfile = svar.io.output_prefix + "_boundary.szplt";
         Combine_SZPLT(outfile);
+
+        close_h5part_files(svar);
     }
 
     cout << "Simulation complete!" << endl;

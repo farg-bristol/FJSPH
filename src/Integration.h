@@ -51,8 +51,18 @@ class Integrator
     );
 
     int solver_method = newmark_beta;
-    real maxf;
     real safe_dt;
+
+    real maxf = MEPSILON;
+    real maxAf = MEPSILON;
+    real maxRho_pc = MEPSILON;
+    real maxRhoi = MEPSILON;
+    real maxdrho = MEPSILON;
+    real minST = 9999999.0;
+    real maxU = MEPSILON;
+#ifdef ALE
+    real maxShift = MEPSILON;
+#endif
 
     size_t start_index, end_index;
     uint iteration;

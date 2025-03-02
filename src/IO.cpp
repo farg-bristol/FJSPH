@@ -724,7 +724,7 @@ void GetInput(int argc, char** argv, SIM& svar)
 
 void Write_Tec_Headers(FILE* ff, FILE* fb, FILE* fg, SIM& svar, std::string const& prefix)
 {
-    if (svar.io.out_encoding == 1)
+    if (svar.io.out_encoding == binary)
     {
         Init_Binary_PLT(svar, prefix, "_fluid.szplt", "Simulation Particles", svar.io.output_fluid_file);
 
@@ -760,11 +760,6 @@ void Write_Tec_Headers(FILE* ff, FILE* fb, FILE* fg, SIM& svar, std::string cons
     }
 }
 
-void Write_h5part_Headers(SIM& svar, std::string const& prefix)
-{
-    open_h5part_files(svar, prefix, svar.io.h5part_fluid_file, svar.io.h5part_bound_file);
-}
-
 void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limits, SPHState const& pnp1)
 {
     if (svar.io.write_tecio)
@@ -777,7 +772,7 @@ void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limit
             Write_Tec_Headers(ff, fb, fg, svar, prefix);
         }
 
-        if (svar.io.out_encoding == 1)
+        if (svar.io.out_encoding == binary)
         {
             for (size_t bound = 0; bound < svar.n_bound_blocks; bound++)
             {
@@ -834,7 +829,7 @@ void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limit
             if (fg != NULL)
                 fclose(fg);
 
-            if (svar.io.out_encoding == 1)
+            if (svar.io.out_encoding == binary)
             {
                 /*Combine the szplt files*/
                 close_file(&svar.io.output_fluid_file);
@@ -853,8 +848,9 @@ void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limit
             prefix += "_" + std::to_string(svar.integrator.current_frame);
         }
 
-        Write_h5part_Headers(svar, prefix);
-        write_h5part_data(svar.io.h5part_fluid_file, svar.io.h5part_bound_file, svar, pnp1);
+        open_h5part_files(svar, prefix);
+        write_h5part_data(svar, pnp1);
+        close_h5part_files(svar);
         // Files are closed in the write function
     }
 }
