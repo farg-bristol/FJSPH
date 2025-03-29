@@ -3,10 +3,10 @@
 
 #include "square.h"
 
-void SquareShape::check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault)
+void SquareShape::check_input(SIM const& svar, real& globalspacing, int& fault)
 {
     // Do common input checks.
-    ShapeBlock::check_input(svar, fvar, globalspacing, fault);
+    ShapeBlock::check_input(svar, globalspacing, fault);
 
     if (!check_vector(start))
     {
@@ -86,11 +86,8 @@ void SquareShape::check_input(SIM const& svar, FLUID const& fvar, real& globalsp
     }
     ni = ni > 1 ? ni : 1;
     nj = nj > 1 ? nj : 1;
-    ni = ni;
-    nj = nj;
 #if SIMDIM == 3
     nk = nk > 1 ? nk : 1;
-    nk = nk;
     npts = ni * nk * nj;
 #else
     npts = ni * nj;

@@ -115,14 +115,14 @@ inline StateVecD pairwise_ST(
 
 #ifdef CSF
 inline void CSF_Curvature(
-    FLUID const& fvar, DELTAP const& dp, SPHPart const& pi, SPHPart const& pj, StateVecD const& Rji,
+    FLUID const& fvar, SPHPart const& pi, SPHPart const& pj, StateVecD const& Rji,
     StateVecD const& gradK, real const& volj, real const& r, real& curve, real& W_correc
 )
 {
-    if (dp.lam[pj.part_id] < 0.75)
+    if (pj.lam < 0.75)
     {
         curve -= (pj.norm.normalized() - pi.norm.normalized()).dot(volj * gradK);
-        W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/dp.kernsum[ii]*/;
+        W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/pi.kernsum*/;
     }
 
     /* Consider imaginary particles to improve curvature representation */
@@ -131,7 +131,7 @@ inline void CSF_Curvature(
         /* Host particle is on the surface, but neighbour is not. Reflect stuff then */
         StateVecD normj = 2 * pi.norm.normalized() - pj.norm.normalized();
         curve += (normj.normalized() - pi.norm.normalized()).dot(volj * gradK);
-        W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/dp.kernsum[ii]*/;
+        W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/pi.kernsum*/;
     }
 
     if (pj.surf == 1 && pi.surf != 1)
@@ -144,7 +144,7 @@ inline void CSF_Curvature(
             StateVecD gradK2 = GradK(2 * Rji, 2 * r, fvar.H, fvar.W_correc);
             StateVecD normj = 2 * pj.norm.normalized() - pi.norm.normalized();
             curve -= (normj.normalized() - pi.norm.normalized()).dot(volj * gradK2);
-            W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/dp.kernsum[ii]*/;
+            W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/pi.kernsum*/;
         }
     }
 }
@@ -215,8 +215,8 @@ inline real Continuity_dSPH(
 #endif
 
 inline StateVecD ArtVisc(
-    real const& nu, SPHPart const& pi, SPHPart const& pj, FLUID const& fvar, StateVecD const& Rji,
-    StateVecD const& Vji, real const idist2, StateVecD const& gradK
+    FLUID const& fvar, SPHPart const& pi, SPHPart const& pj, StateVecD const& Rji, StateVecD const& Vji,
+    real const idist2, StateVecD const& gradK
 )
 {
     // if(pj.b != BOUND)
@@ -233,7 +233,7 @@ inline StateVecD ArtVisc(
         real const rhoij = 0.5 * (pi.rho + pj.rho);
         real const cbar =
             0.5 * (sqrt((fvar.B * fvar.gam) / pi.rho) + sqrt((fvar.B * fvar.gam) / pj.rho));
-        // real const alphv = 2 * nu * (SIMDIM + 2)/(fvar.H*cbar);
+        // real const alphv = 2 * fvar.nu * (SIMDIM + 2)/(fvar.H*cbar);
         // real const visc_alpha = std::max(fvar.visc_alpha,alphv);
         real const visc_alpha = fvar.visc_alpha;
 
@@ -260,8 +260,8 @@ inline StateVecD Linear_ArtVisc(
 // }
 
 inline StateVecD Viscosity(
-    real const& nu, SPHPart const& pi, SPHPart const& pj, StateVecD const& Rji, StateVecD const& Vji,
-    real const& idist2, StateVecD const& gradK
+    FLUID const& fvar, real const& nu, SPHPart const& pi, SPHPart const& pj, StateVecD const& Rji,
+    StateVecD const& Vji, real const& idist2, StateVecD const& gradK
 )
 
 {

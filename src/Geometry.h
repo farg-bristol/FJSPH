@@ -96,8 +96,8 @@ inline int LessThanREError(StateP1MatD const& A)
 
 /*Surface detection as described by Marrone, Colagrossi, Le Touze, Graziani - (2010)*/
 void Detect_Surface(
-    SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start, size_t const& end,
-    OUTL const& outlist, MESH const& cells, VLM const& vortex, SPHState& pnp1
+    SIM& svar, size_t const& start, size_t const& end, OUTL const& outlist, MESH const& cells,
+    SPHState& pnp1
 );
 
 /* Find the 2/3 full neighbour count for the original Gissler et al. (2019) model */

@@ -488,7 +488,7 @@ namespace FOAM
     {
         // Open folder
         cout << "Reading boundary file..." << endl;
-        string file = svar.foam_dir;
+        string file = svar.io.foam_dir;
         file.append("/constant/polyMesh/boundary");
         std::ifstream fin(file);
 
@@ -869,7 +869,7 @@ namespace FOAM
         MESH& cells
     )
     {
-        string file = svar.foam_dir;
+        string file = svar.io.foam_dir;
 
         /* Get point values */
         cout << "Reading point data..." << endl;
@@ -880,13 +880,13 @@ namespace FOAM
         /* Get face vertex data */
         cout << "Reading face data..." << endl;
         vector<vector<size_t>> faces;
-        file = svar.foam_dir;
+        file = svar.io.foam_dir;
         file.append("/constant/polyMesh/faces");
         Read_Faces(file, faces);
 
         /* Get owner data. Considered as cell left (normal direction unimportant) */
         cout << "Reading owner data..." << endl;
-        file = svar.foam_dir;
+        file = svar.io.foam_dir;
         file.append("/constant/polyMesh/owner");
         vector<int> fOwner;
         size_t nCells = 0;
@@ -894,7 +894,7 @@ namespace FOAM
 
         /* Read neighbour data. This may well not have the same number of faces. */
         cout << "Reading neighbour data..." << endl;
-        file = svar.foam_dir;
+        file = svar.io.foam_dir;
         file.append("/constant/polyMesh/neighbour");
         vector<int> fNeigh; /* Neighbour file */
         Read_Label_Field(file, fNeigh, nCells);
@@ -904,13 +904,13 @@ namespace FOAM
 
     void Read_Solution(SIM& svar, MESH& cells)
     {
-        string timef = svar.foam_dir;
+        string timef = svar.io.foam_dir;
         timef.append("/");
-        timef.append(svar.foam_sol);
+        timef.append(svar.io.foam_sol);
 
         cout << "Reading pressure data..." << endl;
         string file = timef;
-        if (svar.foam_buoyant_sim == 0)
+        if (svar.io.foam_buoyant_sim == 0)
             file.append("/p");
         else
             file.append("/p_rgh");

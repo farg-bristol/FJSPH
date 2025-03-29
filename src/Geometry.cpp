@@ -12,8 +12,8 @@
 /*Surface detection as described by Marrone, Colagrossi, Le Touze, Graziani -
  * (2010)*/
 void Detect_Surface(
-    SIM& svar, FLUID const& fvar, AERO const& avar, size_t const& start, size_t const& end,
-    OUTL const& outlist, MESH const& cells, VLM const& vortex, SPHState& pnp1
+    SIM& svar, size_t const& start, size_t const& end, OUTL const& outlist, MESH const& cells,
+    SPHState& pnp1
 )
 {
 
@@ -91,7 +91,7 @@ void Detect_Surface(
 
                     // #if defined(CSF) || defined(HESF)
                     // norm -= volj * (dp.colour[jj.first] -
-                    // dp.colour[ii])*GradK(Rij,r,fvar.H,fvar.W_correc); #endif
+                    // dp.colour[ii])*GradK(Rij,r,svar.fluid.H,svar.fluid.W_correc); #endif
                 }
 
                 pi.surf = surf;
@@ -102,7 +102,7 @@ void Detect_Surface(
                 pi.surf = 0;
             }
 
-            // if(pi.lam_nb <  avar.lam_cutoff || pi.surf == 1)
+            // if(pi.lam_nb <  svar.air.lam_cutoff || pi.surf == 1)
             // {
             /* Calculate normal using eigenvalue gradients */
 
@@ -117,7 +117,8 @@ void Detect_Surface(
                     real const r = sqrt(jj.second);
                     real const volj = pj.m / pj.rho;
 
-                    norm += volj * (pj.lam - pi.lam) * (GradK(Rij, r, fvar.H, fvar.W_correc));
+                    norm +=
+                        volj * (pj.lam - pi.lam) * (GradK(Rij, r, svar.fluid.H, svar.fluid.W_correc));
                 }
             }
             else
@@ -131,12 +132,12 @@ void Detect_Surface(
                     real const r = sqrt(jj.second);
                     real const volj = pj.m / pj.rho;
 
-                    norm += volj * pj.lam * (GradK(Rij, r, fvar.H, fvar.W_correc));
+                    norm += volj * pj.lam * (GradK(Rij, r, svar.fluid.H, svar.fluid.W_correc));
                 }
             }
 
             norm = pi.L * norm;
-            if (norm.norm() > 0.1 * pi.lam / fvar.H)
+            if (norm.norm() > 0.1 * pi.lam / svar.fluid.H)
                 norms[ii] = norm.normalized();
             // }
         }
@@ -148,7 +149,7 @@ void Detect_Surface(
             StateVecD Vdiff = StateVecD::Zero();
 
             SPHPart& pi = pnp1[ii];
-            if (pi.cellID != -1 && pi.b == FREE && (avar.acase == Gissler))
+            if (pi.cellID != -1 && pi.b == FREE && (svar.air.acase == Gissler))
             {
                 if (svar.Asource == meshInfl)
                 {
@@ -157,13 +158,13 @@ void Detect_Surface(
 #if SIMDIM == 3
                 else if (svar.Asource == VLMInfl)
                 {
-                    StateVecD Vel = vortex.getVelocity(pi.xi);
+                    StateVecD Vel = svar.vlm.getVelocity(pi.xi);
                     Vdiff = Vel - pi.v;
                 }
 #endif
                 else
                 {
-                    Vdiff = avar.v_inf - pi.v;
+                    Vdiff = svar.air.v_inf - pi.v;
                 }
             }
 
@@ -183,10 +184,10 @@ void Detect_Surface(
 // if(pi.lam > 0.7)
 // {
 //     curve += volj * (pi.L*(norms[jj.first] - norms[ii])).dot
-//                 (GradK(Rij,r,fvar.H,fvar.W_correc));
+//                 (GradK(Rij,r,svar.fluid.H,svar.fluid.W_correc));
 //     // curve += volj * (dp.L[ii]*(dp.norm[jj.first].normalized() -
 //     pi.norm.normalized())).dot
-//     //         (GradK(Rij,r,fvar.H,fvar.W_correc));
+//     //         (GradK(Rij,r,svar.fluid.H,svar.fluid.W_correc));
 // }
 // else
 // {
@@ -198,11 +199,11 @@ void Detect_Surface(
 //     {
 //         // curve += volj * (dp.L[ii]*(dp.norm[jj.first].normalized() -
 //         pi.norm.normalized())).dot
-//         //     (GradK(Rij,r,fvar.H,fvar.W_correc));
+//         //     (GradK(Rij,r,svar.fluid.H,svar.fluid.W_correc));
 //         curve += volj * (pi.L*(norms[jj.first] - norms[ii])).dot
-//                 (GradK(Rij,r,fvar.H,fvar.W_correc));
+//                 (GradK(Rij,r,svar.fluid.H,svar.fluid.W_correc));
 //         // curve += volj * ((norms[jj.first] - norms[ii])).dot
-//         //         (pi.L*GradK(Rij,r,fvar.H,fvar.W_correc));
+//         //         (pi.L*GradK(Rij,r,svar.fluid.H,svar.fluid.W_correc));
 //     }
 // }
 
@@ -218,23 +219,22 @@ void Detect_Surface(
                 {
                     // curve += volj * (dp.L[ii]*(dp.norm[jj.first].normalized() -
                     // pi.norm.normalized())).dot
-                    //     (GradK(Rij,r,fvar.H,fvar.W_correc));
-                    curve +=
-                        volj *
-                        (pi.L * (norms[jj.first] - norms[ii])).dot(GradK(Rij, r, fvar.H, fvar.W_correc));
+                    //     (GradK(Rij,r,svar.fluid.H,svar.fluid.W_correc));
+                    curve += volj * (pi.L * (norms[jj.first] - norms[ii]))
+                                        .dot(GradK(Rij, r, svar.fluid.H, svar.fluid.W_correc));
                     // curve += volj * ((norms[jj.first] - norms[ii])).dot
-                    //         (pi.L*GradK(Rij,r,fvar.H,fvar.W_correc));
+                    //         (pi.L*GradK(Rij,r,svar.fluid.H,svar.fluid.W_correc));
                 }
 
                 // curve += volj * ((dp.norm[jj.first].normalized() -
                 // pi.norm.normalized())).dot
-                //             (/* dp.L[ii]* */GradK(Rij,r,fvar.H,fvar.W_correc));
+                //             (/* dp.L[ii]* */GradK(Rij,r,svar.fluid.H,svar.fluid.W_correc));
 
                 // curve -= volj * ((norms[jj.first] - norms[ii])).dot
-                //         (/* dp.L[ii]* */GradK(Rij,r,fvar.H,fvar.W_correc));
+                //         (/* dp.L[ii]* */GradK(Rij,r,svar.fluid.H,svar.fluid.W_correc));
 
                 /*Occlusion for Gissler Aero Method*/
-                if (pi.b == FREE && avar.acase == Gissler)
+                if (pi.b == FREE && svar.air.acase == Gissler)
                 {
                     real const frac = -Rij.dot(Vdiff) / (Vdiff.norm() * r);
 
@@ -245,7 +245,7 @@ void Detect_Surface(
                 }
             }
 
-            if (pi.lam_nb < avar.lam_cutoff)
+            if (pi.lam_nb < svar.air.lam_cutoff)
             {
                 pi.woccl = std::max(0.0, std::min(woccl_, 1.0));
             }

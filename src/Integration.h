@@ -18,43 +18,50 @@ class Integrator
     Integrator(int solver) : solver_method(solver){};
 
     real integrate(
-        Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-        VLM const& vortex, MESH const& cells, SURFS& surf_marks, LIMITS& limits, OUTL& outlist,
-        SPHState& pn, SPHState& pnp1, vector<IPTState>& iptdata
+        Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, MESH const& cells, SURFS& surf_marks,
+        LIMITS& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1, vector<IPTState>& iptdata
     );
 
     real integrate_no_update(
-        Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-        VLM const& vortex, MESH const& cells, LIMITS& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1
+        Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, MESH const& cells, LIMITS& limits,
+        OUTL& outlist, SPHState& pn, SPHState& pnp1
     );
 
   private:
     size_t update_data(
-        Sim_Tree& SPH_TREE, SIM& svar, FLUID const& fvar, AERO const& avar, MESH const& cells,
-        LIMITS& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1, SURFS& surf_marks,
-        vector<IPTState>& iptdata
+        Sim_Tree& SPH_TREE, SIM& svar, MESH const& cells, LIMITS& limits, OUTL& outlist, SPHState& pn,
+        SPHState& pnp1, SURFS& surf_marks, vector<IPTState>& iptdata
     );
 
     real solve_prestep(
-        Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-        MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1,
-        vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& npd
+        Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, MESH const& cells,
+        LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1, vector<StateVecD>& xih,
+        size_t const& start_index, size_t& end_index, real& npd
     );
 
     real solve_step(
-        Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, FLUID const& fvar, AERO const& avar,
-        MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1,
-        vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& logbase, real& npd
+        Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, MESH const& cells,
+        LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1, vector<StateVecD>& xih,
+        size_t const& start_index, size_t& end_index, real& logbase, real& npd
     );
 
     real find_timestep(
-        SIM const& svar, FLUID const& fvar, MESH const& cells, SPHState const& pnp1, size_t const& start,
-        size_t const& end
+        SIM const& svar, MESH const& cells, SPHState const& pnp1, size_t const& start, size_t const& end
     );
 
     int solver_method = newmark_beta;
-    real maxf;
     real safe_dt;
+
+    real maxf = MEPSILON;
+    real maxAf = MEPSILON;
+    real maxRho_pc = MEPSILON;
+    real maxRhoi = MEPSILON;
+    real maxdrho = MEPSILON;
+    real minST = 9999999.0;
+    real maxU = MEPSILON;
+#ifdef ALE
+    real maxShift = MEPSILON;
+#endif
 
     size_t start_index, end_index;
     uint iteration;

@@ -640,11 +640,11 @@ void Write_Binary_Timestep(
     size_t end = limits.index.second;
     int32_t const size = end - start;
 
-    double solTime = svar.current_time;
+    double solTime = svar.integrator.current_time;
     int32_t outputZone;
 
     // Get zone data types
-    vector<int32_t> varTypes = svar.var_types;
+    vector<int32_t> varTypes = svar.io.var_types;
     vector<int32_t> shareVarFromZone(varTypes.size(), 0);
     vector<int32_t> valueLocation(varTypes.size(), 1);
     vector<int32_t> passiveVarList(varTypes.size(), 0);
@@ -665,7 +665,7 @@ void Write_Binary_Timestep(
             exit(-1);
         }
 
-    Write_Zone(pnp1, rho_rest, svar.scale, svar.output_variables, start, end, fileHandle, outputZone);
+    Write_Zone(pnp1, rho_rest, svar.scale, svar.io.output_variables, start, end, fileHandle, outputZone);
 
     // Write some auxiliary data, such as mass
     add_zone_aux_data(fileHandle, outputZone, "Particle mass", pnp1[start].m);
@@ -742,8 +742,7 @@ void Write_Binary_Timestep(
 }
 
 void Init_Binary_PLT(
-    SIM& svar, FLUID const& fvar, AERO const& avar, string const& prefix, string const& filename,
-    string const& zoneName, void*& fileHandle
+    SIM& svar, string const& prefix, string const& filename, string const& zoneName, void*& fileHandle
 )
 {
     int32_t FileType = 0;   /*0 = Full, 1 = Grid, 2 = Solution*/
@@ -752,7 +751,7 @@ void Init_Binary_PLT(
     string file = prefix + filename;
 
     if (tecFileWriterOpen(
-            file.c_str(), zoneName.c_str(), svar.var_names.c_str(), fileFormat, FileType, 1, NULL,
+            file.c_str(), zoneName.c_str(), svar.io.var_names.c_str(), fileFormat, FileType, 1, NULL,
             &fileHandle
         ))
     {
@@ -773,100 +772,102 @@ void Init_Binary_PLT(
     add_file_aux_data(fileHandle, "Number of fluid blocks", svar.n_fluid_blocks);
     add_file_aux_data(fileHandle, "Number of boundary points", svar.bound_points);
     add_file_aux_data(fileHandle, "Number of fluid points", svar.fluid_points);
-    add_file_aux_data(fileHandle, "Current frame", svar.current_frame);
+    add_file_aux_data(fileHandle, "Current frame", svar.integrator.current_frame);
 
-    add_file_aux_data(fileHandle, "Input para filename", svar.input_file);
-    add_file_aux_data(fileHandle, "Input fluid definition filename", svar.input_fluid_file);
-    add_file_aux_data(fileHandle, "Input boundary definition filename", svar.input_bound_file);
+    add_file_aux_data(fileHandle, "Input para filename", svar.io.input_file);
+    add_file_aux_data(fileHandle, "Input fluid definition filename", svar.io.input_fluid_file);
+    add_file_aux_data(fileHandle, "Input boundary definition filename", svar.io.input_bound_file);
 
     // add_file_aux_data(fileHandle, "Primary grid face filename", svar.tau_mesh);
     // add_file_aux_data(fileHandle, "Boundary mapping filename", svar.tau_bmap);
     // add_file_aux_data(fileHandle, "Restart-data prefix", svar.tau_sol);
-    add_file_aux_data(fileHandle, "Dimension offset vector", svar.offset_axis);
-    add_file_aux_data(fileHandle, "Solution angle of attack", svar.angle_alpha);
+    add_file_aux_data(fileHandle, "Dimension offset vector", svar.io.offset_axis);
+    add_file_aux_data(fileHandle, "Solution angle of attack", svar.io.angle_alpha);
     add_file_aux_data(fileHandle, "Grid scale", svar.scale);
 
-    add_file_aux_data(fileHandle, "OpenFOAM input directory", svar.foam_dir);
-    add_file_aux_data(fileHandle, "OpenFOAM solution directory", svar.foam_sol);
-    add_file_aux_data(fileHandle, "OpenFOAM binary", svar.foam_is_binary);
-    add_file_aux_data(fileHandle, "Label size", svar.foam_label_size);
-    add_file_aux_data(fileHandle, "Scalar size", svar.foam_scalar_size);
-    add_file_aux_data(fileHandle, "OpenFOAM buoyant", svar.foam_buoyant_sim);
+    add_file_aux_data(fileHandle, "OpenFOAM input directory", svar.io.foam_dir);
+    add_file_aux_data(fileHandle, "OpenFOAM solution directory", svar.io.foam_sol);
+    add_file_aux_data(fileHandle, "OpenFOAM binary", svar.io.foam_is_binary);
+    add_file_aux_data(fileHandle, "Label size", svar.io.foam_label_size);
+    add_file_aux_data(fileHandle, "Scalar size", svar.io.foam_scalar_size);
+    add_file_aux_data(fileHandle, "OpenFOAM buoyant", svar.io.foam_buoyant_sim);
 
-    add_file_aux_data(fileHandle, "VLM definition filename", svar.vlm_file);
+    add_file_aux_data(fileHandle, "VLM definition filename", svar.io.vlm_file);
 
-    add_file_aux_data(fileHandle, "Single file for output", svar.single_file);
-    add_file_aux_data(fileHandle, "Output files prefix", svar.output_prefix);
-    add_file_aux_data(fileHandle, "SPH restart prefix", svar.restart_prefix);
-    add_file_aux_data(fileHandle, "SPH frame time interval", svar.frame_time_interval);
-    add_file_aux_data(fileHandle, "SPH frame count", svar.max_frames);
-    add_file_aux_data(fileHandle, "SPH output encoding", svar.out_encoding);
-    add_file_aux_data(fileHandle, "Variable list", svar.output_names);
+    add_file_aux_data(fileHandle, "Single file for output", svar.io.single_file);
+    add_file_aux_data(fileHandle, "Output files prefix", svar.io.output_prefix);
+    add_file_aux_data(fileHandle, "SPH restart prefix", svar.io.restart_prefix);
+    add_file_aux_data(fileHandle, "SPH frame time interval", svar.integrator.frame_time_interval);
+    add_file_aux_data(fileHandle, "SPH frame count", svar.integrator.max_frames);
+    add_file_aux_data(fileHandle, "SPH output encoding", svar.io.out_encoding);
+    add_file_aux_data(fileHandle, "Variable list", svar.io.output_names);
 
     /* Fluid data */
-    add_file_aux_data(fileHandle, "Reference density", avar.rho_g);
-    add_file_aux_data(fileHandle, "Reference dispersed density", fvar.rho_rest);
-    add_file_aux_data(fileHandle, "Sutherland reference viscosity", avar.mu_g);
-    add_file_aux_data(fileHandle, "Reference dispersed viscosity", fvar.mu);
-    add_file_aux_data(fileHandle, "Reference surface tension", fvar.sig);
-    add_file_aux_data(fileHandle, "SPH surface tension contact angle", fvar.contangb);
+    add_file_aux_data(fileHandle, "Reference density", svar.air.rho_g);
+    add_file_aux_data(fileHandle, "Reference dispersed density", svar.fluid.rho_rest);
+    add_file_aux_data(fileHandle, "Sutherland reference viscosity", svar.air.mu_g);
+    add_file_aux_data(fileHandle, "Reference dispersed viscosity", svar.fluid.mu);
+    add_file_aux_data(fileHandle, "Reference surface tension", svar.fluid.sig);
+    add_file_aux_data(fileHandle, "SPH surface tension contact angle", svar.fluid.contangb);
     add_file_aux_data(fileHandle, "Init hydrostatic pressure", svar.init_hydro_pressure);
     add_file_aux_data(fileHandle, "Hydrostatic height", svar.hydro_height);
 
     /* Aerodynamic data */
-    add_file_aux_data(fileHandle, "Reference velocity", avar.v_ref);
-    add_file_aux_data(fileHandle, "Reference pressure", avar.p_ref);
-    add_file_aux_data(fileHandle, "Reference Mach number", avar.M_ref);
-    add_file_aux_data(fileHandle, "Reference temperature", avar.temp_g);
-    add_file_aux_data(fileHandle, "Gas constant gamma", avar.gamma);
+    add_file_aux_data(fileHandle, "Reference velocity", svar.air.v_ref);
+    add_file_aux_data(fileHandle, "Reference pressure", svar.air.p_ref);
+    add_file_aux_data(fileHandle, "Reference Mach number", svar.air.M_ref);
+    add_file_aux_data(fileHandle, "Reference temperature", svar.air.temp_g);
+    add_file_aux_data(fileHandle, "Gas constant gamma", svar.air.gamma);
 
     /* Simulation settings */
-    add_file_aux_data(fileHandle, "SPH integration solver", svar.solver_name);
-    add_file_aux_data(fileHandle, "SPH boundary solver", svar.bound_solver);
-    add_file_aux_data(fileHandle, "SPH solver minimum residual", svar.min_residual);
-    add_file_aux_data(fileHandle, "SPH maximum timestep", svar.delta_t_max);
-    add_file_aux_data(fileHandle, "SPH minimum timestep", svar.delta_t_min);
-    add_file_aux_data(fileHandle, "SPH maximum CFL", svar.cfl_max);
-    add_file_aux_data(fileHandle, "SPH minimum CFL", svar.cfl_min);
-    add_file_aux_data(fileHandle, "SPH CFL condition", svar.cfl);
-    add_file_aux_data(fileHandle, "SPH unstable CFL step", svar.cfl_step);
-    add_file_aux_data(fileHandle, "SPH unstable CFL count limit", svar.n_unstable_limit);
-    add_file_aux_data(fileHandle, "SPH stable CFL count limit", svar.n_stable_limit);
-    add_file_aux_data(fileHandle, "SPH stable CFL count iteration factor", svar.subits_factor);
-    add_file_aux_data(fileHandle, "SPH maximum shifting velocity", svar.max_shift_vel);
+    add_file_aux_data(fileHandle, "SPH integration solver", svar.integrator.solver_name);
+    add_file_aux_data(fileHandle, "SPH boundary solver", svar.integrator.bound_solver);
+    add_file_aux_data(fileHandle, "SPH solver minimum residual", svar.integrator.min_residual);
+    add_file_aux_data(fileHandle, "SPH maximum timestep", svar.integrator.delta_t_max);
+    add_file_aux_data(fileHandle, "SPH minimum timestep", svar.integrator.delta_t_min);
+    add_file_aux_data(fileHandle, "SPH maximum CFL", svar.integrator.cfl_max);
+    add_file_aux_data(fileHandle, "SPH minimum CFL", svar.integrator.cfl_min);
+    add_file_aux_data(fileHandle, "SPH CFL condition", svar.integrator.cfl);
+    add_file_aux_data(fileHandle, "SPH unstable CFL step", svar.integrator.cfl_step);
+    add_file_aux_data(fileHandle, "SPH unstable CFL count limit", svar.integrator.n_unstable_limit);
+    add_file_aux_data(fileHandle, "SPH stable CFL count limit", svar.integrator.n_stable_limit);
+    add_file_aux_data(
+        fileHandle, "SPH stable CFL count iteration factor", svar.integrator.subits_factor
+    );
+    add_file_aux_data(fileHandle, "SPH maximum shifting velocity", svar.integrator.max_shift_vel);
 
-    add_file_aux_data(fileHandle, "SPH background pressure", fvar.press_back);
-    add_file_aux_data(fileHandle, "SPH starting pressure", fvar.press_pipe);
-    add_file_aux_data(fileHandle, "SPH density variation", fvar.rho_var);
-    add_file_aux_data(fileHandle, "SPH maximum density", fvar.rho_max);
-    add_file_aux_data(fileHandle, "SPH minimum density", fvar.rho_min);
-    add_file_aux_data(fileHandle, "SPH delta coefficient", fvar.dsph_delta);
+    add_file_aux_data(fileHandle, "SPH background pressure", svar.fluid.press_back);
+    add_file_aux_data(fileHandle, "SPH starting pressure", svar.fluid.press_pipe);
+    add_file_aux_data(fileHandle, "SPH density variation", svar.fluid.rho_var);
+    add_file_aux_data(fileHandle, "SPH maximum density", svar.fluid.rho_max);
+    add_file_aux_data(fileHandle, "SPH minimum density", svar.fluid.rho_min);
+    add_file_aux_data(fileHandle, "SPH delta coefficient", svar.fluid.dsph_delta);
 
-    add_file_aux_data(fileHandle, "SPH artificial viscosity factor", fvar.visc_alpha);
-    add_file_aux_data(fileHandle, "SPH speed of sound", fvar.speed_sound);
-    add_file_aux_data(fileHandle, "SPH Newmark Beta iteration limit", svar.max_subits);
+    add_file_aux_data(fileHandle, "SPH artificial viscosity factor", svar.fluid.visc_alpha);
+    add_file_aux_data(fileHandle, "SPH speed of sound", svar.fluid.speed_sound);
+    add_file_aux_data(fileHandle, "SPH Newmark Beta iteration limit", svar.integrator.max_subits);
     add_file_aux_data(fileHandle, "SPH gravity vector", svar.grav);
 
     add_file_aux_data(fileHandle, "SPH initial spacing", svar.particle_step);
     add_file_aux_data(fileHandle, "SPH boundary spacing factor", svar.bound_step_factor);
-    add_file_aux_data(fileHandle, "SPH smoothing length factor", fvar.H_fac);
-    add_file_aux_data(fileHandle, "SPH aerodynamic case", avar.aero_case);
-    add_file_aux_data(fileHandle, "SPH SP diameter definition", avar.use_dx);
-    add_file_aux_data(fileHandle, "SPH use TAB deformation", avar.use_TAB_def);
+    add_file_aux_data(fileHandle, "SPH smoothing length factor", svar.fluid.H_fac);
+    add_file_aux_data(fileHandle, "SPH aerodynamic case", svar.air.aero_case);
+    add_file_aux_data(fileHandle, "SPH SP diameter definition", svar.air.use_dx);
+    add_file_aux_data(fileHandle, "SPH use TAB deformation", svar.air.use_TAB_def);
     add_file_aux_data(fileHandle, "SPH global offset coordinate", svar.offset_vec);
     add_file_aux_data(fileHandle, "SPH maximum particle count", svar.max_points);
-    add_file_aux_data(fileHandle, "SPH aerodynamic cutoff value", avar.lam_cutoff);
-    add_file_aux_data(fileHandle, "SPH freestream velocity", avar.v_inf);
-    add_file_aux_data(fileHandle, "SPH restart fit tolerance", svar.restart_tol);
+    add_file_aux_data(fileHandle, "SPH aerodynamic cutoff value", svar.air.lam_cutoff);
+    add_file_aux_data(fileHandle, "SPH freestream velocity", svar.air.v_inf);
+    add_file_aux_data(fileHandle, "SPH restart fit tolerance", svar.io.restart_tol);
 
     /* Particle tracking settings */
-    add_file_aux_data(fileHandle, "Transition to IPT", svar.using_ipt);
-    add_file_aux_data(fileHandle, "Velocity equation order", svar.ipt_eq_order);
-    add_file_aux_data(fileHandle, "SPH tracking conversion x coordinate", svar.max_x_sph);
-    add_file_aux_data(fileHandle, "Maximum x trajectory coordinate", svar.max_x);
-    add_file_aux_data(fileHandle, "Particle scatter output", svar.part_out);
-    add_file_aux_data(fileHandle, "Particle streak output", svar.streak_out);
-    add_file_aux_data(fileHandle, "Particle cell intersection output", svar.cells_out);
+    add_file_aux_data(fileHandle, "Transition to IPT", svar.ipt.using_ipt);
+    add_file_aux_data(fileHandle, "Velocity equation order", svar.ipt.ipt_eq_order);
+    add_file_aux_data(fileHandle, "SPH tracking conversion x coordinate", svar.ipt.max_x_sph);
+    add_file_aux_data(fileHandle, "Maximum x trajectory coordinate", svar.ipt.max_x);
+    add_file_aux_data(fileHandle, "Particle scatter output", svar.ipt.part_out);
+    add_file_aux_data(fileHandle, "Particle streak output", svar.ipt.streak_out);
+    add_file_aux_data(fileHandle, "Particle cell intersection output", svar.ipt.cells_out);
 }
 
 void close_file(void* handle)
@@ -955,35 +956,35 @@ namespace IPT
         {
             string partf, cellf, streakf, surfacef;
 
-            partf = svar.output_prefix + "_IPT_scatter.szplt";
+            partf = svar.io.output_prefix + "_IPT_scatter.szplt";
 
-            streakf = svar.output_prefix + "_streaks.szplt";
+            streakf = svar.io.output_prefix + "_streaks.szplt";
 
-            cellf = svar.output_prefix + "_cells.plt";
+            cellf = svar.io.output_prefix + "_cells.plt";
 
-            surfacef = svar.output_prefix + "_surface_impacts.szplt";
+            surfacef = svar.io.output_prefix + "_surface_impacts.szplt";
 
             // int32_t fileType   = 0; /*0 = Full, 1 = Grid, 2 = Solution*/
             // int32_t fileFormat = 1; // 0 == PLT, 1 == SZPLT
-            string part_variables = Get_Variables(svar.offset_axis);
-            string cell_variables = Cell_Variables(svar.offset_axis);
+            string part_variables = Get_Variables(svar.io.offset_axis);
+            string cell_variables = Cell_Variables(svar.io.offset_axis);
 
-            if (svar.part_out == 1)
+            if (svar.ipt.part_out == 1)
             {
                 string title = "IPT particle scatter data";
-                Open_File(partf, title, part_variables, 1, svar.part_handle);
+                Open_File(partf, title, part_variables, 1, svar.ipt.part_handle);
             }
 
-            if (svar.streak_out == 1)
+            if (svar.ipt.streak_out == 1)
             {
                 string title = "IPT particle streak data";
-                Open_File(streakf, title, part_variables, 1, svar.streak_handle);
+                Open_File(streakf, title, part_variables, 1, svar.ipt.streak_handle);
             }
 
-            if (svar.cells_out == 1)
+            if (svar.ipt.cells_out == 1)
             {
                 string title = "IPT particle cell intersection data";
-                Open_File(cellf, title, cell_variables, 0, svar.cell_handle);
+                Open_File(cellf, title, cell_variables, 0, svar.ipt.cell_handle);
             }
         }
 
@@ -1006,7 +1007,7 @@ namespace IPT
 
             string group = "IPT Particle " + std::to_string(pnp1.part_id) + " scatter data";
             if (tecZoneCreateIJK(
-                    svar.part_handle, group.c_str(), size, 1, 1, &varTypes[0], &shareVarFromZone[0],
+                    svar.ipt.part_handle, group.c_str(), size, 1, 1, &varTypes[0], &shareVarFromZone[0],
                     &valueLocation[0], &passiveVarList[0], 0, 0, 0, &outputZone
                 ))
             {
@@ -1014,7 +1015,7 @@ namespace IPT
                 exit(-1);
             }
 
-            if (tecZoneSetUnsteadyOptions(svar.part_handle, outputZone, solTime, 4))
+            if (tecZoneSetUnsteadyOptions(svar.ipt.part_handle, outputZone, solTime, 4))
             {
                 cerr << "Failed to add unsteady options." << endl;
                 exit(-1);
@@ -1029,7 +1030,7 @@ namespace IPT
 
                 string name = "position coordinate ";
                 name.append(std::to_string(dim));
-                Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, x, name);
+                Write_Real_Vector(svar.ipt.part_handle, outputZone, var, 0, size, x, name);
             }
 
             vector<real> t(size);
@@ -1050,21 +1051,23 @@ namespace IPT
             pID[0] = pnp1.part_id;
             cID[0] = pnp1.cellID;
 
-            Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, t, "particle time");
-            Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, dt, "timestep");
-            Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, vel, "velocity magnitude");
-            Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, acc, "acceleration magnitude");
-            Write_Int_Vector(svar.part_handle, outputZone, var, 0, size, pID, "particle ID");
-            Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, cVel, "cell velocity");
-            Write_Real_Vector(svar.part_handle, outputZone, var, 0, size, cRho, "cell density");
-            Write_Int_Vector(svar.part_handle, outputZone, var, 0, size, cID, "cell ID");
+            Write_Real_Vector(svar.ipt.part_handle, outputZone, var, 0, size, t, "particle time");
+            Write_Real_Vector(svar.ipt.part_handle, outputZone, var, 0, size, dt, "timestep");
+            Write_Real_Vector(svar.ipt.part_handle, outputZone, var, 0, size, vel, "velocity magnitude");
+            Write_Real_Vector(
+                svar.ipt.part_handle, outputZone, var, 0, size, acc, "acceleration magnitude"
+            );
+            Write_Int_Vector(svar.ipt.part_handle, outputZone, var, 0, size, pID, "particle ID");
+            Write_Real_Vector(svar.ipt.part_handle, outputZone, var, 0, size, cVel, "cell velocity");
+            Write_Real_Vector(svar.ipt.part_handle, outputZone, var, 0, size, cRho, "cell density");
+            Write_Int_Vector(svar.ipt.part_handle, outputZone, var, 0, size, cID, "cell ID");
 
-            if (tecFileWriterFlush(svar.part_handle, 0, NULL))
+            if (tecFileWriterFlush(svar.ipt.part_handle, 0, NULL))
             {
                 cout << "Failed to flush data. Retrying..." << endl;
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 // retry the flush
-                if (tecFileWriterFlush(svar.part_handle, 0, NULL))
+                if (tecFileWriterFlush(svar.ipt.part_handle, 0, NULL))
                 {
                     cerr << "Failed to flush data to particle file" << endl;
                     exit(-1);
@@ -1077,7 +1080,7 @@ namespace IPT
         {
             int64_t const size = pnp1.size();
 
-            double solTime = svar.current_time;
+            double solTime = svar.integrator.current_time;
             int32_t outputZone;
 
 #if SIMDIM == 3
@@ -1161,7 +1164,7 @@ namespace IPT
         {
             // int64_t const size = pnp1.size();
 
-            double solTime = svar.current_time;
+            double solTime = svar.integrator.current_time;
             int32_t outputZone;
 
 #if SIMDIM == 3
@@ -1185,16 +1188,16 @@ namespace IPT
 
             string group = "IPT cell intersection data";
             if (tecZoneCreatePoly(
-                    svar.cell_handle, group.c_str(), zoneType, nNodes, nFaces, nCells, totalNumFaceNodes,
-                    &varTypes[0], &shareVarFromZone[0], &valueLocation[0], &passiveVarList[0], 0, 0, 0,
-                    &outputZone
+                    svar.ipt.cell_handle, group.c_str(), zoneType, nNodes, nFaces, nCells,
+                    totalNumFaceNodes, &varTypes[0], &shareVarFromZone[0], &valueLocation[0],
+                    &passiveVarList[0], 0, 0, 0, &outputZone
                 ))
             {
                 cerr << "Failed to create polyhedral/polygonal zone." << endl;
                 exit(-1);
             }
 
-            if (tecZoneSetUnsteadyOptions(svar.cell_handle, outputZone, solTime, 7))
+            if (tecZoneSetUnsteadyOptions(svar.ipt.cell_handle, outputZone, solTime, 7))
             {
                 cerr << "Failed to add unsteady options." << endl;
                 exit(-1);
@@ -1210,7 +1213,7 @@ namespace IPT
                     x[ii] = usedVerts[ii][dim];
 
                 string name = "position coordinate " + std::to_string(dim);
-                Write_Real_Vector(svar.cell_handle, outputZone, var, 0, nNodes, x, name);
+                Write_Real_Vector(svar.ipt.cell_handle, outputZone, var, 0, nNodes, x, name);
             }
 
             vector<int32_t> faceCounts(faces.size());
@@ -1228,7 +1231,7 @@ namespace IPT
             }
 
             tecZoneWritePolyFaces32(
-                svar.cell_handle, outputZone, 0, nFaces, &faceCounts[0], &faceNodes[0], &left[0],
+                svar.ipt.cell_handle, outputZone, 0, nFaces, &faceCounts[0], &faceNodes[0], &left[0],
                 &right[0], 1
             );
         }

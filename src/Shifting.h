@@ -7,25 +7,20 @@
 #include "Var.h"
 
 /*L matrix for delta-SPH calculation*/
-void dSPH_PreStep(
-    FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL const& outlist,
-    real& npd /* , DELTAP& dp */
-);
+void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL const& outlist, real& npd);
 
 /* Calculate dissipation terms before freezing. */
 void dissipation_terms(
-    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
-    /* DELTAP const& dp, */ SPHState& pnp1
+    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
 );
 
 #ifdef ALE
 void particle_shift(
-    SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
-    /* DELTAP const& dp, */ SPHState& pnp1
+    SIM const& svar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
 );
 #endif
 
-// void Apply_XSPH(FLUID const& fvar, size_t const& start, size_t const& end,
-// 				OUTL const& outlist, DELTAP const& dp, SPHState& pnp1);
+// void Apply_XSPH( size_t const& start, size_t const& end,
+// 				OUTL const& outlist, SPHState& pnp1);
 
 #endif

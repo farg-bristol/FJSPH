@@ -161,7 +161,7 @@ void dissipation_terms(
 #ifdef LINEAR
                 artViscI += Linear_ArtVisc(Rji, Vji, idist2, gradK, volj);
 #else
-                artViscI += pj.m * ArtVisc(fvar.nu, pi, pj, fvar, Rji, Vji, idist2, gradK);
+                artViscI += pj.m * ArtVisc(fvar, pi, pj, Rji, Vji, idist2, gradK);
 #endif
 
 #ifndef NODSPH
@@ -187,8 +187,7 @@ void dissipation_terms(
 
 #ifdef ALE
 void particle_shift(
-    SIM const& svar, FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist,
-    /* DELTAP const& dp, */ SPHState& pnp1
+    SIM const& svar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
 )
 {
     /*Implement particle shifting technique - Sun, Colagrossi, Marrone, Zhang (2018)*/
@@ -196,9 +195,9 @@ void particle_shift(
     // vector<SPHPart>::iterator maxUi = std::max_element(pnp1.begin(),pnp1.end(),
     // 	[](SPHPart p1, SPHPart p2){return p1.v.norm()< p2.v.norm();});
 
-    // real const maxU = fvar.maxU/**maxUi->v.norm()*/;
+    // real const maxU = svar.fluid.maxU/**maxUi->v.norm()*/;
 
-    // real const maxU = fvar.maxU;
+    // real const maxU = svar.fluid.maxU;
 
 #pragma omp parallel default(shared)
     {
@@ -230,10 +229,10 @@ void particle_shift(
                 StateVecD const Rji = pj.xi - pi.xi;
                 real const r = sqrt(jj.second);
                 real const volj = pj.m / pj.rho;
-                real const kern = Kernel(r, fvar.H, fvar.W_correc);
-                StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.W_correc);
+                real const kern = Kernel(r, svar.fluid.H, svar.fluid.W_correc);
+                StateVecD const gradK = GradK(Rji, r, svar.fluid.H, svar.fluid.W_correc);
 
-                deltaU += (1.0 + 0.2 * pow(kern / fvar.W_dx, 4.0)) * gradK * volj;
+                deltaU += (1.0 + 0.2 * pow(kern / svar.fluid.W_dx, 4.0)) * gradK * volj;
                 // deltaU +=
                 // gradLam -= (dp.lam[jj.first]-dp.lam[ii]) * dp.L[ii] * gradK * volj;
 
@@ -251,9 +250,9 @@ void particle_shift(
             }
 
             // deltaR *= -1 * fvar.sr * maxU / fvar.speed_sound;
-            deltaU *= -2.0 * fvar.H * pi.v.norm();
+            deltaU *= -2.0 * svar.fluid.H * pi.v.norm();
 
-            deltaU = std::min(deltaU.norm(), std::min(maxUij / 2.0, svar.max_shift_vel)) *
+            deltaU = std::min(deltaU.norm(), std::min(maxUij / 2.0, svar.integrator.max_shift_vel)) *
                      deltaU.normalized();
 
             // gradLam = gradLam.normalized();
@@ -292,8 +291,8 @@ void particle_shift(
 
 #endif
 
-// void Apply_XSPH(FLUID const& fvar, size_t const& start, size_t const& end,
-// 				OUTL const& outlist, DELTAP const& dp, SPHState& pnp1)
+// void Apply_XSPH( size_t const& start, size_t const& end,
+// 				OUTL const& outlist, SPHState& pnp1)
 // {
 // 	#pragma omp parallel
 // 	{
@@ -316,7 +315,7 @@ void particle_shift(
 // 				real const kern = Kernel(r,fvar.H,fvar.W_correc);
 // 				real rho_ij = 0.5*(pi.rho + pj.rho);
 
-// 				vPert_ -= 0.5 * pj.m/rho_ij * (pi.v-pj.v) * kern/*/dp.kernsum[ii]*/;
+// 				vPert_ -= 0.5 * pj.m/rho_ij * (pi.v-pj.v) * kern/*/pi.kernsum*/;
 
 // 			}
 

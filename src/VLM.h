@@ -4,7 +4,7 @@
 #ifndef VLM_H
 #define VLM_H
 
-#include "Var.h"
+#include "VarDefs.h"
 
 #include <fstream>
 #include <iomanip>
@@ -60,7 +60,7 @@ typedef class VLM
 
     StateVecD getVelocity(StateVecD const& pos) const;
 
-    void write_VLM_Panels(string& prefix);
+    void write_VLM_Panels(std::string& prefix);
 
     void Plot_Streamlines(std::string& prefix);
 

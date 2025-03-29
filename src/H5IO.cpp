@@ -12,66 +12,77 @@
 
 #define asize(array) (sizeof(array) / sizeof(array[0]))
 
+void Write_HDF5_Attributes(int64_t const& file, SIM const& svar);
+
 namespace HDF5
 {
-    void Write_Uint_Attribute(int64_t const& fout, std::string const& attr_name, size_t const& attr_data)
+    hid_t Open_HDF5_File(std::string const& filename, SIM const& svar)
+    {
+        hid_t file_handle;
+        if (std::filesystem::exists(filename))
+        {
+            file_handle = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+
+            if (file_handle == H5I_INVALID_HID)
+            {
+                printf("Failed to open new instance of HDF5 file: %s\n", filename.c_str());
+                exit(-1);
+            }
+        }
+        else
+        {
+            file_handle = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+
+            if (file_handle == H5I_INVALID_HID)
+            {
+                printf("Failed to open existing instance of HDF5 file: %s\n", filename.c_str());
+                exit(-1);
+            }
+
+            Write_HDF5_Attributes(file_handle, svar);
+        }
+
+        return file_handle;
+    }
+
+    template <typename T>
+    void Write_Attribute(
+        int64_t const& fout, std::string const& attr_name, T const& attr_data, hid_t const& var_type,
+        hid_t const& write_type
+    )
     {
         herr_t retval;
         int64_t aid = H5Screate(H5S_SCALAR);
-        int64_t attr =
-            H5Acreate(fout, (attr_name).c_str(), H5T_NATIVE_ULONG, aid, H5P_DEFAULT, H5P_DEFAULT);
-        if ((retval = H5Awrite(attr, H5T_NATIVE_ULONG, &attr_data)))
+        int64_t attr = H5Acreate(fout, (attr_name).c_str(), var_type, aid, H5P_DEFAULT, H5P_DEFAULT);
+        if ((retval = H5Awrite(attr, write_type, &attr_data)))
         {
-            printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
+            printf(
+                "\n\tError: Failed to write attribute \"%s\" to handle %ld\n", attr_name.c_str(), fout
+            );
             exit(-1);
         }
         retval = H5Sclose(aid);
         retval = H5Aclose(attr);
+    }
+
+    void Write_Uint_Attribute(int64_t const& fout, std::string const& attr_name, size_t const& attr_data)
+    {
+        Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_ULONG, H5T_NATIVE_ULONG);
     }
 
     void Write_Uint_Attribute(int64_t const& fout, std::string const& attr_name, uint const& attr_data)
     {
-        herr_t retval;
-        int64_t aid = H5Screate(H5S_SCALAR);
-        int64_t attr =
-            H5Acreate(fout, (attr_name).c_str(), H5T_NATIVE_UINT, aid, H5P_DEFAULT, H5P_DEFAULT);
-        if ((retval = H5Awrite(attr, H5T_NATIVE_UINT, &attr_data)))
-        {
-            printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(aid);
-        retval = H5Aclose(attr);
+        Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_UINT, H5T_NATIVE_UINT);
     }
 
     void Write_Int_Attribute(int64_t const& fout, std::string const& attr_name, int const& attr_data)
     {
-        herr_t retval;
-        int64_t aid = H5Screate(H5S_SCALAR);
-        int64_t attr =
-            H5Acreate(fout, (attr_name).c_str(), H5T_NATIVE_INT, aid, H5P_DEFAULT, H5P_DEFAULT);
-        if ((retval = H5Awrite(attr, H5T_NATIVE_INT, &attr_data)))
-        {
-            printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(aid);
-        retval = H5Aclose(attr);
+        Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_UINT, H5T_NATIVE_UINT);
     }
 
     void Write_Real_Attribute(int64_t const& fout, std::string const& attr_name, double const& attr_data)
     {
-        herr_t retval;
-        int64_t aid = H5Screate(H5S_SCALAR);
-        int64_t attr =
-            H5Acreate(fout, (attr_name).c_str(), H5T_IEEE_F64LE, aid, H5P_DEFAULT, H5P_DEFAULT);
-        if ((retval = H5Awrite(attr, H5T_NATIVE_DOUBLE, &attr_data)))
-        {
-            printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(aid);
-        retval = H5Aclose(attr);
+        Write_Attribute(fout, attr_name, attr_data, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE);
     }
 
     void
@@ -121,25 +132,32 @@ namespace HDF5
         }
     }
 
-    void Write_Variable_Array(
+    template <typename T>
+    void Write_Var_Array(
         int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<std::vector<size_t>> const& var_data
+        std::vector<std::vector<T>> const& var_data, hid_t const& var_type, hid_t const& write_type
     )
     {
         herr_t retval;
         int64_t dataspace = H5Screate_simple(2, dims, NULL);
         int64_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_ULONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
+            fout, var_name.c_str(), var_type, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_ULONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])
-            ))
+        if ((retval = H5Dwrite(dataset, write_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])))
         {
             printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
         retval = H5Sclose(dataspace);
         retval = H5Dclose(dataset);
+    }
+
+    void Write_Variable_Array(
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        std::vector<std::vector<size_t>> const& var_data
+    )
+    {
+        Write_Var_Array(fout, var_name, dims, start, var_data, H5T_NATIVE_ULONG, H5T_NATIVE_ULONG);
     }
 
     void Write_Variable_Array(
@@ -147,19 +165,7 @@ namespace HDF5
         std::vector<std::vector<int>> const& var_data
     )
     {
-        herr_t retval;
-        int64_t dataspace = H5Screate_simple(2, dims, NULL);
-        int64_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_INT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
-        );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])))
-        {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(dataspace);
-        retval = H5Dclose(dataset);
+        Write_Var_Array(fout, var_name, dims, start, var_data, H5T_NATIVE_INT, H5T_NATIVE_INT);
     }
 
     void Write_Variable_Array(
@@ -167,20 +173,7 @@ namespace HDF5
         std::vector<std::vector<float>> const& var_data
     )
     {
-        herr_t retval;
-        int64_t dataspace = H5Screate_simple(2, dims, NULL);
-        int64_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_FLOAT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
-        );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])
-            ))
-        {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(dataspace);
-        retval = H5Dclose(dataset);
+        Write_Var_Array(fout, var_name, dims, start, var_data, H5T_NATIVE_FLOAT, H5T_NATIVE_FLOAT);
     }
 
     void Write_Variable_Array(
@@ -188,20 +181,7 @@ namespace HDF5
         std::vector<std::vector<double>> const& var_data
     )
     {
-        herr_t retval;
-        int64_t dataspace = H5Screate_simple(2, dims, NULL);
-        int64_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
-        );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])
-            ))
-        {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(dataspace);
-        retval = H5Dclose(dataset);
+        Write_Var_Array(fout, var_name, dims, start, var_data, H5T_NATIVE_DOUBLE, H5T_NATIVE_DOUBLE);
     }
 
     // #if UINTPTR_MAX == 0xffffffffffffffff
@@ -587,60 +567,41 @@ namespace HDF5
         }
     }
 
-    void Read_Uint_Attribute(int64_t const& fin, std::string const& attr_name, size_t& attr_data)
+    template <typename T>
+    void Read_Attribute(
+        int64_t const& fin, std::string const& attr_name, T& attr_data, hid_t const& read_type
+    )
     {
         herr_t retval;
         int64_t attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
         size_t data;
-        if ((retval = H5Aread(attr, H5T_NATIVE_ULONG, &data)))
+        if ((retval = H5Aread(attr, read_type, &data)))
         {
             printf("\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
             exit(-1);
         }
         retval = H5Aclose(attr);
         attr_data = data;
+    }
+
+    void Read_Uint_Attribute(int64_t const& fin, std::string const& attr_name, size_t& attr_data)
+    {
+        Read_Attribute(fin, attr_name, attr_data, H5T_NATIVE_ULONG);
     }
 
     void Read_Uint_Attribute(int64_t const& fin, std::string const& attr_name, uint& attr_data)
     {
-        herr_t retval;
-        int64_t attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
-        uint data;
-        if ((retval = H5Aread(attr, H5T_NATIVE_UINT, &data)))
-        {
-            printf("\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
-            exit(-1);
-        }
-        retval = H5Aclose(attr);
-        attr_data = data;
+        Read_Attribute(fin, attr_name, attr_data, H5T_NATIVE_UINT);
     }
 
     void Read_Int_Attribute(int64_t const& fin, std::string const& attr_name, int& attr_data)
     {
-        herr_t retval;
-        int64_t attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
-        int data;
-        if ((retval = H5Aread(attr, H5T_NATIVE_INT, &data)))
-        {
-            printf("\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
-            exit(-1);
-        }
-        retval = H5Aclose(attr);
-        attr_data = data;
+        Read_Attribute(fin, attr_name, attr_data, H5T_NATIVE_INT);
     }
 
     void Read_Real_Attribute(int64_t const& fin, std::string const& attr_name, double& attr_data)
     {
-        herr_t retval;
-        int64_t attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
-        double data;
-        if ((retval = H5Aread(attr, H5T_NATIVE_DOUBLE, &data)))
-        {
-            printf("\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
-            exit(-1);
-        }
-        retval = H5Aclose(attr);
-        attr_data = data;
+        Read_Attribute(fin, attr_name, attr_data, H5T_NATIVE_DOUBLE);
     }
 
     void Read_Vector_Attribute(int64_t const& fin, std::string const& attr_name, StateVecD& attr_data)
@@ -678,8 +639,10 @@ namespace HDF5
             attr_data[ii] = data[ii];
     }
 
-    void Read_Variable_Array(
-        int64_t const& fin, std::string const& var_name, std::vector<std::vector<size_t>>& var_data
+    template <typename T>
+    void Read_Var_Array(
+        int64_t const& fin, std::string const& var_name, std::vector<std::vector<T>>& var_data,
+        hid_t const& read_type
     )
     {
         herr_t retval;
@@ -690,8 +653,8 @@ namespace HDF5
         if (ndims != 2)
             printf("WARNING: Not expected dimensions to array\n");
 
-        var_data.resize(dims[0], std::vector<size_t>(dims[1]));
-        if ((retval = H5Dread(dset, H5T_NATIVE_ULONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
+        var_data.resize(dims[0], std::vector<T>(dims[1]));
+        if ((retval = H5Dread(dset, read_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
         {
             printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
             exit(-1);
@@ -699,73 +662,55 @@ namespace HDF5
 
         retval = H5Sclose(space);
         retval = H5Dclose(dset);
+    }
+
+    void Read_Variable_Array(
+        int64_t const& fin, std::string const& var_name, std::vector<std::vector<size_t>>& var_data
+    )
+    {
+        Read_Var_Array(fin, var_name, var_data, H5T_NATIVE_ULONG);
     }
 
     void Read_Variable_Array(
         int64_t const& fin, std::string const& var_name, std::vector<std::vector<int>>& var_data
     )
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[2];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 2)
-            printf("WARNING: Not expected dimensions to array\n");
-
-        var_data.resize(dims[0], std::vector<int>(dims[1]));
-        if ((retval = H5Dread(dset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Array(fin, var_name, var_data, H5T_NATIVE_INT);
     }
 
     void Read_Variable_Array(
         int64_t const& fin, std::string const& var_name, std::vector<std::vector<float>>& var_data
     )
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[2];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 2)
-            printf("WARNING: Not expected dimensions to array\n");
-
-        var_data.resize(dims[0], std::vector<float>(dims[1]));
-        if ((retval = H5Dread(dset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Array(fin, var_name, var_data, H5T_NATIVE_FLOAT);
     }
 
     void Read_Variable_Array(
         int64_t const& fin, std::string const& var_name, std::vector<std::vector<double>>& var_data
     )
     {
+        Read_Var_Array(fin, var_name, var_data, H5T_NATIVE_DOUBLE);
+    }
+
+    template <typename T>
+    void Read_Var_Scalar(
+        int64_t const& fin, std::string const& var_name, std::vector<T>& var_data, hid_t const& read_type
+    )
+    {
         herr_t retval;
         int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
         int64_t space = H5Dget_space(dset);
-        hsize_t dims[2];
+        hsize_t dims[1];
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 2)
-            printf("WARNING: Not expected dimensions to array\n");
+        if (ndims != 1)
+            printf("WARNING: More than one dimension to array\n");
 
-        var_data.resize(dims[0], std::vector<double>(dims[1]));
-        if ((retval = H5Dread(dset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
+        var_data.resize(dims[0]);
+        if ((retval = H5Dread(dset, read_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
             printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
-
         retval = H5Sclose(space);
         retval = H5Dclose(dset);
     }
@@ -773,127 +718,37 @@ namespace HDF5
     void
     Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<size_t>& var_data)
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[1];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
-
-        var_data.resize(dims[0]);
-        if ((retval = H5Dread(dset, H5T_NATIVE_ULONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Scalar(fin, var_name, var_data, H5T_NATIVE_ULONG);
     }
 
     void
     Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<uint>& var_data)
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[1];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
-
-        var_data.resize(dims[0]);
-        if ((retval = H5Dread(dset, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Scalar(fin, var_name, var_data, H5T_NATIVE_UINT);
     }
 
     void
     Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<int>& var_data)
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[1];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
-
-        var_data.resize(dims[0]);
-        if ((retval = H5Dread(dset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Scalar(fin, var_name, var_data, H5T_NATIVE_INT);
     }
 
     void
     Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<long>& var_data)
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[1];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
-
-        var_data.resize(dims[0]);
-        if ((retval = H5Dread(dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Scalar(fin, var_name, var_data, H5T_NATIVE_LONG);
     }
 
     void
     Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<float>& var_data)
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[1];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
-
-        var_data.resize(dims[0]);
-        if ((retval = H5Dread(dset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Scalar(fin, var_name, var_data, H5T_NATIVE_FLOAT);
     }
 
     void
     Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<double>& var_data)
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[1];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
-
-        var_data.resize(dims[0]);
-        if ((retval = H5Dread(dset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Scalar(fin, var_name, var_data, H5T_NATIVE_DOUBLE);
     }
 
     void Read_Vector_Data(int64_t const& fin, std::string const& name, std::vector<StateVecD>& var_data)
@@ -1057,114 +912,116 @@ namespace HDF5
     }
 } // namespace HDF5
 
-void Write_HDF5_Attributes(int64_t const& file, SIM const& svar, FLUID const& fvar, AERO const& avar)
+void Write_HDF5_Attributes(int64_t const& file, SIM const& svar)
 {
 
     // Write crucial simulation auxiliary data. Potential to expand
-    HDF5::Write_Real_Attribute(file, "Simulation current time", svar.current_time);
+    HDF5::Write_Real_Attribute(file, "Simulation current time", svar.integrator.current_time);
     HDF5::Write_Uint_Attribute(file, "Particle index to add", svar.part_id);
     HDF5::Write_Uint_Attribute(file, "Number of boundary blocks", svar.n_bound_blocks);
     HDF5::Write_Uint_Attribute(file, "Number of fluid blocks", svar.n_fluid_blocks);
     HDF5::Write_Uint_Attribute(file, "Number of boundary points", svar.bound_points);
     HDF5::Write_Uint_Attribute(file, "Number of fluid points", svar.fluid_points);
-    HDF5::Write_Uint_Attribute(file, "Current frame", svar.current_frame);
+    HDF5::Write_Uint_Attribute(file, "Current frame", svar.integrator.current_frame);
 
-    HDF5::Write_String_Attribute(file, "Input para filename", svar.input_file);
-    HDF5::Write_String_Attribute(file, "Input fluid definition filename", svar.input_fluid_file);
-    HDF5::Write_String_Attribute(file, "Input boundary definition filename", svar.input_bound_file);
+    HDF5::Write_String_Attribute(file, "Input para filename", svar.io.input_file);
+    HDF5::Write_String_Attribute(file, "Input fluid definition filename", svar.io.input_fluid_file);
+    HDF5::Write_String_Attribute(file, "Input boundary definition filename", svar.io.input_bound_file);
 
-    HDF5::Write_String_Attribute(file, "Primary grid face filename", svar.tau_mesh);
-    HDF5::Write_String_Attribute(file, "Boundary mapping filename", svar.tau_bmap);
-    HDF5::Write_String_Attribute(file, "Restart-data prefix", svar.tau_sol);
-    HDF5::Write_Int_Attribute(file, "Dimension offset vector", svar.offset_axis);
-    HDF5::Write_Real_Attribute(file, "Solution angle of attack", svar.angle_alpha);
+    HDF5::Write_String_Attribute(file, "Primary grid face filename", svar.io.tau_mesh);
+    HDF5::Write_String_Attribute(file, "Boundary mapping filename", svar.io.tau_bmap);
+    HDF5::Write_String_Attribute(file, "Restart-data prefix", svar.io.tau_sol);
+    HDF5::Write_Int_Attribute(file, "Dimension offset vector", svar.io.offset_axis);
+    HDF5::Write_Real_Attribute(file, "Solution angle of attack", svar.io.angle_alpha);
     HDF5::Write_Real_Attribute(file, "Grid scale", svar.scale);
 
-    HDF5::Write_String_Attribute(file, "OpenFOAM input directory", svar.foam_dir);
-    HDF5::Write_String_Attribute(file, "OpenFOAM solution directory", svar.foam_sol);
-    HDF5::Write_Int_Attribute(file, "OpenFOAM binary", svar.foam_is_binary);
-    HDF5::Write_Int_Attribute(file, "Label size", svar.foam_label_size);
-    HDF5::Write_Int_Attribute(file, "Scalar size", svar.foam_scalar_size);
-    HDF5::Write_Int_Attribute(file, "OpenFOAM is buoyant", svar.foam_buoyant_sim);
-    HDF5::Write_Int_Attribute(file, "OpenFOAM is foam_is_incompressible", svar.foam_is_incomp);
+    HDF5::Write_String_Attribute(file, "OpenFOAM input directory", svar.io.foam_dir);
+    HDF5::Write_String_Attribute(file, "OpenFOAM solution directory", svar.io.foam_sol);
+    HDF5::Write_Int_Attribute(file, "OpenFOAM binary", svar.io.foam_is_binary);
+    HDF5::Write_Int_Attribute(file, "Label size", svar.io.foam_label_size);
+    HDF5::Write_Int_Attribute(file, "Scalar size", svar.io.foam_scalar_size);
+    HDF5::Write_Int_Attribute(file, "OpenFOAM is buoyant", svar.io.foam_buoyant_sim);
+    HDF5::Write_Int_Attribute(file, "OpenFOAM is foam_is_incompressible", svar.io.foam_is_incomp);
 
-    HDF5::Write_String_Attribute(file, "VLM definition filename", svar.vlm_file);
+    HDF5::Write_String_Attribute(file, "VLM definition filename", svar.io.vlm_file);
 
-    HDF5::Write_Uint_Attribute(file, "Single file for output", svar.single_file);
-    HDF5::Write_String_Attribute(file, "Output files prefix", svar.output_prefix);
-    HDF5::Write_String_Attribute(file, "SPH restart prefix", svar.restart_prefix);
-    HDF5::Write_Real_Attribute(file, "SPH frame time interval", svar.frame_time_interval);
-    HDF5::Write_Uint_Attribute(file, "SPH frame count", svar.max_frames);
-    HDF5::Write_Real_Attribute(file, "SPH previous frame time", svar.last_frame_time);
-    HDF5::Write_Uint_Attribute(file, "SPH output encoding", svar.out_encoding);
-    HDF5::Write_String_Attribute(file, "Variable list", svar.output_names);
+    HDF5::Write_Uint_Attribute(file, "Single file for output", svar.io.single_file);
+    HDF5::Write_String_Attribute(file, "Output files prefix", svar.io.output_prefix);
+    HDF5::Write_String_Attribute(file, "SPH restart prefix", svar.io.restart_prefix);
+    HDF5::Write_Real_Attribute(file, "SPH frame time interval", svar.integrator.frame_time_interval);
+    HDF5::Write_Uint_Attribute(file, "SPH frame count", svar.integrator.max_frames);
+    HDF5::Write_Real_Attribute(file, "SPH previous frame time", svar.integrator.last_frame_time);
+    HDF5::Write_Uint_Attribute(file, "SPH output encoding", svar.io.out_encoding);
+    HDF5::Write_String_Attribute(file, "Variable list", svar.io.output_names);
 
     /* Fluid data */
-    HDF5::Write_Real_Attribute(file, "Reference density", avar.rho_g);
-    HDF5::Write_Real_Attribute(file, "Reference dispersed density", fvar.rho_rest);
-    HDF5::Write_Real_Attribute(file, "Sutherland reference viscosity", avar.mu_g);
-    HDF5::Write_Real_Attribute(file, "Reference dispersed viscosity", fvar.mu);
-    HDF5::Write_Real_Attribute(file, "Reference surface tension", fvar.sig);
-    HDF5::Write_Real_Attribute(file, "SPH surface tension contact angle", fvar.contangb);
+    HDF5::Write_Real_Attribute(file, "Reference density", svar.air.rho_g);
+    HDF5::Write_Real_Attribute(file, "Reference dispersed density", svar.fluid.rho_rest);
+    HDF5::Write_Real_Attribute(file, "Sutherland reference viscosity", svar.air.mu_g);
+    HDF5::Write_Real_Attribute(file, "Reference dispersed viscosity", svar.fluid.mu);
+    HDF5::Write_Real_Attribute(file, "Reference surface tension", svar.fluid.sig);
+    HDF5::Write_Real_Attribute(file, "SPH surface tension contact angle", svar.fluid.contangb);
     HDF5::Write_Int_Attribute(file, "Init hydrostatic pressure", svar.init_hydro_pressure);
     HDF5::Write_Real_Attribute(file, "Hydrostatic height", svar.hydro_height);
 
     /* Aerodynamic data */
-    HDF5::Write_Real_Attribute(file, "Reference velocity", avar.v_ref);
-    HDF5::Write_Real_Attribute(file, "Reference pressure", avar.p_ref);
-    HDF5::Write_Real_Attribute(file, "Reference Mach number", avar.M_ref);
-    HDF5::Write_Real_Attribute(file, "Reference temperature", avar.temp_g);
-    HDF5::Write_Real_Attribute(file, "Gas constant gamma", avar.gamma);
+    HDF5::Write_Real_Attribute(file, "Reference velocity", svar.air.v_ref);
+    HDF5::Write_Real_Attribute(file, "Reference pressure", svar.air.p_ref);
+    HDF5::Write_Real_Attribute(file, "Reference Mach number", svar.air.M_ref);
+    HDF5::Write_Real_Attribute(file, "Reference temperature", svar.air.temp_g);
+    HDF5::Write_Real_Attribute(file, "Gas constant gamma", svar.air.gamma);
 
     /* Simulation settings */
-    HDF5::Write_String_Attribute(file, "SPH integration solver", svar.solver_name);
-    HDF5::Write_Uint_Attribute(file, "SPH boundary solver", svar.bound_solver);
-    HDF5::Write_Real_Attribute(file, "SPH solver minimum residual", svar.min_residual);
-    HDF5::Write_Real_Attribute(file, "SPH maximum timestep", svar.delta_t_max);
-    HDF5::Write_Real_Attribute(file, "SPH minimum timestep", svar.delta_t_min);
-    HDF5::Write_Real_Attribute(file, "SPH maximum CFL", svar.cfl_max);
-    HDF5::Write_Real_Attribute(file, "SPH minimum CFL", svar.cfl_min);
-    HDF5::Write_Real_Attribute(file, "SPH CFL condition", svar.cfl);
-    HDF5::Write_Real_Attribute(file, "SPH unstable CFL step", svar.cfl_step);
-    HDF5::Write_Uint_Attribute(file, "SPH unstable CFL count limit", svar.n_unstable_limit);
-    HDF5::Write_Uint_Attribute(file, "SPH stable CFL count limit", svar.n_stable_limit);
-    HDF5::Write_Real_Attribute(file, "SPH stable CFL count iteration factor", svar.subits_factor);
-    HDF5::Write_Real_Attribute(file, "SPH maximum shifting velocity", svar.max_shift_vel);
-    HDF5::Write_Uint_Attribute(file, "SPH stable CFL count", svar.n_stable);
-    HDF5::Write_Uint_Attribute(file, "SPH unstable CFL count", svar.n_unstable);
+    HDF5::Write_String_Attribute(file, "SPH integration solver", svar.integrator.solver_name);
+    HDF5::Write_Uint_Attribute(file, "SPH boundary solver", svar.integrator.bound_solver);
+    HDF5::Write_Real_Attribute(file, "SPH solver minimum residual", svar.integrator.min_residual);
+    HDF5::Write_Real_Attribute(file, "SPH maximum timestep", svar.integrator.delta_t_max);
+    HDF5::Write_Real_Attribute(file, "SPH minimum timestep", svar.integrator.delta_t_min);
+    HDF5::Write_Real_Attribute(file, "SPH maximum CFL", svar.integrator.cfl_max);
+    HDF5::Write_Real_Attribute(file, "SPH minimum CFL", svar.integrator.cfl_min);
+    HDF5::Write_Real_Attribute(file, "SPH CFL condition", svar.integrator.cfl);
+    HDF5::Write_Real_Attribute(file, "SPH unstable CFL step", svar.integrator.cfl_step);
+    HDF5::Write_Uint_Attribute(file, "SPH unstable CFL count limit", svar.integrator.n_unstable_limit);
+    HDF5::Write_Uint_Attribute(file, "SPH stable CFL count limit", svar.integrator.n_stable_limit);
+    HDF5::Write_Real_Attribute(
+        file, "SPH stable CFL count iteration factor", svar.integrator.subits_factor
+    );
+    HDF5::Write_Real_Attribute(file, "SPH maximum shifting velocity", svar.integrator.max_shift_vel);
+    HDF5::Write_Uint_Attribute(file, "SPH stable CFL count", svar.integrator.n_stable);
+    HDF5::Write_Uint_Attribute(file, "SPH unstable CFL count", svar.integrator.n_unstable);
 
-    HDF5::Write_Real_Attribute(file, "SPH background pressure", fvar.press_back);
-    HDF5::Write_Real_Attribute(file, "SPH starting pressure", fvar.press_pipe);
-    HDF5::Write_Real_Attribute(file, "SPH density variation", fvar.rho_var);
-    HDF5::Write_Real_Attribute(file, "SPH maximum density", fvar.rho_max);
-    HDF5::Write_Real_Attribute(file, "SPH minimum density", fvar.rho_min);
-    HDF5::Write_Real_Attribute(file, "SPH delta coefficient", fvar.dsph_delta);
+    HDF5::Write_Real_Attribute(file, "SPH background pressure", svar.fluid.press_back);
+    HDF5::Write_Real_Attribute(file, "SPH starting pressure", svar.fluid.press_pipe);
+    HDF5::Write_Real_Attribute(file, "SPH density variation", svar.fluid.rho_var);
+    HDF5::Write_Real_Attribute(file, "SPH maximum density", svar.fluid.rho_max);
+    HDF5::Write_Real_Attribute(file, "SPH minimum density", svar.fluid.rho_min);
+    HDF5::Write_Real_Attribute(file, "SPH delta coefficient", svar.fluid.dsph_delta);
 
-    HDF5::Write_Real_Attribute(file, "SPH artificial viscosity factor", fvar.visc_alpha);
-    HDF5::Write_Real_Attribute(file, "SPH speed of sound", fvar.speed_sound);
-    HDF5::Write_Uint_Attribute(file, "SPH Newmark Beta iteration limit", svar.max_subits);
+    HDF5::Write_Real_Attribute(file, "SPH artificial viscosity factor", svar.fluid.visc_alpha);
+    HDF5::Write_Real_Attribute(file, "SPH speed of sound", svar.fluid.speed_sound);
+    HDF5::Write_Uint_Attribute(file, "SPH Newmark Beta iteration limit", svar.integrator.max_subits);
     HDF5::Write_Vector_Attribute(file, "SPH gravity vector", svar.grav);
 
     HDF5::Write_Real_Attribute(file, "SPH initial spacing", svar.particle_step);
     HDF5::Write_Real_Attribute(file, "SPH boundary spacing factor", svar.bound_step_factor);
-    HDF5::Write_Real_Attribute(file, "SPH smoothing length factor", fvar.H_fac);
-    HDF5::Write_String_Attribute(file, "SPH aerodynamic case", avar.aero_case);
-    HDF5::Write_Int_Attribute(file, "SPH SP diameter definition", avar.use_dx);
-    HDF5::Write_Int_Attribute(file, "SPH use TAB deformation", avar.use_TAB_def);
+    HDF5::Write_Real_Attribute(file, "SPH smoothing length factor", svar.fluid.H_fac);
+    HDF5::Write_String_Attribute(file, "SPH aerodynamic case", svar.air.aero_case);
+    HDF5::Write_Int_Attribute(file, "SPH SP diameter definition", svar.air.use_dx);
+    HDF5::Write_Int_Attribute(file, "SPH use TAB deformation", svar.air.use_TAB_def);
     HDF5::Write_Vector_Attribute(file, "SPH global offset coordinate", svar.offset_vec);
     HDF5::Write_Uint_Attribute(file, "SPH maximum particle count", svar.max_points);
-    HDF5::Write_Real_Attribute(file, "SPH aerodynamic cutoff value", avar.lam_cutoff);
-    HDF5::Write_Vector_Attribute(file, "SPH freestream velocity", avar.v_inf);
-    HDF5::Write_Real_Attribute(file, "SPH restart fit tolerance", svar.restart_tol);
+    HDF5::Write_Real_Attribute(file, "SPH aerodynamic cutoff value", svar.air.lam_cutoff);
+    HDF5::Write_Vector_Attribute(file, "SPH freestream velocity", svar.air.v_inf);
+    HDF5::Write_Real_Attribute(file, "SPH restart fit tolerance", svar.io.restart_tol);
 
     /* Particle tracking settings */
-    HDF5::Write_Int_Attribute(file, "Transition to IPT", svar.using_ipt);
-    HDF5::Write_Int_Attribute(file, "Velocity equation order", svar.ipt_eq_order);
-    HDF5::Write_Real_Attribute(file, "SPH tracking conversion x coordinate", svar.max_x_sph);
-    HDF5::Write_Real_Attribute(file, "Maximum x trajectory coordinate", svar.max_x);
-    HDF5::Write_Uint_Attribute(file, "Particle scatter output", svar.part_out);
-    HDF5::Write_Uint_Attribute(file, "Particle streak output", svar.streak_out);
-    HDF5::Write_Uint_Attribute(file, "Particle cell intersection output", svar.cells_out);
+    HDF5::Write_Int_Attribute(file, "Transition to IPT", svar.ipt.using_ipt);
+    HDF5::Write_Int_Attribute(file, "Velocity equation order", svar.ipt.ipt_eq_order);
+    HDF5::Write_Real_Attribute(file, "SPH tracking conversion x coordinate", svar.ipt.max_x_sph);
+    HDF5::Write_Real_Attribute(file, "Maximum x trajectory coordinate", svar.ipt.max_x);
+    HDF5::Write_Uint_Attribute(file, "Particle scatter output", svar.ipt.part_out);
+    HDF5::Write_Uint_Attribute(file, "Particle streak output", svar.ipt.streak_out);
+    HDF5::Write_Uint_Attribute(file, "Particle cell intersection output", svar.ipt.cells_out);
 }
 
 void Write_Zone_Attributes(int64_t const& zone, bound_block const& limits)
@@ -1225,25 +1082,17 @@ void Write_Zone_Attributes(int64_t const& zone, bound_block const& limits)
 }
 
 /**
- * @brief Initialise and add the boundary particles to the SPH particles
+ * @brief Write a .h5 file to provide restart data.
  *
  * @param svar Structure of simulation variables
- * @param parts SoA containing SPH particles
- * @param gas SoA containing gas particles and settings
- * @param fibvar SoA containing fibre particles and settings
- * @param act_time Current time for the simulation
- * @param nFluid number of fluid blocks
- * @param nBound number of boundary blocks
- * @param nFib number of fibre blocks
- * @param nGas number of gas blocks
+ * @param pnp1 SoA containing SPH particles at time n+1 (at the time of writing, n = n+1)
+ * @param limits array of block indexes for particles in the global array.
  * @return void
  */
-void Write_HDF5(
-    SIM& svar, FLUID const& fvar, AERO const& avar, SPHState const& pnp1, LIMITS const& limits
-)
+void Write_HDF5(SIM& svar, SPHState const& pnp1, LIMITS const& limits)
 {
     // printf("Starting writing restart HDF5 file...\n");
-    std::string filename = svar.output_prefix + "_particles.h5";
+    std::string filename = svar.io.output_prefix + "_particles.h5";
 
     /*
      * Create a new file. If file exists its contents will be overwritten.
@@ -1253,11 +1102,7 @@ void Write_HDF5(
         std::filesystem::remove(filename);
     }
 
-    int64_t file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-
-    // int64_t group = H5Gcreate2(file,"Particles", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-
-    Write_HDF5_Attributes(file, svar, fvar, avar);
+    hid_t file_handle = HDF5::Open_HDF5_File(filename, svar);
 
     /* Write the actual data */
     size_t blockID = 0;
@@ -1271,7 +1116,7 @@ void Write_HDF5(
 
             // Create the group
             int64_t bdrzone =
-                H5Gcreate2(file, (zoneHeader).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                H5Gcreate2(file_handle, (zoneHeader).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
             HDF5::Write_Zone_Data(
                 bdrzone, svar.scale, pnp1, limits[ii].index.first, limits[ii].index.second
@@ -1300,7 +1145,7 @@ void Write_HDF5(
 
             // Create the group
             int64_t fluzone =
-                H5Gcreate2(file, (zoneHeader).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                H5Gcreate2(file_handle, (zoneHeader).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
             HDF5::Write_Zone_Data(
                 fluzone, svar.scale, pnp1, limits[ii].index.first, limits[ii].index.second
@@ -1324,22 +1169,22 @@ void Write_HDF5(
     }
 
     // Close the files
-    if (H5Fclose(file))
+    if (H5Fclose(file_handle))
     {
         printf("Failed to close HDF file\n");
         exit(-1);
     }
 
     // If the output_prefix differs from the restart prefix, write a new restart prefix using that
-    if (svar.restart && svar.output_prefix == svar.restart_prefix)
+    if (svar.io.restart && svar.io.output_prefix == svar.io.restart_prefix)
     {
-        svar.restart_header_written = 1;
+        svar.io.restart_header_written = 1;
     }
 
-    if (!svar.restart_header_written)
+    if (!svar.io.restart_header_written)
     {
         /* Append a restart prefix to the end of the para file */
-        FILE* para = fopen(svar.input_file.c_str(), "a");
+        FILE* para = fopen(svar.io.input_file.c_str(), "a");
         if (para == NULL)
         {
             printf("Failed to reopen para file\n");
@@ -1350,20 +1195,28 @@ void Write_HDF5(
         fprintf(para, "\n");
         fprintf(para, "    solver at %s", time);
         fprintf(para, "                                          ");
-        fprintf(para, "SPH restart prefix: %s\n", svar.output_prefix.c_str());
+        fprintf(para, "SPH restart prefix: %s\n", svar.io.output_prefix.c_str());
         fclose(para);
-        svar.restart_header_written = 1;
+        svar.io.restart_header_written = 1;
     }
     printf("Finished writing restart HDF5 file.\n");
 }
 
-void Read_HDF5(
-    SIM& svar, FLUID& fvar, AERO& avar, VLM& vortex, SPHState& pn, SPHState& pnp1, LIMITS& limits
-)
+/**
+ * @brief Read a .h5 file to ingest restart data.
+ *
+ * @param svar Structure of simulation variables
+ * @param pn SoA of containing SPH particles at time n (at time of reading, n = n+1, but need to
+ * initialise the data)
+ * @param pnp1 SoA containing SPH particles at time n+1
+ * @param limits array of block indexes for particles in the global array.
+ * @return void
+ */
+void Read_HDF5(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
 {
     printf("Starting reading restart HDF5 file...\n");
 
-    std::string filename = svar.restart_prefix + "_particles.h5";
+    std::string filename = svar.io.restart_prefix + "_particles.h5";
     int64_t file;
     if (std::filesystem::exists(filename))
         file = H5Fopen(filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
@@ -1374,28 +1227,27 @@ void Read_HDF5(
     }
 
     // Read attributes, but only essential ones to not cause discrepancy
-    HDF5::Read_Real_Attribute(file, "Simulation current time", svar.current_time);
-    HDF5::Read_Uint_Attribute(file, "Current frame", svar.current_frame);
+    HDF5::Read_Real_Attribute(file, "Simulation current time", svar.integrator.current_time);
+    HDF5::Read_Uint_Attribute(file, "Current frame", svar.integrator.current_frame);
     HDF5::Read_Real_Attribute(file, "SPH initial spacing", svar.particle_step);
-    HDF5::Read_Uint_Attribute(file, "Single file for output", svar.single_file);
-    HDF5::Read_Real_Attribute(file, "SPH frame time interval", svar.frame_time_interval);
+    HDF5::Read_Uint_Attribute(file, "Single file for output", svar.io.single_file);
+    HDF5::Read_Real_Attribute(file, "SPH frame time interval", svar.integrator.frame_time_interval);
     // HDF5::Read_Real_Attribute(file,   "SPH previous frame time", svar.last_frame_time);
 
-    HDF5::Read_String_Attribute(file, "Variable list", svar.output_names);
+    HDF5::Read_String_Attribute(file, "Variable list", svar.io.output_names);
     HDF5::Read_Real_Attribute(file, "Grid scale", svar.scale);
-    HDF5::Read_Real_Attribute(file, "SPH CFL condition", svar.cfl);
+    HDF5::Read_Real_Attribute(file, "SPH CFL condition", svar.integrator.cfl);
 
     HDF5::Read_Uint_Attribute(file, "Number of boundary blocks", svar.n_bound_blocks);
     HDF5::Read_Uint_Attribute(file, "Number of fluid blocks", svar.n_fluid_blocks);
     HDF5::Read_Uint_Attribute(file, "Number of boundary points", svar.bound_points);
     HDF5::Read_Uint_Attribute(file, "Number of fluid points", svar.fluid_points);
-    HDF5::Read_Uint_Attribute(file, "Current frame", svar.current_frame);
     HDF5::Read_Uint_Attribute(file, "Particle index to add", svar.part_id);
-    HDF5::Read_Uint_Attribute(file, "SPH stable CFL count", svar.n_stable);
-    HDF5::Read_Uint_Attribute(file, "SPH unstable CFL count", svar.n_unstable);
-    svar.last_frame_time = svar.current_time;
+    HDF5::Read_Uint_Attribute(file, "SPH stable CFL count", svar.integrator.n_stable);
+    HDF5::Read_Uint_Attribute(file, "SPH unstable CFL count", svar.integrator.n_unstable);
+    svar.integrator.last_frame_time = svar.integrator.current_time;
 
-    Set_Values(svar, fvar, avar, vortex);
+    Set_Values(svar);
 
     size_t start = 0;
     size_t block = 0;
@@ -1836,70 +1688,84 @@ namespace h5part
     }
 } // namespace h5part
 
-void open_h5part_files(
-    SIM const& svar, FLUID const& fvar, AERO const& avar, string const& prefix,
-    int64_t& h5part_fluid_file, int64_t& h5part_bound_file
-)
+/**
+ * @brief Open .h5part files if there are points to write.
+ *
+ * @param svar Structure of simulation variables
+ * @return void
+ */
+void open_h5part_files(SIM& svar, string const& prefix)
 {
-
     if (svar.fluid_points > 0)
     {
         std::string filename = prefix + "_fluid.h5part";
-
-        if (std::filesystem::exists(filename))
-        {
-            h5part_fluid_file = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
-        }
-        else
-        {
-            h5part_fluid_file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-            Write_HDF5_Attributes(h5part_fluid_file, svar, fvar, avar);
-        }
+        svar.io.h5part_fluid_file = HDF5::Open_HDF5_File(filename, svar);
     }
 
     if (svar.bound_points > 0)
     {
         std::string filename = prefix + "_boundary.h5part";
+        svar.io.h5part_bound_file = HDF5::Open_HDF5_File(filename, svar);
+    }
+}
 
-        if (std::filesystem::exists(filename))
+/**
+ * @brief Close .h5part files if they are currently open.
+ *
+ * @param svar Structure of simulation variables
+ * @return void
+ */
+void close_h5part_files(SIM& svar)
+{
+    // Close the file
+    if (svar.io.h5part_fluid_file != H5I_INVALID_HID)
+    {
+        if (H5Fclose(svar.io.h5part_fluid_file))
         {
-            h5part_bound_file = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+            printf("Failed to close fluid HDF file\n");
+            exit(-1);
         }
-        else
+    }
+
+    // Close the file
+    if (svar.io.h5part_bound_file != H5I_INVALID_HID)
+    {
+        if (H5Fclose(svar.io.h5part_bound_file))
         {
-            h5part_bound_file = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-            Write_HDF5_Attributes(h5part_bound_file, svar, fvar, avar);
+            printf("Failed to close boundary HDF file\n");
+            exit(-1);
         }
     }
 }
 
 /**
- * @brief Initialise and add the boundary particles to the SPH particles
+ * @brief Write a timestep of the simulation to .h5part files. It is expected that the file is already
+ * opened and the handles initialised.
  *
- * @param h5part_fluid_file fluid file identifier
- * @param h5part_bound_file boundary file identifier
- * @param sfile structure file identifier
  * @param svar Structure of simulation variables
- * @param parts SoA containing SPH particles
- * @param gas SoA containing gas particles and settings
- * @param fibvar SoA containing fibre particles and settings
- * @param act_time Current time for the simulation
+ * @param pnp1 SoA containing SPH particles
  * @return void
  */
-void write_h5part_data(
-    int64_t& h5part_fluid_file, int64_t& h5part_bound_file, SIM const& svar, FLUID const& fvar,
-    SPHState const& pnp1
-)
+void write_h5part_data(SIM& svar, SPHState const& pnp1)
 {
-    std::string zoneHeader = "Step#" + std::to_string(svar.current_frame);
+
+    std::string zoneHeader = "Step#" + std::to_string(svar.integrator.current_frame);
     if (svar.n_fluid_blocks > 0)
     {
         // Create a group of the current timestep
-        int64_t fluzone =
-            H5Gcreate2(h5part_fluid_file, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t fluzone = H5Gcreate2(
+            svar.io.h5part_fluid_file, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
+        );
+
+        if (fluzone == H5I_INVALID_HID)
+        {
+            printf("Failed to create fluid zone in h5part file\n");
+            exit(-1);
+        }
+
         h5part::Write_Zone_Data(
-            fluzone, svar.scale, svar.current_time, pnp1, svar.bound_points, svar.total_points,
-            svar.output_variables, fvar.rho_rest
+            fluzone, svar.scale, svar.integrator.current_time, pnp1, svar.bound_points,
+            svar.total_points, svar.io.output_variables, svar.fluid.rho_rest
         );
 
         if (H5Gclose(fluzone))
@@ -1907,35 +1773,29 @@ void write_h5part_data(
             printf("Failed to close fluid HDF group\n");
             exit(-1);
         }
-
-        // Close the file
-        if (H5Fclose(h5part_fluid_file))
-        {
-            printf("Failed to close fluid HDF file\n");
-            exit(-1);
-        }
     }
 
     if (svar.n_bound_blocks > 0)
     {
         // Create a group of the current timestep
-        int64_t bndzone =
-            H5Gcreate2(h5part_bound_file, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        int64_t bndzone = H5Gcreate2(
+            svar.io.h5part_bound_file, zoneHeader.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
+        );
+
+        if (bndzone == H5I_INVALID_HID)
+        {
+            printf("Failed to create fluid zone in h5part file\n");
+            exit(-1);
+        }
+
         h5part::Write_Zone_Data(
-            bndzone, svar.scale, svar.current_time, pnp1, 0, svar.bound_points, svar.output_variables,
-            fvar.rho_rest
+            bndzone, svar.scale, svar.integrator.current_time, pnp1, 0, svar.bound_points,
+            svar.io.output_variables, svar.fluid.rho_rest
         );
 
         if (H5Gclose(bndzone))
         {
             printf("Failed to close boundary HDF group\n");
-            exit(-1);
-        }
-
-        // Close the file
-        if (H5Fclose(h5part_bound_file))
-        {
-            printf("Failed to close boundary HDF file\n");
             exit(-1);
         }
     }

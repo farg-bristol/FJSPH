@@ -18,7 +18,7 @@
 using json = nlohmann::json;
 
 // Check the inputs for a block to make sure they are valid.
-void ShapeBlock::check_input(SIM const& svar, FLUID const& fvar, real& globalspacing, int& fault)
+void ShapeBlock::check_input(SIM const& svar, real& globalspacing, int& fault)
 {
     // Scale things first before doing checks and distances
     if (svar.scale != 1.0)
@@ -143,17 +143,19 @@ void ShapeBlock::check_input(SIM const& svar, FLUID const& fvar, real& globalspa
 
     if (press != 0)
     {
-        real Bconst = fvar.rho_rest * (fvar.speed_sound * fvar.speed_sound) / fvar.gam;
-        dens = pow(((press - fvar.press_pipe) / Bconst + 1.0), fvar.gam) * fvar.rho_rest;
+        real Bconst =
+            svar.fluid.rho_rest * (svar.fluid.speed_sound * svar.fluid.speed_sound) / svar.fluid.gam;
+        dens =
+            pow(((press - svar.fluid.press_pipe) / Bconst + 1.0), svar.fluid.gam) * svar.fluid.rho_rest;
     }
     else
     {
-        dens = fvar.rho_rest;
+        dens = svar.fluid.rho_rest;
     }
 
     if (nu < 0)
     {
-        nu = fvar.nu;
+        nu = svar.fluid.nu;
     }
 }
 
@@ -279,8 +281,7 @@ void get_var(json const& file_data, string const& param, std::vector<StateVecD>&
 }
 
 void read_shape_JSON(
-    json const& input_block, SIM const& svar, FLUID const& fvar, real& globalspacing,
-    ShapeBlock* new_block, int& fault
+    json const& input_block, SIM const& svar, real& globalspacing, ShapeBlock* new_block, int& fault
 )
 {
     get_var(input_block, "Shape", new_block->shape);
@@ -351,11 +352,10 @@ void read_shape_JSON(
     get_var(input_block, "Time data", new_block->times);
     get_var(input_block, "Position data", new_block->pos);
 
-    new_block->check_input(svar, fvar, globalspacing, fault);
+    new_block->check_input(svar, globalspacing, fault);
 }
 
-Shapes
-read_shapes_JSON(std::string const& filename, SIM const& svar, FLUID const& fvar, real& globalspacing)
+Shapes read_shapes_JSON(std::string const& filename, SIM const& svar, real& globalspacing)
 {
     /* Read shapes from file */
     std::ifstream input_file(filename);
@@ -374,13 +374,14 @@ read_shapes_JSON(std::string const& filename, SIM const& svar, FLUID const& fvar
     {
         string shape_name;
         get_var(input_block, "Shape", shape_name);
-        shapes.push_back(create_shape(shape_name, fault));
-        ShapeBlock* new_block = shapes.back();
+        ShapeBlock* new_block = create_shape(shape_name, fault);
         // JSON key is the name of the particle block.
         new_block->filename = filename;
         new_block->name = block_name;
 
-        read_shape_JSON(input_block, svar, fvar, globalspacing, new_block, fault);
+        read_shape_JSON(input_block, svar, globalspacing, new_block, fault);
+
+        shapes.push_back(new_block);
     }
 
     if (fault)
@@ -403,8 +404,7 @@ read_shapes_JSON(std::string const& filename, SIM const& svar, FLUID const& fvar
     return var;
 }
 
-Shapes
-read_shapes_bmap(std::string const& filename, SIM const& svar, FLUID const& fvar, real& globalspacing)
+Shapes read_shapes_bmap(std::string const& filename, SIM const& svar, real& globalspacing)
 {
     /* Read shapes from file */
     std::ifstream input_file(filename);
@@ -595,7 +595,7 @@ read_shapes_bmap(std::string const& filename, SIM const& svar, FLUID const& fvar
     /* Check enough information has been provided */
     for (ShapeBlock* bound : shapes)
     {
-        bound->check_input(svar, fvar, globalspacing, fault);
+        bound->check_input(svar, globalspacing, fault);
 
         if (fault)
         {

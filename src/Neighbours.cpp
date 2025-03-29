@@ -4,15 +4,15 @@
 #include "Neighbours.h"
 
 /* Update tree index and return a new neighbour list */
-OUTL update_neighbours(Sim_Tree const& tree, FLUID const& fvar, SPHState const& pnp1)
+OUTL update_neighbours(FLUID const& fvar, Sim_Tree const& tree, SPHState const& pnp1)
 {
     // Combine to make it impossible to forgot to update the tree index before finding neighbours.
     tree.index->buildIndex();
-    return find_neighbours(tree, fvar, pnp1);
+    return find_neighbours(fvar, tree, pnp1);
 }
 
 /* Find the list of neighbours for each particle and return as a 2D vector */
-OUTL find_neighbours(Sim_Tree const& NP1_INDEX, FLUID const& fvar, SPHState const& pnp1)
+OUTL find_neighbours(FLUID const& fvar, Sim_Tree const& NP1_INDEX, SPHState const& pnp1)
 {
     const real search_radius = fvar.sr;
     OUTL neighbour_list(pnp1.size());
