@@ -38,7 +38,7 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
                 /*Check if the position is the same, and skip the particle if yes*/
                 if (ii == jj.first)
                 {
-                    kernsum_ += fvar.W_correc;
+                    kernsum_ += pi.W_correc;
                     // avgV_ += pi.v * fvar.W_correc;
 
                     continue;
@@ -48,8 +48,8 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
                 StateVecD const Rji = pj.xi - pi.xi;
                 real const r = sqrt(jj.second);
                 real const volj = pj.m / pj.rho;
-                real const kern = Kernel(r, fvar.H, fvar.W_correc);
-                StateVecD const Grad = GradK(-Rji, r, fvar.H, fvar.W_correc);
+                real const kern = Kernel(r, pi.H, pi.W_correc);
+                StateVecD const Grad = GradK(-Rji, r, pi.H, pi.W_correc);
 
                 Lmat_ -= volj * Rji * Grad.transpose();
 
@@ -151,11 +151,11 @@ void dissipation_terms(
             StateVecD const Vji = pj.v - pi.v;
             real const rr = jj.second;
             real const r = sqrt(rr);
-            real const idist2 = 1.0 / (rr + 0.0001 * fvar.H_sq);
+            real const idist2 = 1.0 / (rr + 0.0001 * pi.H * pi.H);
             // #ifndef NODSPH
             real const volj = pj.m / pj.rho;
             // #endif
-            StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.W_correc);
+            StateVecD const gradK = GradK(Rji, r, pi.H, pi.W_correc);
 
             if (pj.b > PISTON)
 #ifdef LINEAR
@@ -166,10 +166,11 @@ void dissipation_terms(
 
 #ifndef NODSPH
             if (pj.b > PISTON)
-                Rrhod +=
-                    Continuity_dSPH(Rji, idist2, fvar.H_sq, gradK, volj, pi.gradRho, pj.gradRho, pi, pj);
+                Rrhod += Continuity_dSPH(
+                    Rji, idist2, pi.H * pi.H, gradK, volj, pi.gradRho, pj.gradRho, pi, pj
+                );
             else
-                Rrhod += Continuity_dSPH(Rji, idist2, fvar.H_sq, gradK, volj, pi, pj);
+                Rrhod += Continuity_dSPH(Rji, idist2, pi.H * pi.H, gradK, volj, pi, pj);
 #endif
         }
 
@@ -229,10 +230,10 @@ void particle_shift(
                 StateVecD const Rji = pj.xi - pi.xi;
                 real const r = sqrt(jj.second);
                 real const volj = pj.m / pj.rho;
-                real const kern = Kernel(r, svar.fluid.H, svar.fluid.W_correc);
-                StateVecD const gradK = GradK(Rji, r, svar.fluid.H, svar.fluid.W_correc);
+                real const kern = Kernel(r, pi.H, pi.W_correc);
+                StateVecD const gradK = GradK(Rji, r, pi.H, pi.W_correc);
 
-                deltaU += (1.0 + 0.2 * pow(kern / svar.fluid.W_dx, 4.0)) * gradK * volj;
+                deltaU += (1.0 + 0.2 * pow(kern / pi.W_dx, 4.0)) * gradK * volj;
                 // deltaU +=
                 // gradLam -= (dp.lam[jj.first]-dp.lam[ii]) * dp.L[ii] * gradK * volj;
 
@@ -250,7 +251,7 @@ void particle_shift(
             }
 
             // deltaR *= -1 * fvar.sr * maxU / fvar.speed_sound;
-            deltaU *= -2.0 * svar.fluid.H * pi.v.norm();
+            deltaU *= -2.0 * pi.H * pi.v.norm();
 
             deltaU = std::min(deltaU.norm(), std::min(maxUij / 2.0, svar.integrator.max_shift_vel)) *
                      deltaU.normalized();

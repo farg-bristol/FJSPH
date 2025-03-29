@@ -61,8 +61,6 @@ std::vector<StateVecD> Read_Geom_File(std::string const& filename)
 void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
 {
     // Search for overlap with particles
-    double searchDist = 0.9 * svar.dx;
-    searchDist = searchDist * searchDist;
 
     // Check boundary blocks first
     for (size_t blockID = 0; blockID < boundvar.nblocks; blockID++)
@@ -74,6 +72,8 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
     {
         Vec_Tree tree(SIMDIM, boundvar.block[blockID]->coords, 50);
         tree.index->buildIndex();
+        double searchDist = 0.9 * boundvar.block[blockID]->dx;
+        searchDist = searchDist * searchDist;
 
         // Search for overlap with boundary particles (do the upper diagonal only)
         for (size_t ii = blockID; ii < boundvar.nblocks; ++ii)
@@ -110,6 +110,8 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
     {
         Vec_Tree tree(SIMDIM, fluvar.block[blockID]->coords, 10);
         tree.index->buildIndex();
+        double searchDist = 0.9 * fluvar.block[blockID]->dx;
+        searchDist = searchDist * searchDist;
 
         // Search for overlap with boundary particles
         for (size_t ii = 0; ii < boundvar.nblocks; ++ii)
@@ -224,14 +226,14 @@ void Check_Intersection(SIM const& svar, Shapes& boundvar, Shapes& fluvar)
     fluvar.total_points = nFluidPts;
 }
 
-size_t Generate_Points(SIM const& svar, double const& globalspacing, Shapes& var)
+size_t Generate_Points(SIM const& svar, Shapes& var)
 {
     size_t total_points = 0;
     size_t diff = 0;
     for (ShapeBlock* bound : var.block)
     {
         printf("Creating boundary block: %s\t...\t", bound->name.c_str());
-        bound->generate_points(globalspacing);
+        bound->generate_points();
 
         printf("npts: %zu\n", bound->coords.size());
 
@@ -269,26 +271,25 @@ size_t Generate_Points(SIM const& svar, double const& globalspacing, Shapes& var
 
 void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
 {
-    real dx = svar.dx;
     // Read boundary blocks
     Shapes boundvar;
     printf("Reading boundary settings...\n");
     if (iequals(std::filesystem::path(svar.io.input_bound_file).extension(), ".json"))
-        boundvar = read_shapes_JSON(svar.io.input_bound_file, svar, dx);
+        boundvar = read_shapes_JSON(svar.io.input_bound_file, svar);
     else
-        boundvar = read_shapes_bmap(svar.io.input_bound_file, svar, dx);
+        boundvar = read_shapes_bmap(svar.io.input_bound_file, svar);
 
     // Read fluid
     Shapes fluvar;
     printf("Reading fluid settings...\n");
     if (iequals(std::filesystem::path(svar.io.input_fluid_file).extension(), ".json"))
-        fluvar = read_shapes_JSON(svar.io.input_fluid_file, svar, dx);
+        fluvar = read_shapes_JSON(svar.io.input_fluid_file, svar);
     else
-        fluvar = read_shapes_bmap(svar.io.input_fluid_file, svar, dx);
+        fluvar = read_shapes_bmap(svar.io.input_fluid_file, svar);
 
     // Now generate points and add to indexes
-    Generate_Points(svar, svar.dx, boundvar);
-    Generate_Points(svar, svar.dx, fluvar);
+    Generate_Points(svar, boundvar);
+    Generate_Points(svar, fluvar);
 
     // Now check for intersections
     Check_Intersection(svar, boundvar, fluvar);
@@ -305,8 +306,8 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
             {
                 pn.emplace_back(SPHPart(
                     boundvar.block[block]->coords[ii], boundvar.block[block]->vel,
-                    boundvar.block[block]->dens, svar.fluid.bnd_mass, boundvar.block[block]->press,
-                    BOUND, part_id
+                    boundvar.block[block]->dens, boundvar.block[block]->mass,
+                    boundvar.block[block]->press, BOUND, part_id
                 ));
                 part_id++;
             }
@@ -344,6 +345,7 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
         limits.back().no_slip = boundvar.block[block]->no_slip;
         limits.back().bound_solver = boundvar.block[block]->bound_solver;
         limits.back().block_type = boundvar.block[block]->bound_type;
+        limits.back().dx = boundvar.block[block]->dx;
     }
 
     svar.n_bound_blocks = boundvar.nblocks;
@@ -364,8 +366,8 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
                 {
                     pn.emplace_back(SPHPart(
                         fluvar.block[block]->coords[ii], fluvar.block[block]->vel,
-                        fluvar.block[block]->dens, svar.fluid.bnd_mass, fluvar.block[block]->press, PIPE,
-                        part_id
+                        fluvar.block[block]->dens, fluvar.block[block]->mass, fluvar.block[block]->press,
+                        PIPE, part_id
                     ));
                     part_id++;
                 }
@@ -395,8 +397,8 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
                     size_t pointID = fluvar.block[block]->back[bID];
                     pn.emplace_back(SPHPart(
                         fluvar.block[block]->coords[pointID], fluvar.block[block]->vel,
-                        fluvar.block[block]->dens, svar.fluid.sim_mass, fluvar.block[block]->press, BACK,
-                        part_id
+                        fluvar.block[block]->dens, fluvar.block[block]->mass, fluvar.block[block]->press,
+                        BACK, part_id
                     ));
 
                     limits.back().back.emplace_back(part_id);
@@ -416,8 +418,8 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
                         size_t pointID = fluvar.block[block]->buffer[bID][buffID];
                         pn.emplace_back(SPHPart(
                             fluvar.block[block]->coords[pointID], fluvar.block[block]->vel,
-                            fluvar.block[block]->dens, svar.fluid.sim_mass, fluvar.block[block]->press,
-                            BUFFER, part_id
+                            fluvar.block[block]->dens, fluvar.block[block]->mass,
+                            fluvar.block[block]->press, BUFFER, part_id
                         ));
 
                         limits.back().buffer[bIndex][buffID] = part_id;
@@ -436,8 +438,8 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
                 {
                     pn.emplace_back(SPHPart(
                         fluvar.block[block]->coords[ii], fluvar.block[block]->vel,
-                        fluvar.block[block]->dens, svar.fluid.sim_mass, fluvar.block[block]->press, FREE,
-                        part_id
+                        fluvar.block[block]->dens, fluvar.block[block]->mass, fluvar.block[block]->press,
+                        FREE, part_id
                     ));
                     part_id++;
                 }
@@ -470,6 +472,7 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
         limits.back().no_slip = fluvar.block[block]->no_slip;
         limits.back().bound_solver = fluvar.block[block]->bound_solver;
         limits.back().block_type = fluvar.block[block]->bound_type;
+        limits.back().dx = fluvar.block[block]->dx;
     }
 
     svar.n_fluid_blocks = fluvar.nblocks;
@@ -499,24 +502,22 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
  * points */
 void Init_Particles_Restart(SIM& svar, LIMITS& limits)
 {
-    real dx = svar.dx;
-
     // Read boundary blocks
     Shapes boundvar;
 
     // Get the extension of the files. If it's JSON, then use the new functions.
     if (iequals(std::filesystem::path(svar.io.input_bound_file).extension(), ".json"))
-        boundvar = read_shapes_JSON(svar.io.input_bound_file, svar, dx);
+        boundvar = read_shapes_JSON(svar.io.input_bound_file, svar);
     else
-        boundvar = read_shapes_bmap(svar.io.input_bound_file, svar, dx);
+        boundvar = read_shapes_bmap(svar.io.input_bound_file, svar);
 
     // Read fluid
     Shapes fluvar;
     printf("Reading fluid settings...\n");
     if (iequals(std::filesystem::path(svar.io.input_fluid_file).extension(), ".json"))
-        fluvar = read_shapes_JSON(svar.io.input_fluid_file, svar, dx);
+        fluvar = read_shapes_JSON(svar.io.input_fluid_file, svar);
     else
-        fluvar = read_shapes_bmap(svar.io.input_fluid_file, svar, dx);
+        fluvar = read_shapes_bmap(svar.io.input_fluid_file, svar);
 
     limits.resize(boundvar.nblocks + fluvar.nblocks, bound_block(0));
 

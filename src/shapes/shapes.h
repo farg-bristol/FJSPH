@@ -100,12 +100,12 @@ class ShapeBlock
     std::vector<StateVecD> coords; /* Coordinates */
 
     // Placeholder functions, that will be overridden by the specific shape classes
-    virtual void check_input(SIM const& svar, real& globalspacing, int& fault);
+    virtual void check_input(SIM const& svar, int& fault);
 
     // void check_input_pre(SIM const& svar,  real& globalspacing, int& fault);
-    void check_input_post(real& globalspacing);
+    void check_input_post();
 
-    virtual void generate_points(real const& globalspacing);
+    virtual void generate_points();
 
     virtual ~ShapeBlock(){};
 };
@@ -127,8 +127,8 @@ struct Shapes
 
 ShapeBlock* create_shape(string const& shape, int& fault);
 
-Shapes read_shapes_JSON(std::string const& filename, SIM const& svar, real& globalspacing);
+Shapes read_shapes_JSON(std::string const& filename, SIM const& svar);
 
-Shapes read_shapes_bmap(std::string const& filename, SIM const& svar, real& globalspacing);
+Shapes read_shapes_bmap(std::string const& filename, SIM const& svar);
 
 #endif

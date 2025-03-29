@@ -381,13 +381,20 @@ real Integrator::find_timestep(
     maxdrho = MEPSILON;
     maxU = MEPSILON;
     minST = 9999999.0;
-#pragma omp parallel for reduction(max : maxf, maxU, maxdrho, maxAf, maxRhoi) reduction(min : minST)
+    minH = 9999999.0;
+    real maxf_term = 9999999.0;
+    real maxU_term = 9999999.0;
+    real maxdrho_term = 9999999.0;
+#pragma omp parallel for reduction(max : maxf, maxU, maxdrho, maxAf, maxRhoi)                           \
+    reduction(min : maxf_term, maxU_term, maxdrho_term, minST, minH)
     for (size_t ii = start_index; ii < end_index; ++ii)
     {
         maxf = std::max(maxf, pnp1[ii].acc.norm());
+        maxf_term = std::min(maxf_term, pnp1[ii].H / pnp1[ii].acc.norm());
         maxAf = std::max(maxAf, pnp1[ii].Af.norm());
 
         maxdrho = std::max(maxdrho, abs(pnp1[ii].Rrho));
+        maxdrho_term = std::min(maxdrho_term, pnp1[ii].H / abs(pnp1[ii].Rrho));
         maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - svar.fluid.rho_rest));
 
         minST = std::min(
@@ -396,21 +403,23 @@ real Integrator::find_timestep(
         );
 
         maxU = std::max(maxU, pnp1[ii].v.norm());
+        maxU_term = std::min(maxU_term, pnp1[ii].H / pnp1[ii].v.norm());
 #ifdef ALE
         maxShift = std::max(maxShift, pnp1[ii].vPert.norm());
 #endif
+        minH = std::min(minH, pnp1[ii].H);
     }
     maxRho_pc = 100 * maxRhoi / svar.fluid.rho_rest;
 
     vector<real> timestep_factors;
-    timestep_factors.emplace_back(0.25 * sqrt(svar.fluid.H / maxf)); /* Force timestep constraint */
-    timestep_factors.emplace_back(2 * svar.fluid.H / (maxU));        /* Velocity constraint */
+    timestep_factors.emplace_back(0.25 * sqrt(maxf_term)); /* Force timestep constraint */
+    timestep_factors.emplace_back(2 * maxU_term);          /* Velocity constraint */
     timestep_factors.emplace_back(
-        0.125 * svar.fluid.H_sq * svar.fluid.rho_rest / svar.fluid.mu
-    );                                            /* Viscosity timestep constraint */
-    timestep_factors.emplace_back(0.067 * minST); /* Surface tension constraint */
-    timestep_factors.emplace_back(0.5 * sqrt(svar.fluid.H / maxdrho)); /* Density gradient constraint */
-    timestep_factors.emplace_back(1.5 * svar.fluid.H / svar.fluid.speed_sound);
+        0.125 * minH * minH * svar.fluid.rho_rest / svar.fluid.mu
+    );                                                       /* Viscosity timestep constraint */
+    timestep_factors.emplace_back(0.067 * minST);            /* Surface tension constraint */
+    timestep_factors.emplace_back(0.5 * sqrt(maxdrho_term)); /* Density gradient constraint */
+    timestep_factors.emplace_back(1.5 * minH / svar.fluid.speed_sound);
     /* Acoustic constraint */ /* 2* can't be used without delta-SPH it seems. Divergent in tensile
                                  instability */
 

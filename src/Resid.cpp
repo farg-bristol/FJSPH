@@ -45,7 +45,7 @@ void Get_Boundary_Pressure(
                 real const rr = jj.second;
                 real const r = sqrt(rr);
                 real const volj = pj.m / pj.rho;
-                real kern = volj * Kernel(r, fvar.H, fvar.W_correc);
+                real kern = volj * Kernel(r, pi.H, pi.W_correc);
 
                 kernsum += kern;
                 pkern += pj.p * kern;
@@ -98,13 +98,13 @@ void Boundary_DBC(
                 StateVecD const Vji = pj.v - pi.v;
                 real const rr = jj.second;
                 real const r = sqrt(rr);
-                real const idist2 = 1.0 / (rr + 0.001 * fvar.H_sq);
+                real const idist2 = 1.0 / (rr + 0.001 * pi.H * pi.H);
                 // real const volj = pj.m/pj.rho;
-                real const kern = Kernel(r, fvar.H, fvar.W_correc);
-                StateVecD const gradK = GradK(Rji, r, fvar.H, fvar.W_correc);
+                real const kern = Kernel(r, pi.H, pi.W_correc);
+                StateVecD const gradK = GradK(Rji, r, pi.H, pi.W_correc);
                 StateVecD art_visc_ = pj.m * ArtVisc(fvar, pi, pj, Rji, Vji, idist2, gradK);
                 /*Base WCSPH continuity drho/dt*/
-                RV_[jj.first] -= 2.0 * c2 * kern / pow(kern + fvar.W_correc, 2.0) * gradK + art_visc_;
+                RV_[jj.first] -= 2.0 * c2 * kern / pow(kern + pi.W_correc, 2.0) * gradK + art_visc_;
             } /*End of neighbours*/
         } /*End of boundary parts*/
 
@@ -120,8 +120,7 @@ void Boundary_DBC(
  * all equations */
 /* Just don't have the position, velocity, and acceleration updated */
 void Boundary_Ghost(
-    size_t const& start, size_t const& end, OUTL const& outlist, real const& H, real const& W_correc,
-    SPHState& pnp1, vector<int>& near_inlet
+    size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1, vector<int>& near_inlet
 )
 {
 /******** LOOP 2 - Boundary points: Calculate density and pressure. **********/
@@ -144,10 +143,9 @@ void Boundary_Ghost(
 
                 StateVecD const Rji = pj.xi - pi.xi;
                 StateVecD const Vji = pj.v - pi.v;
-                real const rr = jj.second;
-                real const r = sqrt(rr);
+                real const r = sqrt(jj.second);
                 real const volj = pj.m / pj.rho;
-                StateVecD const gradK = GradK(Rji, r, H, W_correc);
+                StateVecD const gradK = GradK(Rji, r, pi.H, pi.W_correc);
 
                 /*Base WCSPH continuity drho/dt*/
                 Rrhoi -= volj * Vji.dot(gradK);
@@ -159,10 +157,7 @@ void Boundary_Ghost(
     }
 }
 
-void Set_No_Slip(
-    size_t const& start, size_t const& end, OUTL const& outlist, real const& H, real const& W_correc,
-    SPHState& pnp1
-)
+void Set_No_Slip(size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1)
 {
 #pragma omp for schedule(static) nowait /*Reduction defs in Var.h*/
     for (size_t ii = start; ii < end; ++ii)
@@ -175,7 +170,7 @@ void Set_No_Slip(
             if (ii == jj.first || pj.b <= PISTON)
                 continue;
             real r = sqrt(jj.second);
-            real kern = Kernel(r, H, W_correc);
+            real kern = Kernel(r, pnp1[ii].H, pnp1[ii].W_correc);
             kernsum += kern;
             velsum += pj.v * kern;
         }
@@ -211,7 +206,7 @@ PressureContrib(SPHPart const& pi, SPHPart const& pj, real const& volj, StateVec
 
 inline StateVecD SurfTenContrib(
     SPHPart const& pi, SPHPart const& pj, real const& volj, StateVecD const& gradK, StateVecD const& Rji,
-    real const& r, real const& h, real const& npdm2, real const& pi3o4
+    real const& r, real const& npdm2, real const& pi3o4
 )
 {
 /* He et al (2014) - Diffuse Interface model */
@@ -234,7 +229,7 @@ inline StateVecD SurfTenContrib(
 #ifdef ALE
     if (pi.surfzone == 1)
 #endif
-        return pairwise_ST(Rji, r, h, npdm2, pi3o4, pi.b, pj.b);
+        return pairwise_ST(Rji, r, pi.H, npdm2, pi3o4, pi.b, pj.b);
 #endif
     return StateVecD::Zero();
 }
@@ -287,14 +282,13 @@ void get_acc_and_Rrho_on_i(
         StateVecD const Vji = pj.v - pi.v;
         real const rr = jj.second;
         real const r = sqrt(rr);
-        real const idist2 = 1.0 / (rr + 0.001 * svar.fluid.H_sq);
+        real const idist2 = 1.0 / (rr + 0.001 * pi.H * pi.H);
 
         // #if defined(CSF) || defined(HESF) || (!defined(NODSPH) && defined(NOFROZEN))
         real const volj = pj.m / pj.rho;
         // #endif
 
-        // StateVecD const gradK = GradK(Rji,r,svar.fluid.H,svar.fluid.W_correc);
-        StateVecD const gradK = GradK(Rji, r, svar.fluid.H, svar.fluid.W_correc); /* gradK;*/
+        StateVecD const gradK = GradK(Rji, r, pi.H, pi.W_correc); /* gradK;*/
 
         StateVecD const contrib = PressureContrib(pi, pj, volj, gradK);
 
@@ -307,7 +301,7 @@ void get_acc_and_Rrho_on_i(
         visc_ += pj.m * visc;
 
         /* Surface tension options */
-        surf_t_ += SurfTenContrib(pi, pj, volj, gradK, Rji, r, svar.fluid.H, npdm2, pi3o4);
+        surf_t_ += SurfTenContrib(pi, pj, volj, gradK, Rji, r, npdm2, pi3o4);
 
         acc_ -= contrib;
 #ifdef ALE
@@ -427,27 +421,8 @@ void get_acc_and_Rrho(
     SIM const& svar, MESH const& cells, OUTL const& outlist, real const& npd, SPHState& pnp1
 )
 {
-
     const size_t start = svar.bound_points;
     const size_t end = svar.total_points;
-
-#ifdef PAIRWISE
-
-    /*Surface tension factor*/
-    real const lam =
-        (6.0 / 81.0 * pow((2.0 * svar.fluid.H), 3.0) / pow(M_PI, 4.0) *
-         (9.0 / 4.0 * pow(M_PI, 3.0) - 6.0 * M_PI - 4.0));
-    // #if SIMDIM==2
-    // real const lam = 8.0/81.0*pow(svar.fluid.H,4)/pow(M_PI,4)*(9.0/4.0*pow(M_PI,3)-6.0*M_PI-4.0);
-
-    // #else
-    // real const lam = 3.0 / (4.0 * pow(M_PI, 4.0)) * (pow(2.0, 7) - 9.0 * pow(2.0, 4)
-    //              * M_PI * M_PI + 9.0 * 3.0 * pow(M_PI, 4)) * pow(svar.fluid.H / 3.0, 5);
-    // #endif
-
-    real const npdm2 = (0.5 * svar.fluid.sig / lam) / (npd * npd);
-    real const pi3o4 = 3.0 * M_PI / 4.0;
-#endif
 
 #pragma omp parallel default(shared)
     {
@@ -459,6 +434,25 @@ void get_acc_and_Rrho(
         for (size_t ii = start; ii < end; ++ii)
         {
             SPHPart const& pi = pnp1[ii];
+
+#ifdef PAIRWISE
+            /*Surface tension factor*/
+            real const lam =
+                (6.0 / 81.0 * pow((2.0 * pi.H), 3.0) / pow(M_PI, 4.0) *
+                 (9.0 / 4.0 * pow(M_PI, 3.0) - 6.0 * M_PI - 4.0));
+            // #if SIMDIM==2
+            // real const lam
+            // = 8.0/81.0*pow(svar.fluid.H,4)/pow(M_PI,4)*(9.0/4.0*pow(M_PI,3)-6.0*M_PI-4.0);
+
+            // #else
+            // real const lam = 3.0 / (4.0 * pow(M_PI, 4.0)) * (pow(2.0, 7) - 9.0 * pow(2.0, 4)
+            //              * M_PI * M_PI + 9.0 * 3.0 * pow(M_PI, 4)) * pow(svar.fluid.H / 3.0, 5);
+            // #endif
+
+            real const npdm2 = (0.5 * svar.fluid.sig / lam) / (npd * npd);
+            real const pi3o4 = 3.0 * M_PI_4;
+#endif
+
             get_acc_and_Rrho_on_i(
                 svar, cells, outlist[ii], pnp1, npdm2, pi3o4, grav_vec, pi, pnp1[ii].acc, pnp1[ii].Af,
                 pnp1[ii].Rrho

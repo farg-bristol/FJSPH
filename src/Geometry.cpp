@@ -117,8 +117,7 @@ void Detect_Surface(
                     real const r = sqrt(jj.second);
                     real const volj = pj.m / pj.rho;
 
-                    norm +=
-                        volj * (pj.lam - pi.lam) * (GradK(Rij, r, svar.fluid.H, svar.fluid.W_correc));
+                    norm += volj * (pj.lam - pi.lam) * (GradK(Rij, r, pi.H, pi.W_correc));
                 }
             }
             else
@@ -132,12 +131,12 @@ void Detect_Surface(
                     real const r = sqrt(jj.second);
                     real const volj = pj.m / pj.rho;
 
-                    norm += volj * pj.lam * (GradK(Rij, r, svar.fluid.H, svar.fluid.W_correc));
+                    norm += volj * pj.lam * (GradK(Rij, r, pi.H, pi.W_correc));
                 }
             }
 
             norm = pi.L * norm;
-            if (norm.norm() > 0.1 * pi.lam / svar.fluid.H)
+            if (norm.norm() > 0.1 * pi.lam / pi.H)
                 norms[ii] = norm.normalized();
             // }
         }
@@ -220,8 +219,9 @@ void Detect_Surface(
                     // curve += volj * (dp.L[ii]*(dp.norm[jj.first].normalized() -
                     // pi.norm.normalized())).dot
                     //     (GradK(Rij,r,svar.fluid.H,svar.fluid.W_correc));
-                    curve += volj * (pi.L * (norms[jj.first] - norms[ii]))
-                                        .dot(GradK(Rij, r, svar.fluid.H, svar.fluid.W_correc));
+                    curve +=
+                        volj *
+                        (pi.L * (norms[jj.first] - norms[ii])).dot(GradK(Rij, r, pi.H, pi.W_correc));
                     // curve += volj * ((norms[jj.first] - norms[ii])).dot
                     //         (pi.L*GradK(Rij,r,svar.fluid.H,svar.fluid.W_correc));
                 }

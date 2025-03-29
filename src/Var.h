@@ -161,11 +161,7 @@ struct FLUID
 {
     uint pressure_rel = COLE_EOS;
 
-    real H = -1.0;          /* Support radius */
-    real H_sq = -1.0;       /* Support radius squared */
-    real sr = -1.0;         /* Search radius (support radius * factor)*/
     real H_fac = 2.0;       /* Search radius factor */
-    real W_dx = -1.0;       /* Kernel value at the initial particle spacing distance.*/
     real rho_rest = 1000.0; /* Resting fluid density */
     real rho_pipe = 1000.0; /* Pipe starting density */
     real press_pipe = 0.0;  /* Starting pressure in pipe*/
@@ -174,14 +170,10 @@ struct FLUID
     /* Allow a large variation by default */
     /* making it essentially unbounded other */
     /* than truly unphysical pressures */
-    real rho_max = 1500.0;   /* Maximum density value */
-    real rho_min = 500.0;    /* Minimum density value */
-    real rho_var = 50.0;     /* Maximum density variation allowed (in %) */
-    real rho_max_iter = 1.0; /* Maximum value to reduce the timestep */
-
-    real sim_mass = -1.0;     /* SPH fluid particle mass */
-    real bnd_mass = -1.0;     /* SPH boundary mass */
-    real W_correc = -1.0;     /* Smoothing Kernel Correction*/
+    real rho_max = 1500.0;    /* Maximum density value */
+    real rho_min = 500.0;     /* Minimum density value */
+    real rho_var = 50.0;      /* Maximum density variation allowed (in %) */
+    real rho_max_iter = 1.0;  /* Maximum value to reduce the timestep */
     real visc_alpha = 0.1;    /* Artificial viscosity factor */
     real speed_sound = 300.0; /* Speed of sound */
     real mu = 8.94e-4;        /* Dynamic viscosity */
@@ -369,11 +361,6 @@ struct SIM
     size_t max_points = 9999999; /* End count */
     size_t delete_count = 0;     /* Number of deleted particles */
     size_t internal_count = 0;   /* Number of internal particles */
-
-    /* Particle size value */
-    real particle_step = -1.0;    /* Particle step for creating particle blocks. Must be specified. */
-    real bound_step_factor = 1.0; /* Boundary spacing factor of dx */
-    real dx = -1.0;               /* Initial spacings for particles and boundary. Must be specified. */
 
     /* Geometry parameters */
     StateVecD offset_vec = StateVecD::Zero(); /* Global offset coordinate */
@@ -610,6 +597,12 @@ struct SPHPart
     StateVecD acc = StateVecD::Zero();   /* Particle acceleration */
     StateVecD Af = StateVecD::Zero();    /* Particle aerodynamic force. */
     StateVecD aVisc = StateVecD::Zero(); /* Artificial viscosity contribution */
+
+    real H = -1.0;        /* Support radius */
+    real sr = -1.0;       /* Search radius (support radius * factor)*/
+    real W_dx = -1.0;     /* Kernel value at the initial particle spacing distance.*/
+    real W_correc = -1.0; /* Smoothing Kernel Correction*/
+
     real Rrho = 0.0;                     /* Density gradient */
     real rho = 0.0;                      /* Density */
     real p = 0.0;                        /* Pressure */
@@ -835,6 +828,7 @@ struct bound_block
         bound_solver = 0;
         no_slip = 0;
         block_type = 0;
+        dx = 0;
     }
 
     bound_block(size_t const& a, size_t const& b)
@@ -853,6 +847,7 @@ struct bound_block
         bound_solver = 0;
         no_slip = 0;
         block_type = 0;
+        dx = 0;
     }
 
     string name;                     /* Block name */
@@ -878,6 +873,7 @@ struct bound_block
     int no_slip;              /* Is wall no slip */
     int bound_solver;         /* Solver to use for boundaries */
     int block_type;           /* Block type from definition files. */
+    real dx;
 };
 
 typedef std::vector<bound_block> LIMITS;

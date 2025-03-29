@@ -5,10 +5,10 @@
 
 #include "../Third_Party/Eigen/Geometry"
 
-void LineShape::check_input(SIM const& svar, real& globalspacing, int& fault)
+void LineShape::check_input(SIM const& svar, int& fault)
 {
     // Do common input checks.
-    ShapeBlock::check_input(svar, globalspacing, fault);
+    ShapeBlock::check_input(svar, fault);
 
     if (!check_vector(start))
     {
@@ -34,37 +34,25 @@ void LineShape::check_input(SIM const& svar, real& globalspacing, int& fault)
 #endif
 
     if (dx < 0)
-    { /* Have globalspacing override counts */
-        if (ni < 0
+    {
+        if (ni < 1
 #if SIMDIM == 3
-            || nj < 0
+            || nj < 1
 #endif
         )
         {
-            std::cout << "WARNING: Neither block globalspacing or block counters have been defined."
-                      << std::endl;
-            std::cout << "         Using global globalspacing..." << std::endl;
-            dx = globalspacing;
+            std::cout << "Error: Block \"" << name << "\" spacing has not been defined." << std::endl;
+            fault = 1;
         }
-    }
-
-#if SIMDIM == 2
-    if (ni > 0)
-    {
-        if (dx < 0)
-        { /* Find the correct globalspacing */
-            dx = (end - start).norm() / real(ni);
-        }
-    }
-#else
-    if (ni > 0)
-    {
-        if (nj > 0)
+        else
         {
+#if SIMDIM == 2
+            dx = (end - start).norm() / real(ni);
+#else
             dx = std::min((right - start).norm() / real(ni), (end - right).norm() / real(nj));
+#endif
         }
     }
-#endif
 
     if (thickness < 0)
     {
@@ -94,7 +82,7 @@ void LineShape::check_input(SIM const& svar, real& globalspacing, int& fault)
         if (nj < 1)
         {
             std::cout << "WARNING: ni defined, but nj not." << std::endl;
-            nj = static_cast<size_t>(ceil((end - right).norm() / globalspacing));
+            nj = static_cast<size_t>(ceil((end - right).norm() / dx));
             nj = nj > 1 ? nj : 1;
         }
         npts = ni * nj * nk;
@@ -104,15 +92,15 @@ void LineShape::check_input(SIM const& svar, real& globalspacing, int& fault)
     { /* Need to find it */
 /* Need to estimate the number of points on the line */
 #if SIMDIM == 2
-        ni = static_cast<size_t>(ceil((end - start).norm() / globalspacing));
+        ni = static_cast<size_t>(ceil((end - start).norm() / dx));
         ni = ni > 1 ? ni : 1;
         npts = ni * nk;
 #else
-        ni = static_cast<size_t>(ceil((right - start).norm() / globalspacing));
+        ni = static_cast<size_t>(ceil((right - start).norm() / dx));
         if (particle_order == 1)
-            nj = static_cast<int>(ceil((end - right).norm() / globalspacing / sqrt(3.0) * 2.0));
+            nj = static_cast<int>(ceil((end - right).norm() / dx / sqrt(3.0) * 2.0));
         else
-            nj = static_cast<size_t>(ceil((end - right).norm() / globalspacing));
+            nj = static_cast<size_t>(ceil((end - right).norm() / dx));
 
         ni = ni > 1 ? ni : 1;
         nj = nj > 1 ? nj : 1;
@@ -120,21 +108,21 @@ void LineShape::check_input(SIM const& svar, real& globalspacing, int& fault)
 #endif
     }
 
-    ShapeBlock::check_input_post(globalspacing);
+    ShapeBlock::check_input_post();
 }
 
-void LineShape::generate_points(real const& globalspacing)
+void LineShape::generate_points()
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */
-    std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
+    std::uniform_real_distribution<real> unif(0.0, MEPSILON * dx);
     std::default_random_engine re;
 #if SIMDIM == 2
     // Create line with n thick particles or a given thickness.
 
     /* To check if any points end up too close to each other */
-    // real searchDist = pow2(0.5 * globalspacing - 2.0 * tol * globalspacing);
-    StateVecD delta = (end - start).normalized() * globalspacing;
+    // real searchDist = pow2(0.5 * dx - 2.0 * tol * dx);
+    StateVecD delta = (end - start).normalized() * dx;
     StateVecD norm(delta[1], -delta[0]);
 
     for (int ii = 0; ii < ni; ++ii)
@@ -156,12 +144,12 @@ void LineShape::generate_points(real const& globalspacing)
     // Three dimensional plane with n thick particles or a given thickness.
 
     /* To check if any points end up too close to each other */
-    // real searchDist = pow2(0.5 * globalspacing - 2.0 * MEPSILON * globalspacing);
+    // real searchDist = pow2(0.5 * dx - 2.0 * MEPSILON * dx);
     /* Find integer counts of sizes alone each dimension */
-    StateVecD deltai = (right - start).normalized() * globalspacing;
-    StateVecD deltaj = (end - right).normalized() * globalspacing;
+    StateVecD deltai = (right - start).normalized() * dx;
+    StateVecD deltaj = (end - right).normalized() * dx;
 
-    StateVecD norm = (deltaj.cross(deltai)).normalized() * globalspacing;
+    StateVecD norm = (deltaj.cross(deltai)).normalized() * dx;
 
     for (int jj = 0; jj < nj; ++jj)
     {

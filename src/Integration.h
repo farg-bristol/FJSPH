@@ -59,6 +59,7 @@ class Integrator
     real maxdrho = MEPSILON;
     real minST = 9999999.0;
     real maxU = MEPSILON;
+    real minH = 9999999.0;
 #ifdef ALE
     real maxShift = MEPSILON;
 #endif

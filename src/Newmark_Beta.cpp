@@ -96,10 +96,7 @@ void Newmark_Beta::Do_NB_Iter(
         }
 
         if (limits[block].no_slip)
-            Set_No_Slip(
-                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
-                svar.fluid.W_correc, pnp1
-            );
+            Set_No_Slip(limits[block].index.first, limits[block].index.second, outlist, pnp1);
 
         switch (limits[block].bound_solver)
         {
@@ -121,8 +118,7 @@ void Newmark_Beta::Do_NB_Iter(
         case ghost:
         {
             Boundary_Ghost(
-                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
-                svar.fluid.W_correc, pnp1, near_inlet
+                limits[block].index.first, limits[block].index.second, outlist, pnp1, near_inlet
             );
             break;
         }

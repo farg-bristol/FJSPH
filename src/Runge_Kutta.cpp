@@ -63,10 +63,7 @@ SPHState do_runge_kutta_intermediate_step(
         }
 
         if (limits[block].no_slip)
-            Set_No_Slip(
-                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
-                svar.fluid.W_correc, part_inter
-            );
+            Set_No_Slip(limits[block].index.first, limits[block].index.second, outlist, part_inter);
 
         switch (limits[block].bound_solver)
         {
@@ -100,8 +97,7 @@ SPHState do_runge_kutta_intermediate_step(
         {
             vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
             Boundary_Ghost(
-                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
-                svar.fluid.W_correc, part_inter, near_inlet
+                limits[block].index.first, limits[block].index.second, outlist, part_inter, near_inlet
             );
 
 #pragma omp for schedule(static) nowait
@@ -268,10 +264,7 @@ SPHState do_runge_kutta_final_step(
         }
 
         if (limits[block].no_slip)
-            Set_No_Slip(
-                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
-                svar.fluid.W_correc, part_np1
-            );
+            Set_No_Slip(limits[block].index.first, limits[block].index.second, outlist, part_np1);
 
         switch (limits[block].bound_solver)
         {
@@ -310,8 +303,7 @@ SPHState do_runge_kutta_final_step(
         {
             vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
             Boundary_Ghost(
-                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
-                svar.fluid.W_correc, part_np1, near_inlet
+                limits[block].index.first, limits[block].index.second, outlist, part_np1, near_inlet
             );
 
 #pragma omp for schedule(static) nowait

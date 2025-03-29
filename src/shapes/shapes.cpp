@@ -18,7 +18,7 @@
 using json = nlohmann::json;
 
 // Check the inputs for a block to make sure they are valid.
-void ShapeBlock::check_input(SIM const& svar, real& globalspacing, int& fault)
+void ShapeBlock::check_input(SIM const& svar, int& fault)
 {
     // Scale things first before doing checks and distances
     if (svar.scale != 1.0)
@@ -159,15 +159,14 @@ void ShapeBlock::check_input(SIM const& svar, real& globalspacing, int& fault)
     }
 }
 
-void ShapeBlock::check_input_post(real& globalspacing)
+void ShapeBlock::check_input_post()
 {
-    globalspacing = std::max(dx, globalspacing);
     npts = npts > 1 ? npts : 1;
     if (bound_type != coordDef)
         coords.reserve(npts);
 }
 
-void ShapeBlock::generate_points(real const& globalspacing)
+void ShapeBlock::generate_points()
 {
     // Base function to get overridden, but needs to exist first. Do nothing.
 }
@@ -280,9 +279,7 @@ void get_var(json const& file_data, string const& param, std::vector<StateVecD>&
     }
 }
 
-void read_shape_JSON(
-    json const& input_block, SIM const& svar, real& globalspacing, ShapeBlock* new_block, int& fault
-)
+void read_shape_JSON(json const& input_block, SIM const& svar, ShapeBlock* new_block, int& fault)
 {
     get_var(input_block, "Shape", new_block->shape);
     get_var(input_block, "Sub-shape", new_block->subshape);
@@ -352,10 +349,10 @@ void read_shape_JSON(
     get_var(input_block, "Time data", new_block->times);
     get_var(input_block, "Position data", new_block->pos);
 
-    new_block->check_input(svar, globalspacing, fault);
+    new_block->check_input(svar, fault);
 }
 
-Shapes read_shapes_JSON(std::string const& filename, SIM const& svar, real& globalspacing)
+Shapes read_shapes_JSON(std::string const& filename, SIM const& svar)
 {
     /* Read shapes from file */
     std::ifstream input_file(filename);
@@ -379,7 +376,7 @@ Shapes read_shapes_JSON(std::string const& filename, SIM const& svar, real& glob
         new_block->filename = filename;
         new_block->name = block_name;
 
-        read_shape_JSON(input_block, svar, globalspacing, new_block, fault);
+        read_shape_JSON(input_block, svar, new_block, fault);
 
         shapes.push_back(new_block);
     }
@@ -404,7 +401,7 @@ Shapes read_shapes_JSON(std::string const& filename, SIM const& svar, real& glob
     return var;
 }
 
-Shapes read_shapes_bmap(std::string const& filename, SIM const& svar, real& globalspacing)
+Shapes read_shapes_bmap(std::string const& filename, SIM const& svar)
 {
     /* Read shapes from file */
     std::ifstream input_file(filename);
@@ -595,7 +592,7 @@ Shapes read_shapes_bmap(std::string const& filename, SIM const& svar, real& glob
     /* Check enough information has been provided */
     for (ShapeBlock* bound : shapes)
     {
-        bound->check_input(svar, globalspacing, fault);
+        bound->check_input(svar, fault);
 
         if (fault)
         {
