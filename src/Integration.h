@@ -46,8 +46,7 @@ class Integrator
     );
 
     real find_timestep(
-        SIM const& svar, MESH const& cells, SPHState const& pnp1, size_t const& start,
-        size_t const& end_ng
+        SIM const& svar, MESH const& cells, SPHState const& pnp1, size_t const& start, size_t const& end
     );
 
     int solver_method = newmark_beta;

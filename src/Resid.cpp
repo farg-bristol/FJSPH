@@ -470,7 +470,7 @@ void get_acc_and_Rrho(
 
 void get_aero_velocity(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, MESH const& cells, size_t const& start,
-    size_t& end_ng, OUTL& outlist, LIMITS& limits, SPHState& pn, SPHState& pnp1, real& npd
+    size_t& end, OUTL& outlist, LIMITS& limits, SPHState& pn, SPHState& pnp1, real& npd
 )
 {
     // Check if the particle has moved to a new cell
@@ -515,7 +515,7 @@ void get_aero_velocity(
             svar.delete_count += nDel;
             svar.fluid_points -= nDel;
             svar.total_points -= nDel;
-            end_ng -= nDel;
+            end -= nDel;
             outlist = update_neighbours(svar.fluid, SPH_TREE, pnp1);
             dSPH_PreStep(svar.fluid, svar.total_points, pnp1, outlist, npd);
         }
@@ -529,7 +529,7 @@ void get_aero_velocity(
         case true:
         {
 #pragma omp parallel for
-            for (size_t ii = start; ii < end_ng; ii++)
+            for (size_t ii = start; ii < end; ii++)
             {
                 if (pnp1[ii].lam_nb < svar.air.lam_cutoff && pnp1[ii].b == FREE)
                 {
@@ -547,7 +547,7 @@ void get_aero_velocity(
         case false:
         {
 #pragma omp parallel for
-            for (size_t ii = start; ii < end_ng; ii++)
+            for (size_t ii = start; ii < end; ii++)
             {
                 if (outlist[ii].size() * svar.air.i_n_full < svar.air.lam_cutoff && pnp1[ii].b == FREE)
                 {
@@ -573,7 +573,7 @@ void get_aero_velocity(
         case true:
         {
 #pragma omp parallel for
-            for (size_t ii = start; ii < end_ng; ii++)
+            for (size_t ii = start; ii < end; ii++)
             {
                 if (pnp1[ii].lam_nb < svar.air.lam_cutoff && pnp1[ii].b == FREE)
                 {
@@ -591,7 +591,7 @@ void get_aero_velocity(
         case false:
         {
 #pragma omp parallel for
-            for (size_t ii = start; ii < end_ng; ii++)
+            for (size_t ii = start; ii < end; ii++)
             {
                 if (outlist[ii].size() * svar.air.i_n_full < svar.air.lam_cutoff && pnp1[ii].b == FREE)
                 {

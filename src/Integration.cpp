@@ -58,7 +58,7 @@ real Integrator::integrate_no_update(
     particle_shift(svar, start_index, end_index, outlist, pnp1);
 #endif
 
-    Check_Pipe_Outlet(CELL_TREE, svar, cells, limits, pn, pnp1, end_index, end_index);
+    Check_Pipe_Outlet(CELL_TREE, svar, cells, limits, pn, pnp1, end_index);
 
     vector<StateVecD> xih(end_index - start_index);
 #pragma omp parallel for default(shared)
@@ -95,7 +95,7 @@ real Integrator::integrate_no_update(
     particle_shift(svar, start_index, end_index, outlist, pnp1);
 #endif
 
-    Check_Pipe_Outlet(CELL_TREE, svar, cells, limits, pn, pnp1, end_index, end_index);
+    Check_Pipe_Outlet(CELL_TREE, svar, cells, limits, pn, pnp1, end_index);
 
     /*Do time integration*/
     rms_error = solve_step(
@@ -111,7 +111,17 @@ size_t Integrator::update_data(
     SPHState& pnp1, SURFS& surf_marks, vector<IPTState>& iptdata
 )
 {
-    uint nAdd = update_buffer_region(svar, limits, pnp1, end_index, end_index);
+    uint nAdd = update_buffer_region(svar, limits, pnp1, end_index);
+
+    for (size_t ii = start_index; ii < end_index; ++ii)
+    {
+        SPHPart& pi = pnp1[ii];
+        if (pi.rho < 0.0001)
+        {
+            printf("Warning: Particle density is zero after updating buffer region.\n");
+            pi.rho = fvar.rho_rest;
+        }
+    }
 
     /* Check if any particles need to be deleted, and turned to particle tracking */
     std::set<size_t> to_del;

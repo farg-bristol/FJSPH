@@ -42,6 +42,6 @@ void get_acc_and_Rrho(
 
 void get_aero_velocity(
     Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, MESH const& cells, size_t const& start,
-    size_t& end_ng, OUTL& outlist, LIMITS& limits, SPHState& pn, SPHState& pnp1, real& npd
+    size_t& end, OUTL& outlist, LIMITS& limits, SPHState& pn, SPHState& pnp1, real& npd
 );
 #endif

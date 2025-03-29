@@ -861,7 +861,6 @@ void Check_Pipe_Outlet(
             pnp1.erase(pnp1.begin() + *itr);
             svar.total_points--;
             svar.fluid_points--;
-            end_ng--;
             end--;
             svar.delete_count++;
         }
