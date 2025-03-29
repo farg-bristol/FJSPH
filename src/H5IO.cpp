@@ -132,25 +132,32 @@ namespace HDF5
         }
     }
 
-    void Write_Variable_Array(
+    template <typename T>
+    void Write_Var_Array(
         int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<std::vector<size_t>> const& var_data
+        std::vector<std::vector<T>> const& var_data, hid_t const& var_type, hid_t const& write_type
     )
     {
         herr_t retval;
         int64_t dataspace = H5Screate_simple(2, dims, NULL);
         int64_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_ULONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
+            fout, var_name.c_str(), var_type, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_ULONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])
-            ))
+        if ((retval = H5Dwrite(dataset, write_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])))
         {
             printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
         retval = H5Sclose(dataspace);
         retval = H5Dclose(dataset);
+    }
+
+    void Write_Variable_Array(
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        std::vector<std::vector<size_t>> const& var_data
+    )
+    {
+        Write_Var_Array(fout, var_name, dims, start, var_data, H5T_NATIVE_ULONG, H5T_NATIVE_ULONG);
     }
 
     void Write_Variable_Array(
@@ -158,19 +165,7 @@ namespace HDF5
         std::vector<std::vector<int>> const& var_data
     )
     {
-        herr_t retval;
-        int64_t dataspace = H5Screate_simple(2, dims, NULL);
-        int64_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_INT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
-        );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])))
-        {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(dataspace);
-        retval = H5Dclose(dataset);
+        Write_Var_Array(fout, var_name, dims, start, var_data, H5T_NATIVE_INT, H5T_NATIVE_INT);
     }
 
     void Write_Variable_Array(
@@ -178,20 +173,7 @@ namespace HDF5
         std::vector<std::vector<float>> const& var_data
     )
     {
-        herr_t retval;
-        int64_t dataspace = H5Screate_simple(2, dims, NULL);
-        int64_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_FLOAT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
-        );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])
-            ))
-        {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(dataspace);
-        retval = H5Dclose(dataset);
+        Write_Var_Array(fout, var_name, dims, start, var_data, H5T_NATIVE_FLOAT, H5T_NATIVE_FLOAT);
     }
 
     void Write_Variable_Array(
@@ -199,20 +181,7 @@ namespace HDF5
         std::vector<std::vector<double>> const& var_data
     )
     {
-        herr_t retval;
-        int64_t dataspace = H5Screate_simple(2, dims, NULL);
-        int64_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
-        );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])
-            ))
-        {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(dataspace);
-        retval = H5Dclose(dataset);
+        Write_Var_Array(fout, var_name, dims, start, var_data, H5T_NATIVE_DOUBLE, H5T_NATIVE_DOUBLE);
     }
 
     // #if UINTPTR_MAX == 0xffffffffffffffff
@@ -598,60 +567,41 @@ namespace HDF5
         }
     }
 
-    void Read_Uint_Attribute(int64_t const& fin, std::string const& attr_name, size_t& attr_data)
+    template <typename T>
+    void Read_Attribute(
+        int64_t const& fin, std::string const& attr_name, T& attr_data, hid_t const& read_type
+    )
     {
         herr_t retval;
         int64_t attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
         size_t data;
-        if ((retval = H5Aread(attr, H5T_NATIVE_ULONG, &data)))
+        if ((retval = H5Aread(attr, read_type, &data)))
         {
             printf("\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
             exit(-1);
         }
         retval = H5Aclose(attr);
         attr_data = data;
+    }
+
+    void Read_Uint_Attribute(int64_t const& fin, std::string const& attr_name, size_t& attr_data)
+    {
+        Read_Attribute(fin, attr_name, attr_data, H5T_NATIVE_ULONG);
     }
 
     void Read_Uint_Attribute(int64_t const& fin, std::string const& attr_name, uint& attr_data)
     {
-        herr_t retval;
-        int64_t attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
-        uint data;
-        if ((retval = H5Aread(attr, H5T_NATIVE_UINT, &data)))
-        {
-            printf("\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
-            exit(-1);
-        }
-        retval = H5Aclose(attr);
-        attr_data = data;
+        Read_Attribute(fin, attr_name, attr_data, H5T_NATIVE_UINT);
     }
 
     void Read_Int_Attribute(int64_t const& fin, std::string const& attr_name, int& attr_data)
     {
-        herr_t retval;
-        int64_t attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
-        int data;
-        if ((retval = H5Aread(attr, H5T_NATIVE_INT, &data)))
-        {
-            printf("\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
-            exit(-1);
-        }
-        retval = H5Aclose(attr);
-        attr_data = data;
+        Read_Attribute(fin, attr_name, attr_data, H5T_NATIVE_INT);
     }
 
     void Read_Real_Attribute(int64_t const& fin, std::string const& attr_name, double& attr_data)
     {
-        herr_t retval;
-        int64_t attr = H5Aopen(fin, attr_name.c_str(), H5P_DEFAULT);
-        double data;
-        if ((retval = H5Aread(attr, H5T_NATIVE_DOUBLE, &data)))
-        {
-            printf("\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
-            exit(-1);
-        }
-        retval = H5Aclose(attr);
-        attr_data = data;
+        Read_Attribute(fin, attr_name, attr_data, H5T_NATIVE_DOUBLE);
     }
 
     void Read_Vector_Attribute(int64_t const& fin, std::string const& attr_name, StateVecD& attr_data)
@@ -689,8 +639,10 @@ namespace HDF5
             attr_data[ii] = data[ii];
     }
 
-    void Read_Variable_Array(
-        int64_t const& fin, std::string const& var_name, std::vector<std::vector<size_t>>& var_data
+    template <typename T>
+    void Read_Var_Array(
+        int64_t const& fin, std::string const& var_name, std::vector<std::vector<T>>& var_data,
+        hid_t const& read_type
     )
     {
         herr_t retval;
@@ -701,8 +653,8 @@ namespace HDF5
         if (ndims != 2)
             printf("WARNING: Not expected dimensions to array\n");
 
-        var_data.resize(dims[0], std::vector<size_t>(dims[1]));
-        if ((retval = H5Dread(dset, H5T_NATIVE_ULONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
+        var_data.resize(dims[0], std::vector<T>(dims[1]));
+        if ((retval = H5Dread(dset, read_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
         {
             printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
             exit(-1);
@@ -710,73 +662,55 @@ namespace HDF5
 
         retval = H5Sclose(space);
         retval = H5Dclose(dset);
+    }
+
+    void Read_Variable_Array(
+        int64_t const& fin, std::string const& var_name, std::vector<std::vector<size_t>>& var_data
+    )
+    {
+        Read_Var_Array(fin, var_name, var_data, H5T_NATIVE_ULONG);
     }
 
     void Read_Variable_Array(
         int64_t const& fin, std::string const& var_name, std::vector<std::vector<int>>& var_data
     )
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[2];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 2)
-            printf("WARNING: Not expected dimensions to array\n");
-
-        var_data.resize(dims[0], std::vector<int>(dims[1]));
-        if ((retval = H5Dread(dset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Array(fin, var_name, var_data, H5T_NATIVE_INT);
     }
 
     void Read_Variable_Array(
         int64_t const& fin, std::string const& var_name, std::vector<std::vector<float>>& var_data
     )
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[2];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 2)
-            printf("WARNING: Not expected dimensions to array\n");
-
-        var_data.resize(dims[0], std::vector<float>(dims[1]));
-        if ((retval = H5Dread(dset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Array(fin, var_name, var_data, H5T_NATIVE_FLOAT);
     }
 
     void Read_Variable_Array(
         int64_t const& fin, std::string const& var_name, std::vector<std::vector<double>>& var_data
     )
     {
+        Read_Var_Array(fin, var_name, var_data, H5T_NATIVE_DOUBLE);
+    }
+
+    template <typename T>
+    void Read_Var_Scalar(
+        int64_t const& fin, std::string const& var_name, std::vector<T>& var_data, hid_t const& read_type
+    )
+    {
         herr_t retval;
         int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
         int64_t space = H5Dget_space(dset);
-        hsize_t dims[2];
+        hsize_t dims[1];
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 2)
-            printf("WARNING: Not expected dimensions to array\n");
+        if (ndims != 1)
+            printf("WARNING: More than one dimension to array\n");
 
-        var_data.resize(dims[0], std::vector<double>(dims[1]));
-        if ((retval = H5Dread(dset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
+        var_data.resize(dims[0]);
+        if ((retval = H5Dread(dset, read_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
             printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
-
         retval = H5Sclose(space);
         retval = H5Dclose(dset);
     }
@@ -784,127 +718,37 @@ namespace HDF5
     void
     Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<size_t>& var_data)
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[1];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
-
-        var_data.resize(dims[0]);
-        if ((retval = H5Dread(dset, H5T_NATIVE_ULONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Scalar(fin, var_name, var_data, H5T_NATIVE_ULONG);
     }
 
     void
     Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<uint>& var_data)
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[1];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
-
-        var_data.resize(dims[0]);
-        if ((retval = H5Dread(dset, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Scalar(fin, var_name, var_data, H5T_NATIVE_UINT);
     }
 
     void
     Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<int>& var_data)
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[1];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
-
-        var_data.resize(dims[0]);
-        if ((retval = H5Dread(dset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Scalar(fin, var_name, var_data, H5T_NATIVE_INT);
     }
 
     void
     Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<long>& var_data)
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[1];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
-
-        var_data.resize(dims[0]);
-        if ((retval = H5Dread(dset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Scalar(fin, var_name, var_data, H5T_NATIVE_LONG);
     }
 
     void
     Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<float>& var_data)
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[1];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
-
-        var_data.resize(dims[0]);
-        if ((retval = H5Dread(dset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Scalar(fin, var_name, var_data, H5T_NATIVE_FLOAT);
     }
 
     void
     Read_Variable_Scalar(int64_t const& fin, std::string const& var_name, std::vector<double>& var_data)
     {
-        herr_t retval;
-        int64_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
-        int64_t space = H5Dget_space(dset);
-        hsize_t dims[1];
-        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
-        if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
-
-        var_data.resize(dims[0]);
-        if ((retval = H5Dread(dset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(space);
-        retval = H5Dclose(dset);
+        Read_Var_Scalar(fin, var_name, var_data, H5T_NATIVE_DOUBLE);
     }
 
     void Read_Vector_Data(int64_t const& fin, std::string const& name, std::vector<StateVecD>& var_data)
@@ -1238,17 +1082,11 @@ void Write_Zone_Attributes(int64_t const& zone, bound_block const& limits)
 }
 
 /**
- * @brief Initialise and add the boundary particles to the SPH particles
+ * @brief Write a .h5 file to provide restart data.
  *
  * @param svar Structure of simulation variables
- * @param parts SoA containing SPH particles
- * @param gas SoA containing gas particles and settings
- * @param fibvar SoA containing fibre particles and settings
- * @param act_time Current time for the simulation
- * @param nFluid number of fluid blocks
- * @param nBound number of boundary blocks
- * @param nFib number of fibre blocks
- * @param nGas number of gas blocks
+ * @param pnp1 SoA containing SPH particles at time n+1 (at the time of writing, n = n+1)
+ * @param limits array of block indexes for particles in the global array.
  * @return void
  */
 void Write_HDF5(SIM& svar, SPHState const& pnp1, LIMITS const& limits)
@@ -1364,6 +1202,16 @@ void Write_HDF5(SIM& svar, SPHState const& pnp1, LIMITS const& limits)
     printf("Finished writing restart HDF5 file.\n");
 }
 
+/**
+ * @brief Read a .h5 file to ingest restart data.
+ *
+ * @param svar Structure of simulation variables
+ * @param pn SoA of containing SPH particles at time n (at time of reading, n = n+1, but need to
+ * initialise the data)
+ * @param pnp1 SoA containing SPH particles at time n+1
+ * @param limits array of block indexes for particles in the global array.
+ * @return void
+ */
 void Read_HDF5(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
 {
     printf("Starting reading restart HDF5 file...\n");
@@ -1840,6 +1688,12 @@ namespace h5part
     }
 } // namespace h5part
 
+/**
+ * @brief Open .h5part files if there are points to write.
+ *
+ * @param svar Structure of simulation variables
+ * @return void
+ */
 void open_h5part_files(SIM& svar, string const& prefix)
 {
     if (svar.fluid_points > 0)
@@ -1855,6 +1709,12 @@ void open_h5part_files(SIM& svar, string const& prefix)
     }
 }
 
+/**
+ * @brief Close .h5part files if they are currently open.
+ *
+ * @param svar Structure of simulation variables
+ * @return void
+ */
 void close_h5part_files(SIM& svar)
 {
     // Close the file
@@ -1879,16 +1739,11 @@ void close_h5part_files(SIM& svar)
 }
 
 /**
- * @brief Initialise and add the boundary particles to the SPH particles
+ * @brief Write a timestep of the simulation to .h5part files. It is expected that the file is already
+ * opened and the handles initialised.
  *
- * @param h5part_fluid_file fluid file identifier
- * @param h5part_bound_file boundary file identifier
- * @param sfile structure file identifier
  * @param svar Structure of simulation variables
- * @param parts SoA containing SPH particles
- * @param gas SoA containing gas particles and settings
- * @param fibvar SoA containing fibre particles and settings
- * @param act_time Current time for the simulation
+ * @param pnp1 SoA containing SPH particles
  * @return void
  */
 void write_h5part_data(SIM& svar, SPHState const& pnp1)
