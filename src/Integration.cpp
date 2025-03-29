@@ -119,7 +119,7 @@ size_t Integrator::update_data(
         if (pi.rho < 0.0001)
         {
             printf("Warning: Particle density is zero after updating buffer region.\n");
-            pi.rho = fvar.rho_rest;
+            pi.rho = svar.fluid.rho_rest;
         }
     }
 

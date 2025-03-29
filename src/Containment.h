@@ -25,7 +25,7 @@ FindCell(SIM& svar, Vec_Tree const& CELL_TREE, MESH const& cells, SPHState& pn, 
 
 void Check_Pipe_Outlet(
     Vec_Tree const& CELL_TREE, SIM& svar, MESH const& cells, LIMITS& limits, SPHState& pn,
-    SPHState& pnp1, size_t& end, size_t& end_ng
+    SPHState& pnp1, size_t& end
 );
 
 /* IMPLICIT PARTICLE TRACKING FUNCTIONS */
