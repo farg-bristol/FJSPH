@@ -3,7 +3,7 @@
 
 #include "line.h"
 
-#include "../Third_Party/Eigen/Geometry"
+#include <Eigen/Geometry>
 
 void LineShape::check_input(SIM const& svar, real& globalspacing, int& fault)
 {

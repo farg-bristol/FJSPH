@@ -5,8 +5,8 @@
 #include "Kernel.h"
 #include "Var.h"
 
-#include "Third_Party/Eigen/Eigenvalues"
-#include "Third_Party/Eigen/LU"
+#include <Eigen/Eigenvalues>
+#include <Eigen/LU>
 
 /*L matrix for delta-SPH calculation*/
 void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL const& outlist, real& npd)

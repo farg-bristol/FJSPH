@@ -12,6 +12,8 @@
 #include <sstream>
 #include <string.h>
 
+#include <Eigen/Geometry>
+
 /*A structure for the coordinates to define a panel.*/
 typedef struct Panel
 { /*A and B are 1/4 chord bounds for the vortex.

@@ -4,7 +4,7 @@
 #include "VLM.h"
 #include "Var.h"
 
-#include "Third_Party/Eigen/Geometry"
+#include <Eigen/Geometry>
 
 #define PERTURB(i, j) pow(MEPSILON, pow(2, i* SIMDIM - j))
 
