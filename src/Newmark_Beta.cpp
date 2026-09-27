@@ -253,7 +253,7 @@ void Newmark_Beta::Do_NB_Iter(
                         { /* Define buffer off the back particle */
                             size_t const& buffID = limits[block].buffer[ii][jj];
                             // Set position as related to the previous particle.
-                            pnp1[buffID].xi = xi - svar.dx * (jj + 1.0) * unorm;
+                            pnp1[buffID].xi = xi - limits[block].dx * (jj + 1.0) * unorm;
 
                             // How to set density and pressure though?
                             pnp1[buffID].v = pnp1[backID].v;
