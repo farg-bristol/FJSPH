@@ -6,8 +6,8 @@
 
 #include <string.h>
 
-#include "Third_Party/Eigen/Core"
-#include "Third_Party/Eigen/StdVector"
+#include <Eigen/Core>
+#include <Eigen/StdVector>
 
 /* Define Simulation Dimension */
 #ifndef SIMDIM
@@ -69,24 +69,24 @@ const std::string WHITESPACE = " \n\r\t\f\v";
 
 #pragma omp declare reduction(+ : std::vector<StateVecD> : std::transform(                              \
         omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(),                                \
-            [](StateVecD lhs, StateVecD rhs){return lhs + rhs;}                                         \
-)) initializer(omp_priv = omp_orig)
+            [](const StateVecD& lhs, const StateVecD& rhs){return (lhs + rhs).eval();}                  \
+)) initializer(omp_priv = std::vector<StateVecD>(omp_orig.size(), StateVecD::Zero()))
 
 #pragma omp declare reduction(+ : std::vector<real> : std::transform(                                   \
         omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(),                                \
             [](real lhs, real rhs){return lhs + rhs;}                                                   \
-)) initializer(omp_priv = omp_orig)
+)) initializer(omp_priv = std::vector<real>(omp_orig.size(), real(0)))
 
-#pragma omp declare reduction(+ : StateVecD : omp_out = omp_out + omp_in)                               \
-    initializer(omp_priv = omp_orig)
+#pragma omp declare reduction(+ : StateVecD : omp_out += omp_in)                                        \
+    initializer(omp_priv = StateVecD::Zero())
 
 #pragma omp declare reduction(                                                                          \
         min:StateVecD : omp_out = omp_out.norm() < omp_in.norm() ? omp_in : omp_out                     \
-) initializer(omp_priv = omp_orig)
+) initializer(omp_priv = StateVecD::Zero())
 
 #pragma omp declare reduction(                                                                          \
         max:StateVecD : omp_out = omp_out.norm() > omp_in.norm() ? omp_in : omp_out                     \
-) initializer(omp_priv = omp_orig)
+) initializer(omp_priv = StateVecD::Zero())
 
 /*Define particle type indexes*/
 enum partType

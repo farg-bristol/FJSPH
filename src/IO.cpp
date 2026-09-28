@@ -10,7 +10,7 @@
 #include "Kernel.h"
 #include "VLM.h"
 
-#include "Third_Party/Eigen/LU"
+#include <Eigen/LU>
 
 #include <ctime>
 #include <filesystem>
@@ -143,7 +143,7 @@ void Print_Settings(FILE* out, SIM const& svar)
 #pragma omp parallel
     {
 #pragma omp single
-        fprintf(out, "                         Number of threads: %d\n", svar.numThreads);
+        fprintf(out, "                            Number of threads: %d\n", svar.numThreads);
     }
 
     /* File Inputs */

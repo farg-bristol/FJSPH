@@ -652,7 +652,7 @@ namespace FOAM
 
             /* Sort and delete repetitions to average values */
             std::sort(verts.begin(), verts.end());
-            std::unique(verts.begin(), verts.end());
+            verts.erase(std::unique(verts.begin(), verts.end()));
 
             /* Average the point values */
             StateVecD sum = StateVecD::Zero();

@@ -4,8 +4,7 @@
 #include "VLM.h"
 #include "IOFunctions.h"
 
-#include "Third_Party/Eigen/Geometry"
-#include "Third_Party/Eigen/LU"
+#include <Eigen/LU>
 
 // Define pi
 #ifndef M_PI

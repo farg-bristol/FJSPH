@@ -27,7 +27,7 @@ TECLINK:=-L/usr/local/tecplot/360ex_2024r1/bin/
 H5INC=-I/HDF_Group/HDF5/1.14.6/include
 H5LINK=-L/HDF_Group/HDF5/1.14.6/lib
 
-EIGENINC=-I${HOME}/Eigen
+EIGENINC=-Isrc/Third_Party
 TARGET:=FJSPH
 TARGETDIR:=${HOME}/bin
 
