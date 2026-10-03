@@ -32,6 +32,15 @@ inline StateVecD GradK(StateVecD const& Rij, real const dist, real const H, real
     return StateVecD::Zero();
 }
 
+inline real correction_factor(real const& H)
+{
+#if SIMDIM == 2
+    return 10.0 / (7.0 * M_PI * fluid.H * fluid.H);
+#else
+    return 1.0 / (M_PI * H * H * H);
+#endif
+}
+
 #else
 ///******Wendland's C2 Quintic Kernel*******///
 inline real Kernel(real const& dist, real const& H, real const& W_correc)
@@ -58,6 +67,15 @@ inline StateVecD GradK(StateVecD const& Rij, real const& dist, real const& H, re
     // 	return StateVecD::Zero();
     // }
     return 5.0 * (Rij / (H * H)) * pow(1 - 0.5 * dist / H, 3) * W_correc;
+}
+
+inline real correction_factor(real const& H)
+{
+#if SIMDIM == 2
+    return 7.0 / (4.0 * M_PI * H * H);
+#else
+    return 21 / (16 * M_PI * H * H * H);
+#endif
 }
 #endif
 

@@ -848,7 +848,7 @@ void Init_Binary_PLT(
     add_file_aux_data(fileHandle, "SPH Newmark Beta iteration limit", svar.integrator.max_subits);
     add_file_aux_data(fileHandle, "SPH gravity vector", svar.grav);
 
-    add_file_aux_data(fileHandle, "SPH smoothing length factor", svar.fluid.H_fac);
+    add_file_aux_data(fileHandle, "SPH smoothing length factor", svar.H_fac);
     add_file_aux_data(fileHandle, "SPH aerodynamic case", svar.air.aero_case);
     add_file_aux_data(fileHandle, "SPH SP diameter definition", svar.air.use_dx);
     add_file_aux_data(fileHandle, "SPH use TAB deformation", svar.air.use_TAB_def);

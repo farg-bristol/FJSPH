@@ -882,12 +882,14 @@ void Check_Output_Variables(SIM& svar)
     outvars.insert({"press", OutputVariable("Pressure", realType, true, false)});
     outvars.insert({"dRho", OutputVariable("dRho", realType, true, false)});
     outvars.insert({"part_id", OutputVariable("part_id", int32Type, true, false)});
+    outvars.insert({"fluid_id", OutputVariable("fluid_id", int32Type, false, false)});
     outvars.insert({"cellID", OutputVariable("cellID", int32Type, true, false)});
     outvars.insert({"bound", OutputVariable("bound", uint8Type, true, false)});
 
     // Start of optional parameters.
     outvars.insert({"dens", OutputVariable("Density", realType, false, false)});
     outvars.insert({"densVar", OutputVariable("Density-Variation", realType, false, false)});
+    outvars.insert({"dx", OutputVariable("Particle-Spacing", realType, false, false)});
     outvars.insert({"vmag", OutputVariable("V-mag", realType, false, false)});
     outvars.insert({"surf", OutputVariable("Surface", realType, false, false)});
     outvars.insert({"surfZ", OutputVariable("Surface-Zone", realType, false, false)});

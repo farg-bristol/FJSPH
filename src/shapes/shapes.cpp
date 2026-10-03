@@ -162,20 +162,7 @@ void ShapeBlock::set_values(SIM const& svar)
     fluid.dsph_mom = 2.0 * (SIMDIM + 2.0);
     fluid.nu = fluid.mu / fluid.rho_rest;
 
-#if SIMDIM == 2
-#ifdef CUBIC
-    W_correc = 10.0 / (7.0 * M_PI * fluid.H * fluid.H);
-#else
-    W_correc = 7.0 / (4.0 * M_PI * fluid.H * fluid.H);
-#endif
-#endif
-#if SIMDIM == 3
-#ifdef CUBIC
-    W_correc = (1.0 / (M_PI * H * H * H));
-#else
-    W_correc = (21 / (16 * M_PI * H * H * H));
-#endif
-#endif
+    W_correc = correction_factor(H);
 
     W_dx = Kernel(particle_step, H, W_correc);
 }

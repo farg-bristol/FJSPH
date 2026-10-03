@@ -569,16 +569,16 @@ struct SPHPart
 
     inline real operator[](int a) const { /* Return index of xi vector*/ return xi[a]; }
 
-    void GetYcoef(FLUID const& fvar, AERO const& avar, const real diam)
+    void GetYcoef(FLUID const& fvar, AERO const& avar)
     {
 #if SIMDIM == 3
-        L_air = diam * std::cbrt(3.0 / (4.0 * M_PI));
+        L_air = dx * std::cbrt(3.0 / (4.0 * M_PI));
         A_sphere = M_PI * L_air * L_air;
-        A_plate = diam * diam;
+        A_plate = dx * dx;
 #else
-        L_air = diam / sqrt(M_PI);
+        L_air = dx / sqrt(M_PI);
         A_sphere = 2 * L_air;
-        A_plate = diam;
+        A_plate = dx;
 #endif
 
         real td = (2.0 * fvar.rho_rest * pow(L_air, SIMDIM - 1)) / (avar.Cd * fvar.mu);
