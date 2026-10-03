@@ -32,9 +32,6 @@ void Set_Values(SIM& svar)
     svar.integrator.nb_beta = 0.25;
     svar.integrator.nb_gamma = 0.5; /*Newmark Beta parameters*/
 
-    /*Mass from spacing and density*/
-    svar.air.mass_g = svar.air.rho_g * pow(svar.particle_step, SIMDIM);
-
     svar.air.sos = sqrt(svar.air.temp_g * svar.air.R_g * svar.air.gamma);
     svar.air.i_sos_sq = 1.0 / (svar.air.sos * svar.air.sos);
 
@@ -64,23 +61,10 @@ void Set_Values(SIM& svar)
     }
 #endif
 
-    svar.air.GetYcoef(svar.fluid, svar.particle_step);
-    real n_full = get_n_full(svar.particle_step, svar.fluid.H);
+    real n_full = get_n_full(svar.H_fac);
     svar.air.n_full = n_full;
     svar.air.i_n_full = 1.0 / svar.air.n_full;
     svar.air.interp_fac = 1.0 / svar.air.i_interp_fac;
-
-#if SIMDIM == 3
-    svar.air.A_plate = svar.particle_step * svar.particle_step;
-    // svar.air.A_plate = svar.fluid.H*svar.fluid.H;
-#else
-    svar.air.A_plate = svar.particle_step /**svar.particle_step*/ /** pow(svar.air.L,0.5)*/;
-    // svar.air.A_plate = svar.fluid.H;
-#endif
-
-    /* Particle tracking values */
-    svar.ipt.ipt_diam = pow((6.0 * svar.fluid.sim_mass) / (M_PI * svar.fluid.rho_rest), 1.0 / 3.0);
-    svar.ipt.ipt_area = M_PI * svar.ipt.ipt_diam * svar.ipt.ipt_diam / 4.0;
 }
 
 void print_vector(string const& pretext, StateVecD const& vec)
@@ -200,7 +184,7 @@ void Print_Settings(FILE* out, SIM const& svar)
     fprintf(out, "                           SPH gravity vector: %g, %g\n", svar.grav[0], svar.grav[1]);
 #endif
     fprintf(out, "                    SPH restart fit tolerance: %f\n", svar.io.restart_tol);
-    fprintf(out, "                  SPH smoothing length factor: %g\n", svar.fluid.H_fac);
+    fprintf(out, "                  SPH smoothing length factor: %g\n", svar.H_fac);
 #if SIMDIM == 3
     fprintf(
         out, "                 SPH global offset coordinate: %g, %g, %g\n\n", svar.offset_vec[0],
@@ -365,6 +349,7 @@ void GetInput(int argc, char** argv, SIM& svar)
         Get_Number(line, "SPH Newmark-Beta iteration limit", svar.integrator.max_subits);
         Get_Vector(line, "SPH gravity vector", svar.grav);
 
+        Get_Number(line, "SPH smoothing length factor", svar.H_fac);
         Get_Vector(line, "SPH global offset coordinate", svar.offset_vec);
         Get_Number(line, "SPH maximum particle count", svar.max_points);
         Get_Number(line, "SPH restart fit tolerance", svar.io.restart_tol);

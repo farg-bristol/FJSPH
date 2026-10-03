@@ -101,7 +101,7 @@ void Detect_Surface(
 );
 
 /* Find the 2/3 full neighbour count for the original Gissler et al. (2019) model */
-real get_n_full(real const& dx, real const& H);
+real get_n_full(real const& H_fac);
 
 // Returns 1 if the lines intersect, otherwise 0. In addition, if the lines
 // intersect the intersection point may be stored in the floats i_x and i_y.

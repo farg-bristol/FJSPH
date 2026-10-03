@@ -153,8 +153,13 @@ size_t Integrator::update_data(
         vector<IPTPart> IPT_nm1, IPT_n, IPT_np1;
         for (size_t const& ii : to_del)
         {
+            /* Particle tracking values */
+            FLUID const& fluid = limits[pnp1[ii].fluid_id].fluid;
+            real ipt_diam = pow((6.0 * pnp1[ii].m) / (M_PI * fluid.rho_rest), 1.0 / 3.0);
+            real ipt_area = M_PI * ipt_diam * ipt_diam / 4.0;
+
             IPT_nm1.emplace_back(
-                IPTPart(pnp1[ii], svar.integrator.current_time, svar.ipt.ipt_diam, svar.ipt.ipt_area)
+                IPTPart(pnp1[ii], svar.integrator.current_time, ipt_diam, ipt_area, fluid.rho_rest)
             );
         }
 

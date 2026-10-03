@@ -1004,7 +1004,7 @@ void Write_HDF5_Attributes(int64_t const& file, SIM const& svar)
 
     HDF5::Write_Real_Attribute(file, "SPH initial spacing", svar.particle_step);
     HDF5::Write_Real_Attribute(file, "SPH boundary spacing factor", svar.bound_step_factor);
-    HDF5::Write_Real_Attribute(file, "SPH smoothing length factor", svar.fluid.H_fac);
+    HDF5::Write_Real_Attribute(file, "SPH smoothing length factor", svar.H_fac);
     HDF5::Write_String_Attribute(file, "SPH aerodynamic case", svar.air.aero_case);
     HDF5::Write_Int_Attribute(file, "SPH SP diameter definition", svar.air.use_dx);
     HDF5::Write_Int_Attribute(file, "SPH use TAB deformation", svar.air.use_TAB_def);

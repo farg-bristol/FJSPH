@@ -46,7 +46,6 @@ class ShapeBlock
     real dx = -1;                 /* Particle spacing */
     real H = -1;                  /* Particle support radius */
     real H_sq = -1;               /* Particle support radius squared */
-    real H_fac = 2.0;             /* Search radius factor */
     real W_dx = -1.0;             /* Kernel value at the initial particle spacing distance.*/
     real W_correc = -1.0;         /* Smoothing Kernel Correction*/
     real radius = -1;             /* Radius */

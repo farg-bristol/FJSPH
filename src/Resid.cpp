@@ -236,7 +236,7 @@ inline StateVecD SurfTenContrib(
 
 /* Find the acceleration and density gradient for an individual particle from its neighbourhood. */
 void get_acc_and_Rrho_on_i(
-    SIM const& svar, MESH const& cells, std::vector<neighbour_index> const& outlist_i,
+    SIM const& svar, LIMITS const& limits, std::vector<neighbour_index> const& outlist_i,
     SPHState const& pnp1, real const& npdm2, real const& pi3o4, StateVecD const& grav_vec,
     SPHPart const& pi, StateVecD& acc_i, StateVecD& acc_aero_i, real& Rrho_i
 )
@@ -258,6 +258,8 @@ void get_acc_and_Rrho_on_i(
     real Rrho_d_ = 0.0;
 #endif
 #endif
+
+    FLUID const& fluid = limits[pi.fluid_id].fluid;
 
     if (pi.cellID != -1 /* pi.lam_nb < svar.air.lam_cutoff && pi.b == FREE */)
     {
@@ -296,7 +298,7 @@ void get_acc_and_Rrho_on_i(
 #endif
 
         /*Laminar Viscosity - Morris (2003)*/
-        StateVecD const visc = Viscosity(svar.fluid, svar.fluid.nu, pi, pj, Rji, Vji, idist2, gradK);
+        StateVecD const visc = Viscosity(fluid, fluid.nu, pi, pj, Rji, Vji, idist2, gradK);
         visc_ += pj.m * visc;
 
         /* Surface tension options */
@@ -320,20 +322,19 @@ void get_acc_and_Rrho_on_i(
         if (pj.b > PISTON)
         {
 #ifndef NODSPH
-            Rrho_d_ += Continuity_dSPH(
-                Rji, idist2, svar.fluid.H_sq, gradK, volj, pi.gradRho, pj.gradRho, pi, pj
-            );
+            Rrho_d_ +=
+                Continuity_dSPH(Rji, idist2, fluid.H_sq, gradK, volj, pi.gradRho, pj.gradRho, pi, pj);
 #endif
 #ifdef LINEAR
             art_visc_ += Linear_ArtVisc(Rji, Vji, idist2, gradK, volj);
 #else
-            art_visc_ += pj.m * ArtVisc(svar.fluid, pi, pj, Rji, Vji, idist2, gradK);
+            art_visc_ += pj.m * ArtVisc(fluid, pi, pj, Rji, Vji, idist2, gradK);
 #endif
         }
         else
         {
 #ifndef NODSPH
-            Rrho_d_ += Continuity_dSPH(Rji, idist2, svar.fluid.H_sq, gradK, volj, pi, pj);
+            Rrho_d_ += Continuity_dSPH(Rji, idist2, fluid.H_sq, gradK, volj, pi, pj);
 #endif
         }
 #endif
@@ -345,23 +346,23 @@ void get_acc_and_Rrho_on_i(
 
     if (pi.internal == 1)
     { // Apply the normal boundary force
-        acc_ += NormalBoundaryRepulsion(pi, speed_sound);
+        acc_ += NormalBoundaryRepulsion(pi, fluid.speed_sound);
     }
 
 #ifdef CSF
 // if(dp.lam[ii] < 0.75 /* pi.surf == 1 */)
 // {
-// 	acc_ += (svar.fluid.sig/pi.rho * curve * pi.norm)/W_correc;
+// 	acc_ += (fluid.sig/pi.rho * curve * pi.norm)/W_correc;
 // }
 // if(pi.surf == 1)
 // {	/* lambda tuning factor supposedly = 3 */
-// 	acc_ += 3.0*(svar.fluid.sig * pi.curve * pi.norm);
+// 	acc_ += 3.0*(fluid.sig * pi.curve * pi.norm);
 // }
-// surf_t_ -= svar.fluid.sig * pi.curve * pi.norm * dp.colourG[ii];
+// surf_t_ -= fluid.sig * pi.curve * pi.norm * dp.colourG[ii];
 #ifdef ALE
 // if(pi.surfzone == 1)
 #endif
-    acc_ += 1.0 / pi.rho * svar.fluid.sig * pi.curve * pi.norm * pi.colourG;
+    acc_ += 1.0 / pi.rho * fluid.sig * pi.curve * pi.norm * pi.colourG;
 #endif
 
 #ifdef HESF
@@ -370,8 +371,7 @@ void get_acc_and_Rrho_on_i(
 
 #ifdef NOFROZEN
 #ifdef LINEAR
-    art_visc_ *=
-        svar.fluid.visc_alpha * svar.fluid.H * svar.fluid.speed_sound * svar.fluid.rho0 / pi.rho;
+    art_visc_ *= fluid.visc_alpha * fluid.H * fluid.speed_sound * fluid.rho0 / pi.rho;
 #endif
 
 #ifdef ALE
@@ -382,9 +382,9 @@ void get_acc_and_Rrho_on_i(
 
 #ifndef NODSPH
 #ifdef ALE
-    Rrho_i = Rrho_ * pi.rho + Rrhoc_ + svar.fluid.dsph_cont * Rrho_d_;
+    Rrho_i = Rrho_ * pi.rho + Rrhoc_ + fluid.dsph_cont * Rrho_d_;
 #else
-    Rrho_i = Rrho_ * pi.rho + svar.fluid.dsph_cont * Rrho_d_;
+    Rrho_i = Rrho_ * pi.rho + fluid.dsph_cont * Rrho_d_;
 #endif
 #else
     Rrho_i = Rrho_ * pi.rho;
@@ -417,7 +417,7 @@ Calculate all forces (and represent as acceleration) due to pressure, viscosity,
 aerodynamic coupling.
   */
 void get_acc_and_Rrho(
-    SIM const& svar, MESH const& cells, OUTL const& outlist, real const& npd, SPHState& pnp1
+    SIM const& svar, LIMITS const& limits, OUTL const& outlist, real const& npd, SPHState& pnp1
 )
 {
     const size_t start = svar.bound_points;
@@ -441,19 +441,19 @@ void get_acc_and_Rrho(
                  (9.0 / 4.0 * pow(M_PI, 3.0) - 6.0 * M_PI - 4.0));
             // #if SIMDIM==2
             // real const lam
-            // = 8.0/81.0*pow(svar.fluid.H,4)/pow(M_PI,4)*(9.0/4.0*pow(M_PI,3)-6.0*M_PI-4.0);
+            // = 8.0/81.0*pow(fluid.H,4)/pow(M_PI,4)*(9.0/4.0*pow(M_PI,3)-6.0*M_PI-4.0);
 
             // #else
             // real const lam = 3.0 / (4.0 * pow(M_PI, 4.0)) * (pow(2.0, 7) - 9.0 * pow(2.0, 4)
-            //              * M_PI * M_PI + 9.0 * 3.0 * pow(M_PI, 4)) * pow(svar.fluid.H / 3.0, 5);
+            //              * M_PI * M_PI + 9.0 * 3.0 * pow(M_PI, 4)) * pow(fluid.H / 3.0, 5);
             // #endif
 
-            real const npdm2 = (0.5 * svar.fluid.sig / lam) / (npd * npd);
+            real const npdm2 = (0.5 * limits[pi.fluid_id].fluid.sig / lam) / (npd * npd);
             real const pi3o4 = 3.0 * M_PI_4;
 #endif
 
             get_acc_and_Rrho_on_i(
-                svar, cells, outlist[ii], pnp1, npdm2, pi3o4, grav_vec, pi, pnp1[ii].acc, pnp1[ii].Af,
+                svar, limits, outlist[ii], pnp1, npdm2, pi3o4, grav_vec, pi, pnp1[ii].acc, pnp1[ii].Af,
                 pnp1[ii].Rrho
             );
         } /*End of sim parts*/
@@ -509,8 +509,8 @@ void get_aero_velocity(
             svar.fluid_points -= nDel;
             svar.total_points -= nDel;
             end -= nDel;
-            outlist = update_neighbours(svar.fluid, SPH_TREE, pnp1);
-            dSPH_PreStep(svar.fluid, svar.total_points, pnp1, outlist, npd);
+            outlist = update_neighbours(SPH_TREE, pnp1);
+            dSPH_PreStep(fluid, svar.total_points, pnp1, outlist, npd);
         }
         break;
     }

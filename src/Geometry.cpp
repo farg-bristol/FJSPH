@@ -21,15 +21,13 @@ void Detect_Surface(
 
 #pragma omp parallel default(shared) // shared(pnp1)
     {
-        real const h = 1.33 * svar.particle_step;
-
 #pragma omp for
         for (size_t ii = start; ii < end; ++ii)
         {
-
-            StateVecD norm = StateVecD::Zero();
-
             SPHPart& pi = pnp1[ii];
+            StateVecD norm = StateVecD::Zero();
+            real const h = 1.33 * pi.dx;
+
             if (pi.b < PIPE)
             {
                 pi.surf = 0;
@@ -256,7 +254,7 @@ void Detect_Surface(
 
             pi.norm = norms[ii];
             pi.curve = curve /* /W_correc */;
-            pi.norm_curve = svar.dx * curve /* / W_correc */;
+            pi.norm_curve = pi.dx * curve /* / W_correc */;
             pi.pDist = pi.lam;
         } /* end particle loop */
 
@@ -279,16 +277,20 @@ void Detect_Surface(
     } /* end parallel section */
 }
 
-real get_n_full(real const& dx, real const& H)
+real get_n_full(real const& H_fac)
 {
+    // Support radius is based on a factor of particle spacing.
+    // This normalises the neighbourhood size to be independent of particle size
+    // and possible to evaluate with just the H factor.
+
     // Create a lattice of points from -2H to 2H
     std::vector<StateVecD> vec;
-    for (real x = -2.0 * (H + dx); x <= 2.0 * (H + dx); x += dx)
+    for (real x = -2.0 * H_fac; x <= 2.0 * H_fac; x += 1.0)
     {
-        for (real y = -2.0 * (H + dx); y <= 2.0 * (H + dx); y += dx)
+        for (real y = -2.0 * H_fac; y <= 2.0 * H_fac; y += 1.0)
         {
 #if SIMDIM == 3
-            for (real z = -2.0 * (H + dx); z <= 2.0 * (H + dx); z += dx)
+            for (real z = -2.0 * H_fac; z <= 2.0 * H_fac; z += 1.0)
                 vec.emplace_back(StateVecD(x, y, z));
 #else
             vec.emplace_back(StateVecD(x, y));
@@ -297,7 +299,7 @@ real get_n_full(real const& dx, real const& H)
     }
 
     // Create a tree of the vector?
-    const real search_radius = 4.0 * H * H;
+    const real search_radius = 4.0 * H_fac * H_fac;
     Vec_Tree tree(SIMDIM, vec, 10);
     tree.index->buildIndex();
     StateVecD test = StateVecD::Zero();

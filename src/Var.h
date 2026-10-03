@@ -238,7 +238,6 @@ struct AERO
     real p_ref = 101353.0;                 /* Reference pressure */
     real rho_g = 1.29251;                  /* Gas density */
     real mu_g = 1.716e-5;                  /* Gas dynamic viscosity */
-    real mass_g = -1.0;                    /* Gas particle mass */
     real temp_g = 298.0;                   /* Gas temperature */
     real R_g = 287.0;                      /* Specific gas constant */
     real gamma = 1.403;                    /* Ratio of specific heats */
@@ -331,6 +330,7 @@ struct SIM
     real rho_max_iter = 1.0; /* Maximum value to reduce the timestep */
 
     /* Geometry parameters */
+    real H_fac = 2.0;                         /* Search radius factor */
     StateVecD offset_vec = StateVecD::Zero(); /* Global offset coordinate */
     int Asource = constVel;                   /* Source of aerodynamic solution */
     int init_hydro_pressure = 0;              /* Initialise fluid with hydrostatic pressure? */
@@ -654,33 +654,7 @@ struct IPTPart
 {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     /* Base initialiser for an IPT particle. All values set to zero. */
-    IPTPart()
-    {
-        part_id = 0;
-        going = 1;
-        nIters = 0;
-        failed = 0;
-        t = 0;
-        dt = 0;
-
-        /* Set initial IDs to a nonsense value, so that they don't interfere */
-        faceID = c_no_face;
-        faceV = StateVecD::Zero();
-        faceRho = 0.0;
-
-        cellID = -3;
-        cellV = StateVecD::Zero();
-        cellRho = 0.0;
-
-        acc = 0.0;
-        relax = 1.0;
-        v = StateVecD::Zero();
-        xi = StateVecD::Zero();
-
-        mass = 0.0;
-        d = 0.0;
-        A = 0.0;
-    }
+    IPTPart() {}
 
     /* Initialise an IPT particle with position, mass, and diameter. Velocity considered zero. */
     IPTPart(StateVecD const xi_, real const mass_, real const d_)
@@ -709,6 +683,7 @@ struct IPTPart
         mass = mass_;
         d = d_;
         A = M_PI * d_ * d_ / 4.0;
+        rho = mass_ / (4.0 / 3.0 * M_PI * pow(0.5 * d_, 3)); /* Derive using volume of the sphere. */
     }
 
     /* Initialise a new particle from an existing IPT particle, with new position. */
@@ -738,11 +713,12 @@ struct IPTPart
         mass = pi_.mass;
         d = pi_.d;
         A = pi_.A;
+        rho = pi_.rho;
     }
 
     /* Initialise IPT particle from an existing SPH particle, at a given time.
      Diameter can be different for IPT particles however. */
-    IPTPart(SPHPart const& pi, real const& time, real const& diam, real const& area)
+    IPTPart(SPHPart const& pi, real const& time, real const& diam, real const& area, real const& dens)
     {
         part_id = pi.part_id;
         going = 1;
@@ -770,6 +746,7 @@ struct IPTPart
         /* Derive diameter and area from the mass and resting density */
         d = diam;
         A = area;
+        rho = dens;
     }
 
     /* Reset an IPT particle if a timestep fails to converge. */
@@ -798,30 +775,34 @@ struct IPTPart
         xi = pi.xi;
     }
 
-    size_t part_id;
-    uint going;  /* Is particle still being integrated */
-    uint nIters; /* How many integration steps it's gone through */
-    size_t failed;
+    size_t part_id = 0;
+    uint going = 1;  /* Is particle still being integrated */
+    uint nIters = 0; /* How many integration steps it's gone through */
+    size_t failed = 0;
 
     /* Timestep properties */
-    real t, dt;
+    real t = 0;
+    real dt = -1;
 
     /* Face properties */
-    uint faceID;
-    StateVecD faceV;
-    real faceRho;
+    uint faceID = c_no_face;
+    StateVecD faceV = StateVecD::Zero();
+    real faceRho = 0.0;
 
     /* Containing cell properties */
-    long int cellID;
-    StateVecD cellV;
-    real cellRho;
+    long int cellID = -3;
+    StateVecD cellV = StateVecD::Zero();
+    real cellRho = 0.0;
 
-    real acc; /* Implicit acceleration */
-    real relax;
-    StateVecD v, xi; /* State variables */
+    real acc = 0.0; /* Implicit acceleration */
+    real relax = 1.0;
+    StateVecD v = StateVecD::Zero();
+    StateVecD xi = StateVecD::Zero(); /* State variables */
 
-    real mass; /* SPHPart mass */
-    real d, A; /* SPHPart diameter and area */
+    real mass = 0.0; /* SPHPart mass */
+    real d = 0.0;
+    real A = 0.0;   /* SPHPart diameter and area */
+    real rho = 0.0; /* SPHPart density */
 };
 
 /*  Structure to define the inlet and outlet conditions for either fluid or boundaries */

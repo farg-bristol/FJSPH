@@ -152,7 +152,7 @@ void ShapeBlock::set_values(SIM const& svar)
 
     dx = particle_step * pow(fluid.rho_start / fluid.rho_rest, 1.0 / SIMDIM);
     mass = fluid.rho_rest * pow(particle_step, SIMDIM);
-    H = H_fac * particle_step;
+    H = svar.H_fac * particle_step;
     H_sq = H * H;
     // fluid.sr = 4 * fluid.H_sq; /*KDtree search radius*/
 
@@ -348,7 +348,6 @@ void read_shape_JSON(json const& input_block, SIM const& svar, ShapeBlock* new_b
 
     get_var(input_block, "Particle spacing", new_block->particle_step);
     get_var(input_block, "Particle ordering (Grid/HCP)", new_block->particle_order);
-    get_var(input_block, "SPH smoothing length factor", new_block->H_fac);
     get_var(input_block, "Wall thickness", new_block->thickness);
     get_var(input_block, "Wall radial particle count", new_block->nk);
     get_var(input_block, "Wall is no-slip", new_block->no_slip);
@@ -542,7 +541,6 @@ Shapes read_shapes_bmap(std::string const& filename, SIM const& svar)
         Get_Number(line, "SPH delta coefficient", new_block->fluid.dsph_delta);
         Get_Number(line, "Artificial viscosity factor", new_block->fluid.visc_alpha);
         Get_Number(line, "Speed of sound", new_block->fluid.speed_sound);
-        Get_Number(line, "SPH smoothing length factor", new_block->H_fac);
 
         Get_String(line, "Time data filename", new_block->position_filename);
 
