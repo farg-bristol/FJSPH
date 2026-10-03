@@ -264,9 +264,8 @@ void get_acc_and_Rrho_on_i(
         StateVecD const V_diff = pi.cellV - pi.v;
         real Pbasei = 0.0;
 
-        StateVecD const aero = CalcAeroAcc(
-            svar.air, pi, V_diff, pi.norm, pi.lam_nb, real(outlist_i.size()), Pbasei, svar.dx
-        );
+        StateVecD const aero =
+            CalcAeroAcc(svar.air, pi, V_diff, pi.norm, pi.lam_nb, real(outlist_i.size()), Pbasei);
         acc_ += aero;
         acc_aero_i = aero;
     }
@@ -346,7 +345,7 @@ void get_acc_and_Rrho_on_i(
 
     if (pi.internal == 1)
     { // Apply the normal boundary force
-        acc_ += NormalBoundaryRepulsion(svar.fluid, cells, pi);
+        acc_ += NormalBoundaryRepulsion(pi, speed_sound);
     }
 
 #ifdef CSF

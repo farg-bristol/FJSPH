@@ -29,27 +29,10 @@ void Set_Values(SIM& svar)
     svar.ipt.max_x *= svar.scale;
     svar.ipt.max_x_sph *= svar.scale;
 
-    svar.fluid.B =
-        svar.fluid.rho_rest * pow(svar.fluid.speed_sound, 2) / svar.fluid.gam; /*Factor for Cole's Eq*/
-
-    /*Pipe Pressure calc*/
-    svar.fluid.rho_pipe = svar.fluid.get_density(svar.fluid.press_pipe);
-
-    /* Upper and lower limits for density */
-    if (svar.fluid.rho_max == 1500 && svar.fluid.rho_min == 500)
-    { /* If limits are undefined, use a variation around the base density */
-        svar.fluid.rho_max = svar.fluid.rho_rest * (1.0 + svar.fluid.rho_var * 0.01);
-        svar.fluid.rho_min = svar.fluid.rho_rest * (1.0 - svar.fluid.rho_var * 0.01);
-    }
-
-    svar.dx = svar.particle_step * pow(svar.fluid.rho_pipe / svar.fluid.rho_rest, 1.0 / SIMDIM);
-
     svar.integrator.nb_beta = 0.25;
     svar.integrator.nb_gamma = 0.5; /*Newmark Beta parameters*/
 
     /*Mass from spacing and density*/
-    svar.fluid.sim_mass = svar.fluid.rho_rest * pow(svar.particle_step, SIMDIM);
-    svar.fluid.bnd_mass = svar.fluid.sim_mass;
     svar.air.mass_g = svar.air.rho_g * pow(svar.particle_step, SIMDIM);
 
     svar.air.sos = sqrt(svar.air.temp_g * svar.air.R_g * svar.air.gamma);
@@ -69,33 +52,6 @@ void Set_Values(SIM& svar)
         svar.integrator.delta_t = svar.integrator.delta_t_min;
     else
         svar.integrator.delta_t = 2E-010; /*Initial timestep*/
-
-    svar.fluid.H = svar.fluid.H_fac * svar.particle_step;
-    svar.fluid.H_sq = svar.fluid.H * svar.fluid.H;
-    svar.fluid.sr = 4 * svar.fluid.H_sq; /*KDtree search radius*/
-
-    svar.fluid.dsph_cont = 2.0 * svar.fluid.dsph_delta * svar.fluid.H * svar.fluid.speed_sound;
-    // svar.fluid.dsph_mom = svar.fluid.visc_alpha * svar.fluid.H * svar.fluid.speed_sound *
-    // svar.fluid.rho_rest;
-    svar.fluid.dsph_mom = 2.0 * (SIMDIM + 2.0);
-    svar.fluid.nu = svar.fluid.mu / svar.fluid.rho_rest;
-
-#if SIMDIM == 2
-#ifdef CUBIC
-    svar.fluid.W_correc = 10.0 / (7.0 * M_PI * svar.fluid.H * svar.fluid.H);
-#else
-    svar.fluid.W_correc = 7.0 / (4.0 * M_PI * svar.fluid.H * svar.fluid.H);
-#endif
-#endif
-#if SIMDIM == 3
-#ifdef CUBIC
-    svar.fluid.W_correc = (1.0 / (M_PI * svar.fluid.H * svar.fluid.H * svar.fluid.H));
-#else
-    svar.fluid.W_correc = (21 / (16 * M_PI * svar.fluid.H * svar.fluid.H * svar.fluid.H));
-#endif
-#endif
-
-    svar.fluid.W_dx = Kernel(svar.particle_step, svar.fluid.H, svar.fluid.W_correc);
 
 #if SIMDIM == 3
     if (svar.Asource == VLMInfl)
@@ -191,20 +147,20 @@ void Print_Settings(FILE* out, SIM const& svar)
     /* Fluid data */
     fprintf(out, " Fluid parameters ---------------------------: -\n");
     fprintf(out, "                            Reference density: %g\n", svar.air.rho_g);
-    fprintf(out, "                  Reference dispersed density: %g\n", svar.fluid.rho_rest);
-    fprintf(out, "                Reference dispersed viscosity: %g\n", svar.fluid.mu);
-    fprintf(out, "                    Reference surface tension: %g\n", svar.fluid.sig);
-    fprintf(out, "            SPH surface tension contact angle: %g\n", svar.fluid.contangb);
-    fprintf(out, "              SPH artificial viscosity factor: %g\n", svar.fluid.visc_alpha);
-    fprintf(out, "                        SPH delta coefficient: %g\n", svar.fluid.dsph_delta);
+    // fprintf(out, "                  Reference dispersed density: %g\n", svar.fluid.rho_rest);
+    // fprintf(out, "                Reference dispersed viscosity: %g\n", svar.fluid.mu);
+    // fprintf(out, "                    Reference surface tension: %g\n", svar.fluid.sig);
+    // fprintf(out, "            SPH surface tension contact angle: %g\n", svar.fluid.contangb);
+    // fprintf(out, "              SPH artificial viscosity factor: %g\n", svar.fluid.visc_alpha);
+    // fprintf(out, "                        SPH delta coefficient: %g\n", svar.fluid.dsph_delta);
     fprintf(out, "                SPH maximum shifting velocity: %g\n", svar.integrator.max_shift_vel);
-    fprintf(out, "                           SPH speed of sound: %g\n", svar.fluid.speed_sound);
-    fprintf(out, "                      SPH background pressure: %g\n", svar.fluid.press_back);
-    fprintf(out, "                        SPH starting pressure: %g\n", svar.fluid.press_pipe);
-    fprintf(out, "   SPH maximum absolute density variation (%%): %g\n", svar.fluid.rho_var);
-    fprintf(out, "                          SPH maximum density: %g\n", svar.fluid.rho_max);
-    fprintf(out, "                          SPH minimum density: %g\n", svar.fluid.rho_min);
-    fprintf(out, " SPH density variation to reduce timestep (%%): %g\n", svar.fluid.rho_max_iter);
+    // fprintf(out, "                           SPH speed of sound: %g\n", svar.fluid.speed_sound);
+    // fprintf(out, "                      SPH background pressure: %g\n", svar.fluid.press_back);
+    // fprintf(out, "                        SPH starting pressure: %g\n", svar.fluid.press_pipe);
+    fprintf(out, "   SPH maximum absolute density variation (%%): %g\n", svar.rho_var);
+    fprintf(out, "                          SPH maximum density: %g\n", svar.rho_max);
+    fprintf(out, "                          SPH minimum density: %g\n", svar.rho_min);
+    fprintf(out, " SPH density variation to reduce timestep (%%): %g\n", svar.rho_max_iter);
     fprintf(out, "              Init hydrostatic pressure (0/1): %d\n", svar.init_hydro_pressure);
     fprintf(out, "                           Hydrostatic height: %g\n\n", svar.hydro_height);
 
@@ -217,7 +173,7 @@ void Print_Settings(FILE* out, SIM const& svar)
         out, " SPH compressibility solver (0=WCSPH,1=ACSPH): %u\n",
         svar.integrator.compressibility_solver
     );
-    fprintf(out, "  SPH equation of state (0=Cole/1=Isothermal): %u\n", svar.fluid.pressure_rel);
+    // fprintf(out, "  SPH equation of state (0=Cole/1=Isothermal): %u\n", svar.fluid.pressure_rel);
     fprintf(out, "     SPH boundary solver (0=pressure/1=ghost): %u\n", svar.integrator.bound_solver);
     fprintf(out, "                  SPH solver minimum residual: %g\n", svar.integrator.min_residual);
     fprintf(out, "                         SPH maximum timestep: %g\n", svar.integrator.delta_t_max);
@@ -243,8 +199,6 @@ void Print_Settings(FILE* out, SIM const& svar)
 #else
     fprintf(out, "                           SPH gravity vector: %g, %g\n", svar.grav[0], svar.grav[1]);
 #endif
-    fprintf(out, "                          SPH initial spacing: %g\n", svar.particle_step);
-    fprintf(out, "                  SPH boundary spacing factor: %g\n", svar.bound_step_factor);
     fprintf(out, "                    SPH restart fit tolerance: %f\n", svar.io.restart_tol);
     fprintf(out, "                  SPH smoothing length factor: %g\n", svar.fluid.H_fac);
 #if SIMDIM == 3
@@ -379,11 +333,7 @@ void GetInput(int argc, char** argv, SIM& svar)
         // Get_String(line, "Particle surface impact filename", svar.ascii_surface_file);
 
         /* Fluid data */
-        Get_Number(line, "Reference dispersed density", svar.fluid.rho_rest);
         Get_Number(line, "Sutherland reference viscosity", svar.air.mu_g);
-        Get_Number(line, "Reference dispersed viscosity", svar.fluid.mu);
-        Get_Number(line, "Reference surface tension", svar.fluid.sig);
-        Get_Number(line, "SPH surface tension contact angle", svar.fluid.contangb);
         Get_Number(line, "Init hydrostatic pressure (0/1)", svar.init_hydro_pressure);
         Get_Number(line, "Hydrostatic height", svar.hydro_height);
 
@@ -394,7 +344,6 @@ void GetInput(int argc, char** argv, SIM& svar)
         Get_Number(
             line, "SPH compressibility solver (0=WCSPH,1=ACSPH)", svar.integrator.compressibility_solver
         );
-        Get_Number(line, "SPH equation of state (0=Cole/1=Isothermal)", svar.fluid.pressure_rel);
         Get_Number(line, "SPH boundary solver (0=pressure/1=ghost)", svar.integrator.bound_solver);
         Get_Number(line, "SPH solver minimum residual", svar.integrator.min_residual);
         Get_Number(line, "SPH maximum timestep", svar.integrator.delta_t_max);
@@ -408,22 +357,14 @@ void GetInput(int argc, char** argv, SIM& svar)
         Get_Number(line, "SPH stable CFL count iteration factor", svar.integrator.subits_factor);
         Get_Number(line, "SPH maximum shifting velocity", svar.integrator.max_shift_vel);
 
-        Get_Number(line, "SPH background pressure", svar.fluid.press_back);
-        Get_Number(line, "SPH starting pressure", svar.fluid.press_pipe);
-        Get_Number(line, "SPH maximum absolute density variation (%)", svar.fluid.rho_var);
-        Get_Number(line, "SPH density variation to reduce timestep (%)", svar.fluid.rho_max_iter);
-        Get_Number(line, "SPH maximum density", svar.fluid.rho_max);
-        Get_Number(line, "SPH minimum density", svar.fluid.rho_min);
-        Get_Number(line, "SPH delta coefficient", svar.fluid.dsph_delta);
+        Get_Number(line, "SPH maximum absolute density variation (%)", svar.rho_var);
+        Get_Number(line, "SPH density variation to reduce timestep (%)", svar.rho_max_iter);
+        Get_Number(line, "SPH maximum density", svar.rho_max);
+        Get_Number(line, "SPH minimum density", svar.rho_min);
 
-        Get_Number(line, "SPH artificial viscosity factor", svar.fluid.visc_alpha);
-        Get_Number(line, "SPH speed of sound", svar.fluid.speed_sound);
         Get_Number(line, "SPH Newmark-Beta iteration limit", svar.integrator.max_subits);
         Get_Vector(line, "SPH gravity vector", svar.grav);
 
-        Get_Number(line, "SPH initial spacing", svar.particle_step);
-        Get_Number(line, "SPH boundary spacing factor", svar.bound_step_factor);
-        Get_Number(line, "SPH smoothing length factor", svar.fluid.H_fac);
         Get_Vector(line, "SPH global offset coordinate", svar.offset_vec);
         Get_Number(line, "SPH maximum particle count", svar.max_points);
         Get_Number(line, "SPH restart fit tolerance", svar.io.restart_tol);
@@ -599,12 +540,6 @@ void GetInput(int argc, char** argv, SIM& svar)
             printf("\t1. Newmark-Beta\n\t2. Runge-Kutta\n");
             fault = 1;
         }
-    }
-
-    if (svar.particle_step < 0)
-    {
-        printf("ERROR: SPH initial spacing has not been defined.\n");
-        fault = 1;
     }
 
     if (svar.integrator.max_frames < 0)

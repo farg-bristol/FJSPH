@@ -8,13 +8,12 @@ OUTL update_neighbours(FLUID const& fvar, Sim_Tree const& tree, SPHState const& 
 {
     // Combine to make it impossible to forgot to update the tree index before finding neighbours.
     tree.index->buildIndex();
-    return find_neighbours(fvar, tree, pnp1);
+    return find_neighbours(tree, pnp1);
 }
 
 /* Find the list of neighbours for each particle and return as a 2D vector */
-OUTL find_neighbours(FLUID const& fvar, Sim_Tree const& NP1_INDEX, SPHState const& pnp1)
+OUTL find_neighbours(Sim_Tree const& NP1_INDEX, SPHState const& pnp1)
 {
-    const real search_radius = fvar.sr;
     OUTL neighbour_list(pnp1.size());
 
 #pragma omp parallel default(shared)
@@ -23,7 +22,7 @@ OUTL find_neighbours(FLUID const& fvar, Sim_Tree const& NP1_INDEX, SPHState cons
         for (size_t ii = 0; ii < pnp1.size(); ++ii)
         {
             neighbour_list[ii] =
-                radius_search(NP1_INDEX, pnp1[ii].xi, search_radius); /* Nearest Neighbour Search */
+                radius_search(NP1_INDEX, pnp1[ii].xi, pnp1[ii].sr); /* Nearest Neighbour Search */
         }
     }
 

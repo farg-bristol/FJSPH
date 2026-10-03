@@ -9,7 +9,9 @@
 #include <Eigen/LU>
 
 /*L matrix for delta-SPH calculation*/
-void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL const& outlist, real& npd)
+void dSPH_PreStep(
+    LIMITS const& limits, size_t const& end, SPHState& pnp1, OUTL const& outlist, real& npd
+)
 {
 /************   RENORMALISATION MATRIX CALCULATION    ************/
 #ifdef PAIRWISE
@@ -39,7 +41,7 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
                 if (ii == jj.first)
                 {
                     kernsum_ += pi.W_correc;
-                    // avgV_ += pi.v * fvar.W_correc;
+                    // avgV_ += pi.v * pi.W_correc;
 
                     continue;
                 }
@@ -124,13 +126,14 @@ void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL con
 
 /* Calculate dissipation terms before freezing. */
 void dissipation_terms(
-    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
+    LIMITS const& limits, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
 )
 {
 
     for (size_t ii = start; ii < end; ++ii)
     {
         SPHPart const& pi = pnp1[ii];
+        FLUID const& fluid = limits[pi.fluid_id].fluid;
 
         StateVecD artViscI = StateVecD::Zero();
 
@@ -161,7 +164,7 @@ void dissipation_terms(
 #ifdef LINEAR
                 artViscI += Linear_ArtVisc(Rji, Vji, idist2, gradK, volj);
 #else
-                artViscI += pj.m * ArtVisc(fvar, pi, pj, Rji, Vji, idist2, gradK);
+                artViscI += pj.m * ArtVisc(fluid, pi, pj, Rji, Vji, idist2, gradK);
 #endif
 
 #ifndef NODSPH
@@ -175,13 +178,13 @@ void dissipation_terms(
         }
 
 #ifdef LINEAR
-        artViscI *= fvar.visc_alpha * fvar.H * fvar.speed_sound * fvar.rho_rest / pi.rho;
+        artViscI *= fluid.visc_alpha * pi.H * fluid.speed_sound * fluid.rho_rest / pi.rho;
 #endif
 
         pnp1[ii].aVisc = artViscI;
 
 #ifndef NODSPH
-        pnp1[ii].deltaD = fvar.dsph_cont * Rrhod;
+        pnp1[ii].deltaD = fluid.dsph_cont * Rrhod;
 #endif
     }
 }
@@ -250,7 +253,7 @@ void particle_shift(
                 }
             }
 
-            // deltaR *= -1 * fvar.sr * maxU / fvar.speed_sound;
+            // deltaR *= -1 * pi.sr * maxU / limits[pi.fluid].fluid.speed_sound;
             deltaU *= -2.0 * pi.H * pi.v.norm();
 
             deltaU = std::min(deltaU.norm(), std::min(maxUij / 2.0, svar.integrator.max_shift_vel)) *
@@ -291,38 +294,5 @@ void particle_shift(
 }
 
 #endif
-
-// void Apply_XSPH( size_t const& start, size_t const& end,
-// 				OUTL const& outlist, SPHState& pnp1)
-// {
-// 	#pragma omp parallel
-// 	{
-// 		#pragma omp for schedule(static) nowait
-// 		for(size_t ii = start; ii < end; ++ii)
-// 		{
-// 			SPHPart const& pi(pnp1[ii]);
-
-// 			StateVecD vPert_ = StateVecD::Zero();
-// 			for (size_t const& jj:outlist[ii])
-// 			{	 Neighbour list loop.
-// 				SPHPart const& pj(pnp1[jj]);
-
-// 				if(pj.part_id == pi.part_id || pj.b == PartState.BOUND_)
-// 				{
-// 					continue;
-// 				}
-
-// 				real const r = (pj.xi-pi.xi).norm();;
-// 				real const kern = Kernel(r,fvar.H,fvar.W_correc);
-// 				real rho_ij = 0.5*(pi.rho + pj.rho);
-
-// 				vPert_ -= 0.5 * pj.m/rho_ij * (pi.v-pj.v) * kern/*/pi.kernsum*/;
-
-// 			}
-
-// 			pnp1[ii].vPert = vPert_;
-// 		}
-// 	}
-// }
 
 #endif

@@ -38,11 +38,11 @@ real Integrator::integrate_no_update(
     real npd = 1.0;
 
     // Find maximum safe timestep
-    svar.integrator.delta_t = find_timestep(svar, cells, pnp1, start_index, end_index);
+    svar.integrator.delta_t = find_timestep(svar, limits, pnp1, start_index, end_index);
 
-    outlist = update_neighbours(svar.fluid, SPH_TREE, pnp1);
+    outlist = update_neighbours(SPH_TREE, pnp1);
 
-    dSPH_PreStep(svar.fluid, svar.total_points, pnp1, outlist, npd);
+    dSPH_PreStep(limits, svar.total_points, pnp1, outlist, npd);
 
     get_aero_velocity(
         SPH_TREE, CELL_TREE, svar, cells, start_index, end_index, outlist, limits, pn, pnp1, npd
@@ -51,7 +51,7 @@ real Integrator::integrate_no_update(
     Detect_Surface(svar, start_index, end_index, outlist, cells, pnp1);
 
 #ifndef NOFROZEN
-    dissipation_terms(svar.fluid, start_index, end_index, outlist, pnp1);
+    dissipation_terms(limits, start_index, end_index, outlist, pnp1);
 #endif
 
 #ifdef ALE
@@ -75,9 +75,9 @@ real Integrator::integrate_no_update(
     // cout << "Error: " << error1 << endl;
 
     /****** UPDATE NEIGHBOURS AND TREE ***********/
-    outlist = update_neighbours(svar.fluid, SPH_TREE, pnp1);
+    outlist = update_neighbours(SPH_TREE, pnp1);
 
-    dSPH_PreStep(svar.fluid, end_index, pnp1, outlist, npd);
+    dSPH_PreStep(limits, end_index, pnp1, outlist, npd);
 
     get_aero_velocity(
         SPH_TREE, CELL_TREE, svar, cells, start_index, end_index, outlist, limits, pn, pnp1, npd
@@ -86,7 +86,7 @@ real Integrator::integrate_no_update(
     Detect_Surface(svar, start_index, end_index, outlist, cells, pnp1);
 
 #ifndef NOFROZEN
-    dissipation_terms(svar.fluid, start_index, end_index, outlist, pnp1);
+    dissipation_terms(limits, start_index, end_index, outlist, pnp1);
 #endif
 
     // Apply_XSPH(svar.fluid,start_index,end_index,outlist,pnp1);
@@ -119,7 +119,7 @@ size_t Integrator::update_data(
         if (pi.rho < 0.0001)
         {
             printf("Warning: Particle density is zero after updating buffer region.\n");
-            pi.rho = svar.fluid.rho_rest;
+            pi.rho = limits[pi.fluid_id].fluid.rho_rest;
         }
     }
 
@@ -206,7 +206,7 @@ size_t Integrator::update_data(
 
     if (nAdd != 0 || nDel != 0)
     {
-        outlist = update_neighbours(svar.fluid, SPH_TREE, pnp1);
+        outlist = update_neighbours(SPH_TREE, pnp1);
     }
 
     /****** UPDATE TIME N ***********/
@@ -268,7 +268,7 @@ real Integrator::integrate(
     svar.integrator.current_time += svar.integrator.delta_t;
 
     /* Check the error and adjust the CFL to try and keep convergence */
-    if (step_error > svar.integrator.min_residual || maxRho_pc > svar.fluid.rho_max_iter)
+    if (step_error > svar.integrator.min_residual || maxRho_pc > svar.rho_max_iter)
     {
         if (step_error > 0.6 * integ_sett.min_residual)
         { // If really unstable, immediately reduce the timestep
@@ -368,7 +368,7 @@ real Integrator::solve_step(
 }
 
 real Integrator::find_timestep(
-    SIM const& svar, MESH const& cells, SPHState const& pnp1, size_t const& start_index,
+    SIM const& svar, LIMITS const& limits, SPHState const& pnp1, size_t const& start_index,
     size_t const& end_index
 )
 {
@@ -389,17 +389,20 @@ real Integrator::find_timestep(
     reduction(min : maxf_term, maxU_term, maxdrho_term, minST, minH)
     for (size_t ii = start_index; ii < end_index; ++ii)
     {
+        SPHPart const& pi = pnp1[ii];
+        FLUID const& fluid = limits[pi.fluid_id].fluid;
+
         maxf = std::max(maxf, pnp1[ii].acc.norm());
         maxf_term = std::min(maxf_term, pnp1[ii].H / pnp1[ii].acc.norm());
         maxAf = std::max(maxAf, pnp1[ii].Af.norm());
 
         maxdrho = std::max(maxdrho, abs(pnp1[ii].Rrho));
         maxdrho_term = std::min(maxdrho_term, pnp1[ii].H / abs(pnp1[ii].Rrho));
-        maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - svar.fluid.rho_rest));
+        maxRhoi = std::max(maxRhoi, abs(pnp1[ii].rho - fluid.rho_rest));
+        maxRho_pc = 100 * maxRhoi / fluid.rho_rest;
 
         minST = std::min(
-            minST,
-            sqrt(pnp1[ii].rho * svar.dx * svar.dx / (2.0 * M_PI * svar.fluid.sig * fabs(pnp1[ii].curve)))
+            minST, sqrt(pnp1[ii].rho * pi.dx * pi.dx / (2.0 * M_PI * fluid.sig * fabs(pnp1[ii].curve)))
         );
 
         maxU = std::max(maxU, pnp1[ii].v.norm());
@@ -409,17 +412,22 @@ real Integrator::find_timestep(
 #endif
         minH = std::min(minH, pnp1[ii].H);
     }
-    maxRho_pc = 100 * maxRhoi / svar.fluid.rho_rest;
+
+    real min_visc = 9999999.0;
+    real max_sos = MEPSILON;
+    for (bound_block const& limit : limits)
+    {
+        min_visc = std::min(min_visc, limit.fluid.rho_rest / limit.fluid.mu);
+        max_sos = std::max(max_sos, limit.fluid.speed_sound);
+    }
 
     vector<real> timestep_factors;
-    timestep_factors.emplace_back(0.25 * sqrt(maxf_term)); /* Force timestep constraint */
-    timestep_factors.emplace_back(2 * maxU_term);          /* Velocity constraint */
-    timestep_factors.emplace_back(
-        0.125 * minH * minH * svar.fluid.rho_rest / svar.fluid.mu
-    );                                                       /* Viscosity timestep constraint */
-    timestep_factors.emplace_back(0.067 * minST);            /* Surface tension constraint */
-    timestep_factors.emplace_back(0.5 * sqrt(maxdrho_term)); /* Density gradient constraint */
-    timestep_factors.emplace_back(1.5 * minH / svar.fluid.speed_sound);
+    timestep_factors.emplace_back(0.25 * sqrt(maxf_term));         /* Force timestep constraint */
+    timestep_factors.emplace_back(2 * maxU_term);                  /* Velocity constraint */
+    timestep_factors.emplace_back(0.125 * minH * minH * min_visc); /* Viscosity timestep constraint */
+    timestep_factors.emplace_back(0.067 * minST);                  /* Surface tension constraint */
+    timestep_factors.emplace_back(0.5 * sqrt(maxdrho_term));       /* Density gradient constraint */
+    timestep_factors.emplace_back(1.5 * minH / max_sos);
     /* Acoustic constraint */ /* 2* can't be used without delta-SPH it seems. Divergent in tensile
                                  instability */
 

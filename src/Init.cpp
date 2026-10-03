@@ -251,15 +251,6 @@ size_t Generate_Points(SIM const& svar, Shapes& var)
 
         bound->npts = bound->coords.size();
         total_points += bound->npts;
-
-        if (svar.use_global_gas_law)
-        { // Set block gas law properties as the global
-          // properties
-            bound->rho_rest = svar.fluid.rho_rest;
-            bound->gamma = svar.fluid.gam;
-            bound->speedOfSound = svar.fluid.speed_sound;
-            bound->backgroundP = svar.fluid.press_pipe;
-        }
     }
     var.total_points = total_points;
     // var.total_points = boundary_intersection(globalspacing, var);
@@ -298,25 +289,38 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
     size_t part_id = 0;
     for (size_t block = 0; block < boundvar.nblocks; block++)
     {
+        ShapeBlock* const& b_block = boundvar.block[block];
         limits.emplace_back(part_id, 0);
+        size_t const limit_id = limits.size() - 1;
+        bound_block& limit = limits.back();
+        limit.name = b_block->name;
+        limit.fixed_vel_or_dynamic = b_block->fixed_vel_or_dynamic;
+        limit.particle_order = b_block->particle_order;
+        limit.no_slip = b_block->no_slip;
+        limit.bound_solver = b_block->bound_solver;
+        limit.block_type = b_block->bound_type;
+        limit.dx = b_block->dx;
+        limit.fluid = b_block->fluid;
+        FLUID const& fvar = limit.fluid;
+        real sr = 4.0 * b_block->H_sq; /*KDtree search radius*/
 
-        for (size_t ii = 0; ii < boundvar.block[block]->coords.size(); ii++)
+        for (size_t ii = 0; ii < b_block->coords.size(); ii++)
         {
-            if (!boundvar.block[block]->intersect[ii])
+            if (!b_block->intersect[ii])
             {
                 pn.emplace_back(SPHPart(
-                    boundvar.block[block]->coords[ii], boundvar.block[block]->vel,
-                    boundvar.block[block]->dens, boundvar.block[block]->mass,
-                    boundvar.block[block]->press, BOUND, part_id
+                    b_block->coords[ii], b_block->vel, fvar.rho_start, b_block->mass, fvar.press_start,
+                    b_block->particle_step, b_block->H, sr, b_block->W_dx, b_block->W_correc, BOUND,
+                    part_id, limit_id
                 ));
                 part_id++;
             }
         }
-        if (!boundvar.block[block]->times.empty())
+        if (!b_block->times.empty())
         {
-            if (!boundvar.block[block]->pos.empty() && boundvar.block[block]->vels.empty())
-                get_boundary_velocity(boundvar.block[block]);
-            else if (boundvar.block[block]->vels.empty())
+            if (!b_block->pos.empty() && b_block->vels.empty())
+                get_boundary_velocity(b_block);
+            else if (b_block->vels.empty())
             {
                 printf(
                     "No velocity or position data available for boundary block %zu "
@@ -327,25 +331,17 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
                 exit(-1);
             }
 
-            limits.back().times = boundvar.block[block]->times;
-            limits.back().vels = boundvar.block[block]->vels;
-            limits.back().nTimes = boundvar.block[block]->ntimes;
+            limit.times = b_block->times;
+            limit.vels = b_block->vels;
+            limit.nTimes = b_block->ntimes;
         }
         else
         {
-            limits.back().nTimes = 0;
-            limits.back().vels.emplace_back(boundvar.block[block]->vel);
+            limit.nTimes = 0;
+            limit.vels.emplace_back(b_block->vel);
         }
 
-        limits.back().index.second = part_id;
-
-        limits.back().name = boundvar.block[block]->name;
-        limits.back().fixed_vel_or_dynamic = boundvar.block[block]->fixed_vel_or_dynamic;
-        limits.back().particle_order = boundvar.block[block]->particle_order;
-        limits.back().no_slip = boundvar.block[block]->no_slip;
-        limits.back().bound_solver = boundvar.block[block]->bound_solver;
-        limits.back().block_type = boundvar.block[block]->bound_type;
-        limits.back().dx = boundvar.block[block]->dx;
+        limit.index.second = part_id;
     }
 
     svar.n_bound_blocks = boundvar.nblocks;
@@ -354,20 +350,42 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
     // Fluid points
     for (size_t block = 0; block < fluvar.nblocks; block++)
     {
+        ShapeBlock* const& f_block = fluvar.block[block];
         limits.emplace_back(part_id, 0);
-        if (fluvar.block[block]->bound_type == inletZone)
+        size_t const limit_id = limits.size() - 1;
+        bound_block& limit = limits.back();
+
+        limit.name = f_block->name;
+        limit.insert_norm = f_block->insert_norm;
+        limit.delete_norm = f_block->delete_norm;
+        limit.aero_norm = f_block->aero_norm;
+        limit.insconst = f_block->insconst;
+        limit.delconst = f_block->delconst;
+        limit.aeroconst = f_block->aeroconst;
+
+        limit.fixed_vel_or_dynamic = f_block->fixed_vel_or_dynamic;
+        limit.particle_order = f_block->particle_order;
+        limit.no_slip = f_block->no_slip;
+        limit.bound_solver = f_block->bound_solver;
+        limit.block_type = f_block->bound_type;
+        limit.dx = f_block->dx;
+        limit.fluid = f_block->fluid;
+        FLUID const& fvar = limit.fluid;
+        real sr = 4.0 * f_block->H_sq; /*KDtree search radius*/
+
+        if (f_block->bound_type == inletZone)
         {
             size_t ii = 0;
-            size_t nBuff = fluvar.block[block]->particle_order == 1 ? 5 : 4;
+            size_t nBuff = f_block->particle_order == 1 ? 5 : 4;
 
-            while (fluvar.block[block]->bc[ii] == PIPE)
+            while (f_block->bc[ii] == PIPE)
             {
-                if (!fluvar.block[block]->intersect[ii])
+                if (!f_block->intersect[ii])
                 {
                     pn.emplace_back(SPHPart(
-                        fluvar.block[block]->coords[ii], fluvar.block[block]->vel,
-                        fluvar.block[block]->dens, fluvar.block[block]->mass, fluvar.block[block]->press,
-                        PIPE, part_id
+                        f_block->coords[ii], f_block->vel, fvar.rho_start, f_block->mass,
+                        fvar.press_start, f_block->particle_step, f_block->H, sr, f_block->W_dx,
+                        f_block->W_correc, PIPE, part_id, limit_id
                     ));
                     part_id++;
                 }
@@ -375,34 +393,34 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
             }
 
             // Check if the back line or buffer ends up intersecting
-            vector<size_t> back_intersect(fluvar.block[block]->back.size(), 0);
+            vector<size_t> back_intersect(f_block->back.size(), 0);
 
-            for (size_t bID = 0; bID < fluvar.block[block]->back.size(); bID++)
+            for (size_t bID = 0; bID < f_block->back.size(); bID++)
             {
                 size_t does_int = 0;
-                size_t backID = fluvar.block[block]->back[bID];
+                size_t backID = f_block->back[bID];
 
                 // If the back particle interstects, don't place any of the inlet
-                if (fluvar.block[block]->intersect[backID])
+                if (f_block->intersect[backID])
                     does_int = 1;
 
                 back_intersect[bID] = does_int;
             }
 
             // Insert the back particles
-            for (size_t bID = 0; bID < fluvar.block[block]->back.size(); bID++)
+            for (size_t bID = 0; bID < f_block->back.size(); bID++)
             {
                 if (!back_intersect[bID])
                 {
-                    size_t pointID = fluvar.block[block]->back[bID];
+                    size_t pointID = f_block->back[bID];
                     pn.emplace_back(SPHPart(
-                        fluvar.block[block]->coords[pointID], fluvar.block[block]->vel,
-                        fluvar.block[block]->dens, fluvar.block[block]->mass, fluvar.block[block]->press,
-                        BACK, part_id
+                        f_block->coords[ii], f_block->vel, fvar.rho_start, f_block->mass,
+                        fvar.press_start, f_block->particle_step, f_block->H, sr, f_block->W_dx,
+                        f_block->W_correc, BACK, part_id, limit_id
                     ));
 
-                    limits.back().back.emplace_back(part_id);
-                    limits.back().buffer.emplace_back(nBuff, 0);
+                    limit.back.emplace_back(part_id);
+                    limit.buffer.emplace_back(nBuff, 0);
 
                     part_id++;
                 }
@@ -411,18 +429,18 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
             for (size_t buffID = 0; buffID < nBuff; buffID++)
             {
                 size_t bIndex = 0;
-                for (size_t bID = 0; bID < fluvar.block[block]->back.size(); bID++)
+                for (size_t bID = 0; bID < f_block->back.size(); bID++)
                 {
                     if (!back_intersect[bID])
                     {
-                        size_t pointID = fluvar.block[block]->buffer[bID][buffID];
+                        size_t pointID = f_block->buffer[bID][buffID];
                         pn.emplace_back(SPHPart(
-                            fluvar.block[block]->coords[pointID], fluvar.block[block]->vel,
-                            fluvar.block[block]->dens, fluvar.block[block]->mass,
-                            fluvar.block[block]->press, BUFFER, part_id
+                            f_block->coords[ii], f_block->vel, fvar.rho_start, f_block->mass,
+                            fvar.press_start, f_block->particle_step, f_block->H, sr, f_block->W_dx,
+                            f_block->W_correc, BUFFER, part_id, limit_id
                         ));
 
-                        limits.back().buffer[bIndex][buffID] = part_id;
+                        limit.buffer[bIndex][buffID] = part_id;
 
                         part_id++;
                         bIndex++;
@@ -432,47 +450,32 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
         }
         else
         {
-            for (size_t ii = 0; ii < fluvar.block[block]->coords.size(); ii++)
+            for (size_t ii = 0; ii < f_block->coords.size(); ii++)
             {
-                if (!fluvar.block[block]->intersect[ii])
+                if (!f_block->intersect[ii])
                 {
                     pn.emplace_back(SPHPart(
-                        fluvar.block[block]->coords[ii], fluvar.block[block]->vel,
-                        fluvar.block[block]->dens, fluvar.block[block]->mass, fluvar.block[block]->press,
-                        FREE, part_id
+                        f_block->coords[ii], f_block->vel, fvar.rho_start, f_block->mass,
+                        fvar.press_start, f_block->particle_step, f_block->H, sr, f_block->W_dx,
+                        f_block->W_correc, FREE, part_id, limit_id
                     ));
                     part_id++;
                 }
             }
         }
 
-        limits.back().index.second = part_id;
-        if (!fluvar.block[block]->times.empty())
+        limit.index.second = part_id;
+        if (!f_block->times.empty())
         {
-            limits.back().times = fluvar.block[block]->times;
-            limits.back().vels = fluvar.block[block]->vels;
-            limits.back().nTimes = fluvar.block[block]->ntimes;
+            limit.times = f_block->times;
+            limit.vels = f_block->vels;
+            limit.nTimes = f_block->ntimes;
         }
         else
         {
-            limits.back().nTimes = 0;
-            limits.back().vels.emplace_back(StateVecD::Zero());
+            limit.nTimes = 0;
+            limit.vels.emplace_back(StateVecD::Zero());
         }
-
-        limits.back().name = fluvar.block[block]->name;
-        limits.back().insert_norm = fluvar.block[block]->insert_norm;
-        limits.back().delete_norm = fluvar.block[block]->delete_norm;
-        limits.back().aero_norm = fluvar.block[block]->aero_norm;
-        limits.back().insconst = fluvar.block[block]->insconst;
-        limits.back().delconst = fluvar.block[block]->delconst;
-        limits.back().aeroconst = fluvar.block[block]->aeroconst;
-
-        limits.back().fixed_vel_or_dynamic = fluvar.block[block]->fixed_vel_or_dynamic;
-        limits.back().particle_order = fluvar.block[block]->particle_order;
-        limits.back().no_slip = fluvar.block[block]->no_slip;
-        limits.back().bound_solver = fluvar.block[block]->bound_solver;
-        limits.back().block_type = fluvar.block[block]->bound_type;
-        limits.back().dx = fluvar.block[block]->dx;
     }
 
     svar.n_fluid_blocks = fluvar.nblocks;
@@ -487,9 +490,10 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
 #pragma omp parallel for
         for (size_t ii = 0; ii < svar.total_points; ++ii)
         {
+            FLUID const& fluid_i = limits[pn[ii].fluid_id].fluid;
             real press =
-                std::max(0.0, -svar.fluid.rho_rest * svar.grav[1] * (svar.hydro_height - pn[ii].xi[1]));
-            real dens = svar.fluid.get_density(press);
+                std::max(0.0, -fluid_i.rho_rest * svar.grav[1] * (svar.hydro_height - pn[ii].xi[1]));
+            real dens = fluid_i.get_density(press);
             pn[ii].p = press;
             pn[ii].rho = dens;
         }
@@ -554,6 +558,7 @@ void Init_Particles_Restart(SIM& svar, LIMITS& limits)
         limits[block].no_slip = boundvar.block[block]->no_slip;
         limits[block].bound_solver = boundvar.block[block]->bound_solver;
         limits[block].block_type = boundvar.block[block]->bound_type;
+        limits[block].fluid = boundvar.block[block]->fluid;
     }
 
     size_t offset = boundvar.nblocks;
@@ -584,6 +589,7 @@ void Init_Particles_Restart(SIM& svar, LIMITS& limits)
         limits[block + offset].no_slip = fluvar.block[block]->no_slip;
         limits[block + offset].bound_solver = fluvar.block[block]->bound_solver;
         limits[block + offset].block_type = fluvar.block[block]->bound_type;
+        limits[block + offset].fluid = fluvar.block[block]->fluid;
     }
 
     svar.n_bound_blocks = boundvar.nblocks;

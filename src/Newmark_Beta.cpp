@@ -35,7 +35,7 @@ int Newmark_Beta::Check_Error(
         {
             pnp1 = pn;
 
-            outlist = update_neighbours(svar.fluid, SPH_TREE, pnp1);
+            outlist = update_neighbours(SPH_TREE, pnp1);
 
             svar.integrator.delta_t = 0.5 * svar.integrator.delta_t;
             cout << "Unstable timestep. New dt: " << svar.integrator.delta_t << endl;
@@ -103,15 +103,15 @@ void Newmark_Beta::Do_NB_Iter(
         case DBC:
         {
             Boundary_DBC(
-                svar.fluid, limits[block].index.first, limits[block].index.second, outlist, pnp1
+                limits[block].fluid, limits[block].index.first, limits[block].index.second, outlist, pnp1
             );
             break;
         }
         case pressure_G:
         {
             Get_Boundary_Pressure(
-                svar.fluid, svar.grav, limits[block].index.first, limits[block].index.second, outlist,
-                pnp1
+                limits[block].fluid, svar.grav, limits[block].index.first, limits[block].index.second,
+                outlist, pnp1
             );
             break;
         }
@@ -145,14 +145,13 @@ void Newmark_Beta::Do_NB_Iter(
                 for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
                 { /****** BOUNDARY PARTICLES ***********/
                     real const rho = std::max(
-                        svar.fluid.rho_min,
-                        std::min(
-                            svar.fluid.rho_max,
-                            pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho + gamma_t2 * pn[ii].Rrho)
-                        )
+                        svar.rho_min, std::min(
+                                          svar.rho_max, pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho +
+                                                                           gamma_t2 * pn[ii].Rrho)
+                                      )
                     );
                     pnp1[ii].rho = rho;
-                    pnp1[ii].p = svar.fluid.get_pressure(rho);
+                    pnp1[ii].p = limits[block].fluid.get_pressure(rho);
                 }
                 break;
             }
@@ -164,27 +163,26 @@ void Newmark_Beta::Do_NB_Iter(
                     if (near_inlet[ii])
                     { // Don't allow negative pressures
                         real const rho = std::max(
-                            svar.fluid.rho_rest,
+                            limits[block].fluid.rho_rest,
                             std::min(
-                                svar.fluid.rho_max,
+                                svar.rho_max,
                                 pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho + gamma_t2 * pn[ii].Rrho)
                             )
                         );
                         pnp1[ii].rho = rho;
-                        pnp1[ii].p = svar.fluid.get_pressure(rho);
+                        pnp1[ii].p = limits[block].fluid.get_pressure(rho);
                         pnp1[ii].Rrho = fmax(0.0, pnp1[ii].Rrho);
                     }
                     else
                     {
                         real const rho = std::max(
-                            svar.fluid.rho_min,
-                            std::min(
-                                svar.fluid.rho_max,
-                                pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho + gamma_t2 * pn[ii].Rrho)
-                            )
+                            svar.rho_min, std::min(
+                                              svar.rho_max, pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho +
+                                                                               gamma_t2 * pn[ii].Rrho)
+                                          )
                         );
                         pnp1[ii].rho = rho;
-                        pnp1[ii].p = svar.fluid.get_pressure(rho);
+                        pnp1[ii].p = limits[block].fluid.get_pressure(rho);
                     }
                 }
                 break;
@@ -219,14 +217,13 @@ void Newmark_Beta::Do_NB_Iter(
                     pnp1[ii].v = pn[ii].v + dt * (gamma_t1 * pnp1[ii].acc + gamma_t2 * pn[ii].acc);
 
                     real const rho = std::max(
-                        svar.fluid.rho_min,
-                        std::min(
-                            svar.fluid.rho_max,
-                            pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho + gamma_t2 * pn[ii].Rrho)
-                        )
+                        svar.rho_min, std::min(
+                                          svar.rho_max, pn[ii].rho + dt * (gamma_t1 * pnp1[ii].Rrho +
+                                                                           gamma_t2 * pn[ii].Rrho)
+                                      )
                     );
                     pnp1[ii].rho = rho;
-                    pnp1[ii].p = svar.fluid.get_pressure(rho);
+                    pnp1[ii].p = limits[block].fluid.get_pressure(rho);
                 }
                 else if (pnp1[ii].b == OUTLET)
                 { /* For the outlet zone, just perform euler integration of last info */
@@ -275,15 +272,14 @@ void Newmark_Beta::Do_NB_Iter(
                             size_t const& buffID = limits[block].buffer[ii][jj];
 
                             real const rho = std::max(
-                                svar.fluid.rho_min,
+                                svar.rho_min,
                                 std::min(
-                                    svar.fluid.rho_max,
-                                    pn[buffID].rho +
-                                        dt * (gamma_t1 * pnp1[buffID].Rrho + gamma_t2 * pn[buffID].Rrho)
+                                    svar.rho_max, pn[buffID].rho + dt * (gamma_t1 * pnp1[buffID].Rrho +
+                                                                         gamma_t2 * pn[buffID].Rrho)
                                 )
                             );
                             pnp1[buffID].rho = rho;
-                            pnp1[buffID].p = svar.fluid.get_pressure(rho);
+                            pnp1[buffID].p = limits[block].fluid.get_pressure(rho);
                             pnp1[buffID].xi = pn[buffID].xi + dt * pn[buffID].v;
                         }
                     }
