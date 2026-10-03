@@ -78,26 +78,26 @@ void get_arclength_midpoint(
 }
 
 inline std::vector<StateVecD> make_arc(
-    int const& ni, int const& nk, real const& globalspacing, real const& theta0, real const& dtheta,
+    int const& ni, int const& nk, real const& dx, real const& theta0, real const& dtheta,
     real const& radius, StateVecD const& centre, real const& slength, real const& elength,
     int const& particle_order
 )
 {
-    std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
+    std::uniform_real_distribution<real> unif(0.0, MEPSILON * dx);
     std::default_random_engine re;
 
     // Find the starting point of the straight
     StateVecD svec(cos(theta0), sin(theta0));
     StateVecD snormal(svec[1], -svec[0]);
     // StateVecD startp = svec*radius - slength * snormal;
-    int smax = ceil(slength / globalspacing);
+    int smax = ceil(slength / dx);
 
     StateVecD evec(
         cos(theta0 + static_cast<real>(ni - 1) * dtheta),
         sin(theta0 + static_cast<real>(ni - 1) * dtheta)
     );
     StateVecD enormal(-evec[1], evec[0]);
-    int emax = ceil(elength / globalspacing);
+    int emax = ceil(elength / dx);
     // StateVecD endp = evec - elength * enormal;
 
     std::vector<StateVecD> points;
@@ -108,8 +108,7 @@ inline std::vector<StateVecD> make_arc(
         {
             for (int ii = smax; ii > 0; ii--)
             {
-                StateVecD newPoint =
-                    svec * (radius - real(jj) * globalspacing) + snormal * real(ii) * globalspacing;
+                StateVecD newPoint = svec * (radius - real(jj) * dx) + snormal * real(ii) * dx;
                 newPoint += StateVecD(unif(re), unif(re)) + centre;
                 points.push_back(newPoint);
             }
@@ -121,12 +120,12 @@ inline std::vector<StateVecD> make_arc(
             real r = radius;
             // newPoint = 0.5 * StateVecD(real(2 * i + (j % 2)), sqrt(3.0) * real(j));
             if (particle_order == 1)
-            { /* Shift by half a globalspacing if jj is even */
+            { /* Shift by half a dx if jj is even */
                 theta += 0.5 * dtheta * (jj % 2);
-                r -= 0.5 * sqrt(3) * real(jj) * globalspacing;
+                r -= 0.5 * sqrt(3) * real(jj) * dx;
             }
             else
-                r -= real(jj) * globalspacing;
+                r -= real(jj) * dx;
 
             StateVecD newPoint(cos(theta) * r, sin(theta) * r);
             newPoint += StateVecD(unif(re), unif(re));
@@ -138,8 +137,7 @@ inline std::vector<StateVecD> make_arc(
         {
             for (int ii = 1; ii <= emax; ii++)
             {
-                StateVecD newPoint =
-                    evec * (radius - real(jj) * globalspacing) + enormal * real(ii) * globalspacing;
+                StateVecD newPoint = evec * (radius - real(jj) * dx) + enormal * real(ii) * dx;
                 newPoint += StateVecD(unif(re), unif(re)) + centre;
                 points.push_back(newPoint);
             }
@@ -272,11 +270,11 @@ void get_arclength_midpoint(
 
 inline std::vector<StateVecD> make_arch(
     StateVecD const& start, StateVecD const& centre, StateVecD const& right, real const& slength,
-    real const& elength, int const& nrad, int const& nthick, int const& nlong, real const& globalspacing,
+    real const& elength, int const& nrad, int const& nthick, int const& nlong, real const& dx,
     real const& dtheta, real const& radius, int const& particle_order
 )
 {
-    std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
+    std::uniform_real_distribution<real> unif(0.0, MEPSILON * dx);
     std::default_random_engine re;
 
     // Create local coordinate system (u,v,w)
@@ -284,8 +282,8 @@ inline std::vector<StateVecD> make_arch(
     StateVecD w = right.normalized();
     StateVecD v = u.cross(w).normalized();
 
-    int smax = ceil(slength / globalspacing);
-    int emax = ceil(elength / globalspacing);
+    int smax = ceil(slength / dx);
+    int emax = ceil(elength / dx);
 
     StateVecD evec = cos(real(nrad - 1) * dtheta) * u + sin(real(nrad - 1) * dtheta) * v;
     StateVecD enorm = evec.cross(w);
@@ -296,22 +294,22 @@ inline std::vector<StateVecD> make_arch(
         for (int jj = 0; jj < nthick; jj++)
         {
             real r = radius;
-            real l = real(kk) * globalspacing;
+            real l = real(kk) * dx;
             real doffset = 0;
             if (particle_order == 1)
             {
-                r += 1.0 / 3.0 * sqrt(6.0) * real(jj) * globalspacing;
-                l = 0.5 * sqrt(3) * (real(kk) + real(jj % 2) / 3.0) * globalspacing;
+                r += 1.0 / 3.0 * sqrt(6.0) * real(jj) * dx;
+                l = 0.5 * sqrt(3) * (real(kk) + real(jj % 2) / 3.0) * dx;
                 doffset = 0.5 * dtheta * ((jj + kk) % 2);
             }
             else
-                r += real(jj) * globalspacing;
+                r += real(jj) * dx;
 
             if (slength > 0)
             {
                 for (int ii = smax; ii > 0; ii--)
                 {
-                    real dist = real(ii) * globalspacing + doffset;
+                    real dist = real(ii) * dx + doffset;
                     StateVecD newPoint = u * r - v * dist + l * w;
                     newPoint += StateVecD(unif(re), unif(re), unif(re)) + centre;
                     points.push_back(newPoint);
@@ -321,9 +319,9 @@ inline std::vector<StateVecD> make_arch(
             for (int ii = 0; ii < nrad; ii++)
             {
                 real theta = static_cast<real>(ii) * dtheta;
-                real l = real(kk) * globalspacing;
+                real l = real(kk) * dx;
                 if (particle_order == 1)
-                { /* Shift by half a globalspacing if jj is even */
+                { /* Shift by half a dx if jj is even */
                     theta += doffset;
                 }
 
@@ -339,7 +337,7 @@ inline std::vector<StateVecD> make_arch(
             {
                 for (int ii = 1; ii <= emax; ii++)
                 {
-                    real dist = real(ii) * globalspacing + doffset;
+                    real dist = real(ii) * dx + doffset;
                     StateVecD newPoint = evec * r + enorm * dist + l * w;
                     newPoint += StateVecD(unif(re), unif(re), unif(re)) + centre;
                     points.push_back(newPoint);
@@ -353,10 +351,10 @@ inline std::vector<StateVecD> make_arch(
 
 // Public functions
 
-void ArcShape::check_input(SIM const& svar, real& globalspacing, int& fault)
+void ArcShape::check_input(SIM const& svar, int& fault)
 {
     // Do common input checks.
-    ShapeBlock::check_input(svar, globalspacing, fault);
+    ShapeBlock::check_input(svar, fault);
 
     int has_config = 0;
     int arc_defined = 0;
@@ -450,14 +448,12 @@ void ArcShape::check_input(SIM const& svar, real& globalspacing, int& fault)
     {
         if (ni < 0)
         {
-            std::cout << "WARNING: Block globalspacing has not been defined. Using "
-                         "global globalspacing."
-                      << std::endl;
-            dx = globalspacing;
+            std::cout << "Error: Block \"" << name << "\" spacing has not been defined." << std::endl;
+            fault = 1;
         }
         else
         {
-            /* Use ni as a number along the diameter, so define globalspacing off that
+            /* Use ni as a number along the diameter, so define dx off that
              */
             real di = (2.0 * radius) / real(ni);
             dx = di;
@@ -476,9 +472,9 @@ void ArcShape::check_input(SIM const& svar, real& globalspacing, int& fault)
     else if (nk < 0)
     { /* Use a particle count over the real thickness value */
         if (particle_order == 1)
-            nk = static_cast<int>(ceil(thickness / globalspacing / sqrt(3.0) * 2.0));
+            nk = static_cast<int>(ceil(thickness / dx / sqrt(3.0) * 2.0));
         else
-            nk = static_cast<int>(ceil(thickness / globalspacing));
+            nk = static_cast<int>(ceil(thickness / dx));
     }
 
     // Check that start coordinate exists
@@ -491,7 +487,7 @@ void ArcShape::check_input(SIM const& svar, real& globalspacing, int& fault)
     // }
     // #endif
 
-    real dtheta = globalspacing / radius;
+    real dtheta = dx / radius;
     if (arc_defined)
     {
 
@@ -519,8 +515,8 @@ void ArcShape::check_input(SIM const& svar, real& globalspacing, int& fault)
     ni = ni;
     // Need to add straights in to the count
 
-    int smax = sstraight > 0 ? ceil(sstraight / globalspacing) : 0;
-    int emax = estraight > 0 ? ceil(estraight / globalspacing) : 0;
+    int smax = sstraight > 0 ? ceil(sstraight / dx) : 0;
+    int emax = estraight > 0 ? ceil(estraight / dx) : 0;
 
     npts = (ni + smax + emax) * nk;
 #if SIMDIM == 3
@@ -536,28 +532,26 @@ void ArcShape::check_input(SIM const& svar, real& globalspacing, int& fault)
     else if (nj < 0)
     {
         if (particle_order == 1)
-            nj = static_cast<int>(ceil((length) / globalspacing / sqrt(6.0) * 3.0));
+            nj = static_cast<int>(ceil((length) / dx / sqrt(6.0) * 3.0));
         else
-            nj = static_cast<int>(ceil(length / globalspacing));
+            nj = static_cast<int>(ceil(length / dx));
         nj = nj > 1 ? nj : 1;
     }
     npts *= nj;
 #endif
 
-    ShapeBlock::check_input_post(globalspacing);
+    ShapeBlock::check_input_post();
 }
 
-void ArcShape::generate_points(real const& globalspacing)
+void ArcShape::generate_points()
 {
 #if SIMDIM == 2
     /* Convert to radians */
     real theta0_ = arc_start * M_PI / 180.0;
-    real dtheta = globalspacing / radius;
+    real dtheta = dx / radius;
     // int ni = static_cast<int>(ceil(arclength/dtheta));
 
-    coords = make_arc(
-        ni, nk, globalspacing, theta0_, dtheta, radius, centre, sstraight, estraight, particle_order
-    );
+    coords = make_arc(ni, nk, dx, theta0_, dtheta, radius, centre, sstraight, estraight, particle_order);
 
 #else
 
@@ -569,12 +563,11 @@ void ArcShape::generate_points(real const& globalspacing)
     // if(arclength < 0)
     //     arclength += 2.0*M_PI;
     real arclength_rad = arclength * M_PI / 180.0;
-    real dtheta = globalspacing / radius;
+    real dtheta = dx / radius;
     int ni = static_cast<int>(ceil(arclength_rad / dtheta));
 
     coords = make_arch(
-        start, centre, right, sstraight, estraight, ni, nk, nj, globalspacing, dtheta, radius,
-        particle_order
+        start, centre, right, sstraight, estraight, ni, nk, nj, dx, dtheta, radius, particle_order
     );
 #endif
 }

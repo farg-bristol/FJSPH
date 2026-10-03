@@ -468,6 +468,15 @@ namespace HDF5
 
         vec.clear();
 
+/* Particle spacing */
+#pragma omp parallel for
+        for (size_t ii = start; ii < end; ++ii)
+            vec[ii - start] = pnp1[ii].dx;
+
+        Write_Variable_Scalar(fout, "Particle spacing", dims, 0, vec);
+
+        vec.clear();
+
         /* Boundary flag */
         vector<uint> uvec(length);
 #pragma omp parallel for
@@ -484,6 +493,14 @@ namespace HDF5
             svec[ii - start] = pnp1[ii].part_id;
 
         Write_Variable_Scalar(fout, "Particle ID", dims, 0, svec);
+        svec.clear();
+
+        /* Fluid ID */
+#pragma omp parallel for
+        for (size_t ii = start; ii < end; ++ii)
+            svec[ii - start] = pnp1[ii].fluid_id;
+
+        Write_Variable_Scalar(fout, "Fluid ID", dims, 0, svec);
         svec.clear();
 
         /* Cell ID */
@@ -851,6 +868,12 @@ namespace HDF5
         for (size_t ii = 0; ii < length; ii++)
             temp[ii].m = dvect[ii];
 
+        /* Particle spacing */
+        Read_Variable_Scalar(fin, "Particle spacing", dvect);
+#pragma omp parallel for
+        for (size_t ii = 0; ii < length; ii++)
+            temp[ii].dx = dvect[ii];
+
         /* Boundary flag */
         Read_Variable_Scalar(fin, "Boundary condition", ivect);
 #pragma omp parallel for
@@ -862,6 +885,12 @@ namespace HDF5
 #pragma omp parallel for
         for (size_t ii = 0; ii < length; ii++)
             temp[ii].part_id = svect[ii];
+
+        /* Fluid ID */
+        Read_Variable_Scalar(fin, "Fluid ID", svect);
+#pragma omp parallel for
+        for (size_t ii = 0; ii < length; ii++)
+            temp[ii].fluid_id = svect[ii];
 
         /* Cell ID */
         Read_Variable_Scalar(fin, "Cell ID", lvect);
@@ -956,11 +985,6 @@ void Write_HDF5_Attributes(int64_t const& file, SIM const& svar)
 
     /* Fluid data */
     HDF5::Write_Real_Attribute(file, "Reference density", svar.air.rho_g);
-    HDF5::Write_Real_Attribute(file, "Reference dispersed density", svar.fluid.rho_rest);
-    HDF5::Write_Real_Attribute(file, "Sutherland reference viscosity", svar.air.mu_g);
-    HDF5::Write_Real_Attribute(file, "Reference dispersed viscosity", svar.fluid.mu);
-    HDF5::Write_Real_Attribute(file, "Reference surface tension", svar.fluid.sig);
-    HDF5::Write_Real_Attribute(file, "SPH surface tension contact angle", svar.fluid.contangb);
     HDF5::Write_Int_Attribute(file, "Init hydrostatic pressure", svar.init_hydro_pressure);
     HDF5::Write_Real_Attribute(file, "Hydrostatic height", svar.hydro_height);
 
@@ -990,21 +1014,13 @@ void Write_HDF5_Attributes(int64_t const& file, SIM const& svar)
     HDF5::Write_Uint_Attribute(file, "SPH stable CFL count", svar.integrator.n_stable);
     HDF5::Write_Uint_Attribute(file, "SPH unstable CFL count", svar.integrator.n_unstable);
 
-    HDF5::Write_Real_Attribute(file, "SPH background pressure", svar.fluid.press_back);
-    HDF5::Write_Real_Attribute(file, "SPH starting pressure", svar.fluid.press_pipe);
-    HDF5::Write_Real_Attribute(file, "SPH density variation", svar.fluid.rho_var);
-    HDF5::Write_Real_Attribute(file, "SPH maximum density", svar.fluid.rho_max);
-    HDF5::Write_Real_Attribute(file, "SPH minimum density", svar.fluid.rho_min);
-    HDF5::Write_Real_Attribute(file, "SPH delta coefficient", svar.fluid.dsph_delta);
-
-    HDF5::Write_Real_Attribute(file, "SPH artificial viscosity factor", svar.fluid.visc_alpha);
-    HDF5::Write_Real_Attribute(file, "SPH speed of sound", svar.fluid.speed_sound);
+    HDF5::Write_Real_Attribute(file, "SPH density variation", svar.rho_var);
+    HDF5::Write_Real_Attribute(file, "SPH maximum density", svar.rho_max);
+    HDF5::Write_Real_Attribute(file, "SPH minimum density", svar.rho_min);
     HDF5::Write_Uint_Attribute(file, "SPH Newmark Beta iteration limit", svar.integrator.max_subits);
     HDF5::Write_Vector_Attribute(file, "SPH gravity vector", svar.grav);
 
-    HDF5::Write_Real_Attribute(file, "SPH initial spacing", svar.particle_step);
-    HDF5::Write_Real_Attribute(file, "SPH boundary spacing factor", svar.bound_step_factor);
-    HDF5::Write_Real_Attribute(file, "SPH smoothing length factor", svar.fluid.H_fac);
+    HDF5::Write_Real_Attribute(file, "SPH smoothing length factor", svar.H_fac);
     HDF5::Write_String_Attribute(file, "SPH aerodynamic case", svar.air.aero_case);
     HDF5::Write_Int_Attribute(file, "SPH SP diameter definition", svar.air.use_dx);
     HDF5::Write_Int_Attribute(file, "SPH use TAB deformation", svar.air.use_TAB_def);
@@ -1074,11 +1090,24 @@ void Write_Zone_Attributes(int64_t const& zone, bound_block const& limits)
 #endif
     }
 
-    HDF5::Write_Real_Attribute(zone, "Fixed velocity or dynamic inlet", limits.fixed_vel_or_dynamic);
-    HDF5::Write_Real_Attribute(zone, "Lattice or HCPL packing", limits.particle_order);
-    HDF5::Write_Real_Attribute(zone, "Boundary solver type", limits.bound_solver);
-    HDF5::Write_Real_Attribute(zone, "Boundary is no slip", limits.no_slip);
-    HDF5::Write_Real_Attribute(zone, "Block type", limits.block_type);
+    HDF5::Write_Int_Attribute(zone, "Fixed velocity or dynamic inlet", limits.fixed_vel_or_dynamic);
+    HDF5::Write_Int_Attribute(zone, "Lattice or HCPL packing", limits.particle_order);
+    HDF5::Write_Int_Attribute(zone, "Boundary solver type", limits.bound_solver);
+    HDF5::Write_Int_Attribute(zone, "Boundary is no slip", limits.no_slip);
+    HDF5::Write_Int_Attribute(zone, "Block type", limits.block_type);
+
+    // Fluid properties
+    HDF5::Write_Real_Attribute(zone, "Cole EOS gamma", limits.fluid.gam);
+    HDF5::Write_Real_Attribute(zone, "Reference dispersed density", limits.fluid.rho_rest);
+    HDF5::Write_Real_Attribute(zone, "Reference dispersed viscosity", limits.fluid.mu);
+    HDF5::Write_Real_Attribute(zone, "Reference surface tension", limits.fluid.sig);
+    HDF5::Write_Real_Attribute(zone, "Surface tension contact angle", limits.fluid.contangb);
+    HDF5::Write_Uint_Attribute(zone, "Equation of state", limits.fluid.pressure_rel);
+    HDF5::Write_Real_Attribute(zone, "Background pressure", limits.fluid.press_back);
+    HDF5::Write_Real_Attribute(zone, "Starting pressure", limits.fluid.press_start);
+    HDF5::Write_Real_Attribute(zone, "SPH delta coefficient", limits.fluid.dsph_delta);
+    HDF5::Write_Real_Attribute(zone, "Artificial viscosity factor", limits.fluid.visc_alpha);
+    HDF5::Write_Real_Attribute(zone, "Speed of sound", limits.fluid.speed_sound);
 }
 
 /**
@@ -1202,6 +1231,46 @@ void Write_HDF5(SIM& svar, SPHState const& pnp1, LIMITS const& limits)
     printf("Finished writing restart HDF5 file.\n");
 }
 
+void Read_Zone_Attributes(int64_t const& zone, bound_block& limits)
+{
+    HDF5::Read_String_Attribute(zone, "Block name", limits.name);
+    // Add information about the insertion, aero, and deletion planes.
+    HDF5::Read_Real_Attribute(zone, "Insertion normal x", limits.insert_norm[0]);
+    HDF5::Read_Real_Attribute(zone, "Insertion normal y", limits.insert_norm[1]);
+    HDF5::Read_Real_Attribute(zone, "Deletion normal x", limits.delete_norm[0]);
+    HDF5::Read_Real_Attribute(zone, "Deletion normal y", limits.delete_norm[1]);
+    HDF5::Read_Real_Attribute(zone, "Aerodynamic normal x", limits.aero_norm[0]);
+    HDF5::Read_Real_Attribute(zone, "Aerodynamic normal y", limits.aero_norm[1]);
+#if SIMDIM == 3
+    HDF5::Read_Real_Attribute(zone, "Insertion normal z", limits.insert_norm[2]);
+    HDF5::Read_Real_Attribute(zone, "Deletion normal z", limits.delete_norm[2]);
+    HDF5::Read_Real_Attribute(zone, "Aerodynamic normal z", limits.aero_norm[2]);
+#endif
+
+    HDF5::Read_Real_Attribute(zone, "Insertion plane constant", limits.insconst);
+    HDF5::Read_Real_Attribute(zone, "Deletion plane constant", limits.delconst);
+    HDF5::Read_Real_Attribute(zone, "Aerodynamic plane constant", limits.aeroconst);
+
+    HDF5::Read_Int_Attribute(zone, "Fixed velocity or dynamic inlet", limits.fixed_vel_or_dynamic);
+    HDF5::Read_Int_Attribute(zone, "Lattice or HCPL packing", limits.particle_order);
+    HDF5::Read_Int_Attribute(zone, "Boundary solver type", limits.bound_solver);
+    HDF5::Read_Int_Attribute(zone, "Boundary is no slip", limits.no_slip);
+    HDF5::Read_Int_Attribute(zone, "Block type", limits.block_type);
+
+    // Fluid properties
+    HDF5::Read_Real_Attribute(zone, "Cole EOS gamma", limits.fluid.gam);
+    HDF5::Read_Real_Attribute(zone, "Reference dispersed density", limits.fluid.rho_rest);
+    HDF5::Read_Real_Attribute(zone, "Reference dispersed viscosity", limits.fluid.mu);
+    HDF5::Read_Real_Attribute(zone, "Reference surface tension", limits.fluid.sig);
+    HDF5::Read_Real_Attribute(zone, "Surface tension contact angle", limits.fluid.contangb);
+    HDF5::Read_Uint_Attribute(zone, "Equation of state", limits.fluid.pressure_rel);
+    HDF5::Read_Real_Attribute(zone, "Background pressure", limits.fluid.press_back);
+    HDF5::Read_Real_Attribute(zone, "Starting pressure", limits.fluid.press_start);
+    HDF5::Read_Real_Attribute(zone, "SPH delta coefficient", limits.fluid.dsph_delta);
+    HDF5::Read_Real_Attribute(zone, "Artificial viscosity factor", limits.fluid.visc_alpha);
+    HDF5::Read_Real_Attribute(zone, "Speed of sound", limits.fluid.speed_sound);
+}
+
 /**
  * @brief Read a .h5 file to ingest restart data.
  *
@@ -1229,7 +1298,6 @@ void Read_HDF5(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
     // Read attributes, but only essential ones to not cause discrepancy
     HDF5::Read_Real_Attribute(file, "Simulation current time", svar.integrator.current_time);
     HDF5::Read_Uint_Attribute(file, "Current frame", svar.integrator.current_frame);
-    HDF5::Read_Real_Attribute(file, "SPH initial spacing", svar.particle_step);
     HDF5::Read_Uint_Attribute(file, "Single file for output", svar.io.single_file);
     HDF5::Read_Real_Attribute(file, "SPH frame time interval", svar.integrator.frame_time_interval);
     // HDF5::Read_Real_Attribute(file,   "SPH previous frame time", svar.last_frame_time);
@@ -1322,7 +1390,7 @@ namespace h5part
 
     void Write_Zone_Data(
         int64_t const& fout, real const& scale, double const& time, SPHState const& pnp1,
-        size_t const& start, size_t const& end, OutputMap const& output_variables, double const& rho_rest
+        size_t const& start, size_t const& end, OutputMap const& output_variables, LIMITS const& limits
     )
     {
         /* Need to write position, velocity, acceleration, pressure, density gradient, mass, boundary
@@ -1438,6 +1506,14 @@ namespace h5part
             HDF5::Write_Variable_Scalar(fout, "Particle ID", dims, 0, uvec);
         }
 
+        if (output_variables.at("fluid_id").write)
+        {
+            vector<int> uvec(length);
+            for (size_t ii = start; ii < end; ++ii)
+                uvec[ii - start] = pnp1[ii].fluid_id;
+            HDF5::Write_Variable_Scalar(fout, "Fluid ID", dims, 0, uvec);
+        }
+
         if (output_variables.at("cellID").write)
         {
             vector<int> uvec(length);
@@ -1467,8 +1543,16 @@ namespace h5part
         {
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = 100.0 * (pnp1[ii].rho / rho_rest - 1.0);
+                vec[ii - start] =
+                    100.0 * (pnp1[ii].rho / limits[pnp1[ii].fluid_id].fluid.rho_rest - 1.0);
             HDF5::Write_Variable_Scalar(fout, "Density Variation", dims, 0, vec);
+        }
+
+        if (output_variables.at("dx").write)
+        {
+            for (size_t ii = start; ii < end; ++ii)
+                vec[ii - start] = pnp1[ii].dx;
+            HDF5::Write_Variable_Scalar(fout, "Particle spacing", dims, 0, vec);
         }
 
         if (output_variables.at("vmag").write)
@@ -1746,7 +1830,7 @@ void close_h5part_files(SIM& svar)
  * @param pnp1 SoA containing SPH particles
  * @return void
  */
-void write_h5part_data(SIM& svar, SPHState const& pnp1)
+void write_h5part_data(SIM& svar, LIMITS const& limits, SPHState const& pnp1)
 {
 
     std::string zoneHeader = "Step#" + std::to_string(svar.integrator.current_frame);
@@ -1765,7 +1849,7 @@ void write_h5part_data(SIM& svar, SPHState const& pnp1)
 
         h5part::Write_Zone_Data(
             fluzone, svar.scale, svar.integrator.current_time, pnp1, svar.bound_points,
-            svar.total_points, svar.io.output_variables, svar.fluid.rho_rest
+            svar.total_points, svar.io.output_variables, limits
         );
 
         if (H5Gclose(fluzone))
@@ -1790,7 +1874,7 @@ void write_h5part_data(SIM& svar, SPHState const& pnp1)
 
         h5part::Write_Zone_Data(
             bndzone, svar.scale, svar.integrator.current_time, pnp1, 0, svar.bound_points,
-            svar.io.output_variables, svar.fluid.rho_rest
+            svar.io.output_variables, limits
         );
 
         if (H5Gclose(bndzone))

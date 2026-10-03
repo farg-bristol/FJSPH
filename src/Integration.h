@@ -46,7 +46,8 @@ class Integrator
     );
 
     real find_timestep(
-        SIM const& svar, MESH const& cells, SPHState const& pnp1, size_t const& start, size_t const& end
+        SIM const& svar, LIMITS const& limits, SPHState const& pnp1, size_t const& start,
+        size_t const& end
     );
 
     int solver_method = newmark_beta;
@@ -59,6 +60,7 @@ class Integrator
     real maxdrho = MEPSILON;
     real minST = 9999999.0;
     real maxU = MEPSILON;
+    real minH = 9999999.0;
 #ifdef ALE
     real maxShift = MEPSILON;
 #endif

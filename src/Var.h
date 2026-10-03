@@ -161,27 +161,11 @@ struct FLUID
 {
     uint pressure_rel = COLE_EOS;
 
-    real H = -1.0;          /* Support radius */
-    real H_sq = -1.0;       /* Support radius squared */
-    real sr = -1.0;         /* Search radius (support radius * factor)*/
-    real H_fac = 2.0;       /* Search radius factor */
-    real W_dx = -1.0;       /* Kernel value at the initial particle spacing distance.*/
-    real rho_rest = 1000.0; /* Resting fluid density */
-    real rho_pipe = 1000.0; /* Pipe starting density */
-    real press_pipe = 0.0;  /* Starting pressure in pipe*/
-    real press_back = 0.0;  /* Background pressure */
+    real rho_rest = 1000.0;  /* Resting fluid density */
+    real rho_start = 1000.0; /* Pipe starting density */
+    real press_start = 0.0;  /* Starting pressure in pipe*/
+    real press_back = 0.0;   /* Background pressure */
 
-    /* Allow a large variation by default */
-    /* making it essentially unbounded other */
-    /* than truly unphysical pressures */
-    real rho_max = 1500.0;   /* Maximum density value */
-    real rho_min = 500.0;    /* Minimum density value */
-    real rho_var = 50.0;     /* Maximum density variation allowed (in %) */
-    real rho_max_iter = 1.0; /* Maximum value to reduce the timestep */
-
-    real sim_mass = -1.0;     /* SPH fluid particle mass */
-    real bnd_mass = -1.0;     /* SPH boundary mass */
-    real W_correc = -1.0;     /* Smoothing Kernel Correction*/
     real visc_alpha = 0.1;    /* Artificial viscosity factor */
     real speed_sound = 300.0; /* Speed of sound */
     real mu = 8.94e-4;        /* Dynamic viscosity */
@@ -241,53 +225,19 @@ struct AERO
 {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    void GetYcoef(const FLUID& fvar, const real diam)
-    {
-#if SIMDIM == 3
-        L = diam * std::cbrt(3.0 / (4.0 * M_PI));
-        A_sphere = M_PI * L * L;
-        A_plate = diam * diam;
-#else
-        L = diam / sqrt(M_PI);
-        A_sphere = 2 * L;
-        A_plate = diam;
-#endif
-
-        td = (2.0 * fvar.rho_rest * pow(L, SIMDIM - 1)) / (Cd * fvar.mu);
-
-        omega = sqrt((Ck * fvar.sig) / (fvar.rho_rest * pow(L, SIMDIM)) - 1.0 / pow(td, 2.0));
-
-        tmax = -2.0 * (atan(sqrt(pow(td * omega, 2.0) + 1) + td * omega) - M_PI) / omega;
-
-        Cdef = 1.0 - exp(-tmax / td) * (cos(omega * tmax) + 1 / (omega * td) * sin(omega * tmax));
-        ycoef = 0.5 * Cdef * (Cf / (Ck * Cb)) * (rho_g * L) / fvar.sig;
-
-        // cout << ycoef << "  " << Cdef << "  " << tmax << "  " << endl;
-    }
-
     StateVecD v_inf = StateVecD::Zero(); /* Freestream velocity */
 
     /*Gissler Parameters*/
-    real L = -1.0; /* Aerodynamic length */
-    real td = -1.0;
-    real omega = -1.0;
-    real tmax = -1.0;
-    real ycoef = -1.0;
     real Cf = 1.0 / 3.0;
     real Ck = 8.0;
     real Cd = 5.0;
     real Cb = 0.5;
-    real Cdef = -1.0;
-
-    real A_sphere = -1.0; /* Area of a sphere/cylinder */
-    real A_plate = -1.0;  /* Area of a plate*/
 
     /* Gas Properties*/
     real v_ref = 0.0;                      /* Reference velocity */
     real p_ref = 101353.0;                 /* Reference pressure */
     real rho_g = 1.29251;                  /* Gas density */
     real mu_g = 1.716e-5;                  /* Gas dynamic viscosity */
-    real mass_g = -1.0;                    /* Gas particle mass */
     real temp_g = 298.0;                   /* Gas temperature */
     real R_g = 287.0;                      /* Specific gas constant */
     real gamma = 1.403;                    /* Ratio of specific heats */
@@ -370,12 +320,17 @@ struct SIM
     size_t delete_count = 0;     /* Number of deleted particles */
     size_t internal_count = 0;   /* Number of internal particles */
 
-    /* Particle size value */
-    real particle_step = -1.0;    /* Particle step for creating particle blocks. Must be specified. */
-    real bound_step_factor = 1.0; /* Boundary spacing factor of dx */
-    real dx = -1.0;               /* Initial spacings for particles and boundary. Must be specified. */
+    /* Limits on density variation to try maintain some simulation stability. */
+    /* Allow a large variation by default */
+    /* making it essentially unbounded other */
+    /* than truly unphysical pressures */
+    real rho_max = 1500.0;   /* Maximum density value */
+    real rho_min = 500.0;    /* Minimum density value */
+    real rho_var = 50.0;     /* Maximum density variation allowed (in %) */
+    real rho_max_iter = 1.0; /* Maximum value to reduce the timestep */
 
     /* Geometry parameters */
+    real H_fac = 2.0;                         /* Search radius factor */
     StateVecD offset_vec = StateVecD::Zero(); /* Global offset coordinate */
     int Asource = constVel;                   /* Source of aerodynamic solution */
     int init_hydro_pressure = 0;              /* Initialise fluid with hydrostatic pressure? */
@@ -387,7 +342,6 @@ struct SIM
     // Settings for more localised components.
     IN_OUT_SETT io;
     INTEG_SETT integrator;
-    FLUID fluid;
     AERO air;
     IPT_SETT ipt;
     VLM vlm;
@@ -501,10 +455,12 @@ struct SPHPart
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     SPHPart(
         StateVecD const& X, StateVecD const& Vi, real const Rhoi, real const Mi, real const press,
-        int const bound, uint const p_id
+        real const dx_i, real const Hi, real const sr_i, real const Wi, real const W_correc_i,
+        int const bound, size_t const p_id, size_t const fluid_id_i
     )
     {
         part_id = p_id;
+        fluid_id = fluid_id_i;
         faceID = 0;
         cellID = c_no_cell;
         b = bound;
@@ -518,6 +474,13 @@ struct SPHPart
         Af = StateVecD::Zero();
         aVisc = StateVecD::Zero();
         norm = StateVecD::Zero();
+
+        dx = dx_i;
+        H = Hi;
+        sr = sr_i;
+        W_dx = Wi;
+        W_correc = W_correc_i;
+
         Rrho = 0.0;
         rho = Rhoi;
         p = press;
@@ -550,6 +513,7 @@ struct SPHPart
     SPHPart(StateVecD const& X, SPHPart const& pj, int const bound, size_t const p_id)
     {
         part_id = p_id;
+        fluid_id = pj.fluid_id;
         faceID = 0;
         cellID = c_no_cell;
         b = bound;
@@ -563,10 +527,18 @@ struct SPHPart
         Af = StateVecD::Zero();
         aVisc = StateVecD::Zero();
         norm = StateVecD::Zero();
+
+        dx = pj.dx;
+        H = pj.H;
+        sr = pj.sr;
+        W_dx = pj.W_dx;
+        W_correc = pj.W_correc;
+
         Rrho = 0.0;
         rho = pj.rho;
         p = pj.p;
         m = pj.m;
+
         curve = 0.0;
         norm_curve = 0.0;
         woccl = 0.0;
@@ -597,7 +569,31 @@ struct SPHPart
 
     inline real operator[](int a) const { /* Return index of xi vector*/ return xi[a]; }
 
+    void GetYcoef(FLUID const& fvar, AERO const& avar)
+    {
+#if SIMDIM == 3
+        L_air = dx * std::cbrt(3.0 / (4.0 * M_PI));
+        A_sphere = M_PI * L_air * L_air;
+        A_plate = dx * dx;
+#else
+        L_air = dx / sqrt(M_PI);
+        A_sphere = 2 * L_air;
+        A_plate = dx;
+#endif
+
+        real td = (2.0 * fvar.rho_rest * pow(L_air, SIMDIM - 1)) / (avar.Cd * fvar.mu);
+        real omega =
+            sqrt((avar.Ck * fvar.sig) / (fvar.rho_rest * pow(L_air, SIMDIM)) - 1.0 / pow(td, 2.0));
+        real tmax = -2.0 * (atan(sqrt(pow(td * omega, 2.0) + 1) + td * omega) - M_PI) / omega;
+        real Cdef = 1.0 - exp(-tmax / td) * (cos(omega * tmax) + 1 / (omega * td) * sin(omega * tmax));
+
+        ycoef = 0.5 * Cdef * (avar.Cf / (avar.Ck * avar.Cb)) * (avar.rho_g * L_air) / fvar.sig;
+
+        // cout << ycoef << "  " << Cdef << "  " << tmax << "  " << endl;
+    }
+
     size_t part_id = 0;          /* Particle ID */
+    size_t fluid_id = 0;         /* Fluid bound block ID */
     size_t faceID = 0;           /* Mesh face ID */
     long int cellID = c_no_cell; /* Cell ID. -1 is not in a cell. */
     uint b = 0;                  /* Status flag. See PartState above for possible options */
@@ -610,6 +606,13 @@ struct SPHPart
     StateVecD acc = StateVecD::Zero();   /* Particle acceleration */
     StateVecD Af = StateVecD::Zero();    /* Particle aerodynamic force. */
     StateVecD aVisc = StateVecD::Zero(); /* Artificial viscosity contribution */
+
+    real dx = -1.0;       /* Particle diameter */
+    real H = -1.0;        /* Support radius */
+    real sr = -1.0;       /* Search radius (support radius * factor)*/
+    real W_dx = -1.0;     /* Kernel value at the initial particle spacing distance.*/
+    real W_correc = -1.0; /* Smoothing Kernel Correction*/
+
     real Rrho = 0.0;                     /* Density gradient */
     real rho = 0.0;                      /* Density */
     real p = 0.0;                        /* Pressure */
@@ -634,6 +637,11 @@ struct SPHPart
     real lam_nb = 0.0;  /* Eigenvalues without boundary particles */
     real kernsum = 0.0; /* Summation of the kernel */
 
+    real A_sphere = -1.0; /* Area of a sphere/cylinder */
+    real A_plate = -1.0;  /* Area of a plate*/
+    real L_air = -1.0;    /* Aerodynamic length */
+    real ycoef = 0.0;     /* Gissler TAB coefficient */
+
     /* Mesh surface repulsion */
     StateVecD bNorm = StateVecD::Zero(); /* Boundary normal value. */
     real y = 0.0;                        /* Distance from boundary */
@@ -646,33 +654,7 @@ struct IPTPart
 {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     /* Base initialiser for an IPT particle. All values set to zero. */
-    IPTPart()
-    {
-        part_id = 0;
-        going = 1;
-        nIters = 0;
-        failed = 0;
-        t = 0;
-        dt = 0;
-
-        /* Set initial IDs to a nonsense value, so that they don't interfere */
-        faceID = c_no_face;
-        faceV = StateVecD::Zero();
-        faceRho = 0.0;
-
-        cellID = -3;
-        cellV = StateVecD::Zero();
-        cellRho = 0.0;
-
-        acc = 0.0;
-        relax = 1.0;
-        v = StateVecD::Zero();
-        xi = StateVecD::Zero();
-
-        mass = 0.0;
-        d = 0.0;
-        A = 0.0;
-    }
+    IPTPart() {}
 
     /* Initialise an IPT particle with position, mass, and diameter. Velocity considered zero. */
     IPTPart(StateVecD const xi_, real const mass_, real const d_)
@@ -701,6 +683,7 @@ struct IPTPart
         mass = mass_;
         d = d_;
         A = M_PI * d_ * d_ / 4.0;
+        rho = mass_ / (4.0 / 3.0 * M_PI * pow(0.5 * d_, 3)); /* Derive using volume of the sphere. */
     }
 
     /* Initialise a new particle from an existing IPT particle, with new position. */
@@ -730,11 +713,12 @@ struct IPTPart
         mass = pi_.mass;
         d = pi_.d;
         A = pi_.A;
+        rho = pi_.rho;
     }
 
     /* Initialise IPT particle from an existing SPH particle, at a given time.
      Diameter can be different for IPT particles however. */
-    IPTPart(SPHPart const& pi, real const& time, real const& diam, real const& area)
+    IPTPart(SPHPart const& pi, real const& time, real const& diam, real const& area, real const& dens)
     {
         part_id = pi.part_id;
         going = 1;
@@ -762,6 +746,7 @@ struct IPTPart
         /* Derive diameter and area from the mass and resting density */
         d = diam;
         A = area;
+        rho = dens;
     }
 
     /* Reset an IPT particle if a timestep fails to converge. */
@@ -790,30 +775,34 @@ struct IPTPart
         xi = pi.xi;
     }
 
-    size_t part_id;
-    uint going;  /* Is particle still being integrated */
-    uint nIters; /* How many integration steps it's gone through */
-    size_t failed;
+    size_t part_id = 0;
+    uint going = 1;  /* Is particle still being integrated */
+    uint nIters = 0; /* How many integration steps it's gone through */
+    size_t failed = 0;
 
     /* Timestep properties */
-    real t, dt;
+    real t = 0;
+    real dt = -1;
 
     /* Face properties */
-    uint faceID;
-    StateVecD faceV;
-    real faceRho;
+    uint faceID = c_no_face;
+    StateVecD faceV = StateVecD::Zero();
+    real faceRho = 0.0;
 
     /* Containing cell properties */
-    long int cellID;
-    StateVecD cellV;
-    real cellRho;
+    long int cellID = -3;
+    StateVecD cellV = StateVecD::Zero();
+    real cellRho = 0.0;
 
-    real acc; /* Implicit acceleration */
-    real relax;
-    StateVecD v, xi; /* State variables */
+    real acc = 0.0; /* Implicit acceleration */
+    real relax = 1.0;
+    StateVecD v = StateVecD::Zero();
+    StateVecD xi = StateVecD::Zero(); /* State variables */
 
-    real mass; /* SPHPart mass */
-    real d, A; /* SPHPart diameter and area */
+    real mass = 0.0; /* SPHPart mass */
+    real d = 0.0;
+    real A = 0.0;   /* SPHPart diameter and area */
+    real rho = 0.0; /* SPHPart density */
 };
 
 /*  Structure to define the inlet and outlet conditions for either fluid or boundaries */
@@ -835,6 +824,7 @@ struct bound_block
         bound_solver = 0;
         no_slip = 0;
         block_type = 0;
+        dx = 0;
     }
 
     bound_block(size_t const& a, size_t const& b)
@@ -853,6 +843,7 @@ struct bound_block
         bound_solver = 0;
         no_slip = 0;
         block_type = 0;
+        dx = 0;
     }
 
     string name;                     /* Block name */
@@ -878,6 +869,9 @@ struct bound_block
     int no_slip;              /* Is wall no slip */
     int bound_solver;         /* Solver to use for boundaries */
     int block_type;           /* Block type from definition files. */
+    real dx;
+
+    FLUID fluid; /* Fluid properties for the block */
 };
 
 typedef std::vector<bound_block> LIMITS;

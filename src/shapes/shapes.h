@@ -42,7 +42,12 @@ class ShapeBlock
     real delconst = default_val;
     real aeroconst = default_val;
 
+    real particle_step = -1.0;    /* Particle step for creating particle blocks. Must be specified. */
     real dx = -1;                 /* Particle spacing */
+    real H = -1;                  /* Particle support radius */
+    real H_sq = -1;               /* Particle support radius squared */
+    real W_dx = -1.0;             /* Kernel value at the initial particle spacing distance.*/
+    real W_correc = -1.0;         /* Smoothing Kernel Correction*/
     real radius = -1;             /* Radius */
     real arc_start = -1;          /* Arc start */
     real arc_end = -1;            /* Arc end */
@@ -53,16 +58,8 @@ class ShapeBlock
     real estraight = 0;           /* Straight from the end point */
 
     // Starting physical properties
-    real vmag = 0;          /* Velocity magnitude in jet direction */
-    real press = 0;         /* Starting pressure */
-    real dens = 1000;       /* Starting density (derived from pressure or specified?) */
-    real mass = -1;         /* Starting mass (derived from spacing and density) */
-    real renorm_vol = -1;   /* Volume to renormalise mass using */
-    real nu = -1;           /* Kinematic viscosity */
-    real rho_rest = 1000;   /* Resting density */
-    real gamma = 7;         /* Cole gamma value */
-    real speedOfSound = -1; /* Speed of sound */
-    real backgroundP = 0;   /* Background pressure */
+    real vmag = 0;  /* Velocity magnitude in jet direction */
+    real mass = -1; /* Starting mass (derived from spacing and density) */
 
     /* Vector parameters */
     StateVecD stretch = StateVecD::Constant(1.0); /* Stretching coefficient to test tension */
@@ -99,13 +96,17 @@ class ShapeBlock
 
     std::vector<StateVecD> coords; /* Coordinates */
 
+    FLUID fluid;
+
     // Placeholder functions, that will be overridden by the specific shape classes
-    virtual void check_input(SIM const& svar, real& globalspacing, int& fault);
+    virtual void check_input(SIM const& svar, int& fault);
+
+    void set_values(SIM const& svar);
 
     // void check_input_pre(SIM const& svar,  real& globalspacing, int& fault);
-    void check_input_post(real& globalspacing);
+    void check_input_post();
 
-    virtual void generate_points(real const& globalspacing);
+    virtual void generate_points();
 
     virtual ~ShapeBlock(){};
 };
@@ -127,8 +128,8 @@ struct Shapes
 
 ShapeBlock* create_shape(string const& shape, int& fault);
 
-Shapes read_shapes_JSON(std::string const& filename, SIM const& svar, real& globalspacing);
+Shapes read_shapes_JSON(std::string const& filename, SIM const& svar);
 
-Shapes read_shapes_bmap(std::string const& filename, SIM const& svar, real& globalspacing);
+Shapes read_shapes_bmap(std::string const& filename, SIM const& svar);
 
 #endif
