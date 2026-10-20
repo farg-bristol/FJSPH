@@ -10,11 +10,6 @@ namespace HDF5
 {
     hid_t Open_HDF5_File(std::string const& filename, SIM const& svar);
 
-    void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<double> const& var_data
-    );
-
     template <typename T>
     void Write_Attribute(
         int64_t const& fout, std::string const& attr_name, T const& attr_data, hid_t const& var_type,
@@ -37,56 +32,24 @@ namespace HDF5
 
     template <typename T>
     void Write_Var_Array(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<std::vector<T>> const& var_data, hid_t const& var_type, hid_t const& write_type
     );
 
+    template <typename T>
     void Write_Variable_Array(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<std::vector<size_t>> const& var_data
-    );
-    void Write_Variable_Array(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<std::vector<int>> const& var_data
-    );
-    void Write_Variable_Array(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<std::vector<float>> const& var_data
-    );
-    void Write_Variable_Array(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<std::vector<double>> const& var_data
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
+        std::vector<std::vector<T>> const& var_data
     );
 
+    template <typename T>
     void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<size_t> const& var_data
-    );
-    void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<uint> const& var_data
-    );
-    void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<int> const& var_data
-    );
-    void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<long> const& var_data
-    );
-    void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<float> const& var_data
-    );
-    void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
-        std::vector<double> const& var_data
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
+        std::vector<T> const& var_data
     );
 
-    void Write_Vector_Data(
-        int64_t const& fout, std::string const& name, std::vector<StateVecD> const& data,
-        size_t const& start, size_t const& end
-    );
+    void
+    Write_Vector_Data(int64_t const& fout, std::string const& name, std::vector<StateVecD> const& data);
 
 } // namespace HDF5
 

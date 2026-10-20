@@ -209,141 +209,82 @@ add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& nam
 #endif
 }
 
-inline void Write_Real_Vector(
-    void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& start,
-    int32_t const& size, vector<real> const& varVec, string const& varName
-)
+namespace SZLIO
 {
-    int retval;
+    inline void Write_Real_Vector(
+        void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
+        vector<real> const& varVec, string const& varName
+    )
+    {
+        int retval;
+        int32_t size = varVec.size();
 #if FOD == 1
-    retval = tecZoneVarWriteDoubleValues(fileHandle, outputZone, varCount, 0, size, &varVec[start]);
+        retval = tecZoneVarWriteDoubleValues(fileHandle, outputZone, varCount, 0, size, &varVec[0]);
 #else
-    retval = tecZoneVarWriteFloatValues(fileHandle, outputZone, varCount, 0, size, &varVec[start]);
+        retval = tecZoneVarWriteFloatValues(fileHandle, outputZone, varCount, 0, size, &varVec[0]);
 #endif
 
-    if (retval)
-    {
-        printf(
-            "Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount
-        );
-        exit(-1);
+        if (retval)
+        {
+            printf(
+                "Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount
+            );
+            exit(-1);
+        }
+        varCount++;
     }
-    varCount++;
-}
 
-inline void Write_State_Vector(
-    void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& start,
-    int32_t const& size, vector<StateVecD> const& varVec, string const& varName
-)
-{
-    vector<real> vec(size);
-    for (uint dim = 0; dim < SIMDIM; ++dim)
+    inline void Write_Int_Vector(
+        void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
+        vector<int32_t> const& varVec, string const& varName
+    )
     {
+        int32_t size = varVec.size();
+        if (tecZoneVarWriteInt32Values(fileHandle, outputZone, varCount, 0, size, &varVec[0]))
+        {
+            printf(
+                "Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount
+            );
+            exit(-1);
+        }
+        varCount++;
+    }
+
+    inline void Write_UInt_Vector(
+        void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
+        vector<uint8_t> const& varVec, string const& varName
+    )
+    {
+        int32_t size = varVec.size();
+        if (tecZoneVarWriteUInt8Values(fileHandle, outputZone, varCount, 0, size, &varVec[0]))
+        {
+            printf(
+                "Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount
+            );
+            exit(-1);
+        }
+        varCount++;
+    }
+
+    // X/Y/Z vector
+    inline void Write_State_Vector(
+        void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
+        vector<StateVecD> const& varVec, string const& varName
+    )
+    {
+        int32_t size = varVec.size();
+        vector<real> vec(size);
+        for (uint dim = 0; dim < SIMDIM; ++dim)
+        {
 #pragma omp parallel for
-        for (int ii = start; ii < start + size; ++ii)
-            vec[ii - start] = varVec[ii][dim];
+            for (int ii = 0; ii < size; ++ii)
+                vec[ii] = varVec[ii][dim];
 
-        string name = varName + " " + std::to_string(dim);
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, size, vec, name);
+            string name = varName + " " + std::to_string(dim);
+            Write_Real_Vector(fileHandle, outputZone, varCount, vec, name);
+        }
     }
-}
-
-inline void Write_Int_Vector(
-    void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& start,
-    int32_t const& size, vector<int32_t> const& varVec, string const& varName
-)
-{
-    if (tecZoneVarWriteInt32Values(fileHandle, outputZone, varCount, 0, size, &varVec[start]))
-    {
-        printf(
-            "Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount
-        );
-        exit(-1);
-    }
-    varCount++;
-}
-
-inline void Write_UInt_Vector(
-    void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& start,
-    int32_t const& size, vector<uint8_t> const& varVec, string const& varName
-)
-{
-    if (tecZoneVarWriteUInt8Values(fileHandle, outputZone, varCount, 0, size, &varVec[start]))
-    {
-        printf(
-            "Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount
-        );
-        exit(-1);
-    }
-    varCount++;
-}
-
-inline void Write_Real_Value(
-    void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
-    real const& value, string const& varName
-)
-{
-    int retval;
-    vector<real> rvec(size, 0.0);
-    rvec[0] = value;
-#if FOD == 1
-    retval = tecZoneVarWriteDoubleValues(fileHandle, outputZone, varCount, 0, size, &rvec[0]);
-#else
-    retval = tecZoneVarWriteFloatValues(fileHandle, outputZone, varCount, 0, size, &rvec[0]);
-#endif
-
-    if (retval)
-    {
-        printf(
-            "Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount
-        );
-        exit(-1);
-    }
-    varCount++;
-}
-
-inline void Write_Int_Value(
-    void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
-    int32_t const& value, string const& varName
-)
-{
-    int retval;
-    vector<int32_t> rvec(size, 0.0);
-    rvec[0] = value;
-
-    retval = tecZoneVarWriteInt32Values(fileHandle, outputZone, varCount, 0, size, &rvec[0]);
-
-    if (retval)
-    {
-        printf(
-            "Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount
-        );
-        exit(-1);
-    }
-    varCount++;
-}
-
-inline void Write_UInt_Value(
-    void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, int32_t const& size,
-    uint8_t const& value, string const& varName
-)
-{
-    int retval;
-    vector<uint8_t> rvec(size, 0.0);
-    rvec[0] = value;
-
-    retval = tecZoneVarWriteUInt8Values(fileHandle, outputZone, varCount, 0, size, &rvec[0]);
-
-    if (retval)
-    {
-        printf(
-            "Failed to write \"%s\". zone: %d. varCount: %d\n", varName.c_str(), outputZone, varCount
-        );
-        exit(-1);
-    }
-    varCount++;
-}
-
+} // namespace SZLIO
 /*************************************************************************/
 /*************************** BINARY OUTPUTS ******************************/
 /*************************************************************************/
@@ -366,7 +307,7 @@ inline void Write_Zone(
                 vec[ii - start] = pnp1[ii].xi(dim) / scale;
 
             string name = "Position coordinate " + std::to_string(dim);
-            Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, name);
+            SZLIO::Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, name);
         }
     }
 

@@ -134,7 +134,7 @@ namespace HDF5
 
     template <typename T>
     void Write_Var_Array(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<std::vector<T>> const& var_data, hid_t const& var_type, hid_t const& write_type
     )
     {
@@ -143,7 +143,7 @@ namespace HDF5
         int64_t dataset = H5Dcreate(
             fout, var_name.c_str(), var_type, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
-        if ((retval = H5Dwrite(dataset, write_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start][0])))
+        if ((retval = H5Dwrite(dataset, write_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
         {
             printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
@@ -153,41 +153,41 @@ namespace HDF5
     }
 
     void Write_Variable_Array(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<std::vector<size_t>> const& var_data
     )
     {
-        Write_Var_Array(fout, var_name, dims, start, var_data, H5T_NATIVE_ULONG, H5T_NATIVE_ULONG);
+        Write_Var_Array(fout, var_name, dims, var_data, H5T_NATIVE_ULONG, H5T_NATIVE_ULONG);
     }
 
     void Write_Variable_Array(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<std::vector<int>> const& var_data
     )
     {
-        Write_Var_Array(fout, var_name, dims, start, var_data, H5T_NATIVE_INT, H5T_NATIVE_INT);
+        Write_Var_Array(fout, var_name, dims, var_data, H5T_NATIVE_INT, H5T_NATIVE_INT);
     }
 
     void Write_Variable_Array(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<std::vector<float>> const& var_data
     )
     {
-        Write_Var_Array(fout, var_name, dims, start, var_data, H5T_NATIVE_FLOAT, H5T_NATIVE_FLOAT);
+        Write_Var_Array(fout, var_name, dims, var_data, H5T_NATIVE_FLOAT, H5T_NATIVE_FLOAT);
     }
 
     void Write_Variable_Array(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<std::vector<double>> const& var_data
     )
     {
-        Write_Var_Array(fout, var_name, dims, start, var_data, H5T_NATIVE_DOUBLE, H5T_NATIVE_DOUBLE);
+        Write_Var_Array(fout, var_name, dims, var_data, H5T_NATIVE_DOUBLE, H5T_NATIVE_DOUBLE);
     }
 
     // #if UINTPTR_MAX == 0xffffffffffffffff
     /* 64-bit pointers */
     void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<size_t> const& var_data
     )
     {
@@ -197,8 +197,7 @@ namespace HDF5
         int64_t dataset = H5Dcreate(
             fout, var_name.c_str(), H5T_NATIVE_ULONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_ULONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
+        if ((retval = H5Dwrite(dataset, H5T_NATIVE_ULONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
             printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
@@ -228,7 +227,7 @@ namespace HDF5
     // #endif
 
     void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<uint> const& var_data
     )
     {
@@ -238,8 +237,7 @@ namespace HDF5
         int64_t dataset = H5Dcreate(
             fout, var_name.c_str(), H5T_NATIVE_UINT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
+        if ((retval = H5Dwrite(dataset, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
             printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
@@ -249,7 +247,7 @@ namespace HDF5
     }
 
     void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<int> const& var_data
     )
     {
@@ -259,8 +257,7 @@ namespace HDF5
         int64_t dataset = H5Dcreate(
             fout, var_name.c_str(), H5T_NATIVE_INT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
+        if ((retval = H5Dwrite(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
             printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
@@ -270,7 +267,7 @@ namespace HDF5
     }
 
     void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<long> const& var_data
     )
     {
@@ -280,8 +277,7 @@ namespace HDF5
         int64_t dataset = H5Dcreate(
             fout, var_name.c_str(), H5T_NATIVE_LONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
+        if ((retval = H5Dwrite(dataset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
             printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
@@ -291,7 +287,7 @@ namespace HDF5
     }
 
     void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<float> const& var_data
     )
     {
@@ -301,8 +297,7 @@ namespace HDF5
         int64_t dataset = H5Dcreate(
             fout, var_name.c_str(), H5T_NATIVE_FLOAT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
+        if ((retval = H5Dwrite(dataset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
             printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
@@ -312,7 +307,7 @@ namespace HDF5
     }
 
     void Write_Variable_Scalar(
-        int64_t const& fout, std::string const& var_name, hsize_t const* dims, size_t const& start,
+        int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<double> const& var_data
     )
     {
@@ -322,8 +317,7 @@ namespace HDF5
         int64_t dataset = H5Dcreate(
             fout, var_name.c_str(), H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
-        if ((retval =
-                 H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[start])))
+        if ((retval = H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
             printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
@@ -332,43 +326,41 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
 
-    void Write_Vector_Data(
-        int64_t const& fout, std::string const& name, std::vector<StateVecD> const& data,
-        size_t const& start, size_t const& end
-    )
+    void
+    Write_Vector_Data(int64_t const& fout, std::string const& name, std::vector<StateVecD> const& data)
     {
-        hsize_t length = end - start;
-        std::vector<double> vect(length);
-        hsize_t dim[] = {length};
+        size_t length = data.size();
+        std::vector<double> vect(data.size());
+        hsize_t dim[] = {data.size()};
         std::string name_;
 
 #pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vect[ii - start] = data[ii][0];
+        for (size_t ii = 0; ii < length; ++ii)
+            vect[ii] = data[ii][0];
 
         name_ = name.empty() ? "x" : name + " x";
-        Write_Variable_Scalar(fout, name_.c_str(), dim, 0, vect);
+        Write_Variable_Scalar(fout, name_.c_str(), dim, vect);
 
 #pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vect[ii - start] = data[ii][1];
+        for (size_t ii = 0; ii < length; ++ii)
+            vect[ii] = data[ii][1];
 
         name_ = name.empty() ? "y" : name + " y";
-        Write_Variable_Scalar(fout, name_.c_str(), dim, 0, vect);
+        Write_Variable_Scalar(fout, name_.c_str(), dim, vect);
 
         name_ = name.empty() ? "z" : name + " z";
 #if SIMDIM == 3
 #pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vect[ii - start] = data[ii][2];
+        for (size_t ii = 0; ii < length; ++ii)
+            vect[ii] = data[ii][2];
 
-        Write_Variable_Scalar(fout, name_.c_str(), dim, 0, vect);
+        Write_Variable_Scalar(fout, name_.c_str(), dim, vect);
 #else
 #pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
+        for (size_t ii = 0; ii < length; ++ii)
             vect[ii - start] = 0.0;
 
-        Write_Variable_Scalar(fout, name_.c_str(), dim, 0, vect);
+        Write_Variable_Scalar(fout, name_.c_str(), dim, vect);
 #endif
     }
 
@@ -392,160 +384,13 @@ namespace HDF5
         return "x";
     }
 
-    void Write_Zone_Data(
-        int64_t const& fout, real const& scale, SPHState const& pnp1, size_t const& start,
-        size_t const& end
-    )
-    {
-        /* Need to write position, velocity, acceleration, pressure, density gradient, mass, boundary
-         * flag */
-        /* Write as a 2D array, or 1D arrays for vectors? 1D for now */
-        size_t length = end - start;
-        // hsize_t dims[] = {length,2};
-        hsize_t dims[] = {length};
-        vector<real> vec(length);
-
-        /* Position */
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].xi(dim) / scale;
-
-            string name = "Position coordinate " + get_dim(dim);
-            Write_Variable_Scalar(fout, name, dims, 0, vec);
-        }
-
-        /* Velocity */
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].v(dim);
-
-            string name = "Velocity " + get_dim(dim);
-            Write_Variable_Scalar(fout, name, dims, 0, vec);
-        }
-
-        /* Acceleration */
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].acc(dim);
-
-            string name = "Acceleration " + get_dim(dim);
-            Write_Variable_Scalar(fout, name, dims, 0, vec);
-        }
-
-/* Pressure */
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].p;
-
-        Write_Variable_Scalar(fout, "Pressure", dims, 0, vec);
-
-/* Density */
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].rho;
-
-        Write_Variable_Scalar(fout, "Density", dims, 0, vec);
-
-/* Density gradient */
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].Rrho;
-
-        Write_Variable_Scalar(fout, "Density gradient", dims, 0, vec);
-
-/* Mass */
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].m;
-
-        Write_Variable_Scalar(fout, "Mass", dims, 0, vec);
-
-        vec.clear();
-
-/* Particle spacing */
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].dx;
-
-        Write_Variable_Scalar(fout, "Particle spacing", dims, 0, vec);
-
-        vec.clear();
-
-        /* Boundary flag */
-        vector<uint> uvec(length);
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            uvec[ii - start] = pnp1[ii].b;
-
-        Write_Variable_Scalar(fout, "Boundary condition", dims, 0, uvec);
-        uvec.clear();
-
-        /* Particle ID */
-        vector<size_t> svec(length);
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            svec[ii - start] = pnp1[ii].part_id;
-
-        Write_Variable_Scalar(fout, "Particle ID", dims, 0, svec);
-        svec.clear();
-
-        /* Fluid ID */
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            svec[ii - start] = pnp1[ii].fluid_id;
-
-        Write_Variable_Scalar(fout, "Fluid ID", dims, 0, svec);
-        svec.clear();
-
-        /* Cell ID */
-        vector<long> lvec(length);
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            lvec[ii - start] = pnp1[ii].cellID;
-
-        Write_Variable_Scalar(fout, "Cell ID", dims, 0, lvec);
-
-        /* Cell velocity */
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].cellV(dim);
-
-            string name = "Cell velocity " + get_dim(dim);
-            Write_Variable_Scalar(fout, name, dims, 0, vec);
-        }
-
-/* Cell density */
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].cellRho;
-
-        Write_Variable_Scalar(fout, "Cell density", dims, 0, vec);
-
-/* Cell pressure */
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].cellP;
-
-        Write_Variable_Scalar(fout, "Cell pressure", dims, 0, vec);
-
-        lvec.clear();
-    }
-
     void Write_Inlet_Data(int64_t const& fout, bound_block const& limits)
     {
         size_t length = limits.back.size();
         hsize_t dim[] = {length};
         hsize_t dims[] = {length * 4};
 
-        Write_Variable_Scalar(fout, "Back index", dim, 0, limits.back);
+        Write_Variable_Scalar(fout, "Back index", dim, limits.back);
 
         vector<size_t> buff(length * 4);
         size_t accm(0);
@@ -553,7 +398,7 @@ namespace HDF5
             for (size_t jj = 0; jj < 4; jj++)
                 buff[accm++] = limits.buffer[ii][jj];
 
-        Write_Variable_Scalar(fout, "Buffer index", dims, 0, buff);
+        Write_Variable_Scalar(fout, "Buffer index", dims, buff);
     }
 
     /*************************************************************************/

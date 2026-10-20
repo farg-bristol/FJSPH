@@ -6,6 +6,49 @@
 
 #include "Var.h"
 
+namespace SZLIO
+{
+    void Write_Real_Vector(
+        void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
+        vector<real> const& varVec, string const& varName
+    );
+
+    void Write_Int_Vector(
+        void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
+        vector<int32_t> const& varVec, string const& varName
+    );
+    void Write_UInt_Vector(
+        void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
+        vector<uint8_t> const& varVec, string const& varName
+    );
+
+    void Write_State_Vector(
+        void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
+        vector<StateVecD> const& varVec, string const& varName
+    );
+
+    template <typename T>
+    void Write_Scalar_Value(
+        void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, vector<T> const& varVec,
+        string const& varName
+    )
+    {
+        if (std::typeid(T) == std::typeid(real))
+        {
+            Write_Real_Vector(fileHandle, outputZone, varCount, varVec, varName);
+        }
+        else if (std::typeid(T) == std::typeid(int32_t))
+        {
+            Write_Int_Vector(fileHandle, outputZone, varCount, size, varVec, varName);
+        }
+        else
+        {
+            Write_UInt_Vector(fileHandle, outputZone, varCount, size, varVec, varName);
+        }
+    }
+
+}; // namespace SZLIO
+
 inline int Combine_SZPLT(string& file)
 {
     string cmd = "exec szcombine \"";
