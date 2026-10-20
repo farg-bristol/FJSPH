@@ -19,199 +19,204 @@ inline std::string space2underscore(std::string text)
 /*************************************************************************/
 /********************** BINARY OUTPUT FUNCTIONS **************************/
 /*************************************************************************/
-inline void add_file_aux_data(void* const& file, std::string const& name, std::string const& var)
+namespace SZLIO
 {
-    if (!var.empty())
+    void add_file_aux_data(void* const& file, std::string const& name, std::string const& var)
     {
-        if (tecDataSetAddAuxData(file, space2underscore(name).c_str(), space2underscore(var).c_str()))
+        if (!var.empty())
+        {
+            if (tecDataSetAddAuxData(
+                    file, space2underscore(name).c_str(), space2underscore(var).c_str()
+                ))
+            {
+                std::cout << "Failed to write file auxiliary data: " << name << std::endl;
+                std::cout << "Stopping." << std::endl;
+                exit(-1);
+            }
+        }
+    }
+
+    void add_file_aux_data(void* const& file, std::string const& name, size_t const& var)
+    {
+        std::ostringstream stream;
+        stream << var;
+        if (tecDataSetAddAuxData(file, space2underscore(name).c_str(), stream.str().c_str()))
         {
             std::cout << "Failed to write file auxiliary data: " << name << std::endl;
             std::cout << "Stopping." << std::endl;
             exit(-1);
         }
     }
-}
 
-inline void add_file_aux_data(void* const& file, std::string const& name, size_t const& var)
-{
-    std::ostringstream stream;
-    stream << var;
-    if (tecDataSetAddAuxData(file, space2underscore(name).c_str(), stream.str().c_str()))
+    void add_file_aux_data(void* const& file, std::string const& name, int const& var)
     {
-        std::cout << "Failed to write file auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
-    }
-}
-
-inline void add_file_aux_data(void* const& file, std::string const& name, int const& var)
-{
-    std::ostringstream stream;
-    stream << var;
-    if (tecDataSetAddAuxData(file, space2underscore(name).c_str(), stream.str().c_str()))
-    {
-        std::cout << "Failed to write file auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
-    }
-}
-
-inline void add_file_aux_data(void* const& file, std::string const& name, uint const& var)
-{
-    std::ostringstream stream;
-    stream << var;
-    if (tecDataSetAddAuxData(file, space2underscore(name).c_str(), stream.str().c_str()))
-    {
-        std::cout << "Failed to write file auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
-    }
-}
-
-inline void add_file_aux_data(void* const& file, std::string const& name, double const& var)
-{
-    std::ostringstream stream;
-    stream << std::setprecision(9) << var;
-    if (tecDataSetAddAuxData(file, space2underscore(name).c_str(), stream.str().c_str()))
-    {
-        std::cout << "Failed to write file auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
-    }
-}
-
-inline void add_file_aux_data(void* const& file, std::string const& name, StateVecD const& var)
-{
-    string name_ = name + " x";
-    std::ostringstream stream;
-    stream << std::setprecision(9) << var[0];
-    if (tecDataSetAddAuxData(file, space2underscore(name_).c_str(), stream.str().c_str()))
-    {
-        std::cout << "Failed to write file auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
+        std::ostringstream stream;
+        stream << var;
+        if (tecDataSetAddAuxData(file, space2underscore(name).c_str(), stream.str().c_str()))
+        {
+            std::cout << "Failed to write file auxiliary data: " << name << std::endl;
+            std::cout << "Stopping." << std::endl;
+            exit(-1);
+        }
     }
 
-    name_ = name + " y";
-    stream.str("");
-    stream.clear();
-    stream << std::setprecision(9) << var[1];
-    if (tecDataSetAddAuxData(file, space2underscore(name_).c_str(), stream.str().c_str()))
+    void add_file_aux_data(void* const& file, std::string const& name, uint const& var)
     {
-        std::cout << "Failed to write file auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
+        std::ostringstream stream;
+        stream << var;
+        if (tecDataSetAddAuxData(file, space2underscore(name).c_str(), stream.str().c_str()))
+        {
+            std::cout << "Failed to write file auxiliary data: " << name << std::endl;
+            std::cout << "Stopping." << std::endl;
+            exit(-1);
+        }
     }
+
+    void add_file_aux_data(void* const& file, std::string const& name, double const& var)
+    {
+        std::ostringstream stream;
+        stream << std::setprecision(9) << var;
+        if (tecDataSetAddAuxData(file, space2underscore(name).c_str(), stream.str().c_str()))
+        {
+            std::cout << "Failed to write file auxiliary data: " << name << std::endl;
+            std::cout << "Stopping." << std::endl;
+            exit(-1);
+        }
+    }
+
+    void add_file_aux_data(void* const& file, std::string const& name, StateVecD const& var)
+    {
+        string name_ = name + " x";
+        std::ostringstream stream;
+        stream << std::setprecision(9) << var[0];
+        if (tecDataSetAddAuxData(file, space2underscore(name_).c_str(), stream.str().c_str()))
+        {
+            std::cout << "Failed to write file auxiliary data: " << name << std::endl;
+            std::cout << "Stopping." << std::endl;
+            exit(-1);
+        }
+
+        name_ = name + " y";
+        stream.str("");
+        stream.clear();
+        stream << std::setprecision(9) << var[1];
+        if (tecDataSetAddAuxData(file, space2underscore(name_).c_str(), stream.str().c_str()))
+        {
+            std::cout << "Failed to write file auxiliary data: " << name << std::endl;
+            std::cout << "Stopping." << std::endl;
+            exit(-1);
+        }
 
 #if SIMDIM == 3
-    name_ = name + " z";
-    stream.str("");
-    stream.clear();
-    stream << std::setprecision(9) << var[2];
-    if (tecDataSetAddAuxData(file, space2underscore(name_).c_str(), stream.str().c_str()))
-    {
-        std::cout << "Failed to write file auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
-    }
+        name_ = name + " z";
+        stream.str("");
+        stream.clear();
+        stream << std::setprecision(9) << var[2];
+        if (tecDataSetAddAuxData(file, space2underscore(name_).c_str(), stream.str().c_str()))
+        {
+            std::cout << "Failed to write file auxiliary data: " << name << std::endl;
+            std::cout << "Stopping." << std::endl;
+            exit(-1);
+        }
 #endif
-}
+    }
 
-inline void add_zone_aux_data(
-    void* const& file, int32_t const& zone, std::string const& name, std::string const& var
-)
-{
-    if (!var.empty())
+    void add_zone_aux_data(
+        void* const& file, int32_t const& zone, std::string const& name, std::string const& var
+    )
     {
-        if (tecZoneAddAuxData(file, zone, space2underscore(name).c_str(), space2underscore(var).c_str()))
+        if (!var.empty())
+        {
+            if (tecZoneAddAuxData(
+                    file, zone, space2underscore(name).c_str(), space2underscore(var).c_str()
+                ))
+            {
+                std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
+                std::cout << "Stopping." << std::endl;
+                exit(-1);
+            }
+        }
+    }
+
+    void
+    add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& name, size_t const& var)
+    {
+        std::ostringstream stream;
+        stream << var;
+        if (tecZoneAddAuxData(file, zone, space2underscore(name).c_str(), stream.str().c_str()))
         {
             std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
             std::cout << "Stopping." << std::endl;
             exit(-1);
         }
     }
-}
 
-inline void
-add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& name, size_t const& var)
-{
-    std::ostringstream stream;
-    stream << var;
-    if (tecZoneAddAuxData(file, zone, space2underscore(name).c_str(), stream.str().c_str()))
+    void
+    add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& name, int const& var)
     {
-        std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
-    }
-}
-
-inline void
-add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& name, int const& var)
-{
-    std::ostringstream stream;
-    stream << var;
-    if (tecZoneAddAuxData(file, zone, space2underscore(name).c_str(), stream.str().c_str()))
-    {
-        std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
-    }
-}
-
-inline void
-add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& name, double const& var)
-{
-    std::ostringstream stream;
-    stream << std::setprecision(9) << var;
-    if (tecZoneAddAuxData(file, zone, space2underscore(name).c_str(), stream.str().c_str()))
-    {
-        std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
-    }
-}
-
-inline void
-add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& name, StateVecD const& var)
-{
-    string name_ = name + " x";
-    std::ostringstream stream;
-    stream << std::setprecision(9) << var[0];
-    if (tecZoneAddAuxData(file, zone, space2underscore(name_).c_str(), stream.str().c_str()))
-    {
-        std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
+        std::ostringstream stream;
+        stream << var;
+        if (tecZoneAddAuxData(file, zone, space2underscore(name).c_str(), stream.str().c_str()))
+        {
+            std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
+            std::cout << "Stopping." << std::endl;
+            exit(-1);
+        }
     }
 
-    name_ = name + " y";
-    stream.str("");
-    stream.clear();
-    stream << var[1];
-    if (tecZoneAddAuxData(file, zone, space2underscore(name_).c_str(), stream.str().c_str()))
+    void
+    add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& name, double const& var)
     {
-        std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
+        std::ostringstream stream;
+        stream << std::setprecision(9) << var;
+        if (tecZoneAddAuxData(file, zone, space2underscore(name).c_str(), stream.str().c_str()))
+        {
+            std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
+            std::cout << "Stopping." << std::endl;
+            exit(-1);
+        }
     }
+
+    void add_zone_aux_data(
+        void* const& file, int32_t const& zone, std::string const& name, StateVecD const& var
+    )
+    {
+        string name_ = name + " x";
+        std::ostringstream stream;
+        stream << std::setprecision(9) << var[0];
+        if (tecZoneAddAuxData(file, zone, space2underscore(name_).c_str(), stream.str().c_str()))
+        {
+            std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
+            std::cout << "Stopping." << std::endl;
+            exit(-1);
+        }
+
+        name_ = name + " y";
+        stream.str("");
+        stream.clear();
+        stream << var[1];
+        if (tecZoneAddAuxData(file, zone, space2underscore(name_).c_str(), stream.str().c_str()))
+        {
+            std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
+            std::cout << "Stopping." << std::endl;
+            exit(-1);
+        }
 
 #if SIMDIM == 3
-    name_ = name + " z";
-    stream.str("");
-    stream.clear();
-    stream << std::setprecision(9) << var[2];
-    if (tecZoneAddAuxData(file, zone, space2underscore(name_).c_str(), stream.str().c_str()))
-    {
-        std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
-        std::cout << "Stopping." << std::endl;
-        exit(-1);
-    }
+        name_ = name + " z";
+        stream.str("");
+        stream.clear();
+        stream << std::setprecision(9) << var[2];
+        if (tecZoneAddAuxData(file, zone, space2underscore(name_).c_str(), stream.str().c_str()))
+        {
+            std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
+            std::cout << "Stopping." << std::endl;
+            exit(-1);
+        }
 #endif
-}
+    }
 
-namespace SZLIO
-{
-    inline void Write_Real_Vector(
+    void Write_Vector(
         void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
         vector<real> const& varVec, string const& varName
     )
@@ -234,7 +239,7 @@ namespace SZLIO
         varCount++;
     }
 
-    inline void Write_Int_Vector(
+    void Write_Vector(
         void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
         vector<int32_t> const& varVec, string const& varName
     )
@@ -250,7 +255,7 @@ namespace SZLIO
         varCount++;
     }
 
-    inline void Write_UInt_Vector(
+    void Write_Vector(
         void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
         vector<uint8_t> const& varVec, string const& varName
     )
@@ -267,7 +272,7 @@ namespace SZLIO
     }
 
     // X/Y/Z vector
-    inline void Write_State_Vector(
+    void Write_Vector(
         void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
         vector<StateVecD> const& varVec, string const& varName
     )
@@ -293,283 +298,6 @@ inline void Write_Zone(
     size_t const& start, size_t const& end, void* const& fileHandle, int32_t const& outputZone
 )
 {
-    int32_t varCount = 1;
-    int32_t imax = end - start;
-
-    vector<real> vec(imax);
-    // Restart essential variables. These should not be zero, but could possibly in future
-    if (output_variables.at("pos-vec").write)
-    {
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].xi(dim) / scale;
-
-            string name = "Position coordinate " + std::to_string(dim);
-            SZLIO::Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, name);
-        }
-    }
-
-    if (output_variables.at("vel-vec").write)
-    {
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].v(dim);
-
-            string name = "Velocity " + std::to_string(dim);
-            Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, name);
-        }
-    }
-
-    if (output_variables.at("acc-vec").write)
-    {
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].acc(dim);
-
-            string name = "Acceleration " + std::to_string(dim);
-            Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, name);
-        }
-    }
-
-    if (output_variables.at("press").write)
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].p;
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Pressure");
-    }
-
-    if (output_variables.at("dRho").write)
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].Rrho;
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Density gradient");
-    }
-
-    if (output_variables.at("part_id").write)
-    {
-        vector<int> uvec(imax);
-        for (size_t ii = start; ii < end; ++ii)
-            uvec[ii - start] = pnp1[ii].part_id;
-        Write_Int_Vector(fileHandle, outputZone, varCount, 0, imax, uvec, "Particle ID");
-    }
-
-    if (output_variables.at("cellID").write)
-    {
-        vector<int> uvec(imax);
-        for (size_t ii = start; ii < end; ++ii)
-            uvec[ii - start] = pnp1[ii].cellID;
-        Write_Int_Vector(fileHandle, outputZone, varCount, 0, imax, uvec, "Cell ID");
-    }
-
-    if (output_variables.at("bound").write)
-    {
-        vector<uint8_t> uvec(imax);
-        for (size_t ii = start; ii < end; ++ii)
-            uvec[ii - start] = pnp1[ii].b;
-        Write_UInt_Vector(fileHandle, outputZone, varCount, 0, imax, uvec, "Particle status condition");
-    }
-
-    // Non essential variables, but to provide further information
-    if (output_variables.at("dens").write)
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].rho;
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Density");
-    }
-
-    if (output_variables.at("densVar").write)
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = 100.0 * (pnp1[ii].rho / rho_rest - 1.0);
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Density Variation");
-    }
-
-    if (output_variables.at("vmag").write)
-    {
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].v.norm();
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Velocity magnitude");
-    }
-
-    if (output_variables.at("surf").write)
-    {
-        vector<uint8_t> uvec(imax);
-        for (size_t ii = start; ii < end; ++ii)
-            uvec[ii - start] = pnp1[ii].surf;
-        Write_UInt_Vector(fileHandle, outputZone, varCount, 0, imax, uvec, "Surface flag");
-    }
-
-    if (output_variables.at("surfZ").write)
-    {
-        vector<uint8_t> uvec(imax);
-        for (size_t ii = start; ii < end; ++ii)
-            uvec[ii - start] = pnp1[ii].surfzone;
-        Write_UInt_Vector(fileHandle, outputZone, varCount, 0, imax, uvec, "Surface zone flag");
-    }
-
-    if (output_variables.at("aero-mag").write)
-    {
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].Af.norm();
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Aerodynamic force magnitude");
-    }
-
-    if (output_variables.at("aero-vec").write)
-    {
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].Af(dim);
-
-            string name = "Aerodynamic force " + std::to_string(dim);
-            Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, name);
-        }
-    }
-
-    if (output_variables.at("curv").write)
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].curve;
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Curvature");
-    }
-
-    if (output_variables.at("occl").write)
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].woccl;
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Occlusion factor");
-    }
-
-    if (output_variables.at("cellP").write)
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].cellP;
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Cell pressure");
-    }
-
-    if (output_variables.at("cellRho").write)
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].cellP;
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Cell density");
-    }
-
-    if (output_variables.at("cellV-mag").write)
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].cellV.norm();
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Cell velocity magnitude");
-    }
-
-    if (output_variables.at("cellV-vec").write)
-    {
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].cellV(dim);
-
-            string name = "Cell velocity " + std::to_string(dim);
-            Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, name);
-        }
-    }
-
-    if (output_variables.at("dsphG-vec").write) // Delta SPH density gradient
-    {
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].gradRho(dim);
-
-            string name = "dSPH density gradient" + std::to_string(dim);
-            Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, name);
-        }
-    }
-
-    if (output_variables.at("lam").write) // Lambda eigenvalue of L matrix
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].lam;
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Lambda eigenvalue");
-    }
-
-    if (output_variables.at("lam-nb").write) // Lambda eigenvalue of L matrix without boundary
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].lam_nb;
-        Write_Real_Vector(
-            fileHandle, outputZone, varCount, 0, imax, vec, "Lambda eigenvalue without boundary"
-        );
-    }
-
-    if (output_variables.at("colour").write) // Surface colour function
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].colour;
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Colour function");
-    }
-
-    if (output_variables.at("colour-G").write) // Gradient of the colour function for CSF
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].colourG;
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Colour function gradient");
-    }
-
-    if (output_variables.at("norm-vec").write) // Surface normal
-    {
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].norm(dim);
-
-            string name = "Surface normal" + std::to_string(dim);
-            Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, name);
-        }
-    }
-
-    if (output_variables.at("shiftV-mag").write)
-    {
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].vPert.norm();
-        Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, "Shifting velocity magnitude");
-    }
-
-    if (output_variables.at("shiftV-vec").write)
-    {
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].vPert(dim);
-
-            string name = "Shifting velocity " + std::to_string(dim);
-            Write_Real_Vector(fileHandle, outputZone, varCount, 0, imax, vec, name);
-        }
-    }
 }
 
 void Write_Binary_Timestep(
@@ -682,6 +410,19 @@ void Write_Binary_Timestep(
     }
 }
 
+bool Open_PLT_File(string const& file_name, string const& zone_name, SIM const& svar, void*& file_handle)
+{
+    int32_t FileType = 0;   /*0 = Full, 1 = Grid, 2 = Solution*/
+    int32_t fileFormat = 1; // 0 == PLT, 1 == SZPLT
+
+    return (
+        tecFileWriterOpen(
+            file_name.c_str(), zone_name.c_str(), svar.io.var_names.c_str(), fileFormat, FileType, 1,
+            NULL, &file_handle
+        ) == 0
+    );
+}
+
 void Init_Binary_PLT(
     SIM& svar, string const& prefix, string const& filename, string const& zoneName, void*& fileHandle
 )
@@ -691,10 +432,7 @@ void Init_Binary_PLT(
 
     string file = prefix + filename;
 
-    if (tecFileWriterOpen(
-            file.c_str(), zoneName.c_str(), svar.io.var_names.c_str(), fileFormat, FileType, 1, NULL,
-            &fileHandle
-        ))
+    if (Open_PLT_File(file, zoneName, svar, fileHandle))
     {
         cout << "Failed to open " << file << endl;
         exit(-1);

@@ -45,8 +45,9 @@ namespace HDF5
         return file_handle;
     }
 
+    // Do not call directly. Needs to be called from a typed attribute writer.
     template <typename T>
-    void Write_Attribute(
+    void _Write_Attribute(
         int64_t const& fout, std::string const& attr_name, T const& attr_data, hid_t const& var_type,
         hid_t const& write_type
     )
@@ -65,28 +66,27 @@ namespace HDF5
         retval = H5Aclose(attr);
     }
 
-    void Write_Uint_Attribute(int64_t const& fout, std::string const& attr_name, size_t const& attr_data)
+    void Write_Attribute(int64_t const& fout, std::string const& attr_name, size_t const& attr_data)
     {
-        Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_ULONG, H5T_NATIVE_ULONG);
+        _Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_ULONG, H5T_NATIVE_ULONG);
     }
 
-    void Write_Uint_Attribute(int64_t const& fout, std::string const& attr_name, uint const& attr_data)
+    void Write_Attribute(int64_t const& fout, std::string const& attr_name, uint const& attr_data)
     {
-        Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_UINT, H5T_NATIVE_UINT);
+        _Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_UINT, H5T_NATIVE_UINT);
     }
 
-    void Write_Int_Attribute(int64_t const& fout, std::string const& attr_name, int const& attr_data)
+    void Write_Attribute(int64_t const& fout, std::string const& attr_name, int const& attr_data)
     {
-        Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_UINT, H5T_NATIVE_UINT);
+        _Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_UINT, H5T_NATIVE_UINT);
     }
 
-    void Write_Real_Attribute(int64_t const& fout, std::string const& attr_name, double const& attr_data)
+    void Write_Attribute(int64_t const& fout, std::string const& attr_name, double const& attr_data)
     {
-        Write_Attribute(fout, attr_name, attr_data, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE);
+        _Write_Attribute(fout, attr_name, attr_data, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE);
     }
 
-    void
-    Write_Vector_Attribute(int64_t const& fout, std::string const& attr_name, StateVecD const& attr_data)
+    void Write_Attribute(int64_t const& fout, std::string const& attr_name, StateVecD const& attr_data)
     {
         std::string name_ = attr_name /* + " x" */;
         hsize_t dims[1] = {SIMDIM};
@@ -103,9 +103,7 @@ namespace HDF5
         retval = H5Aclose(attr);
     }
 
-    void Write_String_Attribute(
-        int64_t const& fout, std::string const& attr_name, std::string const& attr_data
-    )
+    void Write_Attribute(int64_t const& fout, std::string const& attr_name, std::string const& attr_data)
     {
         if (attr_data.length() > 0)
         {
@@ -132,6 +130,7 @@ namespace HDF5
         }
     }
 
+    // Do not call directly
     template <typename T>
     void Write_Var_Array(
         int64_t const& fout, std::string const& var_name, hsize_t const* dims,
@@ -186,7 +185,7 @@ namespace HDF5
 
     // #if UINTPTR_MAX == 0xffffffffffffffff
     /* 64-bit pointers */
-    void Write_Variable_Scalar(
+    void Write_Variable(
         int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<size_t> const& var_data
     )
@@ -226,7 +225,7 @@ namespace HDF5
 
     // #endif
 
-    void Write_Variable_Scalar(
+    void Write_Variable(
         int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<uint> const& var_data
     )
@@ -246,7 +245,7 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
 
-    void Write_Variable_Scalar(
+    void Write_Variable(
         int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<int> const& var_data
     )
@@ -266,7 +265,7 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
 
-    void Write_Variable_Scalar(
+    void Write_Variable(
         int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<long> const& var_data
     )
@@ -286,7 +285,7 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
 
-    void Write_Variable_Scalar(
+    void Write_Variable(
         int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<float> const& var_data
     )
@@ -306,7 +305,7 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
 
-    void Write_Variable_Scalar(
+    void Write_Variable(
         int64_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<double> const& var_data
     )
@@ -326,8 +325,10 @@ namespace HDF5
         retval = H5Dclose(dataset);
     }
 
-    void
-    Write_Vector_Data(int64_t const& fout, std::string const& name, std::vector<StateVecD> const& data)
+    void Write_Variable(
+        int64_t const& fout, std::string const& name, hsize_t const* dims,
+        std::vector<StateVecD> const& data
+    )
     {
         size_t length = data.size();
         std::vector<double> vect(data.size());
@@ -339,29 +340,26 @@ namespace HDF5
             vect[ii] = data[ii][0];
 
         name_ = name.empty() ? "x" : name + " x";
-        Write_Variable_Scalar(fout, name_.c_str(), dim, vect);
+        Write_Variable_Scalar(fout, name_.c_str(), dims, vect);
 
 #pragma omp parallel for
         for (size_t ii = 0; ii < length; ++ii)
             vect[ii] = data[ii][1];
 
         name_ = name.empty() ? "y" : name + " y";
-        Write_Variable_Scalar(fout, name_.c_str(), dim, vect);
+        Write_Variable_Scalar(fout, name_.c_str(), dims, vect);
 
+        // Always need the z-dimension written for HDF5/h5part
         name_ = name.empty() ? "z" : name + " z";
+#pragma omp parallel for
+        for (size_t ii = 0; ii < length; ++ii)
 #if SIMDIM == 3
-#pragma omp parallel for
-        for (size_t ii = 0; ii < length; ++ii)
             vect[ii] = data[ii][2];
-
-        Write_Variable_Scalar(fout, name_.c_str(), dim, vect);
 #else
-#pragma omp parallel for
-        for (size_t ii = 0; ii < length; ++ii)
-            vect[ii - start] = 0.0;
-
-        Write_Variable_Scalar(fout, name_.c_str(), dim, vect);
+            vect[ii] = 0.0;
 #endif
+
+        Write_Variable_Scalar(fout, name_.c_str(), dims, vect);
     }
 
     inline string get_dim(uint const& dim)
@@ -790,169 +788,161 @@ void Write_HDF5_Attributes(int64_t const& file, SIM const& svar)
 {
 
     // Write crucial simulation auxiliary data. Potential to expand
-    HDF5::Write_Real_Attribute(file, "Simulation current time", svar.integrator.current_time);
-    HDF5::Write_Uint_Attribute(file, "Particle index to add", svar.part_id);
-    HDF5::Write_Uint_Attribute(file, "Number of boundary blocks", svar.n_bound_blocks);
-    HDF5::Write_Uint_Attribute(file, "Number of fluid blocks", svar.n_fluid_blocks);
-    HDF5::Write_Uint_Attribute(file, "Number of boundary points", svar.bound_points);
-    HDF5::Write_Uint_Attribute(file, "Number of fluid points", svar.fluid_points);
-    HDF5::Write_Uint_Attribute(file, "Current frame", svar.integrator.current_frame);
+    HDF5::Write_Attribute(file, "Simulation current time", svar.integrator.current_time);
+    HDF5::Write_Attribute(file, "Particle index to add", svar.part_id);
+    HDF5::Write_Attribute(file, "Number of boundary blocks", svar.n_bound_blocks);
+    HDF5::Write_Attribute(file, "Number of fluid blocks", svar.n_fluid_blocks);
+    HDF5::Write_Attribute(file, "Number of boundary points", svar.bound_points);
+    HDF5::Write_Attribute(file, "Number of fluid points", svar.fluid_points);
+    HDF5::Write_Attribute(file, "Current frame", svar.integrator.current_frame);
 
-    HDF5::Write_String_Attribute(file, "Input para filename", svar.io.input_file);
-    HDF5::Write_String_Attribute(file, "Input fluid definition filename", svar.io.input_fluid_file);
-    HDF5::Write_String_Attribute(file, "Input boundary definition filename", svar.io.input_bound_file);
+    HDF5::Write_Attribute(file, "Input para filename", svar.io.input_file);
+    HDF5::Write_Attribute(file, "Input fluid definition filename", svar.io.input_fluid_file);
+    HDF5::Write_Attribute(file, "Input boundary definition filename", svar.io.input_bound_file);
 
-    HDF5::Write_String_Attribute(file, "Primary grid face filename", svar.io.tau_mesh);
-    HDF5::Write_String_Attribute(file, "Boundary mapping filename", svar.io.tau_bmap);
-    HDF5::Write_String_Attribute(file, "Restart-data prefix", svar.io.tau_sol);
-    HDF5::Write_Int_Attribute(file, "Dimension offset vector", svar.io.offset_axis);
-    HDF5::Write_Real_Attribute(file, "Solution angle of attack", svar.io.angle_alpha);
-    HDF5::Write_Real_Attribute(file, "Grid scale", svar.scale);
+    HDF5::Write_Attribute(file, "Primary grid face filename", svar.io.tau_mesh);
+    HDF5::Write_Attribute(file, "Boundary mapping filename", svar.io.tau_bmap);
+    HDF5::Write_Attribute(file, "Restart-data prefix", svar.io.tau_sol);
+    HDF5::Write_Attribute(file, "Dimension offset vector", svar.io.offset_axis);
+    HDF5::Write_Attribute(file, "Solution angle of attack", svar.io.angle_alpha);
+    HDF5::Write_Attribute(file, "Grid scale", svar.scale);
 
-    HDF5::Write_String_Attribute(file, "OpenFOAM input directory", svar.io.foam_dir);
-    HDF5::Write_String_Attribute(file, "OpenFOAM solution directory", svar.io.foam_sol);
-    HDF5::Write_Int_Attribute(file, "OpenFOAM binary", svar.io.foam_is_binary);
-    HDF5::Write_Int_Attribute(file, "Label size", svar.io.foam_label_size);
-    HDF5::Write_Int_Attribute(file, "Scalar size", svar.io.foam_scalar_size);
-    HDF5::Write_Int_Attribute(file, "OpenFOAM is buoyant", svar.io.foam_buoyant_sim);
-    HDF5::Write_Int_Attribute(file, "OpenFOAM is foam_is_incompressible", svar.io.foam_is_incomp);
+    HDF5::Write_Attribute(file, "OpenFOAM input directory", svar.io.foam_dir);
+    HDF5::Write_Attribute(file, "OpenFOAM solution directory", svar.io.foam_sol);
+    HDF5::Write_Attribute(file, "OpenFOAM binary", svar.io.foam_is_binary);
+    HDF5::Write_Attribute(file, "Label size", svar.io.foam_label_size);
+    HDF5::Write_Attribute(file, "Scalar size", svar.io.foam_scalar_size);
+    HDF5::Write_Attribute(file, "OpenFOAM is buoyant", svar.io.foam_buoyant_sim);
+    HDF5::Write_Attribute(file, "OpenFOAM is foam_is_incompressible", svar.io.foam_is_incomp);
 
-    HDF5::Write_String_Attribute(file, "VLM definition filename", svar.io.vlm_file);
+    HDF5::Write_Attribute(file, "VLM definition filename", svar.io.vlm_file);
 
-    HDF5::Write_Uint_Attribute(file, "Single file for output", svar.io.single_file);
-    HDF5::Write_String_Attribute(file, "Output files prefix", svar.io.output_prefix);
-    HDF5::Write_String_Attribute(file, "SPH restart prefix", svar.io.restart_prefix);
-    HDF5::Write_Real_Attribute(file, "SPH frame time interval", svar.integrator.frame_time_interval);
-    HDF5::Write_Uint_Attribute(file, "SPH frame count", svar.integrator.max_frames);
-    HDF5::Write_Real_Attribute(file, "SPH previous frame time", svar.integrator.last_frame_time);
-    HDF5::Write_Uint_Attribute(file, "SPH output encoding", svar.io.out_encoding);
-    HDF5::Write_String_Attribute(file, "Variable list", svar.io.output_names);
+    HDF5::Write_Attribute(file, "Single file for output", svar.io.single_file);
+    HDF5::Write_Attribute(file, "Output files prefix", svar.io.output_prefix);
+    HDF5::Write_Attribute(file, "SPH restart prefix", svar.io.restart_prefix);
+    HDF5::Write_Attribute(file, "SPH frame time interval", svar.integrator.frame_time_interval);
+    HDF5::Write_Attribute(file, "SPH frame count", svar.integrator.max_frames);
+    HDF5::Write_Attribute(file, "SPH previous frame time", svar.integrator.last_frame_time);
+    HDF5::Write_Attribute(file, "SPH output encoding", svar.io.out_encoding);
+    HDF5::Write_Attribute(file, "Variable list", svar.io.output_names);
 
     /* Fluid data */
-    HDF5::Write_Real_Attribute(file, "Reference density", svar.air.rho_g);
-    HDF5::Write_Int_Attribute(file, "Init hydrostatic pressure", svar.init_hydro_pressure);
-    HDF5::Write_Real_Attribute(file, "Hydrostatic height", svar.hydro_height);
+    HDF5::Write_Attribute(file, "Reference density", svar.air.rho_g);
+    HDF5::Write_Attribute(file, "Init hydrostatic pressure", svar.init_hydro_pressure);
+    HDF5::Write_Attribute(file, "Hydrostatic height", svar.hydro_height);
 
     /* Aerodynamic data */
-    HDF5::Write_Real_Attribute(file, "Reference velocity", svar.air.v_ref);
-    HDF5::Write_Real_Attribute(file, "Reference pressure", svar.air.p_ref);
-    HDF5::Write_Real_Attribute(file, "Reference Mach number", svar.air.M_ref);
-    HDF5::Write_Real_Attribute(file, "Reference temperature", svar.air.temp_g);
-    HDF5::Write_Real_Attribute(file, "Gas constant gamma", svar.air.gamma);
+    HDF5::Write_Attribute(file, "Reference velocity", svar.air.v_ref);
+    HDF5::Write_Attribute(file, "Reference pressure", svar.air.p_ref);
+    HDF5::Write_Attribute(file, "Reference Mach number", svar.air.M_ref);
+    HDF5::Write_Attribute(file, "Reference temperature", svar.air.temp_g);
+    HDF5::Write_Attribute(file, "Gas constant gamma", svar.air.gamma);
 
     /* Simulation settings */
-    HDF5::Write_String_Attribute(file, "SPH integration solver", svar.integrator.solver_name);
-    HDF5::Write_Uint_Attribute(file, "SPH boundary solver", svar.integrator.bound_solver);
-    HDF5::Write_Real_Attribute(file, "SPH solver minimum residual", svar.integrator.min_residual);
-    HDF5::Write_Real_Attribute(file, "SPH maximum timestep", svar.integrator.delta_t_max);
-    HDF5::Write_Real_Attribute(file, "SPH minimum timestep", svar.integrator.delta_t_min);
-    HDF5::Write_Real_Attribute(file, "SPH maximum CFL", svar.integrator.cfl_max);
-    HDF5::Write_Real_Attribute(file, "SPH minimum CFL", svar.integrator.cfl_min);
-    HDF5::Write_Real_Attribute(file, "SPH CFL condition", svar.integrator.cfl);
-    HDF5::Write_Real_Attribute(file, "SPH unstable CFL step", svar.integrator.cfl_step);
-    HDF5::Write_Uint_Attribute(file, "SPH unstable CFL count limit", svar.integrator.n_unstable_limit);
-    HDF5::Write_Uint_Attribute(file, "SPH stable CFL count limit", svar.integrator.n_stable_limit);
-    HDF5::Write_Real_Attribute(
-        file, "SPH stable CFL count iteration factor", svar.integrator.subits_factor
-    );
-    HDF5::Write_Real_Attribute(file, "SPH maximum shifting velocity", svar.integrator.max_shift_vel);
-    HDF5::Write_Uint_Attribute(file, "SPH stable CFL count", svar.integrator.n_stable);
-    HDF5::Write_Uint_Attribute(file, "SPH unstable CFL count", svar.integrator.n_unstable);
+    HDF5::Write_Attribute(file, "SPH integration solver", svar.integrator.solver_name);
+    HDF5::Write_Attribute(file, "SPH boundary solver", svar.integrator.bound_solver);
+    HDF5::Write_Attribute(file, "SPH solver minimum residual", svar.integrator.min_residual);
+    HDF5::Write_Attribute(file, "SPH maximum timestep", svar.integrator.delta_t_max);
+    HDF5::Write_Attribute(file, "SPH minimum timestep", svar.integrator.delta_t_min);
+    HDF5::Write_Attribute(file, "SPH maximum CFL", svar.integrator.cfl_max);
+    HDF5::Write_Attribute(file, "SPH minimum CFL", svar.integrator.cfl_min);
+    HDF5::Write_Attribute(file, "SPH CFL condition", svar.integrator.cfl);
+    HDF5::Write_Attribute(file, "SPH unstable CFL step", svar.integrator.cfl_step);
+    HDF5::Write_Attribute(file, "SPH unstable CFL count limit", svar.integrator.n_unstable_limit);
+    HDF5::Write_Attribute(file, "SPH stable CFL count limit", svar.integrator.n_stable_limit);
+    HDF5::Write_Attribute(file, "SPH stable CFL count iteration factor", svar.integrator.subits_factor);
+    HDF5::Write_Attribute(file, "SPH maximum shifting velocity", svar.integrator.max_shift_vel);
+    HDF5::Write_Attribute(file, "SPH stable CFL count", svar.integrator.n_stable);
+    HDF5::Write_Attribute(file, "SPH unstable CFL count", svar.integrator.n_unstable);
 
-    HDF5::Write_Real_Attribute(file, "SPH density variation", svar.rho_var);
-    HDF5::Write_Real_Attribute(file, "SPH maximum density", svar.rho_max);
-    HDF5::Write_Real_Attribute(file, "SPH minimum density", svar.rho_min);
-    HDF5::Write_Uint_Attribute(file, "SPH Newmark Beta iteration limit", svar.integrator.max_subits);
-    HDF5::Write_Vector_Attribute(file, "SPH gravity vector", svar.grav);
+    HDF5::Write_Attribute(file, "SPH density variation", svar.rho_var);
+    HDF5::Write_Attribute(file, "SPH maximum density", svar.rho_max);
+    HDF5::Write_Attribute(file, "SPH minimum density", svar.rho_min);
+    HDF5::Write_Attribute(file, "SPH Newmark Beta iteration limit", svar.integrator.max_subits);
+    HDF5::Write_Attribute(file, "SPH gravity vector", svar.grav);
 
-    HDF5::Write_Real_Attribute(file, "SPH smoothing length factor", svar.H_fac);
-    HDF5::Write_String_Attribute(file, "SPH aerodynamic case", svar.air.aero_case);
-    HDF5::Write_Int_Attribute(file, "SPH SP diameter definition", svar.air.use_dx);
-    HDF5::Write_Int_Attribute(file, "SPH use TAB deformation", svar.air.use_TAB_def);
-    HDF5::Write_Vector_Attribute(file, "SPH global offset coordinate", svar.offset_vec);
-    HDF5::Write_Uint_Attribute(file, "SPH maximum particle count", svar.max_points);
-    HDF5::Write_Real_Attribute(file, "SPH aerodynamic cutoff value", svar.air.lam_cutoff);
-    HDF5::Write_Vector_Attribute(file, "SPH freestream velocity", svar.air.v_inf);
-    HDF5::Write_Real_Attribute(file, "SPH restart fit tolerance", svar.io.restart_tol);
+    HDF5::Write_Attribute(file, "SPH smoothing length factor", svar.H_fac);
+    HDF5::Write_Attribute(file, "SPH aerodynamic case", svar.air.aero_case);
+    HDF5::Write_Attribute(file, "SPH SP diameter definition", svar.air.use_dx);
+    HDF5::Write_Attribute(file, "SPH use TAB deformation", svar.air.use_TAB_def);
+    HDF5::Write_Attribute(file, "SPH global offset coordinate", svar.offset_vec);
+    HDF5::Write_Attribute(file, "SPH maximum particle count", svar.max_points);
+    HDF5::Write_Attribute(file, "SPH aerodynamic cutoff value", svar.air.lam_cutoff);
+    HDF5::Write_Attribute(file, "SPH freestream velocity", svar.air.v_inf);
+    HDF5::Write_Attribute(file, "SPH restart fit tolerance", svar.io.restart_tol);
 
     /* Particle tracking settings */
-    HDF5::Write_Int_Attribute(file, "Transition to IPT", svar.ipt.using_ipt);
-    HDF5::Write_Int_Attribute(file, "Velocity equation order", svar.ipt.ipt_eq_order);
-    HDF5::Write_Real_Attribute(file, "SPH tracking conversion x coordinate", svar.ipt.max_x_sph);
-    HDF5::Write_Real_Attribute(file, "Maximum x trajectory coordinate", svar.ipt.max_x);
-    HDF5::Write_Uint_Attribute(file, "Particle scatter output", svar.ipt.part_out);
-    HDF5::Write_Uint_Attribute(file, "Particle streak output", svar.ipt.streak_out);
-    HDF5::Write_Uint_Attribute(file, "Particle cell intersection output", svar.ipt.cells_out);
+    HDF5::Write_Attribute(file, "Transition to IPT", svar.ipt.using_ipt);
+    HDF5::Write_Attribute(file, "Velocity equation order", svar.ipt.ipt_eq_order);
+    HDF5::Write_Attribute(file, "SPH tracking conversion x coordinate", svar.ipt.max_x_sph);
+    HDF5::Write_Attribute(file, "Maximum x trajectory coordinate", svar.ipt.max_x);
+    HDF5::Write_Attribute(file, "Particle scatter output", svar.ipt.part_out);
+    HDF5::Write_Attribute(file, "Particle streak output", svar.ipt.streak_out);
+    HDF5::Write_Attribute(file, "Particle cell intersection output", svar.ipt.cells_out);
 }
 
 void Write_Zone_Attributes(int64_t const& zone, bound_block const& limits)
 {
-    HDF5::Write_String_Attribute(zone, "Block name", limits.name);
+    HDF5::Write_Attribute(zone, "Block name", limits.name);
     // Add information about the insertion, aero, and deletion planes.
-    HDF5::Write_Real_Attribute(zone, "Insertion normal x", limits.insert_norm[0]);
-    HDF5::Write_Real_Attribute(zone, "Insertion normal y", limits.insert_norm[1]);
-    HDF5::Write_Real_Attribute(zone, "Deletion normal x", limits.delete_norm[0]);
-    HDF5::Write_Real_Attribute(zone, "Deletion normal y", limits.delete_norm[1]);
-    HDF5::Write_Real_Attribute(zone, "Aerodynamic normal x", limits.aero_norm[0]);
-    HDF5::Write_Real_Attribute(zone, "Aerodynamic normal y", limits.aero_norm[1]);
+    HDF5::Write_Attribute(zone, "Insertion normal x", limits.insert_norm[0]);
+    HDF5::Write_Attribute(zone, "Insertion normal y", limits.insert_norm[1]);
+    HDF5::Write_Attribute(zone, "Deletion normal x", limits.delete_norm[0]);
+    HDF5::Write_Attribute(zone, "Deletion normal y", limits.delete_norm[1]);
+    HDF5::Write_Attribute(zone, "Aerodynamic normal x", limits.aero_norm[0]);
+    HDF5::Write_Attribute(zone, "Aerodynamic normal y", limits.aero_norm[1]);
 #if SIMDIM == 3
-    HDF5::Write_Real_Attribute(zone, "Insertion normal z", limits.insert_norm[2]);
-    HDF5::Write_Real_Attribute(zone, "Deletion normal z", limits.delete_norm[2]);
-    HDF5::Write_Real_Attribute(zone, "Aerodynamic normal z", limits.aero_norm[2]);
+    HDF5::Write_Attribute(zone, "Insertion normal z", limits.insert_norm[2]);
+    HDF5::Write_Attribute(zone, "Deletion normal z", limits.delete_norm[2]);
+    HDF5::Write_Attribute(zone, "Aerodynamic normal z", limits.aero_norm[2]);
 #endif
 
-    HDF5::Write_Real_Attribute(zone, "Insertion plane constant", limits.insconst);
-    HDF5::Write_Real_Attribute(zone, "Deletion plane constant", limits.delconst);
-    HDF5::Write_Real_Attribute(zone, "Aerodynamic plane constant", limits.aeroconst);
+    HDF5::Write_Attribute(zone, "Insertion plane constant", limits.insconst);
+    HDF5::Write_Attribute(zone, "Deletion plane constant", limits.delconst);
+    HDF5::Write_Attribute(zone, "Aerodynamic plane constant", limits.aeroconst);
 
     // Add boundary time information
     if (limits.nTimes != 0)
     {
-        HDF5::Write_Real_Attribute(zone, "Times count", limits.nTimes);
+        HDF5::Write_Attribute(zone, "Times count", limits.nTimes);
         for (size_t time = 0; time < limits.nTimes; time++)
         {
-            HDF5::Write_Real_Attribute(zone, "Time " + std::to_string(time), limits.times[time]);
-            HDF5::Write_Real_Attribute(
-                zone, "Velocity " + std::to_string(time) + " x", limits.vels[time][0]
-            );
-            HDF5::Write_Real_Attribute(
-                zone, "Velocity " + std::to_string(time) + " y", limits.vels[time][1]
-            );
+            HDF5::Write_Attribute(zone, "Time " + std::to_string(time), limits.times[time]);
+            HDF5::Write_Attribute(zone, "Velocity " + std::to_string(time) + " x", limits.vels[time][0]);
+            HDF5::Write_Attribute(zone, "Velocity " + std::to_string(time) + " y", limits.vels[time][1]);
 #if SIMDIM == 3
-            HDF5::Write_Real_Attribute(
-                zone, "Velocity " + std::to_string(time) + " z", limits.vels[time][2]
-            );
+            HDF5::Write_Attribute(zone, "Velocity " + std::to_string(time) + " z", limits.vels[time][2]);
 #endif
         }
     }
     else
     {
-        HDF5::Write_Real_Attribute(zone, "Times count", 0);
-        HDF5::Write_Real_Attribute(zone, "Velocity x", limits.vels[0][0]);
-        HDF5::Write_Real_Attribute(zone, "Velocity y", limits.vels[0][1]);
+        HDF5::Write_Attribute(zone, "Times count", 0);
+        HDF5::Write_Attribute(zone, "Velocity x", limits.vels[0][0]);
+        HDF5::Write_Attribute(zone, "Velocity y", limits.vels[0][1]);
 #if SIMDIM == 3
-        HDF5::Write_Real_Attribute(zone, "Velocity z", limits.vels[0][2]);
+        HDF5::Write_Attribute(zone, "Velocity z", limits.vels[0][2]);
 #endif
     }
 
-    HDF5::Write_Int_Attribute(zone, "Fixed velocity or dynamic inlet", limits.fixed_vel_or_dynamic);
-    HDF5::Write_Int_Attribute(zone, "Lattice or HCPL packing", limits.particle_order);
-    HDF5::Write_Int_Attribute(zone, "Boundary solver type", limits.bound_solver);
-    HDF5::Write_Int_Attribute(zone, "Boundary is no slip", limits.no_slip);
-    HDF5::Write_Int_Attribute(zone, "Block type", limits.block_type);
+    HDF5::Write_Attribute(zone, "Fixed velocity or dynamic inlet", limits.fixed_vel_or_dynamic);
+    HDF5::Write_Attribute(zone, "Lattice or HCPL packing", limits.particle_order);
+    HDF5::Write_Attribute(zone, "Boundary solver type", limits.bound_solver);
+    HDF5::Write_Attribute(zone, "Boundary is no slip", limits.no_slip);
+    HDF5::Write_Attribute(zone, "Block type", limits.block_type);
 
     // Fluid properties
-    HDF5::Write_Real_Attribute(zone, "Cole EOS gamma", limits.fluid.gam);
-    HDF5::Write_Real_Attribute(zone, "Reference dispersed density", limits.fluid.rho_rest);
-    HDF5::Write_Real_Attribute(zone, "Reference dispersed viscosity", limits.fluid.mu);
-    HDF5::Write_Real_Attribute(zone, "Reference surface tension", limits.fluid.sig);
-    HDF5::Write_Real_Attribute(zone, "Surface tension contact angle", limits.fluid.contangb);
-    HDF5::Write_Uint_Attribute(zone, "Equation of state", limits.fluid.pressure_rel);
-    HDF5::Write_Real_Attribute(zone, "Background pressure", limits.fluid.press_back);
-    HDF5::Write_Real_Attribute(zone, "Starting pressure", limits.fluid.press_start);
-    HDF5::Write_Real_Attribute(zone, "SPH delta coefficient", limits.fluid.dsph_delta);
-    HDF5::Write_Real_Attribute(zone, "Artificial viscosity factor", limits.fluid.visc_alpha);
-    HDF5::Write_Real_Attribute(zone, "Speed of sound", limits.fluid.speed_sound);
+    HDF5::Write_Attribute(zone, "Cole EOS gamma", limits.fluid.gam);
+    HDF5::Write_Attribute(zone, "Reference dispersed density", limits.fluid.rho_rest);
+    HDF5::Write_Attribute(zone, "Reference dispersed viscosity", limits.fluid.mu);
+    HDF5::Write_Attribute(zone, "Reference surface tension", limits.fluid.sig);
+    HDF5::Write_Attribute(zone, "Surface tension contact angle", limits.fluid.contangb);
+    HDF5::Write_Attribute(zone, "Equation of state", limits.fluid.pressure_rel);
+    HDF5::Write_Attribute(zone, "Background pressure", limits.fluid.press_back);
+    HDF5::Write_Attribute(zone, "Starting pressure", limits.fluid.press_start);
+    HDF5::Write_Attribute(zone, "SPH delta coefficient", limits.fluid.dsph_delta);
+    HDF5::Write_Attribute(zone, "Artificial viscosity factor", limits.fluid.visc_alpha);
+    HDF5::Write_Attribute(zone, "Speed of sound", limits.fluid.speed_sound);
 }
 
 /**
@@ -1244,376 +1234,8 @@ namespace h5part
         size_t length = end - start;
         hsize_t dims[] = {length};
 
-        HDF5::Write_Real_Attribute(fout, "TimeValue", time);
+        HDF5::Write_Attribute(fout, "TimeValue", time);
         std::vector<double> vec(length);
-
-        /* Position */
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].xi(dim) / scale;
-
-            string name = "" + HDF5::get_dim(dim);
-            HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-        }
-#if SIMDIM == 2
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = 0;
-
-        string name = "z";
-        HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-#endif
-
-/* Density */
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].rho;
-
-        HDF5::Write_Variable_Scalar(fout, "Density", dims, 0, vec);
-
-/* Mass */
-#pragma omp parallel for
-        for (size_t ii = start; ii < end; ++ii)
-            vec[ii - start] = pnp1[ii].m;
-
-        HDF5::Write_Variable_Scalar(fout, "Mass", dims, 0, vec);
-
-        /* Kinda optional outputs */
-
-        /* Velocity */
-        if (output_variables.at("vel-vec").write)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-            {
-#pragma omp parallel for
-                for (size_t ii = start; ii < end; ++ii)
-                    vec[ii - start] = pnp1[ii].v(dim);
-
-                string name = "Vel " + HDF5::get_dim(dim);
-                HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-            }
-#if SIMDIM == 2
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = 0;
-
-            string name = "Vel z";
-            HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-#endif
-        }
-
-        /* Acceleration */
-        if (output_variables.at("acc-vec").write)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-            {
-#pragma omp parallel for
-                for (size_t ii = start; ii < end; ++ii)
-                    vec[ii - start] = pnp1[ii].acc(dim);
-
-                string name = "Acc " + HDF5::get_dim(dim);
-                HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-            }
-#if SIMDIM == 2
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = 0;
-
-            string name = "Acc z";
-            HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-#endif
-        }
-
-        /* Pressure */
-        if (output_variables.at("press").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].p;
-            HDF5::Write_Variable_Scalar(fout, "Pressure", dims, 0, vec);
-        }
-
-        if (output_variables.at("dRho").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].Rrho;
-            HDF5::Write_Variable_Scalar(fout, "Density gradient", dims, 0, vec);
-        }
-
-        if (output_variables.at("part_id").write)
-        {
-            vector<int> uvec(length);
-            for (size_t ii = start; ii < end; ++ii)
-                uvec[ii - start] = pnp1[ii].part_id;
-            HDF5::Write_Variable_Scalar(fout, "Particle ID", dims, 0, uvec);
-        }
-
-        if (output_variables.at("fluid_id").write)
-        {
-            vector<int> uvec(length);
-            for (size_t ii = start; ii < end; ++ii)
-                uvec[ii - start] = pnp1[ii].fluid_id;
-            HDF5::Write_Variable_Scalar(fout, "Fluid ID", dims, 0, uvec);
-        }
-
-        if (output_variables.at("cellID").write)
-        {
-            vector<int> uvec(length);
-            for (size_t ii = start; ii < end; ++ii)
-                uvec[ii - start] = pnp1[ii].cellID;
-            HDF5::Write_Variable_Scalar(fout, "Cell ID", dims, 0, uvec);
-        }
-
-        if (output_variables.at("bound").write)
-        {
-            vector<uint> uvec(length);
-            for (size_t ii = start; ii < end; ++ii)
-                uvec[ii - start] = pnp1[ii].b;
-            HDF5::Write_Variable_Scalar(fout, "Particle status condition", dims, 0, uvec);
-        }
-
-        // Non essential variables, but to provide further information
-        if (output_variables.at("dens").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].rho;
-            HDF5::Write_Variable_Scalar(fout, "Density", dims, 0, vec);
-        }
-
-        if (output_variables.at("densVar").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] =
-                    100.0 * (pnp1[ii].rho / limits[pnp1[ii].fluid_id].fluid.rho_rest - 1.0);
-            HDF5::Write_Variable_Scalar(fout, "Density Variation", dims, 0, vec);
-        }
-
-        if (output_variables.at("dx").write)
-        {
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].dx;
-            HDF5::Write_Variable_Scalar(fout, "Particle spacing", dims, 0, vec);
-        }
-
-        if (output_variables.at("vmag").write)
-        {
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].v.norm();
-            HDF5::Write_Variable_Scalar(fout, "Velocity magnitude", dims, 0, vec);
-        }
-
-        if (output_variables.at("surf").write)
-        {
-            vector<uint> uvec(length);
-            for (size_t ii = start; ii < end; ++ii)
-                uvec[ii - start] = pnp1[ii].surf;
-            HDF5::Write_Variable_Scalar(fout, "Surface flag", dims, 0, uvec);
-        }
-
-        if (output_variables.at("surfZ").write)
-        {
-            vector<uint> uvec(length);
-            for (size_t ii = start; ii < end; ++ii)
-                uvec[ii - start] = pnp1[ii].surfzone;
-            HDF5::Write_Variable_Scalar(fout, "Surface zone flag", dims, 0, uvec);
-        }
-
-        if (output_variables.at("aero-mag").write)
-        {
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].Af.norm();
-            HDF5::Write_Variable_Scalar(fout, "Aerodynamic force magnitude", dims, 0, vec);
-        }
-
-        if (output_variables.at("aero-vec").write)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-            {
-#pragma omp parallel for
-                for (size_t ii = start; ii < end; ++ii)
-                    vec[ii - start] = pnp1[ii].Af(dim);
-
-                string name = "Aerodynamic force " + std::to_string(dim);
-                HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-            }
-#if SIMDIM == 2
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = 0;
-
-            string name = "Aerodynamic force z";
-            HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-#endif
-        }
-
-        if (output_variables.at("curv").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].curve;
-            HDF5::Write_Variable_Scalar(fout, "Curvature", dims, 0, vec);
-        }
-
-        if (output_variables.at("occl").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].woccl;
-            HDF5::Write_Variable_Scalar(fout, "Occlusion factor", dims, 0, vec);
-        }
-
-        if (output_variables.at("cellP").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].cellP;
-            HDF5::Write_Variable_Scalar(fout, "Cell pressure", dims, 0, vec);
-        }
-
-        if (output_variables.at("cellRho").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].cellP;
-            HDF5::Write_Variable_Scalar(fout, "Cell density", dims, 0, vec);
-        }
-
-        if (output_variables.at("cellV-mag").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].cellV.norm();
-            HDF5::Write_Variable_Scalar(fout, "Cell velocity magnitude", dims, 0, vec);
-        }
-
-        if (output_variables.at("cellV-vec").write)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-            {
-#pragma omp parallel for
-                for (size_t ii = start; ii < end; ++ii)
-                    vec[ii - start] = pnp1[ii].cellV(dim);
-
-                string name = "Cell velocity " + std::to_string(dim);
-                HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-            }
-#if SIMDIM == 2
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = 0;
-
-            string name = "Cell velocity z";
-            HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-#endif
-        }
-
-        if (output_variables.at("dsphG-vec").write)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-            {
-#pragma omp parallel for
-                for (size_t ii = start; ii < end; ++ii)
-                    vec[ii - start] = pnp1[ii].gradRho(dim);
-
-                string name = "dSPH density gradient" + std::to_string(dim);
-                HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-            }
-#if SIMDIM == 2
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = 0;
-
-            string name = "dSPH densit gradient z";
-            HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-#endif
-        }
-
-        if (output_variables.at("lam").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].lam;
-            HDF5::Write_Variable_Scalar(fout, "Lambda eigenvalue", dims, 0, vec);
-        }
-
-        if (output_variables.at("lam-nb").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].lam_nb;
-            HDF5::Write_Variable_Scalar(fout, "Lambda eigenvalue without boundary", dims, 0, vec);
-        }
-
-        if (output_variables.at("colour").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].colour;
-            HDF5::Write_Variable_Scalar(fout, "Colour function", dims, 0, vec);
-        }
-
-        if (output_variables.at("colour-G").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].colourG;
-            HDF5::Write_Variable_Scalar(fout, "Colour function gradient", dims, 0, vec);
-        }
-
-        if (output_variables.at("norm-vec").write)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-            {
-#pragma omp parallel for
-                for (size_t ii = start; ii < end; ++ii)
-                    vec[ii - start] = pnp1[ii].norm(dim);
-
-                string name = "Surface normal" + std::to_string(dim);
-                HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-            }
-#if SIMDIM == 2
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = 0;
-
-            string name = "Surface normal z";
-            HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-#endif
-        }
-
-        if (output_variables.at("shiftV-mag").write)
-        {
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].vPert.norm();
-            HDF5::Write_Variable_Scalar(fout, "Shifting velocity magnitude", dims, 0, vec);
-        }
-
-        if (output_variables.at("shiftV-vec").write)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-            {
-#pragma omp parallel for
-                for (size_t ii = start; ii < end; ++ii)
-                    vec[ii - start] = pnp1[ii].vPert(dim);
-
-                string name = "Shifting velocity " + std::to_string(dim);
-                HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-            }
-#if SIMDIM == 2
-#pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = 0;
-
-            string name = "Shifting velocity z";
-            HDF5::Write_Variable_Scalar(fout, name, dims, 0, vec);
-#endif
-        }
     }
 } // namespace h5part
 

@@ -8,44 +8,46 @@
 
 namespace SZLIO
 {
-    void Write_Real_Vector(
+    void add_file_aux_data(void* const& file, std::string const& name, std::string const& var);
+    void add_file_aux_data(void* const& file, std::string const& name, size_t const& var);
+    void add_file_aux_data(void* const& file, std::string const& name, int const& var);
+    void add_file_aux_data(void* const& file, std::string const& name, uint const& var);
+    void add_file_aux_data(void* const& file, std::string const& name, double const& var);
+    void add_file_aux_data(void* const& file, std::string const& name, StateVecD const& var);
+
+    void add_zone_aux_data(
+        void* const& file, int32_t const& zone, std::string const& name, std::string const& var
+    );
+    void add_zone_aux_data(
+        void* const& file, int32_t const& zone, std::string const& name, size_t const& var
+    );
+    void
+    add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& name, int const& var);
+    void add_zone_aux_data(
+        void* const& file, int32_t const& zone, std::string const& name, double const& var
+    );
+    void add_zone_aux_data(
+        void* const& file, int32_t const& zone, std::string const& name, StateVecD const& var
+    );
+
+    void Write_Vector(
         void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
         vector<real> const& varVec, string const& varName
     );
 
-    void Write_Int_Vector(
+    void Write_Vector(
         void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
         vector<int32_t> const& varVec, string const& varName
     );
-    void Write_UInt_Vector(
+    void Write_Vector(
         void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
         vector<uint8_t> const& varVec, string const& varName
     );
 
-    void Write_State_Vector(
+    void Write_Vector(
         void* const& fileHandle, int32_t const& outputZone, int32_t& varCount,
         vector<StateVecD> const& varVec, string const& varName
     );
-
-    template <typename T>
-    void Write_Scalar_Value(
-        void* const& fileHandle, int32_t const& outputZone, int32_t& varCount, vector<T> const& varVec,
-        string const& varName
-    )
-    {
-        if (std::typeid(T) == std::typeid(real))
-        {
-            Write_Real_Vector(fileHandle, outputZone, varCount, varVec, varName);
-        }
-        else if (std::typeid(T) == std::typeid(int32_t))
-        {
-            Write_Int_Vector(fileHandle, outputZone, varCount, size, varVec, varName);
-        }
-        else
-        {
-            Write_UInt_Vector(fileHandle, outputZone, varCount, size, varVec, varName);
-        }
-    }
 
 }; // namespace SZLIO
 
@@ -69,6 +71,10 @@ inline int Combine_SZPLT(string& file)
     }
     return 0;
 }
+
+bool Open_PLT_File(
+    string const& file_name, string const& zone_name, SIM const& svar, void*& file_handle
+);
 
 void Write_Binary_Timestep(
     SIM const& svar, real const& rho_rest, SPHState const& pnp1, bound_block const& limits,
