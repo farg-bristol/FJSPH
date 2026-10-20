@@ -56,37 +56,27 @@ class FileWriter
         int32_t var_count = 0;
 
         /* Position */
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
+        vector<StateVecD> vvec(length);
 #pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].xi(dim) / scale;
+        for (size_t ii = start; ii < end; ++ii)
+            vvec[ii - start] = pnp1[ii].xi / scale;
 
-            string name = "Position coordinate " + get_dim(dim);
-            write_scalar_var(name, vec, var_count);
-        }
+        write_vector_var("Position coordinate", vvec, var_count);
 
         /* Velocity */
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
 #pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].v(dim);
+        for (size_t ii = start; ii < end; ++ii)
+            vvec[ii - start] = pnp1[ii].v;
 
-            string name = "Velocity " + get_dim(dim);
-            write_scalar_var(name, vec, var_count);
-        }
+        write_vector_var("Velocity", vvec, var_count);
 
         /* Acceleration */
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
 #pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].acc(dim);
+        for (size_t ii = start; ii < end; ++ii)
+            vvec[ii - start] = pnp1[ii].acc;
 
-            string name = "Acceleration " + get_dim(dim);
-            write_scalar_var(name, vec, var_count);
-        }
+        write_vector_var("Acceleration", vvec, var_count);
+        vvec.clear();
 
 /* Pressure */
 #pragma omp parallel for
@@ -162,15 +152,11 @@ class FileWriter
         write_scalar_var("Cell ID", lvec, var_count);
 
         /* Cell velocity */
-        for (uint dim = 0; dim < SIMDIM; ++dim)
-        {
 #pragma omp parallel for
-            for (size_t ii = start; ii < end; ++ii)
-                vec[ii - start] = pnp1[ii].cellV(dim);
+        for (size_t ii = start; ii < end; ++ii)
+            vvec[ii - start] = pnp1[ii].cellV;
 
-            string name = "Cell velocity " + get_dim(dim);
-            write_scalar_var(name, vec, var_count);
-        }
+        write_vector_var("Cell velocity", vvec, var_count);
 
 /* Cell density */
 #pragma omp parallel for
@@ -202,7 +188,7 @@ class FileWriter
             vector<StateVecD> vvec(imax);
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
-                vvec[ii] = pnp1[ii].xi / scale;
+                vvec[ii - start] = pnp1[ii].xi / scale;
 
             write_vector_var("Position coordinate", vvec, var_count);
         }
@@ -212,7 +198,7 @@ class FileWriter
             vector<StateVecD> vvec(imax);
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
-                vvec[ii] = pnp1[ii].v;
+                vvec[ii - start] = pnp1[ii].v;
 
             write_vector_var("Velocity", vvec, var_count);
         }
@@ -222,7 +208,7 @@ class FileWriter
             vector<StateVecD> vvec(imax);
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
-                vvec[ii] = pnp1[ii].acc;
+                vvec[ii - start] = pnp1[ii].acc;
 
             write_vector_var("Acceleration", vvec, var_count);
         }
@@ -319,7 +305,7 @@ class FileWriter
             vector<StateVecD> vvec(imax);
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
-                vvec[ii] = pnp1[ii].Af;
+                vvec[ii - start] = pnp1[ii].Af;
 
             write_vector_var("Aerodynamic force", vvec, var_count);
         }
@@ -369,7 +355,7 @@ class FileWriter
             vector<StateVecD> vvec(imax);
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
-                vvec[ii] = pnp1[ii].cellV;
+                vvec[ii - start] = pnp1[ii].cellV;
 
             write_vector_var("Cell velocity", vvec, var_count);
         }
@@ -379,7 +365,7 @@ class FileWriter
             vector<StateVecD> vvec(imax);
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
-                vvec[ii] = pnp1[ii].gradRho;
+                vvec[ii - start] = pnp1[ii].gradRho;
 
             write_vector_var("d-SPH density gradient", vvec, var_count);
         }
@@ -421,7 +407,7 @@ class FileWriter
             vector<StateVecD> vvec(imax);
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
-                vvec[ii] = pnp1[ii].norm;
+                vvec[ii - start] = pnp1[ii].norm;
 
             write_vector_var("Surface normal", vvec, var_count);
         }
@@ -439,7 +425,7 @@ class FileWriter
             vector<StateVecD> vvec(imax);
 #pragma omp parallel for
             for (size_t ii = start; ii < end; ++ii)
-                vvec[ii] = pnp1[ii].vPert;
+                vvec[ii - start] = pnp1[ii].vPert;
 
             write_vector_var("Shifting velocity", vvec, var_count);
         }
