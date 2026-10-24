@@ -5,9 +5,9 @@
 
 // Public functions
 
-void CoordShape::check_input(SIM const& svar, real& globalspacing, int& fault)
+void CoordShape::check_input(SIM const& svar, int& fault)
 {
-    ShapeBlock::check_input(svar, globalspacing, fault);
+    ShapeBlock::check_input(svar, fault);
 
     if (filename.empty())
     {
@@ -26,10 +26,10 @@ void CoordShape::check_input(SIM const& svar, real& globalspacing, int& fault)
         }
     }
 
-    ShapeBlock::check_input_post(globalspacing);
+    ShapeBlock::check_input_post();
 }
 
-void CoordShape::generate_points(real const& globalspacing)
+void CoordShape::generate_points()
 {
     // Nothing to do for coordinates. Should have already been read from the file.
 }

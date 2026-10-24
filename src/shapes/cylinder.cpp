@@ -4,12 +4,21 @@
 #include "cylinder.h"
 #include "../Geometry.h"
 
-void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault)
+enum geometry_config
+{
+    NO_CONFIG = 0,
+    CentreRadius,
+    CentreEnd,
+    ThreePoints,
+    StartCount
+};
+
+void CylinderShape::check_input(SIM const& svar, int& fault)
 {
     // Do common input checks.
-    ShapeBlock::check_input(svar, globalspacing, fault);
+    ShapeBlock::check_input(svar, fault);
 
-    int has_config = 0;
+    int has_config = NO_CONFIG;
     if (subshape == "Hollow")
     {
         sub_bound_type = hollow;
@@ -37,7 +46,7 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
         { /* Default to these values first */
             if (radius > 0)
             {
-                has_config = 3;
+                has_config = CentreRadius;
                 start = centre;
                 start[1] -= radius;
 
@@ -55,7 +64,7 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
 #if SIMDIM == 3 // Only valid for 3D
             else if (check_vector(right) && check_vector(end))
             {
-                has_config = 4;
+                has_config = CentreEnd;
 
                 StateVecD v = right - centre;
                 StateVecD u = end - right;
@@ -72,7 +81,7 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
 #endif
         )
         {
-            has_config = 1;
+            has_config = ThreePoints;
             centre = 0.5 * (start + end);
             StateVecD v = right - start;
             radius = 0.5 * v.norm();
@@ -93,7 +102,7 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
 
         if (check_vector(start) && check_vector(right) && check_vector(end))
         {
-            has_config = 1;
+            has_config = ThreePoints;
             centre = 0.5 * (start + end);
             StateVecD v = right - start;
             radius = 0.5 * v.norm();
@@ -102,7 +111,7 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
         { /* Default to these values first */
             if (radius > 0)
             {
-                has_config = 3;
+                has_config = CentreRadius;
                 start = centre;
                 start[1] -= radius;
 
@@ -120,7 +129,7 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
 
             if (check_vector(right) && check_vector(end))
             {
-                has_config = 4;
+                has_config = CentreEnd;
                 // Need to find the start
                 StateVecD v = right - centre;
                 StateVecD u = end - right;
@@ -132,7 +141,7 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
         }
         else if (check_vector(start) && ni > 0 && nj > 0)
         {
-            has_config = 2;
+            has_config = StartCount;
         }
     }
     else
@@ -147,7 +156,23 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
         fault = 1;
     }
 
-    if (has_config == 0)
+    // TODO - Need to revisit as this is almost certainly not adequate for all configs.
+    if (dx < 0)
+    {
+        if (ni < 0)
+        {
+            std::cout << "Error: Block \"" << name << "\" spacing has not been defined." << std::endl;
+            fault = 1;
+        }
+        else
+        {
+            /* Use ni as a number along the diameter, so define dx off that */
+            real di = (2.0 * radius) / real(ni);
+            dx = di;
+        }
+    }
+
+    if (has_config == NO_CONFIG)
     {
         printf(
             "ERROR: Cylinder block \"%s\" geometry has not been sufficiently defined.\n", name.c_str()
@@ -216,7 +241,7 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
         rotmat = rotmat;
     }
 
-    if (has_config == 1)
+    if (has_config == ThreePoints)
     {
         // Have three points to define the plane. Override any normal and rotation matrix def
         StateVecD ab = (end - start).normalized();
@@ -232,22 +257,22 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
 #endif
         rotmat = rotmat;
     }
-    if (has_config == 2)
+    if (has_config == StartCount)
     {
         // Start and ni and nj counts have been defined
         centre = start;
-        radius = 0.5 * globalspacing * ni;
+        radius = 0.5 * dx * ni;
 
         centre[1] += radius;
 #if SIMDIM == 3
         right = start;
-        right[1] += globalspacing * ni;
+        right[1] += dx * ni;
         end = right;
-        end[2] += globalspacing * nj;
+        end[2] += dx * nj;
         centre[2] += radius;
 #else
         end = start;
-        end[1] += globalspacing * ni;
+        end[1] += dx * ni;
 #endif
 
         if (rotmat != StateMatD::Identity())
@@ -259,7 +284,7 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
 #endif
         }
     }
-    else if (has_config == 3 || has_config == 4)
+    else if (has_config == CentreRadius || has_config == CentreEnd)
     {
         if (rotmat != StateMatD::Identity())
         {
@@ -271,50 +296,33 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
         }
     }
 
-    dx = globalspacing; // Potential to allow different size particles, but not right now.
-
-    // if(dx < 0)
-    // {
-    //     if(ni < 0)
-    //     {
-    //         printf("WARNING: Cylinder block \"%s\" globalspacing has not been defined. Using
-    //         global globalspacing.\n",name.c_str()); dx = globalspacing;
-    //     }
-    //     else
-    //     {
-    //         /* Use ni as a number along the diameter, so define globalspacing off that */
-    //         real di = (2.0*radius)/real(ni);
-    //         dx = di;
-    //     }
-    // }
-
     if (sub_bound_type == hollow)
     {
         if (thickness < 0)
         {
             if (particle_order == 1)
-                thickness = static_cast<double>(nk) * globalspacing * sqrt(3.0) * 2.0;
+                thickness = static_cast<double>(nk) * dx * sqrt(3.0) * 2.0;
             else
-                thickness = static_cast<double>(nk) * globalspacing;
+                thickness = static_cast<double>(nk) * dx;
         }
         else if (nk < 0)
         { /* Use a particle count over the real thickness value */
             if (particle_order == 1)
-                nk = static_cast<int>(ceil(thickness / (globalspacing * sqrt(3.0) * 2.0)));
+                nk = static_cast<int>(ceil(thickness / (dx * sqrt(3.0) * 2.0)));
             else
-                nk = static_cast<int>(ceil(thickness / globalspacing));
+                nk = static_cast<int>(ceil(thickness / dx));
 
             nk = nk > 1 ? nk : 1;
         }
 
 #if SIMDIM == 3
-        real dtheta = globalspacing / radius;
+        real dtheta = dx / radius;
 
         ni = static_cast<int>(ceil((2 * M_PI) / dtheta));
         ni = ni > 1 ? ni : 1;
 #endif
 
-        nj = ceil(length / globalspacing) + 1;
+        nj = ceil(length / dx) + 1;
         nj = nj > 1 ? nj : 1;
 
         npts = nj * nk;
@@ -326,10 +334,10 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
     }
     else if (sub_bound_type == solid)
     {
-        ni = ceil(2.0 * radius / globalspacing);
-        nj = ceil(length / globalspacing);
+        ni = ceil(2.0 * radius / dx);
+        nj = ceil(length / dx);
 #if SIMDIM == 3
-        nk = ceil(2.0 * radius / globalspacing);
+        nk = ceil(2.0 * radius / dx);
 #endif
         ni = ni > 1 ? ni : 1;
         nj = nj > 1 ? nj : 1;
@@ -343,14 +351,14 @@ void CylinderShape::check_input(SIM const& svar, real& globalspacing, int& fault
 #endif
     }
 
-    ShapeBlock::check_input_post(globalspacing);
+    ShapeBlock::check_input_post();
 }
 
 #if SIMDIM == 2
-std::vector<StateVecD> create_hollow_cylinder(ShapeBlock const& block, real const& globalspacing)
+std::vector<StateVecD> create_hollow_cylinder(ShapeBlock const& block, real const& dx)
 {
     std::vector<StateVecD> points;
-    std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
+    std::uniform_real_distribution<real> unif(0.0, MEPSILON * dx);
     std::default_random_engine re;
 
     StateVecD norm = block.normal.normalized();
@@ -362,11 +370,10 @@ std::vector<StateVecD> create_hollow_cylinder(ShapeBlock const& block, real cons
         { // Thickness
             StateVecD newPoint;
             if (block.particle_order == 1)
-                newPoint = globalspacing *
-                               (norm * real(-ii + 0.5 * (kk % 2)) + 0.5 * left * sqrt(3.0) * real(kk)) +
+                newPoint = dx * (norm * real(-ii + 0.5 * (kk % 2)) + 0.5 * left * sqrt(3.0) * real(kk)) +
                            r * left;
             else
-                newPoint = globalspacing * (norm * real(-ii) + left * real(kk)) + r * left;
+                newPoint = dx * (norm * real(-ii) + left * real(kk)) + r * left;
 
             newPoint += StateVecD(unif(re), unif(re));
             newPoint += block.centre;
@@ -380,11 +387,10 @@ std::vector<StateVecD> create_hollow_cylinder(ShapeBlock const& block, real cons
         { // Thickness
             StateVecD newPoint;
             if (block.particle_order == 1)
-                newPoint = globalspacing *
-                               (norm * real(-ii + 0.5 * (kk % 2)) - 0.5 * left * sqrt(3.0) * real(kk)) -
+                newPoint = dx * (norm * real(-ii + 0.5 * (kk % 2)) - 0.5 * left * sqrt(3.0) * real(kk)) -
                            r * left;
             else
-                newPoint = globalspacing * (norm * real(-ii) - left * real(kk)) - r * left;
+                newPoint = dx * (norm * real(-ii) - left * real(kk)) - r * left;
 
             newPoint += StateVecD(unif(re), unif(re));
             newPoint += block.centre;
@@ -394,11 +400,11 @@ std::vector<StateVecD> create_hollow_cylinder(ShapeBlock const& block, real cons
     return points;
 }
 
-std::vector<StateVecD> create_solid_cylinder(ShapeBlock const& block, real const& globalspacing)
+std::vector<StateVecD> create_solid_cylinder(ShapeBlock const& block, real const& dx)
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */
-    std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
+    std::uniform_real_distribution<real> unif(0.0, MEPSILON * dx);
     std::default_random_engine re;
 
     StateVecD norm = -block.normal.normalized();
@@ -426,10 +432,10 @@ std::vector<StateVecD> create_solid_cylinder(ShapeBlock const& block, real const
 #endif
 
 #if SIMDIM == 3
-std::vector<StateVecD> create_hollow_cylinder(ShapeBlock const& block, real const& globalspacing)
+std::vector<StateVecD> create_hollow_cylinder(ShapeBlock const& block, real const& dx)
 {
     std::vector<StateVecD> points;
-    std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
+    std::uniform_real_distribution<real> unif(0.0, MEPSILON * dx);
     std::default_random_engine re;
 
     // Create local coordinate system (u,v,w)
@@ -440,23 +446,23 @@ std::vector<StateVecD> create_hollow_cylinder(ShapeBlock const& block, real cons
         for (int kk = 0; kk < block.nk; kk++)
         { // Thickness
             real r = block.radius;
-            real l = real(jj) * globalspacing;
+            real l = real(jj) * dx;
             real doffset = 0;
             if (block.particle_order == 1)
             {
-                r += 1.0 / 3.0 * sqrt(6.0) * real(kk) * globalspacing;
-                l = 0.5 * sqrt(3) * (real(jj) + real(kk % 2) / 3.0) * globalspacing;
+                r += 1.0 / 3.0 * sqrt(6.0) * real(kk) * dx;
+                l = 0.5 * sqrt(3) * (real(jj) + real(kk % 2) / 3.0) * dx;
                 doffset = 0.5 * dtheta * ((kk + jj) % 2);
             }
             else
-                r += real(kk) * globalspacing;
+                r += real(kk) * dx;
 
             for (int ii = 0; ii < block.ni; ii++)
             { // Radius
                 real theta = static_cast<real>(ii) * dtheta;
-                // real l = real(ii)*globalspacing;
+                // real l = real(ii)*dx;
                 if (block.particle_order == 1)
-                { /* Shift by half a globalspacing if jj is even */
+                { /* Shift by half a dx if jj is even */
                     theta += doffset;
                 }
 
@@ -473,10 +479,10 @@ std::vector<StateVecD> create_hollow_cylinder(ShapeBlock const& block, real cons
     return points;
 }
 
-std::vector<StateVecD> create_solid_cylinder(ShapeBlock const& block, real const& globalspacing)
+std::vector<StateVecD> create_solid_cylinder(ShapeBlock const& block, real const& dx)
 {
     std::vector<StateVecD> points;
-    std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
+    std::uniform_real_distribution<real> unif(0.0, MEPSILON * dx);
     std::default_random_engine re;
 
     real const& radius = block.radius;
@@ -497,7 +503,7 @@ std::vector<StateVecD> create_solid_cylinder(ShapeBlock const& block, real const
                 else
                     newPoint = StateVecD(-real(ii), real(kk), real(jj));
 
-                newPoint *= globalspacing;
+                newPoint *= dx;
                 newPoint += StateVecD(unif(re), unif(re), unif(re));
 
                 real a = newPoint[1] - radius;
@@ -516,14 +522,14 @@ std::vector<StateVecD> create_solid_cylinder(ShapeBlock const& block, real const
 }
 #endif
 
-void CylinderShape::generate_points(real const& globalspacing)
+void CylinderShape::generate_points()
 {
     if (sub_bound_type == hollow)
     {
-        coords = create_hollow_cylinder(*this, globalspacing);
+        coords = create_hollow_cylinder(*this, dx);
     }
     else if (sub_bound_type == solid)
     {
-        coords = create_solid_cylinder(*this, globalspacing);
+        coords = create_solid_cylinder(*this, dx);
     }
 }

@@ -12,13 +12,14 @@
 #include "square.h"
 
 #include "../IOFunctions.h"
+#include "../Kernel.h"
 
 #include "../Third_Party/nlohmann/json.hpp"
 
 using json = nlohmann::json;
 
 // Check the inputs for a block to make sure they are valid.
-void ShapeBlock::check_input(SIM const& svar, real& globalspacing, int& fault)
+void ShapeBlock::check_input(SIM const& svar, int& fault)
 {
     // Scale things first before doing checks and distances
     if (svar.scale != 1.0)
@@ -140,34 +141,40 @@ void ShapeBlock::check_input(SIM const& svar, real& globalspacing, int& fault)
             printf("         \t1. Grid\n         \t2. HCP\n");
         }
     }
-
-    if (press != 0)
-    {
-        real Bconst =
-            svar.fluid.rho_rest * (svar.fluid.speed_sound * svar.fluid.speed_sound) / svar.fluid.gam;
-        dens =
-            pow(((press - svar.fluid.press_pipe) / Bconst + 1.0), svar.fluid.gam) * svar.fluid.rho_rest;
-    }
-    else
-    {
-        dens = svar.fluid.rho_rest;
-    }
-
-    if (nu < 0)
-    {
-        nu = svar.fluid.nu;
-    }
 }
 
-void ShapeBlock::check_input_post(real& globalspacing)
+void ShapeBlock::set_values(SIM const& svar)
 {
-    globalspacing = std::max(dx, globalspacing);
+    fluid.B = fluid.rho_rest * pow(fluid.speed_sound, 2) / fluid.gam; /*Factor for Cole's Eq*/
+
+    /*Pipe Pressure calc*/
+    fluid.rho_start = fluid.get_density(fluid.press_start);
+
+    dx = particle_step * pow(fluid.rho_start / fluid.rho_rest, 1.0 / SIMDIM);
+    mass = fluid.rho_rest * pow(particle_step, SIMDIM);
+    H = svar.H_fac * particle_step;
+    H_sq = H * H;
+    // fluid.sr = 4 * fluid.H_sq; /*KDtree search radius*/
+
+    fluid.dsph_cont = 2.0 * fluid.dsph_delta * H * fluid.speed_sound;
+    // fluid.dsph_mom = fluid.visc_alpha * fluid.H * fluid.speed_sound *
+    // fluid.rho_rest;
+    fluid.dsph_mom = 2.0 * (SIMDIM + 2.0);
+    fluid.nu = fluid.mu / fluid.rho_rest;
+
+    W_correc = correction_factor(H);
+
+    W_dx = Kernel(particle_step, H, W_correc);
+}
+
+void ShapeBlock::check_input_post()
+{
     npts = npts > 1 ? npts : 1;
     if (bound_type != coordDef)
         coords.reserve(npts);
 }
 
-void ShapeBlock::generate_points(real const& globalspacing)
+void ShapeBlock::generate_points()
 {
     // Base function to get overridden, but needs to exist first. Do nothing.
 }
@@ -280,9 +287,7 @@ void get_var(json const& file_data, string const& param, std::vector<StateVecD>&
     }
 }
 
-void read_shape_JSON(
-    json const& input_block, SIM const& svar, real& globalspacing, ShapeBlock* new_block, int& fault
-)
+void read_shape_JSON(json const& input_block, SIM const& svar, ShapeBlock* new_block, int& fault)
 {
     get_var(input_block, "Shape", new_block->shape);
     get_var(input_block, "Sub-shape", new_block->subshape);
@@ -328,7 +333,7 @@ void read_shape_JSON(
     get_var(input_block, "Start straight length", new_block->sstraight);
     get_var(input_block, "End straight length", new_block->estraight);
 
-    get_var(input_block, "Particle spacing", new_block->dx);
+    get_var(input_block, "Particle spacing", new_block->particle_step);
     get_var(input_block, "Particle ordering (Grid/HCP)", new_block->particle_order);
     get_var(input_block, "Wall thickness", new_block->thickness);
     get_var(input_block, "Wall radial particle count", new_block->nk);
@@ -336,13 +341,19 @@ void read_shape_JSON(
 
     get_var(input_block, "Start velocity", new_block->vel);
     get_var(input_block, "Start jet velocity", new_block->vmag);
-    get_var(input_block, "Start pressure", new_block->press);
-    get_var(input_block, "Start density", new_block->dens);
 
-    get_var(input_block, "Cole EOS gamma", new_block->gamma);
-    get_var(input_block, "Speed of sound", new_block->speedOfSound);
-    get_var(input_block, "Rest density", new_block->rho_rest);
-    get_var(input_block, "Volume to target", new_block->renorm_vol);
+    // Fluid properties
+    get_var(input_block, "Cole EOS gamma", new_block->fluid.gam);
+    get_var(input_block, "Reference dispersed density", new_block->fluid.rho_rest);
+    get_var(input_block, "Reference dispersed viscosity", new_block->fluid.mu);
+    get_var(input_block, "Reference surface tension", new_block->fluid.sig);
+    get_var(input_block, "Surface tension contact angle", new_block->fluid.contangb);
+    get_var(input_block, "Equation of state (0=Cole/1=Isothermal)", new_block->fluid.pressure_rel);
+    get_var(input_block, "Background pressure", new_block->fluid.press_back);
+    get_var(input_block, "Starting pressure", new_block->fluid.press_start);
+    get_var(input_block, "SPH delta coefficient", new_block->fluid.dsph_delta);
+    get_var(input_block, "Artificial viscosity factor", new_block->fluid.visc_alpha);
+    get_var(input_block, "Speed of sound", new_block->fluid.speed_sound);
 
     get_var(input_block, "Coordinate filename", new_block->filename);
 
@@ -352,10 +363,10 @@ void read_shape_JSON(
     get_var(input_block, "Time data", new_block->times);
     get_var(input_block, "Position data", new_block->pos);
 
-    new_block->check_input(svar, globalspacing, fault);
+    new_block->check_input(svar, fault);
 }
 
-Shapes read_shapes_JSON(std::string const& filename, SIM const& svar, real& globalspacing)
+Shapes read_shapes_JSON(std::string const& filename, SIM const& svar)
 {
     /* Read shapes from file */
     std::ifstream input_file(filename);
@@ -379,7 +390,7 @@ Shapes read_shapes_JSON(std::string const& filename, SIM const& svar, real& glob
         new_block->filename = filename;
         new_block->name = block_name;
 
-        read_shape_JSON(input_block, svar, globalspacing, new_block, fault);
+        read_shape_JSON(input_block, svar, new_block, fault);
 
         shapes.push_back(new_block);
     }
@@ -404,7 +415,7 @@ Shapes read_shapes_JSON(std::string const& filename, SIM const& svar, real& glob
     return var;
 }
 
-Shapes read_shapes_bmap(std::string const& filename, SIM const& svar, real& globalspacing)
+Shapes read_shapes_bmap(std::string const& filename, SIM const& svar)
 {
     /* Read shapes from file */
     std::ifstream input_file(filename);
@@ -505,14 +516,18 @@ Shapes read_shapes_bmap(std::string const& filename, SIM const& svar, real& glob
 
         Get_Vector(line, "Starting velocity", new_block->vel);
         Get_Number(line, "Starting jet velocity", new_block->vmag);
-        Get_Number(line, "Starting pressure", new_block->press);
-        Get_Number(line, "Starting density", new_block->dens);
-        // Get_Number(line, "Starting mass", new_block->mass);
 
-        Get_Number(line, "Cole EOS gamma", new_block->gamma);
-        Get_Number(line, "Speed of sound", new_block->speedOfSound);
-        Get_Number(line, "Resting density", new_block->rho_rest);
-        Get_Number(line, "Volume to target", new_block->renorm_vol);
+        Get_Number(line, "Cole EOS gamma", new_block->fluid.gam);
+        Get_Number(line, "Reference dispersed density", new_block->fluid.rho_rest);
+        Get_Number(line, "Reference dispersed viscosity", new_block->fluid.mu);
+        Get_Number(line, "Reference surface tension", new_block->fluid.sig);
+        Get_Number(line, "Surface tension contact angle", new_block->fluid.contangb);
+        Get_Number(line, "Equation of state (0=Cole/1=Isothermal)", new_block->fluid.pressure_rel);
+        Get_Number(line, "Background pressure", new_block->fluid.press_back);
+        Get_Number(line, "Starting pressure", new_block->fluid.press_start);
+        Get_Number(line, "SPH delta coefficient", new_block->fluid.dsph_delta);
+        Get_Number(line, "Artificial viscosity factor", new_block->fluid.visc_alpha);
+        Get_Number(line, "Speed of sound", new_block->fluid.speed_sound);
 
         Get_String(line, "Time data filename", new_block->position_filename);
 
@@ -595,7 +610,7 @@ Shapes read_shapes_bmap(std::string const& filename, SIM const& svar, real& glob
     /* Check enough information has been provided */
     for (ShapeBlock* bound : shapes)
     {
-        bound->check_input(svar, globalspacing, fault);
+        bound->check_input(svar, fault);
 
         if (fault)
         {

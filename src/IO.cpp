@@ -4,8 +4,8 @@
 #include "IO.h"
 #include "AsciiIO.h"
 #include "BinaryIO.h"
+#include "FileIO.h"
 #include "Geometry.h"
-#include "H5IO.h"
 #include "IOFunctions.h"
 #include "Kernel.h"
 #include "VLM.h"
@@ -18,6 +18,13 @@
 
 using std::filesystem::directory_iterator;
 
+H5PartFile fluid_h5;
+H5PartFile bound_h5;
+SZLFile fluid_szl;
+SZLFile bound_szl;
+ASCIIFile fluid_ascii;
+ASCIIFile bound_ascii;
+
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
 /*************************************************************************/
@@ -29,28 +36,8 @@ void Set_Values(SIM& svar)
     svar.ipt.max_x *= svar.scale;
     svar.ipt.max_x_sph *= svar.scale;
 
-    svar.fluid.B =
-        svar.fluid.rho_rest * pow(svar.fluid.speed_sound, 2) / svar.fluid.gam; /*Factor for Cole's Eq*/
-
-    /*Pipe Pressure calc*/
-    svar.fluid.rho_pipe = svar.fluid.get_density(svar.fluid.press_pipe);
-
-    /* Upper and lower limits for density */
-    if (svar.fluid.rho_max == 1500 && svar.fluid.rho_min == 500)
-    { /* If limits are undefined, use a variation around the base density */
-        svar.fluid.rho_max = svar.fluid.rho_rest * (1.0 + svar.fluid.rho_var * 0.01);
-        svar.fluid.rho_min = svar.fluid.rho_rest * (1.0 - svar.fluid.rho_var * 0.01);
-    }
-
-    svar.dx = svar.particle_step * pow(svar.fluid.rho_pipe / svar.fluid.rho_rest, 1.0 / SIMDIM);
-
     svar.integrator.nb_beta = 0.25;
     svar.integrator.nb_gamma = 0.5; /*Newmark Beta parameters*/
-
-    /*Mass from spacing and density*/
-    svar.fluid.sim_mass = svar.fluid.rho_rest * pow(svar.particle_step, SIMDIM);
-    svar.fluid.bnd_mass = svar.fluid.sim_mass;
-    svar.air.mass_g = svar.air.rho_g * pow(svar.particle_step, SIMDIM);
 
     svar.air.sos = sqrt(svar.air.temp_g * svar.air.R_g * svar.air.gamma);
     svar.air.i_sos_sq = 1.0 / (svar.air.sos * svar.air.sos);
@@ -70,33 +57,6 @@ void Set_Values(SIM& svar)
     else
         svar.integrator.delta_t = 2E-010; /*Initial timestep*/
 
-    svar.fluid.H = svar.fluid.H_fac * svar.particle_step;
-    svar.fluid.H_sq = svar.fluid.H * svar.fluid.H;
-    svar.fluid.sr = 4 * svar.fluid.H_sq; /*KDtree search radius*/
-
-    svar.fluid.dsph_cont = 2.0 * svar.fluid.dsph_delta * svar.fluid.H * svar.fluid.speed_sound;
-    // svar.fluid.dsph_mom = svar.fluid.visc_alpha * svar.fluid.H * svar.fluid.speed_sound *
-    // svar.fluid.rho_rest;
-    svar.fluid.dsph_mom = 2.0 * (SIMDIM + 2.0);
-    svar.fluid.nu = svar.fluid.mu / svar.fluid.rho_rest;
-
-#if SIMDIM == 2
-#ifdef CUBIC
-    svar.fluid.W_correc = 10.0 / (7.0 * M_PI * svar.fluid.H * svar.fluid.H);
-#else
-    svar.fluid.W_correc = 7.0 / (4.0 * M_PI * svar.fluid.H * svar.fluid.H);
-#endif
-#endif
-#if SIMDIM == 3
-#ifdef CUBIC
-    svar.fluid.W_correc = (1.0 / (M_PI * svar.fluid.H * svar.fluid.H * svar.fluid.H));
-#else
-    svar.fluid.W_correc = (21 / (16 * M_PI * svar.fluid.H * svar.fluid.H * svar.fluid.H));
-#endif
-#endif
-
-    svar.fluid.W_dx = Kernel(svar.particle_step, svar.fluid.H, svar.fluid.W_correc);
-
 #if SIMDIM == 3
     if (svar.Asource == VLMInfl)
     {
@@ -108,23 +68,10 @@ void Set_Values(SIM& svar)
     }
 #endif
 
-    svar.air.GetYcoef(svar.fluid, svar.particle_step);
-    real n_full = get_n_full(svar.particle_step, svar.fluid.H);
+    real n_full = get_n_full(svar.H_fac);
     svar.air.n_full = n_full;
     svar.air.i_n_full = 1.0 / svar.air.n_full;
     svar.air.interp_fac = 1.0 / svar.air.i_interp_fac;
-
-#if SIMDIM == 3
-    svar.air.A_plate = svar.particle_step * svar.particle_step;
-    // svar.air.A_plate = svar.fluid.H*svar.fluid.H;
-#else
-    svar.air.A_plate = svar.particle_step /**svar.particle_step*/ /** pow(svar.air.L,0.5)*/;
-    // svar.air.A_plate = svar.fluid.H;
-#endif
-
-    /* Particle tracking values */
-    svar.ipt.ipt_diam = pow((6.0 * svar.fluid.sim_mass) / (M_PI * svar.fluid.rho_rest), 1.0 / 3.0);
-    svar.ipt.ipt_area = M_PI * svar.ipt.ipt_diam * svar.ipt.ipt_diam / 4.0;
 }
 
 void print_vector(string const& pretext, StateVecD const& vec)
@@ -191,20 +138,20 @@ void Print_Settings(FILE* out, SIM const& svar)
     /* Fluid data */
     fprintf(out, " Fluid parameters ---------------------------: -\n");
     fprintf(out, "                            Reference density: %g\n", svar.air.rho_g);
-    fprintf(out, "                  Reference dispersed density: %g\n", svar.fluid.rho_rest);
-    fprintf(out, "                Reference dispersed viscosity: %g\n", svar.fluid.mu);
-    fprintf(out, "                    Reference surface tension: %g\n", svar.fluid.sig);
-    fprintf(out, "            SPH surface tension contact angle: %g\n", svar.fluid.contangb);
-    fprintf(out, "              SPH artificial viscosity factor: %g\n", svar.fluid.visc_alpha);
-    fprintf(out, "                        SPH delta coefficient: %g\n", svar.fluid.dsph_delta);
+    // fprintf(out, "                  Reference dispersed density: %g\n", svar.fluid.rho_rest);
+    // fprintf(out, "                Reference dispersed viscosity: %g\n", svar.fluid.mu);
+    // fprintf(out, "                    Reference surface tension: %g\n", svar.fluid.sig);
+    // fprintf(out, "            SPH surface tension contact angle: %g\n", svar.fluid.contangb);
+    // fprintf(out, "              SPH artificial viscosity factor: %g\n", svar.fluid.visc_alpha);
+    // fprintf(out, "                        SPH delta coefficient: %g\n", svar.fluid.dsph_delta);
     fprintf(out, "                SPH maximum shifting velocity: %g\n", svar.integrator.max_shift_vel);
-    fprintf(out, "                           SPH speed of sound: %g\n", svar.fluid.speed_sound);
-    fprintf(out, "                      SPH background pressure: %g\n", svar.fluid.press_back);
-    fprintf(out, "                        SPH starting pressure: %g\n", svar.fluid.press_pipe);
-    fprintf(out, "   SPH maximum absolute density variation (%%): %g\n", svar.fluid.rho_var);
-    fprintf(out, "                          SPH maximum density: %g\n", svar.fluid.rho_max);
-    fprintf(out, "                          SPH minimum density: %g\n", svar.fluid.rho_min);
-    fprintf(out, " SPH density variation to reduce timestep (%%): %g\n", svar.fluid.rho_max_iter);
+    // fprintf(out, "                           SPH speed of sound: %g\n", svar.fluid.speed_sound);
+    // fprintf(out, "                      SPH background pressure: %g\n", svar.fluid.press_back);
+    // fprintf(out, "                        SPH starting pressure: %g\n", svar.fluid.press_pipe);
+    fprintf(out, "   SPH maximum absolute density variation (%%): %g\n", svar.rho_var);
+    fprintf(out, "                          SPH maximum density: %g\n", svar.rho_max);
+    fprintf(out, "                          SPH minimum density: %g\n", svar.rho_min);
+    fprintf(out, " SPH density variation to reduce timestep (%%): %g\n", svar.rho_max_iter);
     fprintf(out, "              Init hydrostatic pressure (0/1): %d\n", svar.init_hydro_pressure);
     fprintf(out, "                           Hydrostatic height: %g\n\n", svar.hydro_height);
 
@@ -217,7 +164,7 @@ void Print_Settings(FILE* out, SIM const& svar)
         out, " SPH compressibility solver (0=WCSPH,1=ACSPH): %u\n",
         svar.integrator.compressibility_solver
     );
-    fprintf(out, "  SPH equation of state (0=Cole/1=Isothermal): %u\n", svar.fluid.pressure_rel);
+    // fprintf(out, "  SPH equation of state (0=Cole/1=Isothermal): %u\n", svar.fluid.pressure_rel);
     fprintf(out, "     SPH boundary solver (0=pressure/1=ghost): %u\n", svar.integrator.bound_solver);
     fprintf(out, "                  SPH solver minimum residual: %g\n", svar.integrator.min_residual);
     fprintf(out, "                         SPH maximum timestep: %g\n", svar.integrator.delta_t_max);
@@ -243,10 +190,8 @@ void Print_Settings(FILE* out, SIM const& svar)
 #else
     fprintf(out, "                           SPH gravity vector: %g, %g\n", svar.grav[0], svar.grav[1]);
 #endif
-    fprintf(out, "                          SPH initial spacing: %g\n", svar.particle_step);
-    fprintf(out, "                  SPH boundary spacing factor: %g\n", svar.bound_step_factor);
     fprintf(out, "                    SPH restart fit tolerance: %f\n", svar.io.restart_tol);
-    fprintf(out, "                  SPH smoothing length factor: %g\n", svar.fluid.H_fac);
+    fprintf(out, "                  SPH smoothing length factor: %g\n", svar.H_fac);
 #if SIMDIM == 3
     fprintf(
         out, "                 SPH global offset coordinate: %g, %g, %g\n\n", svar.offset_vec[0],
@@ -379,11 +324,7 @@ void GetInput(int argc, char** argv, SIM& svar)
         // Get_String(line, "Particle surface impact filename", svar.ascii_surface_file);
 
         /* Fluid data */
-        Get_Number(line, "Reference dispersed density", svar.fluid.rho_rest);
         Get_Number(line, "Sutherland reference viscosity", svar.air.mu_g);
-        Get_Number(line, "Reference dispersed viscosity", svar.fluid.mu);
-        Get_Number(line, "Reference surface tension", svar.fluid.sig);
-        Get_Number(line, "SPH surface tension contact angle", svar.fluid.contangb);
         Get_Number(line, "Init hydrostatic pressure (0/1)", svar.init_hydro_pressure);
         Get_Number(line, "Hydrostatic height", svar.hydro_height);
 
@@ -394,7 +335,6 @@ void GetInput(int argc, char** argv, SIM& svar)
         Get_Number(
             line, "SPH compressibility solver (0=WCSPH,1=ACSPH)", svar.integrator.compressibility_solver
         );
-        Get_Number(line, "SPH equation of state (0=Cole/1=Isothermal)", svar.fluid.pressure_rel);
         Get_Number(line, "SPH boundary solver (0=pressure/1=ghost)", svar.integrator.bound_solver);
         Get_Number(line, "SPH solver minimum residual", svar.integrator.min_residual);
         Get_Number(line, "SPH maximum timestep", svar.integrator.delta_t_max);
@@ -408,22 +348,15 @@ void GetInput(int argc, char** argv, SIM& svar)
         Get_Number(line, "SPH stable CFL count iteration factor", svar.integrator.subits_factor);
         Get_Number(line, "SPH maximum shifting velocity", svar.integrator.max_shift_vel);
 
-        Get_Number(line, "SPH background pressure", svar.fluid.press_back);
-        Get_Number(line, "SPH starting pressure", svar.fluid.press_pipe);
-        Get_Number(line, "SPH maximum absolute density variation (%)", svar.fluid.rho_var);
-        Get_Number(line, "SPH density variation to reduce timestep (%)", svar.fluid.rho_max_iter);
-        Get_Number(line, "SPH maximum density", svar.fluid.rho_max);
-        Get_Number(line, "SPH minimum density", svar.fluid.rho_min);
-        Get_Number(line, "SPH delta coefficient", svar.fluid.dsph_delta);
+        Get_Number(line, "SPH maximum absolute density variation (%)", svar.rho_var);
+        Get_Number(line, "SPH density variation to reduce timestep (%)", svar.rho_max_iter);
+        Get_Number(line, "SPH maximum density", svar.rho_max);
+        Get_Number(line, "SPH minimum density", svar.rho_min);
 
-        Get_Number(line, "SPH artificial viscosity factor", svar.fluid.visc_alpha);
-        Get_Number(line, "SPH speed of sound", svar.fluid.speed_sound);
         Get_Number(line, "SPH Newmark-Beta iteration limit", svar.integrator.max_subits);
         Get_Vector(line, "SPH gravity vector", svar.grav);
 
-        Get_Number(line, "SPH initial spacing", svar.particle_step);
-        Get_Number(line, "SPH boundary spacing factor", svar.bound_step_factor);
-        Get_Number(line, "SPH smoothing length factor", svar.fluid.H_fac);
+        Get_Number(line, "SPH smoothing length factor", svar.H_fac);
         Get_Vector(line, "SPH global offset coordinate", svar.offset_vec);
         Get_Number(line, "SPH maximum particle count", svar.max_points);
         Get_Number(line, "SPH restart fit tolerance", svar.io.restart_tol);
@@ -601,12 +534,6 @@ void GetInput(int argc, char** argv, SIM& svar)
         }
     }
 
-    if (svar.particle_step < 0)
-    {
-        printf("ERROR: SPH initial spacing has not been defined.\n");
-        fault = 1;
-    }
-
     if (svar.integrator.max_frames < 0)
     {
         printf("Number of frames to output not defined.\n");
@@ -722,136 +649,77 @@ void GetInput(int argc, char** argv, SIM& svar)
 
 } /*End of GetInput()*/
 
-void Write_Tec_Headers(FILE* ff, FILE* fb, FILE* fg, SIM& svar, std::string const& prefix)
+void init_writers(SIM const& svar)
 {
-    if (svar.io.out_encoding == binary)
+    if (svar.io.write_h5part)
     {
-        Init_Binary_PLT(svar, prefix, "_fluid.szplt", "Simulation Particles", svar.io.output_fluid_file);
-
-        Init_Binary_PLT(
-            svar, prefix, "_boundary.szplt", "Boundary Particles", svar.io.output_bound_file
-        );
+        fluid_h5 = H5PartFile(svar, "Fluid");
+        bound_h5 = H5PartFile(svar, "Boundary");
     }
-    else
-    {
-        /* Write first timestep */
-        string mainput_file = prefix;
-        mainput_file.append("_fluid.dat");
-        ff = fopen(mainput_file.c_str(), "a");
-        if (ff != NULL)
-            Write_ASCII_header(ff, svar, "Simulation Particles");
-        else
-        {
-            printf("Failed to open %s. Stopping.\n", mainput_file.c_str());
-            exit(-1);
-        }
 
-        /*If the boundary exists, write it.*/
-        string h5part_bound_file = prefix;
-        h5part_bound_file.append("_boundary.dat");
-        fb = fopen(h5part_bound_file.c_str(), "a");
-        if (fb != NULL)
-            Write_ASCII_header(fb, svar, "Boundary Particles");
+    if (svar.io.write_tecio)
+    {
+        if (svar.io.out_encoding == binary)
+        {
+            bound_szl = SZLFile(svar, "Boundary", 0, svar.n_bound_blocks);
+            fluid_szl =
+                SZLFile(svar, "Fluid", svar.n_bound_blocks, svar.n_bound_blocks + svar.n_fluid_blocks);
+        }
         else
         {
-            printf("Error opening %s file. Stopping\n", h5part_bound_file.c_str());
-            exit(-1);
+            bound_ascii = ASCIIFile(svar, "Boundary", 0, svar.n_bound_blocks);
+            fluid_ascii =
+                ASCIIFile(svar, "Fluid", svar.n_bound_blocks, svar.n_bound_blocks + svar.n_fluid_blocks);
         }
     }
 }
 
-void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limits, SPHState const& pnp1)
+void close_writers()
+{
+    // Close everything regardless of wether initialised.
+    bound_h5.close_file();
+    fluid_h5.close_file();
+    bound_szl.close_file();
+    fluid_szl.close_file();
+    bound_ascii.close_file();
+    fluid_ascii.close_file();
+}
+
+void combine_szl_files()
 {
     if (svar.io.write_tecio)
     {
-        std::ostringstream oss;
-        oss << svar.integrator.current_time;
-        if (!svar.io.single_file)
-        {
-            string prefix = svar.io.output_prefix + "_time_" + oss.str();
-            Write_Tec_Headers(ff, fb, fg, svar, prefix);
-        }
+        bound_szl.combine_file();
+        fluid_szl.combine_file();
+    }
+}
 
+void Write_Timestep(SIM const& svar, LIMITS const& limits, SPHState const& pnp1)
+{
+    if (svar.io.write_tecio)
+    {
         if (svar.io.out_encoding == binary)
         {
-            for (size_t bound = 0; bound < svar.n_bound_blocks; bound++)
-            {
-                string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name +
-                               "_time_" + oss.str() + "s";
-                Write_Binary_Timestep(
-                    svar, svar.fluid.rho_rest, pnp1, limits[bound], title.c_str(),
-                    static_cast<int32_t>(bound + 1), svar.io.output_bound_file
-                );
-            }
-
-            for (size_t block = svar.n_bound_blocks; block < svar.n_bound_blocks + svar.n_fluid_blocks;
-                 block++)
-            {
-                string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name + "_time_" +
-                               oss.str() + "s";
-                Write_Binary_Timestep(
-                    svar, svar.fluid.rho_rest, pnp1, limits[block], title.c_str(),
-                    static_cast<int32_t>(block + 1), svar.io.output_fluid_file
-                );
-            }
+            bound_szl.write_timestep(svar, pnp1, limits, svar.integrator.current_time);
+            fluid_szl.write_timestep(svar, pnp1, limits, svar.integrator.current_time);
         }
         else
         {
-            for (size_t bound = 0; bound < svar.n_bound_blocks; bound++)
-            {
-                string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name +
-                               "_time_" + oss.str() + "s";
-                Write_ASCII_Timestep(
-                    svar, svar.fluid.rho_rest, pnp1, limits[bound].index.first,
-                    limits[bound].index.second, title.c_str(), bound + 1, fb
-                );
-            }
-
-            for (size_t block = svar.n_bound_blocks; block < svar.n_bound_blocks + svar.n_fluid_blocks;
-                 block++)
-            {
-                string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name + "_time_" +
-                               oss.str() + "s";
-
-                Write_ASCII_Timestep(
-                    svar, svar.fluid.rho_rest, pnp1, limits[block].index.first,
-                    limits[block].index.second, title.c_str(), block + 1, ff
-                );
-            }
-        }
-
-        if (!svar.io.single_file)
-        { // Close files after use
-            if (ff != NULL)
-                fclose(ff);
-            if (fb != NULL)
-                fclose(fb);
-            if (fg != NULL)
-                fclose(fg);
-
-            if (svar.io.out_encoding == binary)
-            {
-                /*Combine the szplt files*/
-                close_file(&svar.io.output_fluid_file);
-                close_file(&svar.io.output_bound_file);
-            }
+            bound_ascii.write_timestep(svar, pnp1, limits, svar.integrator.current_time);
+            fluid_ascii.write_timestep(svar, pnp1, limits, svar.integrator.current_time);
         }
     }
 
     if (svar.io.write_h5part)
     {
-        string prefix = svar.io.output_prefix;
-        if (!svar.io.single_file)
-        {
-            std::ostringstream oss;
-            oss << svar.integrator.current_time;
-            prefix += "_" + std::to_string(svar.integrator.current_frame);
-        }
-
-        open_h5part_files(svar, prefix);
-        write_h5part_data(svar, pnp1);
-        close_h5part_files(svar);
-        // Files are closed in the write function
+        bound_h5.write_timestep(
+            pnp1, limits, 0, svar.bound_points, svar.integrator.current_frame,
+            svar.integrator.current_time
+        );
+        fluid_h5.write_timestep(
+            pnp1, limits, svar.bound_points, svar.total_points, svar.integrator.current_frame,
+            svar.integrator.current_time
+        );
     }
 }
 
@@ -962,12 +830,14 @@ void Check_Output_Variables(SIM& svar)
     outvars.insert({"press", OutputVariable("Pressure", realType, true, false)});
     outvars.insert({"dRho", OutputVariable("dRho", realType, true, false)});
     outvars.insert({"part_id", OutputVariable("part_id", int32Type, true, false)});
+    outvars.insert({"fluid_id", OutputVariable("fluid_id", int32Type, false, false)});
     outvars.insert({"cellID", OutputVariable("cellID", int32Type, true, false)});
     outvars.insert({"bound", OutputVariable("bound", uint8Type, true, false)});
 
     // Start of optional parameters.
     outvars.insert({"dens", OutputVariable("Density", realType, false, false)});
     outvars.insert({"densVar", OutputVariable("Density-Variation", realType, false, false)});
+    outvars.insert({"dx", OutputVariable("Particle-Spacing", realType, false, false)});
     outvars.insert({"vmag", OutputVariable("V-mag", realType, false, false)});
     outvars.insert({"surf", OutputVariable("Surface", realType, false, false)});
     outvars.insert({"surfZ", OutputVariable("Surface-Zone", realType, false, false)});

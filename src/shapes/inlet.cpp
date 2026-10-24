@@ -4,12 +4,21 @@
 #include "inlet.h"
 #include "../Geometry.h"
 
-void InletShape::check_input(SIM const& svar, real& globalspacing, int& fault)
+enum geometry_config
+{
+    NO_CONFIG = 0,
+    CentreRadius,
+    CentreEnd,
+    ThreePoints,
+    StartCount
+};
+
+void InletShape::check_input(SIM const& svar, int& fault)
 {
     // Do common input checks.
-    ShapeBlock::check_input(svar, globalspacing, fault);
+    ShapeBlock::check_input(svar, fault);
 
-    int has_config = 0;
+    int has_config = NO_CONFIG;
 
 #if SIMDIM == 3
     if (subshape == "Square")
@@ -17,11 +26,11 @@ void InletShape::check_input(SIM const& svar, real& globalspacing, int& fault)
         sub_bound_type = squareCube;
         if (check_vector(start) && check_vector(right) && check_vector(end))
         {
-            has_config = 1;
+            has_config = ThreePoints;
         }
 
         if (check_vector(start) && ni > 0 && nj > 0)
-            has_config = 2;
+            has_config = StartCount;
     }
     else if (subshape == "Circle")
     {
@@ -30,7 +39,7 @@ void InletShape::check_input(SIM const& svar, real& globalspacing, int& fault)
         { /* Default to these values first */
             if (check_vector(right) && check_vector(end))
             {
-                has_config = 4;
+                has_config = CentreEnd;
                 StateVecD v = right - centre;
                 StateVecD u = end - right;
                 start = centre - v - u;
@@ -40,7 +49,7 @@ void InletShape::check_input(SIM const& svar, real& globalspacing, int& fault)
 
             if (radius > 0)
             {
-                has_config = 3;
+                has_config = CentreRadius;
                 start = centre;
                 start[1] -= radius;
                 start[2] -= radius;
@@ -88,13 +97,26 @@ void InletShape::check_input(SIM const& svar, real& globalspacing, int& fault)
     }
 #endif
 
-    if (has_config == 0)
+    if (has_config == NO_CONFIG)
     {
         printf("ERROR: Inlet block \"%s\" geometry not sufficiently defined\n", name.c_str());
         fault = 1;
     }
 
-    dx = globalspacing; // Potential to allow different size particles, but not right now.
+    if (dx < 0)
+    {
+        if (ni < 0)
+        {
+            std::cout << "Error: Block \"" << name << "\" spacing has not been defined." << std::endl;
+            fault = 1;
+        }
+        else
+        {
+            /* Use ni as a number along the diameter, so define dx off that */
+            real di = (2.0 * radius) / real(ni);
+            dx = di;
+        }
+    }
 
     // Generate the rotation matrix if it exists
     if (angles.norm() != 0)
@@ -188,7 +210,7 @@ void InletShape::check_input(SIM const& svar, real& globalspacing, int& fault)
         rotmat = rotmat;
     }
 
-    if (has_config == 1)
+    if (has_config == ThreePoints)
     {
         // Have three points to define the plane. Override any normal and rotation matrix def
         StateVecD ab = (end - start).normalized();
@@ -206,20 +228,20 @@ void InletShape::check_input(SIM const& svar, real& globalspacing, int& fault)
 
         insert_norm = normal;
         // Define the insertion constant using the length
-        StateVecD test = start - (length - 0.01 * globalspacing) * insert_norm;
+        StateVecD test = start - (length - 0.01 * dx) * insert_norm;
         insconst = insert_norm.dot(test);
     }
-    else if (has_config == 2)
+    else if (has_config == StartCount)
     {
 // Start and ni and nj counts have been defined (nk doesn't need to be defined for the inlet)
 #if SIMDIM == 3
         right = start;
-        right[1] += globalspacing * ni;
+        right[1] += dx * ni;
         end = right;
-        end[2] += globalspacing * nj;
+        end[2] += dx * nj;
 #else
         end = start;
-        end[1] += globalspacing * ni;
+        end[1] += dx * ni;
 #endif
 
         if (rotmat != StateMatD::Identity())
@@ -230,7 +252,7 @@ void InletShape::check_input(SIM const& svar, real& globalspacing, int& fault)
 #endif
         }
     }
-    else if (has_config == 3 || has_config == 4)
+    else if (has_config == CentreRadius || has_config == CentreEnd)
     {
         // Centre and radius defined, so start, right and end derived.
         if (rotmat != StateMatD::Identity())
@@ -255,11 +277,11 @@ void InletShape::check_input(SIM const& svar, real& globalspacing, int& fault)
 #if SIMDIM == 3
 #endif
 
-    ni = static_cast<int>(ceil(xlength / globalspacing));
+    ni = static_cast<int>(ceil(xlength / dx));
 #if SIMDIM == 3
-    nj = static_cast<int>(ceil(ylength / globalspacing));
+    nj = static_cast<int>(ceil(ylength / dx));
 #endif
-    nk = static_cast<int>(ceil(length / globalspacing));
+    nk = static_cast<int>(ceil(length / dx));
 
     ni = ni > 1 ? ni : 1;
     nk = nk > 1 ? nk : 1;
@@ -302,15 +324,15 @@ void InletShape::check_input(SIM const& svar, real& globalspacing, int& fault)
         vel = vmag * insert_norm;
     }
 
-    ShapeBlock::check_input_post(globalspacing);
+    ShapeBlock::check_input_post();
 }
 
 #if SIMDIM == 2
-void InletShape::generate_points(real const& globalspacing)
+void InletShape::generate_points(real const& dx)
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */
-    std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
+    std::uniform_real_distribution<real> unif(0.0, MEPSILON * dx);
     std::default_random_engine re;
 
     StateVecD delta = (end - start) / static_cast<real>(ni);
@@ -452,11 +474,11 @@ create_disk(ShapeBlock const& block, real const& dx, real const& radius, int con
         return create_lattice_disk(block, dx, radius, kk);
 }
 
-void InletShape::generate_points(real const& globalspacing)
+void InletShape::generate_points()
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */
-    std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
+    std::uniform_real_distribution<real> unif(0.0, MEPSILON * dx);
     std::default_random_engine re;
 
     // Which geometry to create?
@@ -472,7 +494,7 @@ void InletShape::generate_points(real const& globalspacing)
                 {
                     StateVecD newPoint = StateVecD(real(-kk), real(ii), real(jj));
 
-                    newPoint *= globalspacing;
+                    newPoint *= dx;
                     newPoint += StateVecD(unif(re), unif(re), unif(re));
                     newPoint = rotmat * newPoint;
                     newPoint += start;
@@ -489,7 +511,7 @@ void InletShape::generate_points(real const& globalspacing)
             {
                 StateVecD newPoint(real(-kk), real(jj), real(ii));
 
-                newPoint *= globalspacing;
+                newPoint *= dx;
                 newPoint += StateVecD(unif(re), unif(re), unif(re));
                 newPoint = rotmat * newPoint;
                 newPoint += start;
@@ -513,7 +535,7 @@ void InletShape::generate_points(real const& globalspacing)
                 {
                     StateVecD newPoint = StateVecD(real(-kk), real(ii), real(jj));
 
-                    newPoint *= globalspacing;
+                    newPoint *= dx;
                     newPoint += StateVecD(unif(re), unif(re), unif(re));
                     newPoint = rotmat * newPoint;
                     newPoint += start;
@@ -532,7 +554,7 @@ void InletShape::generate_points(real const& globalspacing)
         int kk = 0;
         for (kk = 0; kk < nk; ++kk)
         {
-            std::vector<StateVecD> temp = create_disk(*this, globalspacing, radius, kk);
+            std::vector<StateVecD> temp = create_disk(*this, dx, radius, kk);
 
             for (StateVecD const& pos : temp)
             {
@@ -542,7 +564,7 @@ void InletShape::generate_points(real const& globalspacing)
         } /* end k count */
 
         // Create the back particles
-        std::vector<StateVecD> temp = create_disk(*this, globalspacing, radius, kk);
+        std::vector<StateVecD> temp = create_disk(*this, dx, radius, kk);
 
         for (StateVecD const& pos : temp)
         {
@@ -557,7 +579,7 @@ void InletShape::generate_points(real const& globalspacing)
         size_t buff = 0;
         for (kk = nk + 1; kk <= nk + nBuff; ++kk)
         {
-            std::vector<StateVecD> temp = create_disk(*this, globalspacing, radius, kk);
+            std::vector<StateVecD> temp = create_disk(*this, dx, radius, kk);
 
             for (size_t ii = 0; ii < temp.size(); ii++)
             {
@@ -607,7 +629,7 @@ uint update_buffer_region(SIM& svar, LIMITS& limits, SPHState& pnp1, size_t& end
                     /* Create a new particle */
                     if (svar.total_points < svar.max_points)
                     {
-                        StateVecD xi = pnp1[block.buffer[ii].back()].xi - svar.dx * block.insert_norm;
+                        StateVecD xi = pnp1[block.buffer[ii].back()].xi - block.dx * block.insert_norm;
 
                         // Insert the new particle, using the properties of the old particle.
                         // Use insert to keep particles closer together in memory.

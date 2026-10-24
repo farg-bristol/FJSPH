@@ -32,6 +32,15 @@ inline StateVecD GradK(StateVecD const& Rij, real const dist, real const H, real
     return StateVecD::Zero();
 }
 
+inline real correction_factor(real const& H)
+{
+#if SIMDIM == 2
+    return 10.0 / (7.0 * M_PI * fluid.H * fluid.H);
+#else
+    return 1.0 / (M_PI * H * H * H);
+#endif
+}
+
 #else
 ///******Wendland's C2 Quintic Kernel*******///
 inline real Kernel(real const& dist, real const& H, real const& W_correc)
@@ -58,6 +67,15 @@ inline StateVecD GradK(StateVecD const& Rij, real const& dist, real const& H, re
     // 	return StateVecD::Zero();
     // }
     return 5.0 * (Rij / (H * H)) * pow(1 - 0.5 * dist / H, 3) * W_correc;
+}
+
+inline real correction_factor(real const& H)
+{
+#if SIMDIM == 2
+    return 7.0 / (4.0 * M_PI * H * H);
+#else
+    return 21 / (16 * M_PI * H * H * H);
+#endif
 }
 #endif
 
@@ -115,14 +133,14 @@ inline StateVecD pairwise_ST(
 
 #ifdef CSF
 inline void CSF_Curvature(
-    FLUID const& fvar, SPHPart const& pi, SPHPart const& pj, StateVecD const& Rji,
-    StateVecD const& gradK, real const& volj, real const& r, real& curve, real& W_correc
+    SPHPart const& pi, SPHPart const& pj, StateVecD const& Rji, StateVecD const& gradK, real const& volj,
+    real const& r, real& curve, real& W_correc
 )
 {
     if (pj.lam < 0.75)
     {
         curve -= (pj.norm.normalized() - pi.norm.normalized()).dot(volj * gradK);
-        W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/pi.kernsum*/;
+        W_correc += volj * Kernel(r, pi.H, pi.W_correc) /*/pi.kernsum*/;
     }
 
     /* Consider imaginary particles to improve curvature representation */
@@ -131,20 +149,20 @@ inline void CSF_Curvature(
         /* Host particle is on the surface, but neighbour is not. Reflect stuff then */
         StateVecD normj = 2 * pi.norm.normalized() - pj.norm.normalized();
         curve += (normj.normalized() - pi.norm.normalized()).dot(volj * gradK);
-        W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/pi.kernsum*/;
+        W_correc += volj * Kernel(r, pi.H, pi.W_correc) /*/pi.kernsum*/;
     }
 
     if (pj.surf == 1 && pi.surf != 1)
     {
         /* Neighbour particle is on the surface, but host is not. Not as easy */
         /* Need to check if extended particle is still in the neighbourhood */
-        if (r < fvar.H)
+        if (r < pi.H)
         { /* Assuming a support radius of 2h, if the current particle is within h */
             /* it will still be in the neighbourhood if distance is doubled */
-            StateVecD gradK2 = GradK(2 * Rji, 2 * r, fvar.H, fvar.W_correc);
+            StateVecD gradK2 = GradK(2 * Rji, 2 * r, pi.H, pi.W_correc);
             StateVecD normj = 2 * pj.norm.normalized() - pi.norm.normalized();
             curve -= (normj.normalized() - pi.norm.normalized()).dot(volj * gradK2);
-            W_correc += volj * Kernel(r, fvar.H, fvar.W_correc) /*/pi.kernsum*/;
+            W_correc += volj * Kernel(r, pi.H, pi.W_correc) /*/pi.kernsum*/;
         }
     }
 }
@@ -229,7 +247,8 @@ inline StateVecD ArtVisc(
     }
     else
     {
-        real const muij = fvar.H * vdotr * idist2;
+        // TODO - Review for symmetry of operator with non-equal support radius.
+        real const muij = pi.H * vdotr * idist2;
         real const rhoij = 0.5 * (pi.rho + pj.rho);
         real const cbar =
             0.5 * (sqrt((fvar.B * fvar.gam) / pi.rho) + sqrt((fvar.B * fvar.gam) / pj.rho));
@@ -263,17 +282,18 @@ inline StateVecD Viscosity(
     FLUID const& fvar, real const& nu, SPHPart const& pi, SPHPart const& pj, StateVecD const& Rji,
     StateVecD const& Vji, real const& idist2, StateVecD const& gradK
 )
-
 {
     return nu * (pi.rho + pj.rho) / (pi.rho * pj.rho) * (Rji.dot(gradK)) * idist2 * Vji;
 }
 
 /*Repulsion for interacting with mesh surface - saves generating particles on surface*/
-inline StateVecD NormalBoundaryRepulsion(FLUID const& fvar, MESH const& cells, SPHPart const& pi)
+inline StateVecD NormalBoundaryRepulsion(SPHPart const& pi, real const& speed_sound)
 {
-    real beta = 4 * fvar.speed_sound * fvar.speed_sound;
-    real kern = BoundaryKernel(pi.y, fvar.H, beta);
-    return fvar.bnd_mass / (fvar.bnd_mass + fvar.sim_mass) * kern * pi.bNorm;
+    real beta = 4 * speed_sound * speed_sound;
+    real kern = BoundaryKernel(pi.y, pi.H, beta);
+    // Formally a ratio of boundary mass to simulation particle mass, but boundary mass is equal to sim.
+    // F = (m_bound/(m_bound + m_sim) * kern * bNorm)
+    return 0.5 * kern * pi.bNorm;
 }
 
 #endif
