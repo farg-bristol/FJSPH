@@ -4,8 +4,8 @@
 #include "IO.h"
 #include "AsciiIO.h"
 #include "BinaryIO.h"
+#include "FileIO.h"
 #include "Geometry.h"
-#include "H5IO.h"
 #include "IOFunctions.h"
 #include "Kernel.h"
 #include "VLM.h"
@@ -17,6 +17,11 @@
 #include <regex>
 
 using std::filesystem::directory_iterator;
+
+H5PartFile fluid_h5;
+H5PartFile bound_h5;
+SZLFile fluid_szl;
+SZLFile bound_szl;
 
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
@@ -642,15 +647,47 @@ void GetInput(int argc, char** argv, SIM& svar)
 
 } /*End of GetInput()*/
 
+void init_writers(SIM const& svar)
+{
+    if (svar.io.write_h5part)
+    {
+        fluid_h5 = H5PartFile(svar, "Fluid");
+        bound_h5 = H5PartFile(svar, "Boundary");
+    }
+
+    if (svar.io.write_tecio)
+    {
+        if (svar.io.out_encoding == binary)
+        {
+            bound_szl = SZLFile(svar, "Boundary", 0, svar.n_bound_blocks);
+            fluid_szl =
+                SZLFile(svar, "Fluid", svar.n_bound_blocks, svar.n_bound_blocks + svar.n_fluid_blocks);
+        }
+    }
+}
+
+void close_writers()
+{
+    // Close everything regardless of wether initialised.
+    bound_h5.close_file();
+    fluid_h5.close_file();
+    bound_szl.close_file();
+    fluid_szl.close_file();
+}
+
+void combine_szl_files()
+{
+    if (svar.io.write_tecio)
+    {
+        bound_szl.combine_file();
+        fluid_szl.combine_file();
+    }
+}
+
 void Write_Tec_Headers(FILE* ff, FILE* fb, FILE* fg, SIM& svar, std::string const& prefix)
 {
     if (svar.io.out_encoding == binary)
     {
-        Init_Binary_PLT(svar, prefix, "_fluid.szplt", "Simulation Particles", svar.io.output_fluid_file);
-
-        Init_Binary_PLT(
-            svar, prefix, "_boundary.szplt", "Boundary Particles", svar.io.output_bound_file
-        );
     }
     else
     {
@@ -694,26 +731,8 @@ void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limit
 
         if (svar.io.out_encoding == binary)
         {
-            for (size_t bound = 0; bound < svar.n_bound_blocks; bound++)
-            {
-                string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name +
-                               "_time_" + oss.str() + "s";
-                Write_Binary_Timestep(
-                    svar, svar.fluid.rho_rest, pnp1, limits[bound], title.c_str(),
-                    static_cast<int32_t>(bound + 1), svar.io.output_bound_file
-                );
-            }
-
-            for (size_t block = svar.n_bound_blocks; block < svar.n_bound_blocks + svar.n_fluid_blocks;
-                 block++)
-            {
-                string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name + "_time_" +
-                               oss.str() + "s";
-                Write_Binary_Timestep(
-                    svar, svar.fluid.rho_rest, pnp1, limits[block], title.c_str(),
-                    static_cast<int32_t>(block + 1), svar.io.output_fluid_file
-                );
-            }
+            bound_szl.write_timestep(pnp1, limits, svar.integrator.current_time);
+            fluid_szl.write_timestep(pnp1, limits, svar.integrator.current_time);
         }
         else
         {
@@ -760,18 +779,14 @@ void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limit
 
     if (svar.io.write_h5part)
     {
-        string prefix = svar.io.output_prefix;
-        if (!svar.io.single_file)
-        {
-            std::ostringstream oss;
-            oss << svar.integrator.current_time;
-            prefix += "_" + std::to_string(svar.integrator.current_frame);
-        }
-
-        open_h5part_files(svar, prefix);
-        write_h5part_data(svar, pnp1);
-        close_h5part_files(svar);
-        // Files are closed in the write function
+        bound_h5.write_timestep(
+            pnp1, limits, 0, svar.bound_points, svar.integrator.current_frame,
+            svar.integrator.current_time
+        );
+        fluid_h5.write_timestep(
+            pnp1, limits, svar.bound_points, svar.total_points, svar.integrator.current_frame,
+            svar.integrator.current_time
+        );
     }
 }
 

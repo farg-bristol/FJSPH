@@ -3,12 +3,11 @@
 
 #include <chrono>
 
-#include "BinaryIO.h"
 #include "CDFIO.h"
 #include "Containment.h"
 #include "FOAMIO.h"
+#include "FileIO.h"
 #include "Geometry.h"
-#include "H5IO.h"
 #include "IO.h"
 #include "IOFunctions.h"
 #include "IPT.h"
@@ -159,29 +158,19 @@ int main(int argc, char* argv[])
     FILE* f3 = NULL;
     FILE* fb = NULL;
     FILE* fg = NULL;
-    string framef = svar.io.output_prefix;
-    framef.append("_frame.info");
+    string framef = svar.io.output_prefix + "_frame.info";
     if (svar.io.restart == 1)
         f2 = fopen(framef.c_str(), "a");
     else
         f2 = fopen(framef.c_str(), "w");
 
-    if (svar.io.single_file)
-    {
-        if (svar.io.write_tecio)
-            Write_Tec_Headers(ff, fb, fg, svar, svar.io.output_prefix);
-        if (svar.io.write_h5part)
-            open_h5part_files(svar, svar.io.output_prefix);
-    }
+    RestartFile h5writer(svar);
+    init_writers(svar);
 
     if (!svar.io.restart)
     {
         Write_Timestep(ff, fb, fg, svar, limits, pnp1);
-    }
-
-    ///*** Perform an iteration to populate the vectors *****/
-    if (!svar.io.restart)
-    {
+        ///*** Perform an iteration to populate the vectors *****/
         integrator.integrate_no_update(SPH_TREE, CELL_TREE, svar, cells, limits, outlist, pn, pnp1);
     }
     else
@@ -317,7 +306,8 @@ int main(int argc, char* argv[])
         }
 
         Write_Timestep(ff, fb, fg, svar, limits, pnp1);
-        Write_HDF5(svar, pnp1, limits);
+
+        h5writer.write_restart_file(svar, pnp1, limits);
         if (svar.ipt.using_ipt)
             IPT::Write_Data(svar, cells, iptdata);
 
@@ -337,15 +327,12 @@ int main(int argc, char* argv[])
     if (fg != NULL)
         fclose(fg);
 
+    close_writers();
+
     if (svar.io.out_encoding == binary)
     {
         /*Combine the szplt files*/
-
-        string outfile = svar.io.output_prefix + "_fluid.szplt";
-        Combine_SZPLT(outfile);
-
-        outfile = svar.io.output_prefix + "_boundary.szplt";
-        Combine_SZPLT(outfile);
+        combine_szl_files();
 
         close_h5part_files(svar);
     }

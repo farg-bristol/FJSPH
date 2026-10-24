@@ -8,6 +8,19 @@
 
 namespace SZLIO
 {
+    bool open_file(
+        string const& file_name, string const& zone_name, string const& var_names, void*& file_handle
+    );
+
+    int32_t create_zone(
+        void* const& file_handle, int32_t const& strandID, std::string const& zone_header,
+        vector<int32_t> const& var_types, int64_t const& size, double const& solution_time
+    );
+
+    void close_file(void* handle);
+
+    void flush_file(void* handle);
+
     void add_file_aux_data(void* const& file, std::string const& name, std::string const& var);
     void add_file_aux_data(void* const& file, std::string const& name, size_t const& var);
     void add_file_aux_data(void* const& file, std::string const& name, int const& var);
@@ -51,7 +64,7 @@ namespace SZLIO
 
 }; // namespace SZLIO
 
-inline int Combine_SZPLT(string& file)
+inline int Combine_SZPLT(string const& file)
 {
     string cmd = "exec szcombine \"";
     cmd.append(file);
@@ -71,23 +84,6 @@ inline int Combine_SZPLT(string& file)
     }
     return 0;
 }
-
-bool Open_PLT_File(
-    string const& file_name, string const& zone_name, SIM const& svar, void*& file_handle
-);
-
-void Write_Binary_Timestep(
-    SIM const& svar, real const& rho_rest, SPHState const& pnp1, bound_block const& limits,
-    char const* group, int32_t const& strandID, void* const& fileHandle
-);
-
-void Init_Binary_PLT(
-    SIM& svar, string const& prefix, string const& filename, string const& zoneName, void*& fileHandle
-);
-
-void close_file(void* handle);
-
-void flush_file(void* handle);
 
 // IPT Binary functions (Allows more explicit library includes, so that tecio is only in BinaryIO.cpp.)
 namespace IPT

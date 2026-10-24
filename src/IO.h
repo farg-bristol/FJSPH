@@ -14,9 +14,11 @@ void Set_Values(SIM& svar);
 
 void GetInput(int argc, char** argv, SIM& svar);
 
-void Write_Tec_Headers(FILE* ff, FILE* fb, FILE* fg, SIM& svar, std::string const& prefix);
+void init_writers(SIM const& svar);
+void close_writers();
+void combine_szl_files();
 
-void Write_h5part_Headers(SIM& svar, std::string const& prefix);
+void Write_Tec_Headers(FILE* ff, FILE* fb, FILE* fg, SIM& svar, std::string const& prefix);
 
 void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limits, SPHState const& pnp1);
 
