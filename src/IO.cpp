@@ -22,6 +22,8 @@ H5PartFile fluid_h5;
 H5PartFile bound_h5;
 SZLFile fluid_szl;
 SZLFile bound_szl;
+ASCIIFile fluid_ascii;
+ASCIIFile bound_ascii;
 
 /*************************************************************************/
 /**************************** ASCII INPUTS *******************************/
@@ -663,6 +665,12 @@ void init_writers(SIM const& svar)
             fluid_szl =
                 SZLFile(svar, "Fluid", svar.n_bound_blocks, svar.n_bound_blocks + svar.n_fluid_blocks);
         }
+        else
+        {
+            bound_ascii = ASCIIFile(svar, "Boundary", 0, svar.n_bound_blocks);
+            fluid_ascii =
+                ASCIIFile(svar, "Fluid", svar.n_bound_blocks, svar.n_bound_blocks + svar.n_fluid_blocks);
+        }
     }
 }
 
@@ -673,6 +681,8 @@ void close_writers()
     fluid_h5.close_file();
     bound_szl.close_file();
     fluid_szl.close_file();
+    bound_ascii.close_file();
+    fluid_ascii.close_file();
 }
 
 void combine_szl_files()
@@ -684,96 +694,19 @@ void combine_szl_files()
     }
 }
 
-void Write_Tec_Headers(FILE* ff, FILE* fb, FILE* fg, SIM& svar, std::string const& prefix)
-{
-    if (svar.io.out_encoding == binary)
-    {
-    }
-    else
-    {
-        /* Write first timestep */
-        string mainput_file = prefix;
-        mainput_file.append("_fluid.dat");
-        ff = fopen(mainput_file.c_str(), "a");
-        if (ff != NULL)
-            Write_ASCII_header(ff, svar, "Simulation Particles");
-        else
-        {
-            printf("Failed to open %s. Stopping.\n", mainput_file.c_str());
-            exit(-1);
-        }
-
-        /*If the boundary exists, write it.*/
-        string h5part_bound_file = prefix;
-        h5part_bound_file.append("_boundary.dat");
-        fb = fopen(h5part_bound_file.c_str(), "a");
-        if (fb != NULL)
-            Write_ASCII_header(fb, svar, "Boundary Particles");
-        else
-        {
-            printf("Error opening %s file. Stopping\n", h5part_bound_file.c_str());
-            exit(-1);
-        }
-    }
-}
-
-void Write_Timestep(FILE* ff, FILE* fb, FILE* fg, SIM& svar, LIMITS const& limits, SPHState const& pnp1)
+void Write_Timestep(SIM const& svar, LIMITS const& limits, SPHState const& pnp1)
 {
     if (svar.io.write_tecio)
     {
-        std::ostringstream oss;
-        oss << svar.integrator.current_time;
-        if (!svar.io.single_file)
-        {
-            string prefix = svar.io.output_prefix + "_time_" + oss.str();
-            Write_Tec_Headers(ff, fb, fg, svar, prefix);
-        }
-
         if (svar.io.out_encoding == binary)
         {
-            bound_szl.write_timestep(pnp1, limits, svar.integrator.current_time);
-            fluid_szl.write_timestep(pnp1, limits, svar.integrator.current_time);
+            bound_szl.write_timestep(svar, pnp1, limits, svar.integrator.current_time);
+            fluid_szl.write_timestep(svar, pnp1, limits, svar.integrator.current_time);
         }
         else
         {
-            for (size_t bound = 0; bound < svar.n_bound_blocks; bound++)
-            {
-                string title = "Boundary_" + std::to_string(bound) + "_" + limits[bound].name +
-                               "_time_" + oss.str() + "s";
-                Write_ASCII_Timestep(
-                    svar, svar.fluid.rho_rest, pnp1, limits[bound].index.first,
-                    limits[bound].index.second, title.c_str(), bound + 1, fb
-                );
-            }
-
-            for (size_t block = svar.n_bound_blocks; block < svar.n_bound_blocks + svar.n_fluid_blocks;
-                 block++)
-            {
-                string title = "Fluid_" + std::to_string(block) + "_" + limits[block].name + "_time_" +
-                               oss.str() + "s";
-
-                Write_ASCII_Timestep(
-                    svar, svar.fluid.rho_rest, pnp1, limits[block].index.first,
-                    limits[block].index.second, title.c_str(), block + 1, ff
-                );
-            }
-        }
-
-        if (!svar.io.single_file)
-        { // Close files after use
-            if (ff != NULL)
-                fclose(ff);
-            if (fb != NULL)
-                fclose(fb);
-            if (fg != NULL)
-                fclose(fg);
-
-            if (svar.io.out_encoding == binary)
-            {
-                /*Combine the szplt files*/
-                close_file(&svar.io.output_fluid_file);
-                close_file(&svar.io.output_bound_file);
-            }
+            bound_ascii.write_timestep(svar, pnp1, limits, svar.integrator.current_time);
+            fluid_ascii.write_timestep(svar, pnp1, limits, svar.integrator.current_time);
         }
     }
 

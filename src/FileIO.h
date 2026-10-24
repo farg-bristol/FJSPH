@@ -48,7 +48,7 @@ class FileReadWriter
     write_scalar_var(std::string const& var_name, std::vector<T> const& var_data, int32_t& var_count);
 
     void create_zone(
-        std::string const& zone_header, real const& solution_time = 0, int64_t size = 0,
+        std::string const& zone_header, real const& solution_time = 0, int64_t const size = 0,
         int32_t const strandID = 0
     );
     void close_zone();
@@ -67,6 +67,8 @@ class FileReadWriter
     bool single_file;
     string var_names;
     vector<int32_t> var_types;
+
+    FILE* tec_dat_handle;
 };
 
 class RestartFile : public FileReadWriter
@@ -118,10 +120,25 @@ class SZLFile : public DataFile
         size_t const& _end_block
     );
 
-    void write_timestep(SPHState const& pnp1, LIMITS const& limits, real const& time);
+    void write_timestep(SIM const& svar, SPHState const& pnp1, LIMITS const& limits, real const& time);
 
     void combine_file();
     void flush_file();
+
+  private:
+    void write_timestep_data(SPHState const& pnp1, LIMITS const& limits, real const& time);
+    size_t start_block, end_block;
+};
+
+class ASCIIFile : protected DataFile
+{
+  public:
+    ASCIIFile(
+        SIM const& svar, std::string const& _data_type, size_t const& _start_block,
+        size_t const& _end_block
+    );
+
+    void write_timestep(SIM const& svar, SPHState const& pnp1, LIMITS const& limits, real const& time);
 
   private:
     void write_timestep_data(SPHState const& pnp1, LIMITS const& limits, real const& time);

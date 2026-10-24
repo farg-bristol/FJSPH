@@ -2,6 +2,7 @@
 /******          Created by Jamie MacLeod, University of Bristol        ***********/
 
 #include "FileIO.h"
+#include "AsciiIO.h"
 #include "BinaryIO.h"
 #include "H5IO.h"
 #include "Helper_Functions.h"
@@ -61,7 +62,8 @@ int FileReadWriter::open_file(std::string const& filename, std::string const& zo
     {
     case dat:
     {
-        /* code */
+        tec_dat_handle = fopen(filename.c_str(), "a");
+        ASCII::Write_File_header(tec_dat_handle, var_names, zone_name);
         break;
     }
     case h5:
@@ -91,7 +93,7 @@ void FileReadWriter::close_file()
     {
     case dat:
     {
-        /* code */
+        fclose(tec_dat_handle);
         break;
     }
     case h5:
@@ -274,7 +276,7 @@ void FileReadWriter::write_file_attribute(std::string const& attr_name, T const&
     switch (file_ext)
     {
     case dat:
-        /* code */
+        ASCII::add_file_aux_data(tec_dat_handle, attr_name, attr_data);
         break;
     case h5:
     case h5part:
@@ -295,7 +297,7 @@ void FileReadWriter::write_zone_attribute(std::string const& attr_name, T const&
     switch (file_ext)
     {
     case dat:
-        /* code */
+        ASCII::add_zone_aux_data(tec_dat_handle, attr_name, attr_data);
         break;
     case h5:
     case h5part:
@@ -318,7 +320,7 @@ void FileReadWriter::write_scalar_var(
     switch (file_ext)
     {
     case dat:
-        /* code */
+        ASCII::Write_Vector(tec_dat_handle, var_data);
         break;
     case h5:
     case h5part:
@@ -335,14 +337,14 @@ void FileReadWriter::write_scalar_var(
 }
 
 void FileReadWriter::create_zone(
-    std::string const& zone_header, real const& solution_time = 0, int64_t size = 0,
+    std::string const& zone_header, real const& solution_time = 0, int64_t const size = 0,
     int32_t const strandID = 0
 )
 {
     switch (file_ext)
     {
     case dat:
-        /* code */
+        ASCII::Write_Zone_Header(tec_dat_handle, zone_header, size, strandID, solution_time);
         break;
     case h5:
     case h5part:
@@ -363,7 +365,7 @@ void FileReadWriter::close_zone()
     switch (file_ext)
     {
     case dat:
-        /* code */
+        // Nothing to do
         break;
     case h5:
     case h5part:
@@ -383,7 +385,7 @@ bool FileReadWriter::get_file_is_open()
     switch (file_ext)
     {
     case dat:
-        /* code */
+        return tec_dat_handle != NULL;
         break;
     case h5:
     case h5part:
@@ -404,7 +406,8 @@ bool FileReadWriter::get_zone_is_open()
     switch (file_ext)
     {
     case dat:
-        /* code */
+        // No concept of a zone for ASCII
+        return false;
         break;
     case h5:
     case h5part:
@@ -997,10 +1000,13 @@ SZLFile::SZLFile(
         // Open the file now. Default file name is correct
         string zone_name = data_type + " Particles";
         open_file(get_filename(), zone_name);
+        write_file_attributes(svar);
     }
 };
 
-void SZLFile::write_timestep(SPHState const& pnp1, LIMITS const& limits, real const& time)
+void SZLFile::write_timestep(
+    SIM const& svar, SPHState const& pnp1, LIMITS const& limits, real const& time
+)
 {
     if (!single_file)
     {
@@ -1008,6 +1014,7 @@ void SZLFile::write_timestep(SPHState const& pnp1, LIMITS const& limits, real co
         string _file_name = get_filename(time);
         string zone_name = data_type + " Particles";
         open_file(_file_name, zone_name);
+        write_file_attributes(svar);
     }
 
     write_timestep_data(pnp1, limits, time);
@@ -1046,12 +1053,73 @@ void SZLFile::write_timestep_data(SPHState const& pnp1, LIMITS const& limits, re
 
         int32_t strand_id = static_cast<int32_t>(block + 1);
 
-        int32_t outputZone =
-            SZLIO::create_zone(tec_file_handle, strand_id, title, var_types, size, time);
+        create_zone(title, time, size, strand_id);
 
         write_zone_attributes(limit);
         write_zone(pnp1, limit.fluid.rho_rest, start, end);
         flush_file();
         close_zone();
+    }
+}
+
+ASCIIFile::ASCIIFile(
+    SIM const& svar, std::string const& _data_type, size_t const& _start_block, size_t const& _end_block
+)
+    : DataFile(dat, svar, _data_type), start_block(_start_block), end_block(_end_block)
+{
+    if (single_file)
+    {
+        // Open the file now. Default file name is correct
+        string zone_name = data_type + " Particles";
+        open_file(get_filename(), zone_name);
+        write_file_attributes(svar);
+    }
+};
+
+void ASCIIFile::write_timestep(
+    SIM const& svar, SPHState const& pnp1, LIMITS const& limits, real const& time
+)
+{
+    if (!single_file)
+    {
+        // Open the file for this time.
+        string _file_name = get_filename(time);
+        string zone_name = data_type + " Particles";
+        open_file(_file_name, zone_name);
+        write_file_attributes(svar);
+    }
+
+    write_timestep_data(pnp1, limits, time);
+
+    if (!single_file)
+    {
+        close_file();
+    }
+}
+
+void ASCIIFile::write_timestep_data(SPHState const& pnp1, LIMITS const& limits, real const& time)
+{
+    // Ensure that files are open
+    assert(get_file_is_open());
+
+    std::ostringstream oss;
+    oss << std::setprecision(5) << time;
+    std::string time_str = oss.str();
+
+    for (size_t block = start_block; block < end_block; block++)
+    {
+        bound_block const& limit = limits[block];
+        size_t start = limit.index.first;
+        size_t end = limit.index.second;
+        int32_t const size = end - start;
+        string title = data_type + "_" + std::to_string(block) + "_" + limits[block].name + "_time_" +
+                       time_str + "s";
+
+        int32_t strand_id = static_cast<int32_t>(block + 1);
+
+        create_zone(title, time, size, strand_id);
+
+        write_zone_attributes(limit);
+        write_zone(pnp1, limit.fluid.rho_rest, start, end);
     }
 }

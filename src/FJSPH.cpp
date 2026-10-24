@@ -153,11 +153,7 @@ int main(int argc, char* argv[])
     Integrator integrator(svar.integrator.solver_type);
 
     ///*************** Open simulation files ***************/
-    FILE* ff = NULL;
     FILE* f2 = NULL;
-    FILE* f3 = NULL;
-    FILE* fb = NULL;
-    FILE* fg = NULL;
     string framef = svar.io.output_prefix + "_frame.info";
     if (svar.io.restart == 1)
         f2 = fopen(framef.c_str(), "a");
@@ -169,7 +165,7 @@ int main(int argc, char* argv[])
 
     if (!svar.io.restart)
     {
-        Write_Timestep(ff, fb, fg, svar, limits, pnp1);
+        Write_Timestep(svar, limits, pnp1);
         ///*** Perform an iteration to populate the vectors *****/
         integrator.integrate_no_update(SPH_TREE, CELL_TREE, svar, cells, limits, outlist, pn, pnp1);
     }
@@ -305,7 +301,7 @@ int main(int argc, char* argv[])
             break;
         }
 
-        Write_Timestep(ff, fb, fg, svar, limits, pnp1);
+        Write_Timestep(svar, limits, pnp1);
 
         h5writer.write_restart_file(svar, pnp1, limits);
         if (svar.ipt.using_ipt)
@@ -318,8 +314,6 @@ int main(int argc, char* argv[])
     /*Wrap up simulation files and close them*/
     if (f2 != NULL)
         fclose(f2);
-    if (f3 != NULL)
-        fclose(f3);
     if (ff != NULL)
         fclose(ff);
     if (fb != NULL)

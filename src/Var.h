@@ -132,18 +132,14 @@ struct IN_OUT_SETT
     vector<int> tau_bwrite;    /* TAU if surface wants data writing */
 
     /* TECIO File outputs */
-    void* output_bound_file = NULL; /* TECIO SPH boundary file handle. */
-    void* output_fluid_file = NULL; /* TECIO SPH fluid file handle. */
     std::vector<int32_t> var_types; /* TECIO data types for variables being output */
     string var_names;               /* TECIO variable name string output */
     string output_names = "";       /* Names of variables to output */
     OutputMap output_variables;     /* Internal map of variables storing which to be output */
 
     /* H5Part file outputs */
-    int64_t h5part_bound_file = -1; /* HDF5 h5part SPH boundary file handle */
-    int64_t h5part_fluid_file = -1; /* HDF5 h5part SPH fluid file handle */
-    bool write_tecio = true;        /* Write Tecplot file (this or write_h5part needs to be true) */
-    bool write_h5part = false;      /* Write H5part file (this or write_tecio needs to be true) */
+    bool write_tecio = true;   /* Write Tecplot file (this or write_h5part needs to be true) */
+    bool write_h5part = false; /* Write H5part file (this or write_tecio needs to be true) */
 
     ofstream ascii_surface_file;       /* ACSII surface impact file */
     void* tecio_surface_handle = NULL; /* TECIO Surface impact file */

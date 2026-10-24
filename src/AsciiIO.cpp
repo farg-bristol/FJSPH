@@ -11,501 +11,282 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
+inline std::string space2underscore(std::string text)
+{
+    std::replace(text.begin(), text.end(), ' ', '_');
+    return text;
+}
 /*************************************************************************/
 /**************************** ASCII OUTPUTS ******************************/
 /*************************************************************************/
-void Write_ASCII_header(FILE* fp, SIM const& svar, char const* title)
-{
-    string var_names = svar.io.var_names;
-    std::regex r(",");
-    string var = std::regex_replace(var_names, r, "\",\"");
-    fprintf(fp, "TITLE=\"%s\"\n", title);
-    fprintf(fp, "VARIABLES=\"%s\"", var.c_str());
-}
 
-inline void Write_ASCII_Vector(FILE* fp, vector<real> const& vec, size_t const& start, size_t const& end)
+namespace ASCII
 {
-    size_t newl = 0;
-    for (size_t ii = start; ii < end; ++ii)
+    void add_file_aux_data(FILE* fp, string const& name, string const& var)
     {
-        fprintf(fp, "%3.7e", vec[ii]);
-        if (newl > 4)
-        {
-            fprintf(fp, "\n");
-            newl = 0;
-        }
-        else
-            newl++;
+        fprintf(fp, "DATASETAUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), var.c_str());
     }
-}
 
-inline void
-Write_ASCII_Vector(FILE* fp, vector<StateVecD> const& vec, size_t const& start, size_t const& end)
-{
-    for (size_t ii = start; ii < end; ++ii)
+    void add_file_aux_data(FILE* fp, std::string const& name, size_t const& var)
     {
-        for (size_t ii = start; ii < end; ++ii)
+        std::ostringstream stream;
+        stream << var;
+        fprintf(
+            fp, "DATASETAUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), stream.str().c_str()
+        );
+    }
+
+    void add_file_aux_data(FILE* fp, std::string const& name, int const& var)
+    {
+        std::ostringstream stream;
+        stream << var;
+        fprintf(
+            fp, "DATASETAUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), stream.str().c_str()
+        );
+    }
+
+    void add_file_aux_data(FILE* fp, std::string const& name, uint const& var)
+    {
+        std::ostringstream stream;
+        stream << var;
+        fprintf(
+            fp, "DATASETAUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), stream.str().c_str()
+        );
+    }
+
+    void add_file_aux_data(FILE* fp, std::string const& name, double const& var)
+    {
+        std::ostringstream stream;
+        stream << std::setprecision(9) << var;
+        fprintf(
+            fp, "DATASETAUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), stream.str().c_str()
+        );
+    }
+
+    void add_file_aux_data(FILE* fp, std::string const& name, float const& var)
+    {
+        std::ostringstream stream;
+        stream << std::setprecision(9) << var;
+        fprintf(
+            fp, "DATASETAUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), stream.str().c_str()
+        );
+    }
+
+    void add_file_aux_data(FILE* fp, std::string const& name, StateVecD const& var)
+    {
+        std::ostringstream stream;
+        stream << std::setprecision(9) << var[0];
+        fprintf(
+            fp, "DATASETAUXDATA %s = \"%s\"\n", space2underscore(name + " x").c_str(),
+            stream.str().c_str()
+        );
+
+        stream.str("");
+        stream.clear();
+        stream << std::setprecision(9) << var[1];
+        fprintf(
+            fp, "DATASETAUXDATA %s = \"%s\"\n", space2underscore(name + " y").c_str(),
+            stream.str().c_str()
+        );
+
+#if SIMDIM == 3
+        stream.str("");
+        stream.clear();
+        stream << std::setprecision(9) << var[2];
+        fprintf(
+            fp, "DATASETAUXDATA %s = \"%s\"\n", space2underscore(name + " z").c_str(),
+            stream.str().c_str()
+        );
+
+#endif
+    }
+
+    void add_zone_aux_data(FILE* fp, string const& name, string const& var)
+    {
+        fprintf(fp, "AUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), var.c_str());
+    }
+
+    void add_zone_aux_data(FILE* fp, std::string const& name, size_t const& var)
+    {
+        std::ostringstream stream;
+        stream << var;
+        fprintf(fp, "AUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), stream.str().c_str());
+    }
+
+    void add_zone_aux_data(FILE* fp, std::string const& name, int const& var)
+    {
+        std::ostringstream stream;
+        stream << var;
+        fprintf(fp, "AUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), stream.str().c_str());
+    }
+
+    void add_zone_aux_data(FILE* fp, std::string const& name, uint const& var)
+    {
+        std::ostringstream stream;
+        stream << var;
+        fprintf(fp, "AUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), stream.str().c_str());
+    }
+
+    void add_zone_aux_data(FILE* fp, std::string const& name, double const& var)
+    {
+        std::ostringstream stream;
+        stream << std::setprecision(9) << var;
+        fprintf(fp, "AUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), stream.str().c_str());
+    }
+
+    void add_zone_aux_data(FILE* fp, std::string const& name, float const& var)
+    {
+        std::ostringstream stream;
+        stream << std::setprecision(9) << var;
+        fprintf(fp, "AUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), stream.str().c_str());
+    }
+
+    void add_zone_aux_data(FILE* fp, std::string const& name, StateVecD const& var)
+    {
+        std::ostringstream stream;
+        stream << std::setprecision(9) << var[0];
+        fprintf(
+            fp, "AUXDATA %s = \"%s\"\n", space2underscore(name + " x").c_str(), stream.str().c_str()
+        );
+
+        stream.str("");
+        stream.clear();
+        stream << std::setprecision(9) << var[1];
+        fprintf(
+            fp, "AUXDATA %s = \"%s\"\n", space2underscore(name + " y").c_str(), stream.str().c_str()
+        );
+
+#if SIMDIM == 3
+        stream.str("");
+        stream.clear();
+        stream << std::setprecision(9) << var[2];
+        fprintf(
+            fp, "AUXDATA %s = \"%s\"\n", space2underscore(name + " z").c_str(), stream.str().c_str()
+        );
+
+#endif
+    }
+
+    void Write_Vector(FILE* fp, vector<real> const& vec)
+    {
+        size_t newl = 0;
+        size_t const end = vec.size();
+        for (size_t ii = 0; ii < end; ++ii)
+        {
+            fprintf(fp, "%3.7e", vec[ii]);
+            if (newl > 4)
+            {
+                fprintf(fp, "\n");
+                newl = 0;
+            }
+            else
+                newl++;
+        }
+        fprintf(fp, "\n");
+    }
+
+    void Write_Vector(FILE* fp, vector<uint> const& vec)
+    {
+        size_t newl = 0;
+        size_t const end = vec.size();
+        for (size_t ii = 0; ii < end; ++ii)
+        {
+            fprintf(fp, "%u", vec[ii]);
+            if (newl > 6)
+            {
+                fprintf(fp, "\n");
+                newl = 0;
+            }
+            else
+                newl++;
+        }
+        fprintf(fp, "\n");
+    }
+
+    void Write_Vector(FILE* fp, vector<size_t> const& vec)
+    {
+        size_t newl = 0;
+        size_t const end = vec.size();
+        for (size_t ii = 0; ii < end; ++ii)
+        {
+            fprintf(fp, "%zu", vec[ii]);
+            if (newl > 6)
+            {
+                fprintf(fp, "\n");
+                newl = 0;
+            }
+            else
+                newl++;
+        }
+        fprintf(fp, "\n");
+    }
+
+    void Write_Vector(FILE* fp, vector<long> const& vec)
+    {
+        size_t newl = 0;
+        size_t const end = vec.size();
+        for (size_t ii = 0; ii < end; ++ii)
+        {
+            fprintf(fp, "%zu", vec[ii]);
+            if (newl > 6)
+            {
+                fprintf(fp, "\n");
+                newl = 0;
+            }
+            else
+                newl++;
+        }
+        fprintf(fp, "\n");
+    }
+
+    void Write_Vector(FILE* fp, vector<int> const& vec)
+    {
+        size_t newl = 0;
+        size_t const end = vec.size();
+        for (size_t ii = 0; ii < end; ++ii)
+        {
+            fprintf(fp, "%d", vec[ii]);
+            if (newl > 6)
+            {
+                fprintf(fp, "\n");
+                newl = 0;
+            }
+            else
+                newl++;
+        }
+        fprintf(fp, "\n");
+    }
+
+    void Write_Vector(FILE* fp, vector<StateVecD> const& vec)
+    {
+        size_t const end = vec.size();
+        for (size_t ii = 0; ii < end; ++ii)
         {
             for (uint dim = 0; dim < SIMDIM; ++dim)
                 fprintf(fp, "%3.7e", vec[ii][dim]);
             fprintf(fp, "\n");
         }
     }
-}
 
-void Write_ASCII_Timestep(
-    SIM& svar, real const& rho_rest, SPHState const& pnp1, size_t const& start, size_t const& end,
-    char const* name, uint const& strandID, FILE* fp
-)
-{
-    // if(tau_bwrite == 1)
-    //  	fp <<  "ZONE T=\"" << name << "\"";
-    // else
-    fprintf(
-        fp, "ZONE T=\"%s\", I=%zu, DATAPACKING=BLOCK, STRANDID=%d, SOLUTIONTIME=%.7g\n", name,
-        end - start, strandID, svar.integrator.current_time
-    );
-
-    // fp <<", I=" << end - start << ", F=POINT" <<", STRANDID=1, SOLUTIONTIME=" << svar.current_time  <<
-    // "\n"; fp << std::left << std::scientific << std::setprecision(6); const static uint width = 15;
-
-    if (svar.io.output_variables.at("pos-vec").write) // Position coordinates, scaled
+    void Write_File_header(FILE* fp, string const& var_names, string const& title)
     {
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-                fprintf(fp, "%3.7e", pnp1[ii].xi(dim) / svar.scale);
-            fprintf(fp, "\n");
-        }
+        std::regex r(",");
+        string var = std::regex_replace(var_names, r, "\",\"");
+        fprintf(fp, "TITLE=\"%s\"\n", title.c_str());
+        fprintf(fp, "VARIABLES=\"%s\"", var.c_str());
     }
 
-    if (svar.io.output_variables.at("vel-vec").write) // Velocity vector
+    void Write_Zone_Header(
+        FILE* fp, std::string zone_header, int64_t size, int32_t strand_id, real solution_time
+    )
     {
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-                fprintf(fp, "%3.7e", pnp1[ii].v(dim));
-            fprintf(fp, "\n");
-        }
+        fprintf(
+            fp, "ZONE T=\"%s\", I=%zu, DATAPACKING=BLOCK, STRANDID=%d, SOLUTIONTIME=%.7g\n", zone_header,
+            size, strand_id, solution_time
+        );
     }
 
-    if (svar.io.output_variables.at("acc-vec").write) // Acceleration vector
-    {
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-                fprintf(fp, "%3.7e", pnp1[ii].acc(dim));
-            fprintf(fp, "\n");
-        }
-    }
-
-    if (svar.io.output_variables.at("press").write) // Pressure scalar
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].p);
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("dRho").write) // Density gradient
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].Rrho);
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("part_id").write) // Particle ID, integer
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%zu", pnp1[ii].part_id);
-            if (newl > 6)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("cellID").write) // cellID
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%zu", pnp1[ii].cellID);
-            if (newl > 6)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("bound").write) // Boundary type
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%u", pnp1[ii].b);
-            if (newl > 6)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("dens").write) // Density
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].rho);
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("densVar").write) // Density Variation
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", 100.0 * (pnp1[ii].rho / rho_rest - 1.0));
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("vmag").write) // Velocity magnitude
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].v.norm());
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("surf").write) // Surface flag
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3d", pnp1[ii].surf);
-            if (newl > 8)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("surfZ").write) // Surface zone flag
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3d", pnp1[ii].surfzone);
-            if (newl > 8)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("aero-mag").write) // Aerodynamic force magnitude
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].Af.norm());
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("aero-vec").write) // Aerodynamic force vector
-    {
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-                fprintf(fp, "%3.7e", pnp1[ii].Af(dim));
-            fprintf(fp, "\n");
-        }
-    }
-
-    if (svar.io.output_variables.at("curv").write) // Curvature scalar
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].curve);
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("occl").write) // Occlusion factor
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].woccl);
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("cellP").write) // Cell pressure
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].cellP);
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("cellRho").write) // Cell density
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].cellRho);
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("cellV-mag").write) // Cell velocity magnitude
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].cellV.norm());
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("cellV-vec").write) // Cell velocity vector
-    {
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-                fprintf(fp, "%3.7e", pnp1[ii].cellV(dim));
-            fprintf(fp, "\n");
-        }
-    }
-
-    if (svar.io.output_variables.at("dephG-vec").write) // dSPH density gradient
-    {
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-                fprintf(fp, "%3.7e", pnp1[ii].gradRho(dim));
-            fprintf(fp, "\n");
-        }
-    }
-
-    if (svar.io.output_variables.at("lam").write) // Lambda eigenvalue of L matrix
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].lam);
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("lam-nb").write) // Lambda eigenvalue without boundary
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].lam_nb);
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("colour").write) // Surface colour function
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].colour);
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("colour-G").write) // Surface colour gradient
-    {
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].colourG);
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("norm-vec").write) // Surface normal
-    {                                                  // Cell velocity vector
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-                fprintf(fp, "%3.7e", pnp1[ii].norm(dim));
-            fprintf(fp, "\n");
-        }
-    }
-
-    if (svar.io.output_variables.at("shiftV-mag").write)
-    { // Shifting velocity magnitude
-        size_t newl = 0;
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            fprintf(fp, "%3.7e", pnp1[ii].vPert.norm());
-            if (newl > 4)
-            {
-                fprintf(fp, "\n");
-                newl = 0;
-            }
-            else
-                newl++;
-        }
-        fprintf(fp, "\n");
-    }
-
-    if (svar.io.output_variables.at("shiftV-vec").write)
-    { // Shifting velocity vector
-        for (size_t ii = start; ii < end; ++ii)
-        {
-            for (uint dim = 0; dim < SIMDIM; ++dim)
-                fprintf(fp, "%3.7e", pnp1[ii].vPert(dim));
-            fprintf(fp, "\n");
-        }
-    }
-}
+} // namespace ASCII
 
 void Write_Cell_Data(MESH const& cdata)
 {
