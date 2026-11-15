@@ -14,12 +14,19 @@
 
 namespace HDF5
 {
-    hid_t Open_File(std::string const& filename)
+    hid_t Open_File(std::string const& filename, bool const& reading = false)
     {
         hid_t file_handle;
         if (std::filesystem::exists(filename))
         {
-            file_handle = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+            if (reading)
+            {
+                file_handle = H5Fopen(filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+            }
+            else
+            {
+                file_handle = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+            }
 
             if (file_handle == H5I_INVALID_HID)
             {
@@ -29,7 +36,14 @@ namespace HDF5
         }
         else
         {
-            file_handle = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+            if (!reading)
+            {
+                file_handle = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+            }
+            else
+            {
+                file_handle = H5I_INVALID_HID;
+            }
 
             if (file_handle == H5I_INVALID_HID)
             {
@@ -215,8 +229,7 @@ namespace HDF5
     )
     {
         herr_t retval;
-        hid_t dataspace = H5Screate(H5S_SIMPLE);
-        retval = H5Sset_extent_simple(dataspace, 1, dims, NULL);
+        hid_t dataspace = H5Screate_simple(1, dims, NULL);
         hid_t dataset = H5Dcreate(
             fout, var_name.c_str(), H5T_NATIVE_ULONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
@@ -255,8 +268,7 @@ namespace HDF5
     )
     {
         herr_t retval;
-        hid_t dataspace = H5Screate(H5S_SIMPLE);
-        retval = H5Sset_extent_simple(dataspace, 1, dims, NULL);
+        hid_t dataspace = H5Screate_simple(1, dims, NULL);
         hid_t dataset = H5Dcreate(
             fout, var_name.c_str(), H5T_NATIVE_UINT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
@@ -275,8 +287,7 @@ namespace HDF5
     )
     {
         herr_t retval;
-        hid_t dataspace = H5Screate(H5S_SIMPLE);
-        retval = H5Sset_extent_simple(dataspace, 1, dims, NULL);
+        hid_t dataspace = H5Screate_simple(1, dims, NULL);
         hid_t dataset = H5Dcreate(
             fout, var_name.c_str(), H5T_NATIVE_INT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
@@ -295,8 +306,7 @@ namespace HDF5
     )
     {
         herr_t retval;
-        hid_t dataspace = H5Screate(H5S_SIMPLE);
-        retval = H5Sset_extent_simple(dataspace, 1, dims, NULL);
+        hid_t dataspace = H5Screate_simple(1, dims, NULL);
         hid_t dataset = H5Dcreate(
             fout, var_name.c_str(), H5T_NATIVE_LONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
@@ -315,8 +325,7 @@ namespace HDF5
     )
     {
         herr_t retval;
-        hid_t dataspace = H5Screate(H5S_SIMPLE);
-        retval = H5Sset_extent_simple(dataspace, 1, dims, NULL);
+        hid_t dataspace = H5Screate_simple(1, dims, NULL);
         hid_t dataset = H5Dcreate(
             fout, var_name.c_str(), H5T_NATIVE_FLOAT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
@@ -335,8 +344,7 @@ namespace HDF5
     )
     {
         herr_t retval;
-        hid_t dataspace = H5Screate(H5S_SIMPLE);
-        retval = H5Sset_extent_simple(dataspace, 1, dims, NULL);
+        hid_t dataspace = H5Screate_simple(1, dims, NULL);
         hid_t dataset = H5Dcreate(
             fout, var_name.c_str(), H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
@@ -421,6 +429,27 @@ namespace HDF5
                 buff[accm++] = limits.buffer[ii][jj];
 
         Write_Variable(fout, "Buffer index", dims, buff);
+    }
+
+    void Write_Particle_Array(
+        hid_t const& fout, std::string var_name, SPHState const& pnp1, size_t const& start,
+        size_t const& end, hid_t restart_type
+    )
+    {
+        size_t length = end - start;
+        hsize_t dims[1] = {length};
+        herr_t retval;
+        hid_t dataspace = H5Screate_simple(1, dims, NULL);
+        hid_t dataset = H5Dcreate(
+            fout, var_name.c_str(), restart_type, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
+        );
+        if ((retval = H5Dwrite(dataset, restart_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &pnp1[start])))
+        {
+            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
+            exit(-1);
+        }
+        retval = H5Sclose(dataspace);
+        retval = H5Dclose(dataset);
     }
 
     /*************************************************************************/
@@ -804,6 +833,37 @@ namespace HDF5
             for (size_t jj = 0; jj < 4; jj++)
                 limits.buffer[ii][jj] = buff[accm++];
     }
+
+    // Create the compound type for saving a particle in a restart file.
+    hid_t generate_compound_particle()
+    {
+#if FOD == 1
+        hid_t real_type = H5T_NATIVE_DOUBLE;
+#else
+        hid_t real_type = H5T_NATIVE_FLOAT;
+#endif
+        hid_t vec3_type = H5Tarray_create(real_type, 1, (hsize_t[]){SIMDIM});
+        hid_t particle_type = H5Tcreate(H5T_COMPOUND, sizeof(SPHPart));
+
+        H5Tinsert(particle_type, "Position coordinate", offsetof(SPHPart, xi), vec3_type);
+        H5Tinsert(particle_type, "Velocity", offsetof(SPHPart, v), vec3_type);
+        H5Tinsert(particle_type, "Acceleration", HOFFSET(SPHPart, acc), vec3_type);
+        H5Tinsert(particle_type, "Pressure", HOFFSET(SPHPart, p), real_type);
+        H5Tinsert(particle_type, "Density", HOFFSET(SPHPart, rho), real_type);
+        H5Tinsert(particle_type, "Density gradient", HOFFSET(SPHPart, Rrho), real_type);
+        H5Tinsert(particle_type, "Mass", HOFFSET(SPHPart, m), real_type);
+        H5Tinsert(particle_type, "Particle spacing", HOFFSET(SPHPart, dx), real_type);
+        H5Tinsert(particle_type, "Boundary condition", HOFFSET(SPHPart, b), H5T_NATIVE_UINT);
+        H5Tinsert(particle_type, "Particle ID", HOFFSET(SPHPart, part_id), H5T_NATIVE_ULONG);
+        H5Tinsert(particle_type, "Fluid ID", HOFFSET(SPHPart, fluid_id), H5T_NATIVE_ULONG);
+        H5Tinsert(particle_type, "Cell ID", HOFFSET(SPHPart, cellID), H5T_NATIVE_LONG);
+        H5Tinsert(particle_type, "Cell velocity", HOFFSET(SPHPart, cellV), vec3_type);
+        H5Tinsert(particle_type, "Cell density", HOFFSET(SPHPart, cellRho), real_type);
+        H5Tinsert(particle_type, "Cell pressure", HOFFSET(SPHPart, cellP), real_type);
+
+        return particle_type;
+    }
+
 } // namespace HDF5
 
 void Read_Zone_Attributes(hid_t const& zone, bound_block& limits)

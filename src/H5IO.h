@@ -67,6 +67,11 @@ namespace HDF5
 
     void Write_Inlet_Data(hid_t const& fout, bound_block const& limits);
 
+    void Write_Particle_Array(
+        hid_t const& fout, std::string var_name, SPHState const& pnp1, size_t const& start,
+        size_t const& end, hid_t restart_type
+    );
+
     // Reading
     void Read_Attribute(hid_t const& fin, std::string const& attr_name, std::string& attr_data);
     void Read_Attribute(hid_t const& fin, std::string const& attr_name, size_t& attr_data);
@@ -106,6 +111,7 @@ namespace HDF5
         hid_t const& fin, std::string const& var_name, std::vector<StateVecD>& var_data
     );
 
+    hid_t generate_compound_particle();
 } // namespace HDF5
 
 void Read_HDF5(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits);

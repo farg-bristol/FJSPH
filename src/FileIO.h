@@ -81,6 +81,8 @@ class RestartFile : public FileReadWriter
   private:
     int
     write_restart_zone(real const& scale, SPHState const& pnp1, size_t const& start, size_t const& end);
+
+    hid_t restart_type;
 };
 
 class DataFile : public FileReadWriter

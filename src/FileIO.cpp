@@ -423,7 +423,10 @@ bool FileReadWriter::get_zone_is_open()
     }
 }
 
-RestartFile::RestartFile(SIM const& svar) : FileReadWriter(h5, svar){};
+RestartFile::RestartFile(SIM const& svar) : FileReadWriter(h5, svar)
+{
+    restart_type = HDF5::generate_compound_particle();
+};
 
 /**
  * @brief Write a .h5 file to provide restart data.
@@ -530,127 +533,129 @@ int RestartFile::write_restart_zone(
     size_t length = end - start;
     // hsize_t dims[] = {length,2};
     hsize_t dims[] = {length};
-    vector<real> vec(length);
-    int32_t var_count = 0;
 
-    /* Position */
-    vector<StateVecD> vvec(length);
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        vvec[ii - start] = pnp1[ii].xi / scale;
+    HDF5::Write_Particle_Array(h5_zone_handle, "pnp1", pnp1, start, end, restart_type);
+    //     vector<real> vec(length);
+    //     int32_t var_count = 0;
 
-    write_scalar_var("Position coordinate", vvec, var_count);
+    //     /* Position */
+    //     vector<StateVecD> vvec(length);
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         vvec[ii - start] = pnp1[ii].xi / scale;
 
-    /* Velocity */
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        vvec[ii - start] = pnp1[ii].v;
+    //     write_scalar_var("Position coordinate", vvec, var_count);
 
-    write_scalar_var("Velocity", vvec, var_count);
+    //     /* Velocity */
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         vvec[ii - start] = pnp1[ii].v;
 
-    /* Acceleration */
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        vvec[ii - start] = pnp1[ii].acc;
+    //     write_scalar_var("Velocity", vvec, var_count);
 
-    write_scalar_var("Acceleration", vvec, var_count);
-    vvec.clear();
+    //     /* Acceleration */
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         vvec[ii - start] = pnp1[ii].acc;
 
-/* Pressure */
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        vec[ii - start] = pnp1[ii].p;
+    //     write_scalar_var("Acceleration", vvec, var_count);
+    //     vvec.clear();
 
-    write_scalar_var("Pressure", vec, var_count);
+    // /* Pressure */
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         vec[ii - start] = pnp1[ii].p;
 
-/* Density */
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        vec[ii - start] = pnp1[ii].rho;
+    //     write_scalar_var("Pressure", vec, var_count);
 
-    write_scalar_var("Density", vec, var_count);
+    // /* Density */
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         vec[ii - start] = pnp1[ii].rho;
 
-/* Density gradient */
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        vec[ii - start] = pnp1[ii].Rrho;
+    //     write_scalar_var("Density", vec, var_count);
 
-    write_scalar_var("Density gradient", vec, var_count);
+    // /* Density gradient */
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         vec[ii - start] = pnp1[ii].Rrho;
 
-/* Mass */
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        vec[ii - start] = pnp1[ii].m;
+    //     write_scalar_var("Density gradient", vec, var_count);
 
-    write_scalar_var("Mass", vec, var_count);
+    // /* Mass */
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         vec[ii - start] = pnp1[ii].m;
 
-    vec.clear();
+    //     write_scalar_var("Mass", vec, var_count);
 
-/* Particle spacing */
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        vec[ii - start] = pnp1[ii].dx;
+    //     vec.clear();
 
-    write_scalar_var("Particle spacing", vec, var_count);
+    // /* Particle spacing */
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         vec[ii - start] = pnp1[ii].dx;
 
-    vec.clear();
+    //     write_scalar_var("Particle spacing", vec, var_count);
 
-    /* Boundary flag */
-    vector<uint> uvec(length);
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        uvec[ii - start] = pnp1[ii].b;
+    //     vec.clear();
 
-    write_scalar_var("Boundary condition", uvec, var_count);
-    uvec.clear();
+    //     /* Boundary flag */
+    //     vector<uint> uvec(length);
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         uvec[ii - start] = pnp1[ii].b;
 
-    /* Particle ID */
-    vector<size_t> svec(length);
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        svec[ii - start] = pnp1[ii].part_id;
+    //     write_scalar_var("Boundary condition", uvec, var_count);
+    //     uvec.clear();
 
-    write_scalar_var("Particle ID", svec, var_count);
-    svec.clear();
+    //     /* Particle ID */
+    //     vector<size_t> svec(length);
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         svec[ii - start] = pnp1[ii].part_id;
 
-    /* Fluid ID */
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        svec[ii - start] = pnp1[ii].fluid_id;
+    //     write_scalar_var("Particle ID", svec, var_count);
+    //     svec.clear();
 
-    write_scalar_var("Fluid ID", svec, var_count);
-    svec.clear();
+    //     /* Fluid ID */
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         svec[ii - start] = pnp1[ii].fluid_id;
 
-    /* Cell ID */
-    vector<long> lvec(length);
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        lvec[ii - start] = pnp1[ii].cellID;
+    //     write_scalar_var("Fluid ID", svec, var_count);
+    //     svec.clear();
 
-    write_scalar_var("Cell ID", lvec, var_count);
+    //     /* Cell ID */
+    //     vector<long> lvec(length);
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         lvec[ii - start] = pnp1[ii].cellID;
 
-    /* Cell velocity */
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        vvec[ii - start] = pnp1[ii].cellV;
+    //     write_scalar_var("Cell ID", lvec, var_count);
 
-    write_scalar_var("Cell velocity", vvec, var_count);
+    //     /* Cell velocity */
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         vvec[ii - start] = pnp1[ii].cellV;
 
-/* Cell density */
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        vec[ii - start] = pnp1[ii].cellRho;
+    //     write_scalar_var("Cell velocity", vvec, var_count);
 
-    write_scalar_var("Cell density", vec, var_count);
+    // /* Cell density */
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         vec[ii - start] = pnp1[ii].cellRho;
 
-/* Cell pressure */
-#pragma omp parallel for
-    for (size_t ii = start; ii < end; ++ii)
-        vec[ii - start] = pnp1[ii].cellP;
+    //     write_scalar_var("Cell density", vec, var_count);
 
-    write_scalar_var("Cell pressure", vec, var_count);
+    // /* Cell pressure */
+    // #pragma omp parallel for
+    //     for (size_t ii = start; ii < end; ++ii)
+    //         vec[ii - start] = pnp1[ii].cellP;
 
-    lvec.clear();
+    //     write_scalar_var("Cell pressure", vec, var_count);
+
+    //     lvec.clear();
 }
 
 DataFile::DataFile(file_extension const& _file_ext, SIM const& svar, std::string const& _data_type)
