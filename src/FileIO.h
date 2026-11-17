@@ -18,8 +18,8 @@ class FileReadWriter
     ~FileReadWriter();
 
     int open_file(std::string const& filename, std::string const& zone_name = "");
-    void write_file_attributes(SIM const& svar);
-    void write_zone_attributes(bound_block const& limits);
+    virtual void write_file_attributes(SIM const& svar);
+    virtual void write_zone_attributes(bound_block const& limits);
 
     inline string get_dim(uint const& dim)
     {
@@ -27,18 +27,13 @@ class FileReadWriter
         {
         case 0:
             return "x";
-            break;
         case 1:
             return "y";
-            break;
         case 2:
             return "z";
-            break;
         default:
             return "x";
-            break;
         }
-        return "x";
     }
 
     template <typename T> void write_file_attribute(std::string const& attr_name, T const& attr_data);
@@ -76,19 +71,29 @@ class RestartFile : public FileReadWriter
   public:
     RestartFile(SIM const& svar);
 
-    void write_restart_file(SIM& svar, SPHState const& pnp1, LIMITS const& limits);
+    void write_restart_file(SIM& svar, SPHState& pnp1, LIMITS const& limits);
+    void read_restart_file(SIM& svar, SPHState& pnp1, LIMITS const& limits);
 
   private:
-    int
-    write_restart_zone(real const& scale, SPHState const& pnp1, size_t const& start, size_t const& end);
+    int write_restart_zone(
+        std::string const& zone_header, SPHState const& pnp1, LIMITS const& limits,
+        size_t const& block_index
+    );
+    int read_restart_zone(
+        std::string const& zone_header, SPHState& pnp1, LIMITS& limits, size_t const& block_index
+    );
 
     hid_t restart_type;
+    ReadOrWrite read_or_write;
 };
 
 class DataFile : public FileReadWriter
 {
   public:
     DataFile(file_extension const& _file_ext, SIM const& svar, std::string const& _data_type);
+
+    void write_file_attributes(SIM const& svar) override;
+    void write_zone_attributes(bound_block const& limits) override;
 
   protected:
     OutputMap output_var;

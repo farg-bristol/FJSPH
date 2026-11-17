@@ -212,18 +212,14 @@ void FileReadWriter::write_zone_attributes(bound_block const& limits)
     // Add information about the insertion, aero, and deletion planes.
     write_zone_attribute("Insertion normal x", limits.insert_norm[0]);
     write_zone_attribute("Insertion normal y", limits.insert_norm[1]);
-    write_zone_attribute("Deletion normal x", limits.delete_norm[0]);
-    write_zone_attribute("Deletion normal y", limits.delete_norm[1]);
     write_zone_attribute("Aerodynamic normal x", limits.aero_norm[0]);
     write_zone_attribute("Aerodynamic normal y", limits.aero_norm[1]);
 #if SIMDIM == 3
     write_zone_attribute("Insertion normal z", limits.insert_norm[2]);
-    write_zone_attribute("Deletion normal z", limits.delete_norm[2]);
     write_zone_attribute("Aerodynamic normal z", limits.aero_norm[2]);
 #endif
 
     write_zone_attribute("Insertion plane constant", limits.insconst);
-    write_zone_attribute("Deletion plane constant", limits.delconst);
     write_zone_attribute("Aerodynamic plane constant", limits.aeroconst);
 
     // Add boundary time information
@@ -348,7 +344,7 @@ void FileReadWriter::create_zone(
         break;
     case h5:
     case h5part:
-        h5_zone_handle = HDF5::Open_Zone(h5_file_handle, zone_header);
+        h5_zone_handle = HDF5::Create_Zone(h5_file_handle, zone_header);
         break;
     case szplt:
         tec_output_zone =
@@ -426,6 +422,7 @@ bool FileReadWriter::get_zone_is_open()
 RestartFile::RestartFile(SIM const& svar) : FileReadWriter(h5, svar)
 {
     restart_type = HDF5::generate_compound_particle();
+    read_or_write = writing;
 };
 
 /**
@@ -436,7 +433,7 @@ RestartFile::RestartFile(SIM const& svar) : FileReadWriter(h5, svar)
  * @param limits array of block indexes for particles in the global array.
  * @return void
  */
-void RestartFile::write_restart_file(SIM& svar, SPHState const& pnp1, LIMITS const& limits)
+void RestartFile::write_restart_file(SIM& svar, SPHState& pnp1, LIMITS const& limits)
 {
     assert(file_ext == h5);
 
@@ -453,16 +450,8 @@ void RestartFile::write_restart_file(SIM& svar, SPHState const& pnp1, LIMITS con
     {
         for (size_t ii = 0; ii < svar.n_bound_blocks; ++ii)
         {
-            std::string zoneHeader = "Boundary " + std::to_string(ii);
-
-            // Create the group
-            h5_zone_handle = HDF5::Open_Zone(h5_file_handle, zoneHeader);
-
-            write_zone_attributes(limits[ii]);
-            write_restart_zone(svar.scale, pnp1, limits[ii].index.first, limits[ii].index.second);
-
-            close_zone();
-
+            std::string zone_header = "Boundary " + std::to_string(ii);
+            write_restart_zone(zone_header, pnp1, limits, ii);
             blockID++;
         }
     }
@@ -473,18 +462,8 @@ void RestartFile::write_restart_file(SIM& svar, SPHState const& pnp1, LIMITS con
         size_t flublock = 0;
         for (size_t ii = svar.n_bound_blocks; ii < svar.n_bound_blocks + svar.n_fluid_blocks; ++ii)
         {
-            std::string zoneHeader = "Fluid " + std::to_string(flublock);
-
-            // Create the group
-            h5_zone_handle = HDF5::Open_Zone(h5_file_handle, zoneHeader);
-
-            write_zone_attributes(limits[ii]);
-            write_restart_zone(svar.scale, pnp1, limits[ii].index.first, limits[ii].index.second);
-            if (limits[ii].block_type == inletZone)
-                HDF5::Write_Inlet_Data(h5_zone_handle, limits[ii]);
-
-            close_zone();
-
+            std::string zone_header = "Fluid " + std::to_string(flublock);
+            write_restart_zone(zone_header, pnp1, limits, ii);
             blockID++;
             flublock++;
         }
@@ -522,19 +501,32 @@ void RestartFile::write_restart_file(SIM& svar, SPHState const& pnp1, LIMITS con
 }
 
 int RestartFile::write_restart_zone(
-    real const& scale, SPHState const& pnp1, size_t const& start, size_t const& end
+    std::string const& zone_header, SPHState const& pnp1, LIMITS const& limits, size_t const& block_index
 )
 {
+    // Create the group
+    create_zone(zone_header);
+
+    bound_block const& lim = limits[block_index];
+    write_zone_attributes(lim);
+
     // Write out all the parameters for a timestep
+    HDF5::Write_Particle_Array(
+        h5_zone_handle, "Particle data", pnp1, lim.index.first, lim.index.second, restart_type
+    );
+
+    if (lim.block_type == inletZone)
+        HDF5::Write_Inlet_Data(h5_zone_handle, lim);
+
+    close_zone();
 
     /* Need to write position, velocity, acceleration, pressure, density gradient, mass, boundary
      * flag */
     /* Write as a 2D array, or 1D arrays for vectors? 1D for now */
-    size_t length = end - start;
-    // hsize_t dims[] = {length,2};
-    hsize_t dims[] = {length};
+    // size_t length = end - start;
+    // // hsize_t dims[] = {length,2};
+    // hsize_t dims[] = {length};
 
-    HDF5::Write_Particle_Array(h5_zone_handle, "pnp1", pnp1, start, end, restart_type);
     //     vector<real> vec(length);
     //     int32_t var_count = 0;
 
@@ -658,6 +650,19 @@ int RestartFile::write_restart_zone(
     //     lvec.clear();
 }
 
+int RestartFile::read_restart_zone(
+    std::string const& zone_header, SPHState& pnp1, LIMITS& limits, size_t const& block_index
+)
+{
+    // Create the group
+    h5_zone_handle = open_zone(zone_header);
+    bound_block& lim = limits[block_index];
+
+    SPHState temp_particles;
+    HDF5::Read_Particle_Array(h5_zone_handle, "Particle data", temp_particles, restart_type);
+    size_t length = temp_particles.size();
+}
+
 DataFile::DataFile(file_extension const& _file_ext, SIM const& svar, std::string const& _data_type)
     : FileReadWriter(_file_ext, svar), output_var(svar.io.output_variables),
       output_prefix(svar.io.output_prefix), data_type(_data_type)
@@ -666,6 +671,26 @@ DataFile::DataFile(file_extension const& _file_ext, SIM const& svar, std::string
     data_lower = data_type;
     std::transform(data_lower.begin(), data_lower.end(), data_lower.begin(), ::tolower);
 };
+
+void DataFile::write_file_attributes(SIM const& svar)
+{
+    FileReadWriter::write_file_attributes(svar);
+
+    // attributes not needed for restart
+}
+
+void DataFile::write_zone_attributes(bound_block const& limits)
+{
+    FileReadWriter::write_zone_attributes(limits);
+
+    // non-essential attributes for restarting.
+    write_zone_attribute("Deletion normal x", limits.delete_norm[0]);
+    write_zone_attribute("Deletion normal y", limits.delete_norm[1]);
+#if SIMDIM == 3
+    write_zone_attribute("Deletion normal z", limits.delete_norm[2]);
+#endif
+    write_zone_attribute("Deletion plane constant", limits.delconst);
+}
 
 string DataFile::get_filename(real time = -1)
 {

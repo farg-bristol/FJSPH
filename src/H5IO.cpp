@@ -14,29 +14,29 @@
 
 namespace HDF5
 {
-    hid_t Open_File(std::string const& filename, bool const& reading = false)
+    hid_t Open_File(std::string const& filename, bool const& writing = true)
     {
         hid_t file_handle;
         if (std::filesystem::exists(filename))
         {
-            if (reading)
+            if (writing)
             {
-                file_handle = H5Fopen(filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+                file_handle = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
             }
             else
             {
-                file_handle = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+                file_handle = H5Fopen(filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
             }
 
             if (file_handle == H5I_INVALID_HID)
             {
-                cerr << "Failed to open new instance of HDF5 file: " << filename.c_str() << endl;
+                fprintf(stderr, "Failed to open existing instance of HDF5 file: %s\n", filename.c_str());
                 exit(-1);
             }
         }
         else
         {
-            if (!reading)
+            if (writing)
             {
                 file_handle = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
             }
@@ -47,7 +47,7 @@ namespace HDF5
 
             if (file_handle == H5I_INVALID_HID)
             {
-                cerr << "Failed to open existing instance of HDF5 file: " << filename.c_str() << endl;
+                fprintf(stderr, "Failed to open new instance of HDF5 file: %s\n", filename.c_str());
                 exit(-1);
             }
         }
@@ -59,15 +59,21 @@ namespace HDF5
     {
         assert(file_handle != H5I_INVALID_HID);
 
-        hid_t bdrzone =
-            H5Gcreate2(file_handle, (zone_header).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        return H5Gopen(file_handle, zone_header.c_str(), H5P_DEFAULT);
+    }
+
+    hid_t Create_Zone(hid_t const& file_handle, string const& zone_header)
+    {
+        assert(file_handle != H5I_INVALID_HID);
+
+        return H5Gcreate2(file_handle, (zone_header).c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     }
 
     void Close_File(hid_t handle)
     {
         if (H5Fclose(handle))
         {
-            printf("Failed to close fluid HDF file\n");
+            fprintf(stderr, "Failed to close fluid HDF file\n");
             exit(-1);
         }
     }
@@ -95,8 +101,9 @@ namespace HDF5
         hid_t attr = H5Acreate(fout, (attr_name).c_str(), var_type, aid, H5P_DEFAULT, H5P_DEFAULT);
         if ((retval = H5Awrite(attr, write_type, &attr_data)))
         {
-            printf(
-                "\n\tError: Failed to write attribute \"%s\" to handle %ld\n", attr_name.c_str(), fout
+            fprintf(
+                stderr, "\n\tError: Failed to write attribute \"%s\" to handle %ld\n", attr_name.c_str(),
+                fout
             );
             exit(-1);
         }
@@ -133,7 +140,7 @@ namespace HDF5
         hid_t attr = H5Acreate(fout, (name_).c_str(), H5T_IEEE_F64LE, aid, H5P_DEFAULT, H5P_DEFAULT);
         if ((retval = H5Awrite(attr, H5T_NATIVE_DOUBLE, &attr_data[0])))
         {
-            printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
             exit(-1);
         }
 
@@ -159,7 +166,7 @@ namespace HDF5
                 H5Acreate(fout, attr_name.c_str(), attr_type, attr_space, H5P_DEFAULT, H5P_DEFAULT);
             if ((retval = H5Awrite(attr, memtype, data)))
             {
-                printf("\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
+                fprintf(stderr, "\n\tError: Failed to write attribute \"%s\"\n", attr_name.c_str());
                 exit(-1);
             }
             // retval = H5Sclose(attr_type);
@@ -182,7 +189,7 @@ namespace HDF5
         );
         if ((retval = H5Dwrite(dataset, write_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
         {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
         retval = H5Sclose(dataspace);
@@ -235,7 +242,7 @@ namespace HDF5
         );
         if ((retval = H5Dwrite(dataset, H5T_NATIVE_ULONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
         retval = H5Sclose(dataspace);
@@ -253,7 +260,7 @@ namespace HDF5
     //     H5P_DEFAULT, H5P_DEFAULT); if ((retval = H5Dwrite(dataset, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL,
     //     H5P_DEFAULT, &var_data[start])))
     //     {
-    //         printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
+    //         fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
     //         exit(-1);
     //     }
     //     retval = H5Sclose(dataspace);
@@ -274,7 +281,7 @@ namespace HDF5
         );
         if ((retval = H5Dwrite(dataset, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
         retval = H5Sclose(dataspace);
@@ -293,7 +300,7 @@ namespace HDF5
         );
         if ((retval = H5Dwrite(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
         retval = H5Sclose(dataspace);
@@ -312,7 +319,7 @@ namespace HDF5
         );
         if ((retval = H5Dwrite(dataset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
         retval = H5Sclose(dataspace);
@@ -331,7 +338,7 @@ namespace HDF5
         );
         if ((retval = H5Dwrite(dataset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
         retval = H5Sclose(dataspace);
@@ -350,7 +357,7 @@ namespace HDF5
         );
         if ((retval = H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
         retval = H5Sclose(dataspace);
@@ -394,26 +401,6 @@ namespace HDF5
         Write_Variable(fout, name_.c_str(), dims, vect);
     }
 
-    inline string get_dim(uint const& dim)
-    {
-        switch (dim)
-        {
-        case 0:
-            return "x";
-            break;
-        case 1:
-            return "y";
-            break;
-        case 2:
-            return "z";
-            break;
-        default:
-            return "x";
-            break;
-        }
-        return "x";
-    }
-
     void Write_Inlet_Data(hid_t const& fout, bound_block const& limits)
     {
         size_t length = limits.back.size();
@@ -438,14 +425,14 @@ namespace HDF5
     {
         size_t length = end - start;
         hsize_t dims[1] = {length};
-        herr_t retval;
         hid_t dataspace = H5Screate_simple(1, dims, NULL);
         hid_t dataset = H5Dcreate(
             fout, var_name.c_str(), restart_type, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
         );
-        if ((retval = H5Dwrite(dataset, restart_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &pnp1[start])))
+        herr_t retval = H5Dwrite(dataset, restart_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &pnp1[start]);
+        if (retval)
         {
-            printf("\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
         retval = H5Sclose(dataspace);
@@ -472,7 +459,7 @@ namespace HDF5
             data = (char*)malloc(sdim * sizeof(char));
             if ((retval = H5Aread(attr, memtype, data)))
             {
-                printf("\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
+                fprintf(stderr, "\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
                 exit(-1);
             }
             H5Aclose(attr);
@@ -490,7 +477,7 @@ namespace HDF5
         size_t data;
         if ((retval = H5Aread(attr, read_type, &data)))
         {
-            printf("\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
             exit(-1);
         }
         retval = H5Aclose(attr);
@@ -527,25 +514,28 @@ namespace HDF5
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
 
         if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
+            fprintf(stderr, "WARNING: More than one dimension to array\n");
 
         double* data = (double*)malloc(dims[0] * sizeof(double));
         if ((retval = H5Aread(attr, H5T_NATIVE_DOUBLE, data)))
         {
-            printf("\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to read attribute: \"%s\"\n", attr_name.c_str());
             exit(-1);
         }
         retval = H5Aclose(attr);
 
         if (SIMDIM > dims[0])
         {
-            printf("ERROR: Vector dimension is smaller than simulation dimension. Will cause a fault so "
-                   "stopping.\n");
+            fprintf(
+                stderr,
+                "ERROR: Vector dimension is smaller than simulation dimension. Will cause a fault so "
+                "stopping.\n"
+            );
             exit(-1);
         }
         else if (dims[0] != SIMDIM)
         {
-            printf("WARNING: dimension of vector does not match simulation dimension\n");
+            fprintf(stderr, "WARNING: dimension of vector does not match simulation dimension\n");
         }
 
         for (size_t ii = 0; ii < SIMDIM; ii++)
@@ -564,12 +554,12 @@ namespace HDF5
         hsize_t dims[2];
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
         if (ndims != 2)
-            printf("WARNING: Not expected dimensions to array\n");
+            fprintf(stderr, "WARNING: Not expected dimensions to array\n");
 
         var_data.resize(dims[0], std::vector<T>(dims[1]));
         if ((retval = H5Dread(dset, read_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0][0])))
         {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
 
@@ -617,12 +607,12 @@ namespace HDF5
         hsize_t dims[1];
         int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
         if (ndims != 1)
-            printf("WARNING: More than one dimension to array\n");
+            fprintf(stderr, "WARNING: More than one dimension to array\n");
 
         var_data.resize(dims[0]);
         if ((retval = H5Dread(dset, read_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
         {
-            printf("\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
+            fprintf(stderr, "\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
             exit(-1);
         }
         retval = H5Sclose(space);
@@ -704,9 +694,40 @@ namespace HDF5
 #endif
         else
         {
-            printf("Mismatch of vector sizes. Cannot continue.\n");
+            fprintf(stderr, "Mismatch of vector sizes. Cannot continue.\n");
             exit(-1);
         }
+    }
+
+    void
+    Read_Particle_Array(hid_t const& fin, std::string var_name, SPHState& var_data, hid_t restart_type)
+    {
+        hid_t dset = H5Dopen(fin, var_name.c_str(), H5P_DEFAULT);
+        hid_t space = H5Dget_space(dset);
+        hsize_t dims[1];
+        int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
+        if (ndims != 1)
+        {
+            throw std::runtime_error("Expected 1D particle dataset");
+        }
+
+        hid_t file_type = H5Dget_type(dset);
+
+        if (!H5Tequal(file_type, restart_type))
+        {
+            fprintf(stderr, "Datatype mismatch. Cannot continue\n");
+            exit(-1);
+        }
+
+        var_data.resize(dims[0]);
+        herr_t retval = H5Dread(dset, restart_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, var_data.data());
+        if (retval)
+        {
+            fprintf(stderr, "\n\tError: Failed to read \"%s\" data\n", var_name.c_str());
+            exit(-1);
+        }
+        retval = H5Sclose(space);
+        retval = H5Dclose(dset);
     }
 
     void Read_Zone_Data(hid_t const& fin, real const& scale, SPHState& pnp1, size_t& length)
@@ -813,7 +834,7 @@ namespace HDF5
         // Check each vector is the right size.
         if (avect.size() != dvect.size() || avect.size() != ivect.size())
         {
-            printf("ERROR: Mismatch of ingested particle data lengths. Stopping\n");
+            fprintf(stderr, "ERROR: Mismatch of ingested particle data lengths. Stopping\n");
             exit(-1);
         }
         pnp1.resize(pnp1.size() + length);
@@ -926,7 +947,7 @@ void Read_HDF5(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
         file = H5Fopen(filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     else
     {
-        printf("ERROR: Attempting to read file that doesn't exist: %s\n", filename.c_str());
+        fprintf(stderr, "ERROR: Attempting to read file that doesn't exist: %s\n", filename.c_str());
         exit(-1);
     }
 

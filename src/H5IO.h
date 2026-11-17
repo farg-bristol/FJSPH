@@ -8,8 +8,9 @@
 
 namespace HDF5
 {
-    hid_t Open_File(std::string const& filename);
+    hid_t Open_File(std::string const& filename, bool const& reading = false);
     hid_t Open_Zone(hid_t const& file_handle, string const& zone_header);
+    hid_t Create_Zone(hid_t const& file_handle, string const& zone_header);
     void Close_Handle(hid_t handle);
 
     void Write_Attribute(hid_t const& fout, std::string const& attr_name, size_t const& attr_data);
@@ -110,6 +111,9 @@ namespace HDF5
     void Read_Variable_Scalar(
         hid_t const& fin, std::string const& var_name, std::vector<StateVecD>& var_data
     );
+
+    void
+    Read_Particle_Array(hid_t const& fin, std::string var_name, SPHState& var_data, hid_t restart_type);
 
     hid_t generate_compound_particle();
 } // namespace HDF5
