@@ -33,7 +33,8 @@ namespace ASCII
 
     void Write_File_header(FILE* fp, string const& var_names, string const& title);
     void Write_Zone_Header(
-        FILE* fp, std::string zone_header, int64_t size, int32_t strand_id, real solution_time
+        FILE* fp, std::string const& zone_header, int64_t const& size, int32_t const& strand_id,
+        real const& solution_time
     );
 } // namespace ASCII
 

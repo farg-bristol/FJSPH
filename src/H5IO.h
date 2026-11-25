@@ -8,7 +8,7 @@
 
 namespace HDF5
 {
-    hid_t Open_File(std::string const& filename, bool const& reading = false);
+    hid_t Open_File(std::string const& filename, ReadOrWrite const& read_write = writing);
     hid_t Open_Zone(hid_t const& file_handle, string const& zone_header);
     hid_t Create_Zone(hid_t const& file_handle, string const& zone_header);
     void Close_Handle(hid_t handle);

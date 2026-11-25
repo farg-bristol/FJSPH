@@ -277,12 +277,13 @@ namespace ASCII
     }
 
     void Write_Zone_Header(
-        FILE* fp, std::string zone_header, int64_t size, int32_t strand_id, real solution_time
+        FILE* fp, std::string const& zone_header, int64_t const& size, int32_t const& strand_id,
+        real const& solution_time
     )
     {
         fprintf(
-            fp, "ZONE T=\"%s\", I=%zu, DATAPACKING=BLOCK, STRANDID=%d, SOLUTIONTIME=%.7g\n", zone_header,
-            size, strand_id, solution_time
+            fp, "ZONE T=\"%s\", I=%zu, DATAPACKING=BLOCK, STRANDID=%d, SOLUTIONTIME=%.7g\n",
+            zone_header.c_str(), size, strand_id, solution_time
         );
     }
 

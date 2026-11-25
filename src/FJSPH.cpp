@@ -62,6 +62,9 @@ int main(int argc, char* argv[])
 
     omp_set_num_threads(svar.numThreads);
 
+    // Initialise restart file read/writer.
+    RestartFile h5writer(svar);
+
     // if(MakeOutputDir(argc,argv,svar))
     // {
     // 	cout << "Couldn't make output directory. Please check permissions." << endl;
@@ -132,7 +135,7 @@ int main(int argc, char* argv[])
     {
         Init_Particles_Restart(svar, limits);
         /* Read the files */
-        Read_HDF5(svar, pn, pnp1, limits);
+        h5writer.read_restart_file(svar, pn, pnp1, limits);
     }
 
     // Check if cells have been initialsed before making a tree off it
@@ -160,7 +163,6 @@ int main(int argc, char* argv[])
     else
         f2 = fopen(framef.c_str(), "w");
 
-    RestartFile h5writer(svar);
     init_writers(svar);
 
     if (!svar.io.restart)

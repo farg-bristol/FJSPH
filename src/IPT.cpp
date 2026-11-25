@@ -682,7 +682,7 @@ namespace IPT
                     fflush(svar.ipt.streak_file);
                 else
                 {
-                    flush_file(svar.ipt.streak_handle);
+                    SZLIO::flush_file(svar.ipt.streak_handle);
                 }
             }
         }
@@ -723,7 +723,7 @@ namespace IPT
                     fflush(svar.ipt.cell_file);
                 else
                 {
-                    flush_file(svar.ipt.cell_handle);
+                    SZLIO::flush_file(svar.ipt.cell_handle);
                 }
             }
         }

@@ -17,9 +17,9 @@ class FileReadWriter
 
     ~FileReadWriter();
 
-    int open_file(std::string const& filename, std::string const& zone_name = "");
-    virtual void write_file_attributes(SIM const& svar);
-    virtual void write_zone_attributes(bound_block const& limits);
+    void open_file(std::string const& filename, std::string const& zone_name = "");
+    virtual void rw_file_attributes(SIM& svar);
+    virtual void rw_zone_attributes(bound_block& limits);
 
     inline string get_dim(uint const& dim)
     {
@@ -42,10 +42,22 @@ class FileReadWriter
     void
     write_scalar_var(std::string const& var_name, std::vector<T> const& var_data, int32_t& var_count);
 
+    template <typename T> void read_file_attribute(std::string const& attr_name, T& attr_data);
+    template <typename T> void read_zone_attribute(std::string const& attr_name, T& attr_data);
+    template <typename T>
+    void read_scalar_var(std::string const& var_name, std::vector<T>& var_data, int32_t& var_count);
+
+    // Functions that do the appropriate thing based on reading or writing.
+    template <typename T> void rw_file_attribute(std::string const& attr_name, T& attr_data);
+    template <typename T> void rw_zone_attribute(std::string const& attr_name, T& attr_data);
+    template <typename T>
+    void rw_scalar_var(std::string const& var_name, std::vector<T>& var_data, int32_t& var_count);
+
     void create_zone(
         std::string const& zone_header, real const& solution_time = 0, int64_t const size = 0,
         int32_t const strandID = 0
     );
+    void open_zone(std::string const& zone_header);
     void close_zone();
     bool get_file_is_open();
     bool get_zone_is_open();
@@ -53,6 +65,7 @@ class FileReadWriter
     file_extension file_ext;
     std::string ext_str;
     real scale = 1.0;
+    ReadOrWrite read_or_write;
 
     hid_t h5_file_handle;
     hid_t h5_zone_handle;
@@ -71,20 +84,18 @@ class RestartFile : public FileReadWriter
   public:
     RestartFile(SIM const& svar);
 
-    void write_restart_file(SIM& svar, SPHState& pnp1, LIMITS const& limits);
-    void read_restart_file(SIM& svar, SPHState& pnp1, LIMITS const& limits);
+    void write_restart_file(SIM& svar, SPHState& pnp1, LIMITS& limits);
+    void read_restart_file(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits);
 
   private:
     int write_restart_zone(
-        std::string const& zone_header, SPHState const& pnp1, LIMITS const& limits,
-        size_t const& block_index
+        std::string const& zone_header, SPHState const& pnp1, LIMITS& limits, size_t const& block_index
     );
     int read_restart_zone(
-        std::string const& zone_header, SPHState& pnp1, LIMITS& limits, size_t const& block_index
+        std::string const& zone_header, SPHState& pn, LIMITS& limits, size_t const& block_index
     );
 
     hid_t restart_type;
-    ReadOrWrite read_or_write;
 };
 
 class DataFile : public FileReadWriter
@@ -92,8 +103,8 @@ class DataFile : public FileReadWriter
   public:
     DataFile(file_extension const& _file_ext, SIM const& svar, std::string const& _data_type);
 
-    void write_file_attributes(SIM const& svar) override;
-    void write_zone_attributes(bound_block const& limits) override;
+    void rw_file_attributes(SIM& svar) override;
+    void rw_zone_attributes(bound_block& limits) override;
 
   protected:
     OutputMap output_var;
@@ -123,17 +134,16 @@ class SZLFile : public DataFile
 
   public:
     SZLFile(
-        SIM const& svar, std::string const& _data_type, size_t const& _start_block,
-        size_t const& _end_block
+        SIM& svar, std::string const& _data_type, size_t const& _start_block, size_t const& _end_block
     );
 
-    void write_timestep(SIM const& svar, SPHState const& pnp1, LIMITS const& limits, real const& time);
+    void write_timestep(SIM& svar, SPHState const& pnp1, LIMITS& limits, real const& time);
 
     void combine_file();
     void flush_file();
 
   private:
-    void write_timestep_data(SPHState const& pnp1, LIMITS const& limits, real const& time);
+    void write_timestep_data(SPHState const& pnp1, LIMITS& limits, real const& time);
     size_t start_block, end_block;
 };
 
@@ -141,13 +151,12 @@ class ASCIIFile : protected DataFile
 {
   public:
     ASCIIFile(
-        SIM const& svar, std::string const& _data_type, size_t const& _start_block,
-        size_t const& _end_block
+        SIM& svar, std::string const& _data_type, size_t const& _start_block, size_t const& _end_block
     );
 
-    void write_timestep(SIM const& svar, SPHState const& pnp1, LIMITS const& limits, real const& time);
+    void write_timestep(SIM& svar, SPHState const& pnp1, LIMITS& limits, real const& time);
 
   private:
-    void write_timestep_data(SPHState const& pnp1, LIMITS const& limits, real const& time);
+    void write_timestep_data(SPHState const& pnp1, LIMITS& limits, real const& time);
     size_t start_block, end_block;
 };

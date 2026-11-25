@@ -14,12 +14,12 @@
 
 namespace HDF5
 {
-    hid_t Open_File(std::string const& filename, bool const& writing = true)
+    hid_t Open_File(std::string const& filename, ReadOrWrite const& read_write = writing)
     {
         hid_t file_handle;
         if (std::filesystem::exists(filename))
         {
-            if (writing)
+            if (read_write == writing)
             {
                 file_handle = H5Fopen(filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
             }
@@ -36,7 +36,7 @@ namespace HDF5
         }
         else
         {
-            if (writing)
+            if (read_write == writing)
             {
                 file_handle = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
             }
@@ -371,7 +371,6 @@ namespace HDF5
     {
         size_t length = data.size();
         std::vector<double> vect(data.size());
-        hsize_t dim[] = {data.size()};
         std::string name_;
 
 #pragma omp parallel for
@@ -887,46 +886,6 @@ namespace HDF5
 
 } // namespace HDF5
 
-void Read_Zone_Attributes(hid_t const& zone, bound_block& limits)
-{
-    HDF5::Read_Attribute(zone, "Block name", limits.name);
-    // Add information about the insertion, aero, and deletion planes.
-    HDF5::Read_Attribute(zone, "Insertion normal x", limits.insert_norm[0]);
-    HDF5::Read_Attribute(zone, "Insertion normal y", limits.insert_norm[1]);
-    HDF5::Read_Attribute(zone, "Deletion normal x", limits.delete_norm[0]);
-    HDF5::Read_Attribute(zone, "Deletion normal y", limits.delete_norm[1]);
-    HDF5::Read_Attribute(zone, "Aerodynamic normal x", limits.aero_norm[0]);
-    HDF5::Read_Attribute(zone, "Aerodynamic normal y", limits.aero_norm[1]);
-#if SIMDIM == 3
-    HDF5::Read_Attribute(zone, "Insertion normal z", limits.insert_norm[2]);
-    HDF5::Read_Attribute(zone, "Deletion normal z", limits.delete_norm[2]);
-    HDF5::Read_Attribute(zone, "Aerodynamic normal z", limits.aero_norm[2]);
-#endif
-
-    HDF5::Read_Attribute(zone, "Insertion plane constant", limits.insconst);
-    HDF5::Read_Attribute(zone, "Deletion plane constant", limits.delconst);
-    HDF5::Read_Attribute(zone, "Aerodynamic plane constant", limits.aeroconst);
-
-    HDF5::Read_Attribute(zone, "Fixed velocity or dynamic inlet", limits.fixed_vel_or_dynamic);
-    HDF5::Read_Attribute(zone, "Lattice or HCPL packing", limits.particle_order);
-    HDF5::Read_Attribute(zone, "Boundary solver type", limits.bound_solver);
-    HDF5::Read_Attribute(zone, "Boundary is no slip", limits.no_slip);
-    HDF5::Read_Attribute(zone, "Block type", limits.block_type);
-
-    // Fluid properties
-    HDF5::Read_Attribute(zone, "Cole EOS gamma", limits.fluid.gam);
-    HDF5::Read_Attribute(zone, "Reference dispersed density", limits.fluid.rho_rest);
-    HDF5::Read_Attribute(zone, "Reference dispersed viscosity", limits.fluid.mu);
-    HDF5::Read_Attribute(zone, "Reference surface tension", limits.fluid.sig);
-    HDF5::Read_Attribute(zone, "Surface tension contact angle", limits.fluid.contangb);
-    HDF5::Read_Attribute(zone, "Equation of state", limits.fluid.pressure_rel);
-    HDF5::Read_Attribute(zone, "Background pressure", limits.fluid.press_back);
-    HDF5::Read_Attribute(zone, "Starting pressure", limits.fluid.press_start);
-    HDF5::Read_Attribute(zone, "SPH delta coefficient", limits.fluid.dsph_delta);
-    HDF5::Read_Attribute(zone, "Artificial viscosity factor", limits.fluid.visc_alpha);
-    HDF5::Read_Attribute(zone, "Speed of sound", limits.fluid.speed_sound);
-}
-
 /**
  * @brief Read a .h5 file to ingest restart data.
  *
@@ -970,73 +929,6 @@ void Read_HDF5(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
     HDF5::Read_Attribute(file, "SPH stable CFL count", svar.integrator.n_stable);
     HDF5::Read_Attribute(file, "SPH unstable CFL count", svar.integrator.n_unstable);
     svar.integrator.last_frame_time = svar.integrator.current_time;
-
-    Set_Values(svar);
-
-    size_t start = 0;
-    size_t block = 0;
-    if (svar.n_bound_blocks > 0)
-    {
-        // Will already be set from reading the boundary file
-        // parts.ntimes.assign(nBound,0);
-        // parts.b_times.resize(nBound);
-        // parts.b_vels.resize(nBound);
-        svar.bound_points = 0;
-        for (size_t ii = 0; ii < svar.n_bound_blocks; ii++)
-        {
-            std::string zoneHeader = "Boundary " + std::to_string(ii);
-            hid_t group = H5Gopen(file, zoneHeader.c_str(), H5P_DEFAULT);
-            // size_t n0 = parts.grdnp1.size();
-            limits[block].index.first = start;
-            size_t length = 0;
-            HDF5::Read_Zone_Data(group, svar.scale, pn, length);
-            start += length;
-            limits[block].index.second = start;
-
-            // std::string name;
-            // HDF5::Read_Attribute(group, "Block name", name);
-
-            H5Gclose(group);
-            block++;
-            svar.bound_points += length;
-        }
-    }
-
-    if (svar.n_fluid_blocks > 0)
-    {
-        svar.fluid_points = 0;
-        for (size_t ii = 0; ii < svar.n_fluid_blocks; ii++)
-        {
-            // Assume the block definition files have been read.
-            std::string zoneHeader = "Fluid " + std::to_string(ii);
-            hid_t group = H5Gopen(file, zoneHeader.c_str(), H5P_DEFAULT);
-            // size_t n0 = parts.grdnp1.size();
-
-            limits[block].index.first = start;
-            size_t length = 0;
-            HDF5::Read_Zone_Data(group, svar.scale, pn, length);
-            start += length;
-            limits[block].index.second = start;
-
-            // read the inlet data
-            if (limits[block].block_type == inletZone)
-                HDF5::Read_Inlet_Data(group, limits[block]);
-
-            // Read any attributes?
-            // std::string name;
-            // HDF5::Read_Attribute(group, "Block name", name);
-            // HDF5::Read_Attribute(group, "Block type", name);
-
-            H5Gclose(group);
-            block++;
-            svar.fluid_points += length;
-        }
-    }
-
-    H5Fclose(file);
-    svar.total_points = svar.bound_points + svar.fluid_points;
-    pnp1.resize(pn.size());
-    copy_omp(pn.begin(), pn.end(), pnp1.begin());
 
     printf("Finished reading restart HDF5 file.\n");
 }

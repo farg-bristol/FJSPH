@@ -32,9 +32,11 @@ FileReadWriter::FileReadWriter(file_extension const& _file_ext, SIM const& svar)
         ext_str = ".h5part";
         break;
     default:
-        cerr << "Incorrect file extension defined" << endl;
+        fprintf(stderr, "Incorrect file extension defined\n");
         exit(-1);
     }
+
+    read_or_write = writing;
 }
 
 FileReadWriter::~FileReadWriter()
@@ -46,7 +48,7 @@ FileReadWriter::~FileReadWriter()
     }
 }
 
-int FileReadWriter::open_file(std::string const& filename, std::string const& zone_name = "")
+void FileReadWriter::open_file(std::string const& filename, std::string const& zone_name)
 {
     /*
      * Create a new file. If file exists its contents will be overwritten.
@@ -69,7 +71,7 @@ int FileReadWriter::open_file(std::string const& filename, std::string const& zo
     case h5:
     case h5part:
     {
-        h5_file_handle = HDF5::Open_File(_filename.string());
+        h5_file_handle = HDF5::Open_File(_filename.string(), read_or_write);
         break;
     }
     case szplt:
@@ -110,160 +112,139 @@ void FileReadWriter::close_file()
     }
 }
 
-void FileReadWriter::write_file_attributes(SIM const& svar)
+void FileReadWriter::rw_file_attributes(SIM& svar)
 {
     // Write crucial simulation auxiliary data. Potential to expand
-    write_file_attribute("Simulation current time", svar.integrator.current_time);
-    write_file_attribute("Particle index to add", svar.part_id);
-    write_file_attribute("Number of boundary blocks", svar.n_bound_blocks);
-    write_file_attribute("Number of fluid blocks", svar.n_fluid_blocks);
-    write_file_attribute("Number of boundary points", svar.bound_points);
-    write_file_attribute("Number of fluid points", svar.fluid_points);
-    write_file_attribute("Current frame", svar.integrator.current_frame);
+    rw_file_attribute("Simulation current time", svar.integrator.current_time);
+    rw_file_attribute("Particle index to add", svar.part_id);
+    rw_file_attribute("Number of boundary blocks", svar.n_bound_blocks);
+    rw_file_attribute("Number of fluid blocks", svar.n_fluid_blocks);
+    rw_file_attribute("Number of boundary points", svar.bound_points);
+    rw_file_attribute("Number of fluid points", svar.fluid_points);
+    rw_file_attribute("Current frame", svar.integrator.current_frame);
 
-    write_file_attribute("Input para filename", svar.io.input_file);
-    write_file_attribute("Input fluid definition filename", svar.io.input_fluid_file);
-    write_file_attribute("Input boundary definition filename", svar.io.input_bound_file);
+    rw_file_attribute("Input para filename", svar.io.input_file);
+    rw_file_attribute("Input fluid definition filename", svar.io.input_fluid_file);
+    rw_file_attribute("Input boundary definition filename", svar.io.input_bound_file);
 
-    write_file_attribute("Primary grid face filename", svar.io.tau_mesh);
-    write_file_attribute("Boundary mapping filename", svar.io.tau_bmap);
-    write_file_attribute("Restart-data prefix", svar.io.tau_sol);
-    write_file_attribute("Dimension offset vector", svar.io.offset_axis);
-    write_file_attribute("Solution angle of attack", svar.io.angle_alpha);
-    write_file_attribute("Grid scale", svar.scale);
+    rw_file_attribute("Primary grid face filename", svar.io.tau_mesh);
+    rw_file_attribute("Boundary mapping filename", svar.io.tau_bmap);
+    rw_file_attribute("Restart-data prefix", svar.io.tau_sol);
+    rw_file_attribute("Dimension offset vector", svar.io.offset_axis);
+    rw_file_attribute("Solution angle of attack", svar.io.angle_alpha);
+    rw_file_attribute("Grid scale", svar.scale);
 
-    write_file_attribute("OpenFOAM input directory", svar.io.foam_dir);
-    write_file_attribute("OpenFOAM solution directory", svar.io.foam_sol);
-    write_file_attribute("OpenFOAM binary", svar.io.foam_is_binary);
-    write_file_attribute("Label size", svar.io.foam_label_size);
-    write_file_attribute("Scalar size", svar.io.foam_scalar_size);
-    write_file_attribute("OpenFOAM is buoyant", svar.io.foam_buoyant_sim);
-    write_file_attribute("OpenFOAM is foam_is_incompressible", svar.io.foam_is_incomp);
+    rw_file_attribute("OpenFOAM input directory", svar.io.foam_dir);
+    rw_file_attribute("OpenFOAM solution directory", svar.io.foam_sol);
+    rw_file_attribute("OpenFOAM binary", svar.io.foam_is_binary);
+    rw_file_attribute("Label size", svar.io.foam_label_size);
+    rw_file_attribute("Scalar size", svar.io.foam_scalar_size);
+    rw_file_attribute("OpenFOAM is buoyant", svar.io.foam_buoyant_sim);
+    rw_file_attribute("OpenFOAM is foam_is_incompressible", svar.io.foam_is_incomp);
 
-    write_file_attribute("VLM definition filename", svar.io.vlm_file);
+    rw_file_attribute("VLM definition filename", svar.io.vlm_file);
 
-    write_file_attribute("Single file for output", svar.io.single_file);
-    write_file_attribute("Output files prefix", svar.io.output_prefix);
-    write_file_attribute("SPH restart prefix", svar.io.restart_prefix);
-    write_file_attribute("SPH frame time interval", svar.integrator.frame_time_interval);
-    write_file_attribute("SPH frame count", svar.integrator.max_frames);
-    write_file_attribute("SPH previous frame time", svar.integrator.last_frame_time);
-    write_file_attribute("SPH output encoding", svar.io.out_encoding);
-    write_file_attribute("Variable list", svar.io.output_names);
+    rw_file_attribute("Single file for output", svar.io.single_file);
+    rw_file_attribute("Output files prefix", svar.io.output_prefix);
+    rw_file_attribute("SPH restart prefix", svar.io.restart_prefix);
+    rw_file_attribute("SPH frame time interval", svar.integrator.frame_time_interval);
+    rw_file_attribute("SPH frame count", svar.integrator.max_frames);
+    rw_file_attribute("SPH previous frame time", svar.integrator.last_frame_time);
+    rw_file_attribute("SPH output encoding", svar.io.out_encoding);
 
     /* Fluid data */
-    write_file_attribute("Reference density", svar.air.rho_g);
-    write_file_attribute("Init hydrostatic pressure", svar.init_hydro_pressure);
-    write_file_attribute("Hydrostatic height", svar.hydro_height);
+    rw_file_attribute("Reference density", svar.air.rho_g);
+    rw_file_attribute("Init hydrostatic pressure", svar.init_hydro_pressure);
+    rw_file_attribute("Hydrostatic height", svar.hydro_height);
 
     /* Aerodynamic data */
-    write_file_attribute("Reference velocity", svar.air.v_ref);
-    write_file_attribute("Reference pressure", svar.air.p_ref);
-    write_file_attribute("Reference Mach number", svar.air.M_ref);
-    write_file_attribute("Reference temperature", svar.air.temp_g);
-    write_file_attribute("Gas constant gamma", svar.air.gamma);
+    rw_file_attribute("Reference velocity", svar.air.v_ref);
+    rw_file_attribute("Reference pressure", svar.air.p_ref);
+    rw_file_attribute("Reference Mach number", svar.air.M_ref);
+    rw_file_attribute("Reference temperature", svar.air.temp_g);
+    rw_file_attribute("Gas constant gamma", svar.air.gamma);
 
     /* Simulation settings */
-    write_file_attribute("SPH integration solver", svar.integrator.solver_name);
-    write_file_attribute("SPH boundary solver", svar.integrator.bound_solver);
-    write_file_attribute("SPH solver minimum residual", svar.integrator.min_residual);
-    write_file_attribute("SPH maximum timestep", svar.integrator.delta_t_max);
-    write_file_attribute("SPH minimum timestep", svar.integrator.delta_t_min);
-    write_file_attribute("SPH maximum CFL", svar.integrator.cfl_max);
-    write_file_attribute("SPH minimum CFL", svar.integrator.cfl_min);
-    write_file_attribute("SPH CFL condition", svar.integrator.cfl);
-    write_file_attribute("SPH unstable CFL step", svar.integrator.cfl_step);
-    write_file_attribute("SPH unstable CFL count limit", svar.integrator.n_unstable_limit);
-    write_file_attribute("SPH stable CFL count limit", svar.integrator.n_stable_limit);
-    write_file_attribute("SPH stable CFL count iteration factor", svar.integrator.subits_factor);
-    write_file_attribute("SPH maximum shifting velocity", svar.integrator.max_shift_vel);
-    write_file_attribute("SPH stable CFL count", svar.integrator.n_stable);
-    write_file_attribute("SPH unstable CFL count", svar.integrator.n_unstable);
+    rw_file_attribute("SPH integration solver", svar.integrator.solver_name);
+    rw_file_attribute("SPH boundary solver", svar.integrator.bound_solver);
+    rw_file_attribute("SPH solver minimum residual", svar.integrator.min_residual);
+    rw_file_attribute("SPH maximum timestep", svar.integrator.delta_t_max);
+    rw_file_attribute("SPH minimum timestep", svar.integrator.delta_t_min);
+    rw_file_attribute("SPH maximum CFL", svar.integrator.cfl_max);
+    rw_file_attribute("SPH minimum CFL", svar.integrator.cfl_min);
+    rw_file_attribute("SPH CFL condition", svar.integrator.cfl);
+    rw_file_attribute("SPH unstable CFL step", svar.integrator.cfl_step);
 
-    write_file_attribute("SPH density variation", svar.rho_var);
-    write_file_attribute("SPH maximum density", svar.rho_max);
-    write_file_attribute("SPH minimum density", svar.rho_min);
-    write_file_attribute("SPH Newmark Beta iteration limit", svar.integrator.max_subits);
-    write_file_attribute("SPH gravity vector", svar.grav);
+    rw_file_attribute("SPH gravity vector", svar.grav);
 
-    write_file_attribute("SPH smoothing length factor", svar.H_fac);
-    write_file_attribute("SPH aerodynamic case", svar.air.aero_case);
-    write_file_attribute("SPH SP diameter definition", svar.air.use_dx);
-    write_file_attribute("SPH use TAB deformation", svar.air.use_TAB_def);
-    write_file_attribute("SPH global offset coordinate", svar.offset_vec);
-    write_file_attribute("SPH maximum particle count", svar.max_points);
-    write_file_attribute("SPH aerodynamic cutoff value", svar.air.lam_cutoff);
-    write_file_attribute("SPH freestream velocity", svar.air.v_inf);
-    write_file_attribute("SPH restart fit tolerance", svar.io.restart_tol);
-
-    /* Particle tracking settings */
-    write_file_attribute("Transition to IPT", svar.ipt.using_ipt);
-    write_file_attribute("Velocity equation order", svar.ipt.ipt_eq_order);
-    write_file_attribute("SPH tracking conversion x coordinate", svar.ipt.max_x_sph);
-    write_file_attribute("Maximum x trajectory coordinate", svar.ipt.max_x);
-    write_file_attribute("Particle scatter output", svar.ipt.part_out);
-    write_file_attribute("Particle streak output", svar.ipt.streak_out);
-    write_file_attribute("Particle cell intersection output", svar.ipt.cells_out);
+    rw_file_attribute("SPH smoothing length factor", svar.H_fac);
+    rw_file_attribute("SPH aerodynamic case", svar.air.aero_case);
+    rw_file_attribute("SPH SP diameter definition", svar.air.use_dx);
+    rw_file_attribute("SPH use TAB deformation", svar.air.use_TAB_def);
+    rw_file_attribute("SPH global offset coordinate", svar.offset_vec);
+    rw_file_attribute("SPH aerodynamic cutoff value", svar.air.lam_cutoff);
+    rw_file_attribute("SPH freestream velocity", svar.air.v_inf);
+    rw_file_attribute("SPH restart fit tolerance", svar.io.restart_tol);
 }
 
-void FileReadWriter::write_zone_attributes(bound_block const& limits)
+void FileReadWriter::rw_zone_attributes(bound_block& limits)
 {
-    write_zone_attribute("Block name", limits.name);
+    rw_zone_attribute("Block name", limits.name);
     // Add information about the insertion, aero, and deletion planes.
-    write_zone_attribute("Insertion normal x", limits.insert_norm[0]);
-    write_zone_attribute("Insertion normal y", limits.insert_norm[1]);
-    write_zone_attribute("Aerodynamic normal x", limits.aero_norm[0]);
-    write_zone_attribute("Aerodynamic normal y", limits.aero_norm[1]);
+    rw_zone_attribute("Insertion normal x", limits.insert_norm[0]);
+    rw_zone_attribute("Insertion normal y", limits.insert_norm[1]);
+    rw_zone_attribute("Aerodynamic normal x", limits.aero_norm[0]);
+    rw_zone_attribute("Aerodynamic normal y", limits.aero_norm[1]);
 #if SIMDIM == 3
-    write_zone_attribute("Insertion normal z", limits.insert_norm[2]);
-    write_zone_attribute("Aerodynamic normal z", limits.aero_norm[2]);
+    rw_zone_attribute("Insertion normal z", limits.insert_norm[2]);
+    rw_zone_attribute("Aerodynamic normal z", limits.aero_norm[2]);
 #endif
 
-    write_zone_attribute("Insertion plane constant", limits.insconst);
-    write_zone_attribute("Aerodynamic plane constant", limits.aeroconst);
+    rw_zone_attribute("Insertion plane constant", limits.insconst);
+    rw_zone_attribute("Aerodynamic plane constant", limits.aeroconst);
 
     // Add boundary time information
+    rw_zone_attribute("Times count", limits.nTimes);
+    limits.vels.resize(limits.nTimes);
     if (limits.nTimes != 0)
     {
-        write_zone_attribute("Times count", limits.nTimes);
         for (size_t time = 0; time < limits.nTimes; time++)
         {
-            write_zone_attribute("Time " + std::to_string(time), limits.times[time]);
-            write_zone_attribute("Velocity " + std::to_string(time) + " x", limits.vels[time][0]);
-            write_zone_attribute("Velocity " + std::to_string(time) + " y", limits.vels[time][1]);
+            rw_zone_attribute("Time " + std::to_string(time), limits.times[time]);
+            rw_zone_attribute("Velocity " + std::to_string(time) + " x", limits.vels[time][0]);
+            rw_zone_attribute("Velocity " + std::to_string(time) + " y", limits.vels[time][1]);
 #if SIMDIM == 3
-            write_zone_attribute("Velocity " + std::to_string(time) + " z", limits.vels[time][2]);
+            rw_zone_attribute("Velocity " + std::to_string(time) + " z", limits.vels[time][2]);
 #endif
         }
     }
     else
     {
-        write_zone_attribute("Times count", 0);
-        write_zone_attribute("Velocity x", limits.vels[0][0]);
-        write_zone_attribute("Velocity y", limits.vels[0][1]);
+        rw_zone_attribute("Velocity x", limits.vels[0][0]);
+        rw_zone_attribute("Velocity y", limits.vels[0][1]);
 #if SIMDIM == 3
-        write_zone_attribute("Velocity z", limits.vels[0][2]);
+        rw_zone_attribute("Velocity z", limits.vels[0][2]);
 #endif
     }
 
-    write_zone_attribute("Fixed velocity or dynamic inlet", limits.fixed_vel_or_dynamic);
-    write_zone_attribute("Lattice or HCPL packing", limits.particle_order);
-    write_zone_attribute("Boundary solver type", limits.bound_solver);
-    write_zone_attribute("Boundary is no slip", limits.no_slip);
-    write_zone_attribute("Block type", limits.block_type);
+    rw_zone_attribute("Fixed velocity or dynamic inlet", limits.fixed_vel_or_dynamic);
+    rw_zone_attribute("Lattice or HCPL packing", limits.particle_order);
+    rw_zone_attribute("Boundary solver type", limits.bound_solver);
+    rw_zone_attribute("Boundary is no slip", limits.no_slip);
+    rw_zone_attribute("Block type", limits.block_type);
 
     // Fluid properties
-    write_zone_attribute("Cole EOS gamma", limits.fluid.gam);
-    write_zone_attribute("Reference dispersed density", limits.fluid.rho_rest);
-    write_zone_attribute("Reference dispersed viscosity", limits.fluid.mu);
-    write_zone_attribute("Reference surface tension", limits.fluid.sig);
-    write_zone_attribute("Surface tension contact angle", limits.fluid.contangb);
-    write_zone_attribute("Equation of state", limits.fluid.pressure_rel);
-    write_zone_attribute("Background pressure", limits.fluid.press_back);
-    write_zone_attribute("Starting pressure", limits.fluid.press_start);
-    write_zone_attribute("SPH delta coefficient", limits.fluid.dsph_delta);
-    write_zone_attribute("Artificial viscosity factor", limits.fluid.visc_alpha);
-    write_zone_attribute("Speed of sound", limits.fluid.speed_sound);
+    rw_zone_attribute("Cole EOS gamma", limits.fluid.gam);
+    rw_zone_attribute("Reference dispersed density", limits.fluid.rho_rest);
+    rw_zone_attribute("Reference dispersed viscosity", limits.fluid.mu);
+    rw_zone_attribute("Reference surface tension", limits.fluid.sig);
+    rw_zone_attribute("Surface tension contact angle", limits.fluid.contangb);
+    rw_zone_attribute("Equation of state", limits.fluid.pressure_rel);
+    rw_zone_attribute("Background pressure", limits.fluid.press_back);
+    rw_zone_attribute("Starting pressure", limits.fluid.press_start);
+    rw_zone_attribute("SPH delta coefficient", limits.fluid.dsph_delta);
+    rw_zone_attribute("Artificial viscosity factor", limits.fluid.visc_alpha);
+    rw_zone_attribute("Speed of sound", limits.fluid.speed_sound);
 }
 
 template <typename T>
@@ -272,18 +253,26 @@ void FileReadWriter::write_file_attribute(std::string const& attr_name, T const&
     switch (file_ext)
     {
     case dat:
+    {
         ASCII::add_file_aux_data(tec_dat_handle, attr_name, attr_data);
         break;
+    }
     case h5:
     case h5part:
+    {
         HDF5::Write_Attribute(h5_file_handle, attr_name, attr_data);
         break;
+    }
     case szplt:
+    {
         SZLIO::add_file_aux_data(tec_file_handle, attr_name, attr_data);
         break;
+    }
     default:
-        cerr << "Incorrect file extension defined" << endl;
+    {
+        fprintf(stderr, "Incorrect file extension defined\n");
         break;
+    }
     }
 }
 
@@ -293,18 +282,26 @@ void FileReadWriter::write_zone_attribute(std::string const& attr_name, T const&
     switch (file_ext)
     {
     case dat:
+    {
         ASCII::add_zone_aux_data(tec_dat_handle, attr_name, attr_data);
         break;
+    }
     case h5:
     case h5part:
+    {
         HDF5::Write_Attribute(h5_zone_handle, attr_name, attr_data);
         break;
+    }
     case szplt:
+    {
         SZLIO::add_zone_aux_data(tec_file_handle, tec_output_zone, attr_name, attr_data);
         break;
+    }
     default:
-        cerr << "Incorrect file extension defined" << endl;
+    {
+        fprintf(stderr, "Incorrect file extension defined\n");
         break;
+    }
     }
 }
 
@@ -316,43 +313,230 @@ void FileReadWriter::write_scalar_var(
     switch (file_ext)
     {
     case dat:
+    {
         ASCII::Write_Vector(tec_dat_handle, var_data);
         break;
+    }
     case h5:
     case h5part:
+    {
         hsize_t dims[] = {var_data.size()};
         HDF5::Write_Variable(h5_zone_handle, var_name, dims, var_data);
         break;
+    }
     case szplt:
+    {
+        int64_t imax = var_data.size();
         SZLIO::Write_Vector(tec_file_handle, tec_output_zone, var_count, 0, imax, var_data, var_name);
         break;
+    }
     default:
-        cerr << "Incorrect file extension defined" << endl;
+    {
+        fprintf(stderr, "Incorrect file extension defined\n");
         break;
+    }
+    }
+}
+
+template <typename T>
+void FileReadWriter::read_file_attribute(std::string const& attr_name, T& attr_data)
+{
+    switch (file_ext)
+    {
+    case h5:
+    case h5part:
+    {
+        HDF5::Read_Attribute(h5_file_handle, attr_name, attr_data);
+        break;
+    }
+    case dat:
+    case szplt:
+    {
+        fprintf(stderr, "read_file_attribute is only available for HDF5 files.\n");
+        break;
+    }
+    default:
+    {
+        fprintf(stderr, "Incorrect file extension defined\n");
+        break;
+    }
+    }
+}
+
+template <typename T>
+void FileReadWriter::read_zone_attribute(std::string const& attr_name, T& attr_data)
+{
+    switch (file_ext)
+    {
+    case h5:
+    case h5part:
+    {
+        HDF5::Read_Attribute(h5_zone_handle, attr_name, attr_data);
+        break;
+    }
+    case dat:
+    case szplt:
+    {
+        fprintf(stderr, "read_zone_attribute is only available for HDF5 files.\n");
+        break;
+    }
+    default:
+    {
+        fprintf(stderr, "Incorrect file extension defined\n");
+        break;
+    }
+    }
+}
+
+template <typename T>
+void FileReadWriter::read_scalar_var(
+    std::string const& var_name, std::vector<T>& var_data, int32_t& var_count
+)
+{
+    switch (file_ext)
+    {
+    case h5:
+    case h5part:
+    {
+        HDF5::Read_Variable_Scalar(h5_zone_handle, var_name, var_data);
+        break;
+    }
+    case dat:
+    case szplt:
+    {
+        fprintf(stderr, "read_scalar_var is only available for HDF5 files.\n");
+        break;
+    }
+    default:
+    {
+        fprintf(stderr, "Incorrect file extension defined\n");
+        break;
+    }
+    }
+}
+
+template <typename T> void FileReadWriter::rw_file_attribute(std::string const& attr_name, T& attr_data)
+{
+    switch (read_or_write)
+    {
+    case writing:
+    {
+        write_file_attribute(attr_name, attr_data);
+        break;
+    }
+    case reading:
+    {
+        read_file_attribute(attr_name, attr_data);
+        break;
+    }
+    default:
+    {
+        fprintf(stderr, "Incorrect read or write status.\n");
+        break;
+    }
+    }
+}
+
+template <typename T> void FileReadWriter::rw_zone_attribute(std::string const& attr_name, T& attr_data)
+{
+    switch (read_or_write)
+    {
+    case writing:
+    {
+        write_zone_attribute(attr_name, attr_data);
+        break;
+    }
+    case reading:
+    {
+        read_zone_attribute(attr_name, attr_data);
+        break;
+    }
+    default:
+    {
+        fprintf(stderr, "Incorrect read or write status.\n");
+        break;
+    }
+    }
+}
+
+template <typename T>
+void FileReadWriter::rw_scalar_var(
+    std::string const& var_name, std::vector<T>& var_data, int32_t& var_count
+)
+{
+    switch (read_or_write)
+    {
+    case writing:
+    {
+        write_scalar_var(var_name, var_data, var_count);
+        break;
+    }
+    case reading:
+    {
+        read_scalar_var(var_name, var_data, var_count);
+        break;
+    }
+    default:
+    {
+        fprintf(stderr, "Incorrect read or write status.\n");
+        break;
+    }
     }
 }
 
 void FileReadWriter::create_zone(
-    std::string const& zone_header, real const& solution_time = 0, int64_t const size = 0,
-    int32_t const strandID = 0
+    std::string const& zone_header, real const& solution_time, int64_t const size, int32_t const strandID
 )
 {
     switch (file_ext)
     {
     case dat:
+    {
         ASCII::Write_Zone_Header(tec_dat_handle, zone_header, size, strandID, solution_time);
         break;
+    }
     case h5:
     case h5part:
+    {
         h5_zone_handle = HDF5::Create_Zone(h5_file_handle, zone_header);
         break;
+    }
     case szplt:
+    {
         tec_output_zone =
             SZLIO::create_zone(tec_file_handle, strandID, zone_header, var_types, size, solution_time);
         break;
+    }
     default:
-        cerr << "Incorrect file extension defined" << endl;
+    {
+        fprintf(stderr, "Incorrect file extension defined\n");
         break;
+    }
+    }
+}
+
+// Open an existing zone.
+void FileReadWriter::open_zone(std::string const& zone_header)
+{
+    switch (file_ext)
+    {
+    case h5:
+    case h5part:
+    {
+        h5_zone_handle = HDF5::Open_Zone(h5_file_handle, zone_header);
+        break;
+    }
+    case dat:
+    case szplt:
+    {
+        fprintf(stderr, "open_zone is only available for HDF5 files.\n");
+        break;
+    }
+    default:
+    {
+        fprintf(stderr, "Incorrect file extension defined\n");
+        break;
+    }
     }
 }
 
@@ -361,18 +545,26 @@ void FileReadWriter::close_zone()
     switch (file_ext)
     {
     case dat:
+    {
         // Nothing to do
         break;
+    }
     case h5:
     case h5part:
+    {
         HDF5::Close_Handle(h5_zone_handle);
         break;
+    }
     case szplt:
+    {
         tec_output_zone = 0;
         break;
+    }
     default:
-        cerr << "Incorrect file extension defined" << endl;
+    {
+        fprintf(stderr, "Incorrect file extension defined\n");
         break;
+    }
     }
 }
 
@@ -381,19 +573,23 @@ bool FileReadWriter::get_file_is_open()
     switch (file_ext)
     {
     case dat:
+    {
         return tec_dat_handle != NULL;
-        break;
+    }
     case h5:
     case h5part:
+    {
         return h5_file_handle != H5I_INVALID_HID;
-        break;
+    }
     case szplt:
+    {
         return tec_file_handle != NULL;
-        break;
+    }
     default:
-        cerr << "Incorrect file extension defined" << endl;
+    {
+        fprintf(stderr, "Incorrect file extension defined\n");
         return false;
-        break;
+    }
     }
 }
 
@@ -402,27 +598,30 @@ bool FileReadWriter::get_zone_is_open()
     switch (file_ext)
     {
     case dat:
+    {
         // No concept of a zone for ASCII
         return false;
-        break;
+    }
     case h5:
     case h5part:
+    {
         return h5_zone_handle != H5I_INVALID_HID;
-        break;
+    }
     case szplt:
+    {
         return tec_output_zone != 0;
-        break;
+    }
     default:
-        cerr << "Incorrect file extension defined" << endl;
+    {
+        fprintf(stderr, "Incorrect file extension defined\n");
         return false;
-        break;
+    }
     }
 }
 
 RestartFile::RestartFile(SIM const& svar) : FileReadWriter(h5, svar)
 {
     restart_type = HDF5::generate_compound_particle();
-    read_or_write = writing;
 };
 
 /**
@@ -433,14 +632,15 @@ RestartFile::RestartFile(SIM const& svar) : FileReadWriter(h5, svar)
  * @param limits array of block indexes for particles in the global array.
  * @return void
  */
-void RestartFile::write_restart_file(SIM& svar, SPHState& pnp1, LIMITS const& limits)
+void RestartFile::write_restart_file(SIM& svar, SPHState& pnp1, LIMITS& limits)
 {
+    read_or_write = writing;
     assert(file_ext == h5);
 
     std::string filename = svar.io.output_prefix + "_particles.h5";
     open_file(filename);
 
-    write_file_attributes(svar);
+    rw_file_attributes(svar);
 
     /* Write the actual data */
     size_t blockID = 0;
@@ -501,14 +701,14 @@ void RestartFile::write_restart_file(SIM& svar, SPHState& pnp1, LIMITS const& li
 }
 
 int RestartFile::write_restart_zone(
-    std::string const& zone_header, SPHState const& pnp1, LIMITS const& limits, size_t const& block_index
+    std::string const& zone_header, SPHState const& pnp1, LIMITS& limits, size_t const& block_index
 )
 {
     // Create the group
     create_zone(zone_header);
 
-    bound_block const& lim = limits[block_index];
-    write_zone_attributes(lim);
+    bound_block& lim = limits[block_index];
+    rw_zone_attributes(lim);
 
     // Write out all the parameters for a timestep
     HDF5::Write_Particle_Array(
@@ -650,17 +850,74 @@ int RestartFile::write_restart_zone(
     //     lvec.clear();
 }
 
+void RestartFile::read_restart_file(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
+{
+    read_or_write = reading;
+    assert(file_ext == h5);
+
+    std::string filename = svar.io.output_prefix + "_particles.h5";
+    open_file(filename);
+
+    rw_file_attributes(svar);
+    svar.integrator.last_frame_time = svar.integrator.current_time;
+
+    Set_Values(svar);
+
+    // Read the particle blocks
+    // Ensure no data in particle array before starting.
+    size_t blockID = 0;
+    pn.resize(0);
+
+    // Boundary particles
+    if (svar.n_bound_blocks > 0)
+    {
+        for (size_t ii = 0; ii < svar.n_bound_blocks; ++ii)
+        {
+            std::string zone_header = "Boundary " + std::to_string(ii);
+            read_restart_zone(zone_header, pn, limits, ii);
+            blockID++;
+        }
+    }
+    svar.bound_points = pn.size();
+
+    // Fluid particles
+    if (svar.n_fluid_blocks > 0)
+    {
+        size_t flublock = 0;
+        for (size_t ii = svar.n_bound_blocks; ii < svar.n_bound_blocks + svar.n_fluid_blocks; ++ii)
+        {
+            std::string zone_header = "Fluid " + std::to_string(flublock);
+            read_restart_zone(zone_header, pn, limits, ii);
+            blockID++;
+            flublock++;
+        }
+    }
+    svar.fluid_points = pn.size() - svar.bound_points;
+    svar.total_points = pn.size();
+
+    pnp1.resize(pn.size());
+    copy_omp(pn.begin(), pn.end(), pnp1.begin());
+
+    printf("Finished reading restart HDF5 file.\n");
+}
+
 int RestartFile::read_restart_zone(
-    std::string const& zone_header, SPHState& pnp1, LIMITS& limits, size_t const& block_index
+    std::string const& zone_header, SPHState& pn, LIMITS& limits, size_t const& block_index
 )
 {
     // Create the group
-    h5_zone_handle = open_zone(zone_header);
+    open_zone(zone_header);
     bound_block& lim = limits[block_index];
 
     SPHState temp_particles;
     HDF5::Read_Particle_Array(h5_zone_handle, "Particle data", temp_particles, restart_type);
     size_t length = temp_particles.size();
+
+    lim.index.first = pn.size();
+    lim.index.second = lim.index.first + length;
+
+    pn.resize(pn.size() + length);
+    copy_omp(temp_particles.begin(), temp_particles.end(), pn.begin());
 }
 
 DataFile::DataFile(file_extension const& _file_ext, SIM const& svar, std::string const& _data_type)
@@ -672,16 +929,39 @@ DataFile::DataFile(file_extension const& _file_ext, SIM const& svar, std::string
     std::transform(data_lower.begin(), data_lower.end(), data_lower.begin(), ::tolower);
 };
 
-void DataFile::write_file_attributes(SIM const& svar)
+void DataFile::rw_file_attributes(SIM& svar)
 {
-    FileReadWriter::write_file_attributes(svar);
+    FileReadWriter::rw_file_attributes(svar);
 
-    // attributes not needed for restart
+    /* Attributes not needed for restart */
+    rw_file_attribute("Variable list", svar.io.output_names);
+
+    /* Simulation settings */
+    rw_file_attribute("SPH unstable CFL count limit", svar.integrator.n_unstable_limit);
+    rw_file_attribute("SPH stable CFL count limit", svar.integrator.n_stable_limit);
+    rw_file_attribute("SPH stable CFL count iteration factor", svar.integrator.subits_factor);
+    rw_file_attribute("SPH maximum shifting velocity", svar.integrator.max_shift_vel);
+    rw_file_attribute("SPH stable CFL count", svar.integrator.n_stable);
+    rw_file_attribute("SPH unstable CFL count", svar.integrator.n_unstable);
+    rw_file_attribute("SPH density variation", svar.rho_var);
+    rw_file_attribute("SPH maximum density", svar.rho_max);
+    rw_file_attribute("SPH minimum density", svar.rho_min);
+    rw_file_attribute("SPH Newmark Beta iteration limit", svar.integrator.max_subits);
+    rw_file_attribute("SPH maximum particle count", svar.max_points);
+
+    /* Particle tracking settings */
+    rw_file_attribute("Transition to IPT", svar.ipt.using_ipt);
+    rw_file_attribute("Velocity equation order", svar.ipt.ipt_eq_order);
+    rw_file_attribute("SPH tracking conversion x coordinate", svar.ipt.max_x_sph);
+    rw_file_attribute("Maximum x trajectory coordinate", svar.ipt.max_x);
+    rw_file_attribute("Particle scatter output", svar.ipt.part_out);
+    rw_file_attribute("Particle streak output", svar.ipt.streak_out);
+    rw_file_attribute("Particle cell intersection output", svar.ipt.cells_out);
 }
 
-void DataFile::write_zone_attributes(bound_block const& limits)
+void DataFile::rw_zone_attributes(bound_block& limits)
 {
-    FileReadWriter::write_zone_attributes(limits);
+    FileReadWriter::rw_zone_attributes(limits);
 
     // non-essential attributes for restarting.
     write_zone_attribute("Deletion normal x", limits.delete_norm[0]);
@@ -692,7 +972,7 @@ void DataFile::write_zone_attributes(bound_block const& limits)
     write_zone_attribute("Deletion plane constant", limits.delconst);
 }
 
-string DataFile::get_filename(real time = -1)
+string DataFile::get_filename(real time)
 {
     if (time < 0)
         return output_prefix + "_" + data_lower + ext_str;
@@ -1021,7 +1301,7 @@ void H5PartFile::write_timestep(
 }
 
 SZLFile::SZLFile(
-    SIM const& svar, std::string const& _data_type, size_t const& _start_block, size_t const& _end_block
+    SIM& svar, std::string const& _data_type, size_t const& _start_block, size_t const& _end_block
 )
     : DataFile(szplt, svar, _data_type), start_block(_start_block), end_block(_end_block)
 {
@@ -1030,13 +1310,11 @@ SZLFile::SZLFile(
         // Open the file now. Default file name is correct
         string zone_name = data_type + " Particles";
         open_file(get_filename(), zone_name);
-        write_file_attributes(svar);
+        rw_file_attributes(svar);
     }
 };
 
-void SZLFile::write_timestep(
-    SIM const& svar, SPHState const& pnp1, LIMITS const& limits, real const& time
-)
+void SZLFile::write_timestep(SIM& svar, SPHState const& pnp1, LIMITS& limits, real const& time)
 {
     if (!single_file)
     {
@@ -1044,7 +1322,7 @@ void SZLFile::write_timestep(
         string _file_name = get_filename(time);
         string zone_name = data_type + " Particles";
         open_file(_file_name, zone_name);
-        write_file_attributes(svar);
+        rw_file_attributes(svar);
     }
 
     write_timestep_data(pnp1, limits, time);
@@ -1063,7 +1341,7 @@ void SZLFile::combine_file()
         Combine_SZPLT(get_filename());
 };
 
-void SZLFile::write_timestep_data(SPHState const& pnp1, LIMITS const& limits, real const& time)
+void SZLFile::write_timestep_data(SPHState const& pnp1, LIMITS& limits, real const& time)
 {
     // Ensure that files are open
     assert(get_file_is_open());
@@ -1074,7 +1352,7 @@ void SZLFile::write_timestep_data(SPHState const& pnp1, LIMITS const& limits, re
 
     for (size_t block = start_block; block < end_block; block++)
     {
-        bound_block const& limit = limits[block];
+        bound_block& limit = limits[block];
         size_t start = limit.index.first;
         size_t end = limit.index.second;
         int32_t const size = end - start;
@@ -1085,7 +1363,7 @@ void SZLFile::write_timestep_data(SPHState const& pnp1, LIMITS const& limits, re
 
         create_zone(title, time, size, strand_id);
 
-        write_zone_attributes(limit);
+        rw_zone_attributes(limit);
         write_zone(pnp1, limit.fluid.rho_rest, start, end);
         flush_file();
         close_zone();
@@ -1093,7 +1371,7 @@ void SZLFile::write_timestep_data(SPHState const& pnp1, LIMITS const& limits, re
 }
 
 ASCIIFile::ASCIIFile(
-    SIM const& svar, std::string const& _data_type, size_t const& _start_block, size_t const& _end_block
+    SIM& svar, std::string const& _data_type, size_t const& _start_block, size_t const& _end_block
 )
     : DataFile(dat, svar, _data_type), start_block(_start_block), end_block(_end_block)
 {
@@ -1102,13 +1380,11 @@ ASCIIFile::ASCIIFile(
         // Open the file now. Default file name is correct
         string zone_name = data_type + " Particles";
         open_file(get_filename(), zone_name);
-        write_file_attributes(svar);
+        rw_file_attributes(svar);
     }
 };
 
-void ASCIIFile::write_timestep(
-    SIM const& svar, SPHState const& pnp1, LIMITS const& limits, real const& time
-)
+void ASCIIFile::write_timestep(SIM& svar, SPHState const& pnp1, LIMITS& limits, real const& time)
 {
     if (!single_file)
     {
@@ -1116,7 +1392,7 @@ void ASCIIFile::write_timestep(
         string _file_name = get_filename(time);
         string zone_name = data_type + " Particles";
         open_file(_file_name, zone_name);
-        write_file_attributes(svar);
+        rw_file_attributes(svar);
     }
 
     write_timestep_data(pnp1, limits, time);
@@ -1127,7 +1403,7 @@ void ASCIIFile::write_timestep(
     }
 }
 
-void ASCIIFile::write_timestep_data(SPHState const& pnp1, LIMITS const& limits, real const& time)
+void ASCIIFile::write_timestep_data(SPHState const& pnp1, LIMITS& limits, real const& time)
 {
     // Ensure that files are open
     assert(get_file_is_open());
@@ -1138,7 +1414,7 @@ void ASCIIFile::write_timestep_data(SPHState const& pnp1, LIMITS const& limits, 
 
     for (size_t block = start_block; block < end_block; block++)
     {
-        bound_block const& limit = limits[block];
+        bound_block& limit = limits[block];
         size_t start = limit.index.first;
         size_t end = limit.index.second;
         int32_t const size = end - start;
@@ -1149,7 +1425,7 @@ void ASCIIFile::write_timestep_data(SPHState const& pnp1, LIMITS const& limits, 
 
         create_zone(title, time, size, strand_id);
 
-        write_zone_attributes(limit);
+        rw_zone_attributes(limit);
         write_zone(pnp1, limit.fluid.rho_rest, start, end);
     }
 }
