@@ -42,7 +42,7 @@ FileReadWriter::FileReadWriter(file_extension const& _file_ext, SIM const& svar)
 FileReadWriter::~FileReadWriter()
 {
     // Ensure file is closed
-    if (get_file_is_open())
+    if (file_is_open())
     {
         close_file();
     }
@@ -88,7 +88,7 @@ void FileReadWriter::open_file(std::string const& filename, std::string const& z
 
 void FileReadWriter::close_file()
 {
-    if (!get_file_is_open())
+    if (!file_is_open())
         return; // Already closed
 
     switch (file_ext)
@@ -326,8 +326,7 @@ void FileReadWriter::write_scalar_var(
     }
     case szplt:
     {
-        int64_t imax = var_data.size();
-        SZLIO::Write_Vector(tec_file_handle, tec_output_zone, var_count, 0, imax, var_data, var_name);
+        SZLIO::Write_Vector(tec_file_handle, tec_output_zone, var_count, var_data, var_name);
         break;
     }
     default:
@@ -568,7 +567,7 @@ void FileReadWriter::close_zone()
     }
 }
 
-bool FileReadWriter::get_file_is_open()
+bool FileReadWriter::file_is_open()
 {
     switch (file_ext)
     {
@@ -593,7 +592,7 @@ bool FileReadWriter::get_file_is_open()
     }
 }
 
-bool FileReadWriter::get_zone_is_open()
+bool FileReadWriter::zone_is_open()
 {
     switch (file_ext)
     {
@@ -700,7 +699,7 @@ void RestartFile::write_restart_file(SIM& svar, SPHState& pnp1, LIMITS& limits)
     printf("Finished writing restart HDF5 file.\n");
 }
 
-int RestartFile::write_restart_zone(
+void RestartFile::write_restart_zone(
     std::string const& zone_header, SPHState const& pnp1, LIMITS& limits, size_t const& block_index
 )
 {
@@ -719,135 +718,6 @@ int RestartFile::write_restart_zone(
         HDF5::Write_Inlet_Data(h5_zone_handle, lim);
 
     close_zone();
-
-    /* Need to write position, velocity, acceleration, pressure, density gradient, mass, boundary
-     * flag */
-    /* Write as a 2D array, or 1D arrays for vectors? 1D for now */
-    // size_t length = end - start;
-    // // hsize_t dims[] = {length,2};
-    // hsize_t dims[] = {length};
-
-    //     vector<real> vec(length);
-    //     int32_t var_count = 0;
-
-    //     /* Position */
-    //     vector<StateVecD> vvec(length);
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         vvec[ii - start] = pnp1[ii].xi / scale;
-
-    //     write_scalar_var("Position coordinate", vvec, var_count);
-
-    //     /* Velocity */
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         vvec[ii - start] = pnp1[ii].v;
-
-    //     write_scalar_var("Velocity", vvec, var_count);
-
-    //     /* Acceleration */
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         vvec[ii - start] = pnp1[ii].acc;
-
-    //     write_scalar_var("Acceleration", vvec, var_count);
-    //     vvec.clear();
-
-    // /* Pressure */
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         vec[ii - start] = pnp1[ii].p;
-
-    //     write_scalar_var("Pressure", vec, var_count);
-
-    // /* Density */
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         vec[ii - start] = pnp1[ii].rho;
-
-    //     write_scalar_var("Density", vec, var_count);
-
-    // /* Density gradient */
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         vec[ii - start] = pnp1[ii].Rrho;
-
-    //     write_scalar_var("Density gradient", vec, var_count);
-
-    // /* Mass */
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         vec[ii - start] = pnp1[ii].m;
-
-    //     write_scalar_var("Mass", vec, var_count);
-
-    //     vec.clear();
-
-    // /* Particle spacing */
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         vec[ii - start] = pnp1[ii].dx;
-
-    //     write_scalar_var("Particle spacing", vec, var_count);
-
-    //     vec.clear();
-
-    //     /* Boundary flag */
-    //     vector<uint> uvec(length);
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         uvec[ii - start] = pnp1[ii].b;
-
-    //     write_scalar_var("Boundary condition", uvec, var_count);
-    //     uvec.clear();
-
-    //     /* Particle ID */
-    //     vector<size_t> svec(length);
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         svec[ii - start] = pnp1[ii].part_id;
-
-    //     write_scalar_var("Particle ID", svec, var_count);
-    //     svec.clear();
-
-    //     /* Fluid ID */
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         svec[ii - start] = pnp1[ii].fluid_id;
-
-    //     write_scalar_var("Fluid ID", svec, var_count);
-    //     svec.clear();
-
-    //     /* Cell ID */
-    //     vector<long> lvec(length);
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         lvec[ii - start] = pnp1[ii].cellID;
-
-    //     write_scalar_var("Cell ID", lvec, var_count);
-
-    //     /* Cell velocity */
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         vvec[ii - start] = pnp1[ii].cellV;
-
-    //     write_scalar_var("Cell velocity", vvec, var_count);
-
-    // /* Cell density */
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         vec[ii - start] = pnp1[ii].cellRho;
-
-    //     write_scalar_var("Cell density", vec, var_count);
-
-    // /* Cell pressure */
-    // #pragma omp parallel for
-    //     for (size_t ii = start; ii < end; ++ii)
-    //         vec[ii - start] = pnp1[ii].cellP;
-
-    //     write_scalar_var("Cell pressure", vec, var_count);
-
-    //     lvec.clear();
 }
 
 void RestartFile::read_restart_file(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
@@ -901,7 +771,7 @@ void RestartFile::read_restart_file(SIM& svar, SPHState& pn, SPHState& pnp1, LIM
     printf("Finished reading restart HDF5 file.\n");
 }
 
-int RestartFile::read_restart_zone(
+void RestartFile::read_restart_zone(
     std::string const& zone_header, SPHState& pn, LIMITS& limits, size_t const& block_index
 )
 {
@@ -1281,11 +1151,11 @@ void H5PartFile::write_timestep(
     open_file(_file_name);
 
     // Ensure that files are open
-    assert(get_file_is_open());
+    assert(file_is_open());
 
     std::string zone_header = "Step#" + std::to_string(frame);
     create_zone(zone_header);
-    assert(get_zone_is_open());
+    assert(zone_is_open());
 
     // Write attributes for the zone
     write_zone_attribute("TimeValue", time);
@@ -1344,7 +1214,7 @@ void SZLFile::combine_file()
 void SZLFile::write_timestep_data(SPHState const& pnp1, LIMITS& limits, real const& time)
 {
     // Ensure that files are open
-    assert(get_file_is_open());
+    assert(file_is_open());
 
     std::ostringstream oss;
     oss << std::setprecision(5) << time;
@@ -1406,7 +1276,7 @@ void ASCIIFile::write_timestep(SIM& svar, SPHState const& pnp1, LIMITS& limits, 
 void ASCIIFile::write_timestep_data(SPHState const& pnp1, LIMITS& limits, real const& time)
 {
     // Ensure that files are open
-    assert(get_file_is_open());
+    assert(file_is_open());
 
     std::ostringstream oss;
     oss << std::setprecision(5) << time;

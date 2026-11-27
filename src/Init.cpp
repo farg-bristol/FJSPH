@@ -412,7 +412,6 @@ void Init_Particles(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits)
             {
                 if (!back_intersect[bID])
                 {
-                    size_t pointID = f_block->back[bID];
                     pn.emplace_back(SPHPart(
                         f_block->coords[ii], f_block->vel, fvar.rho_start, f_block->mass,
                         fvar.press_start, f_block->particle_step, f_block->H, sr, f_block->W_dx,

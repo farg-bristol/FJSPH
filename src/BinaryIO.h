@@ -35,6 +35,8 @@ namespace SZLIO
         void* const& file, int32_t const& zone, std::string const& name, size_t const& var
     );
     void
+    add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& name, uint const& var);
+    void
     add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& name, int const& var);
     void add_zone_aux_data(
         void* const& file, int32_t const& zone, std::string const& name, double const& var

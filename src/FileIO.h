@@ -11,8 +11,11 @@ class FileReadWriter
 {
   public:
     void close_file();
+    bool file_is_open();
+    bool zone_is_open();
 
   protected:
+    FileReadWriter(){};
     FileReadWriter(file_extension const& _file_ext, SIM const& svar);
 
     ~FileReadWriter();
@@ -59,8 +62,6 @@ class FileReadWriter
     );
     void open_zone(std::string const& zone_header);
     void close_zone();
-    bool get_file_is_open();
-    bool get_zone_is_open();
 
     file_extension file_ext;
     std::string ext_str;
@@ -88,10 +89,10 @@ class RestartFile : public FileReadWriter
     void read_restart_file(SIM& svar, SPHState& pn, SPHState& pnp1, LIMITS& limits);
 
   private:
-    int write_restart_zone(
+    void write_restart_zone(
         std::string const& zone_header, SPHState const& pnp1, LIMITS& limits, size_t const& block_index
     );
-    int read_restart_zone(
+    void read_restart_zone(
         std::string const& zone_header, SPHState& pn, LIMITS& limits, size_t const& block_index
     );
 
@@ -101,6 +102,7 @@ class RestartFile : public FileReadWriter
 class DataFile : public FileReadWriter
 {
   public:
+    DataFile(){};
     DataFile(file_extension const& _file_ext, SIM const& svar, std::string const& _data_type);
 
     void rw_file_attributes(SIM& svar) override;
@@ -121,6 +123,7 @@ class DataFile : public FileReadWriter
 class H5PartFile : public DataFile
 {
   public:
+    H5PartFile(){};
     H5PartFile(SIM const& svar, std::string const& _data_type);
 
     void write_timestep(
@@ -133,6 +136,7 @@ class SZLFile : public DataFile
 {
 
   public:
+    SZLFile(){};
     SZLFile(
         SIM& svar, std::string const& _data_type, size_t const& _start_block, size_t const& _end_block
     );
@@ -147,9 +151,10 @@ class SZLFile : public DataFile
     size_t start_block, end_block;
 };
 
-class ASCIIFile : protected DataFile
+class ASCIIFile : public DataFile
 {
   public:
+    ASCIIFile(){};
     ASCIIFile(
         SIM& svar, std::string const& _data_type, size_t const& _start_block, size_t const& _end_block
     );

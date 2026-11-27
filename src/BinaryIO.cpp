@@ -225,6 +225,19 @@ namespace SZLIO
     }
 
     void
+    add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& name, uint const& var)
+    {
+        std::ostringstream stream;
+        stream << var;
+        if (tecZoneAddAuxData(file, zone, space2underscore(name).c_str(), stream.str().c_str()))
+        {
+            std::cout << "Failed to write zone " << zone << " auxiliary data: " << name << std::endl;
+            std::cout << "Stopping." << std::endl;
+            exit(-1);
+        }
+    }
+
+    void
     add_zone_aux_data(void* const& file, int32_t const& zone, std::string const& name, int const& var)
     {
         std::ostringstream stream;

@@ -147,7 +147,7 @@ int main(int argc, char* argv[])
 
     ///********* Tree algorithm stuff ************/
     Sim_Tree SPH_TREE(SIMDIM, pnp1, 20);
-    outlist = update_neighbours(svar.fluid, SPH_TREE, pnp1);
+    outlist = update_neighbours(SPH_TREE, pnp1);
 
     Vec_Tree CELL_TREE(SIMDIM, cells.cCentre, 10);
     CELL_TREE.index->buildIndex();
@@ -176,7 +176,7 @@ int main(int argc, char* argv[])
         size_t const start = svar.bound_points;
         size_t end = svar.total_points;
         real npd = 1.0;
-        dSPH_PreStep(svar.fluid, end, pnp1, outlist, npd);
+        dSPH_PreStep(limits, end, pnp1, outlist, npd);
 
         if (svar.Asource == meshInfl)
         {
@@ -316,12 +316,6 @@ int main(int argc, char* argv[])
     /*Wrap up simulation files and close them*/
     if (f2 != NULL)
         fclose(f2);
-    if (ff != NULL)
-        fclose(ff);
-    if (fb != NULL)
-        fclose(fb);
-    if (fg != NULL)
-        fclose(fg);
 
     close_writers();
 
@@ -329,8 +323,6 @@ int main(int argc, char* argv[])
     {
         /*Combine the szplt files*/
         combine_szl_files();
-
-        close_h5part_files(svar);
     }
 
     cout << "Simulation complete!" << endl;

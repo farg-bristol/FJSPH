@@ -328,7 +328,7 @@ void InletShape::check_input(SIM const& svar, int& fault)
 }
 
 #if SIMDIM == 2
-void InletShape::generate_points(real const& dx)
+void InletShape::generate_points()
 {
     std::vector<StateVecD> points;
     /* Perturb points so they aren't in a perfect grid */

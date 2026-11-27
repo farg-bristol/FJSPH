@@ -12,7 +12,6 @@
 
 #include <Eigen/LU>
 
-#include <ctime>
 #include <filesystem>
 #include <regex>
 
@@ -649,7 +648,7 @@ void GetInput(int argc, char** argv, SIM& svar)
 
 } /*End of GetInput()*/
 
-void init_writers(SIM const& svar)
+void init_writers(SIM& svar)
 {
     if (svar.io.write_h5part)
     {
@@ -687,14 +686,14 @@ void close_writers()
 
 void combine_szl_files()
 {
-    if (svar.io.write_tecio)
-    {
+    if (bound_szl.file_is_open())
         bound_szl.combine_file();
+
+    if (fluid_szl.file_is_open())
         fluid_szl.combine_file();
-    }
 }
 
-void Write_Timestep(SIM const& svar, LIMITS const& limits, SPHState const& pnp1)
+void Write_Timestep(SIM& svar, LIMITS& limits, SPHState& pnp1)
 {
     if (svar.io.write_tecio)
     {

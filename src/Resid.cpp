@@ -510,7 +510,7 @@ void get_aero_velocity(
             svar.total_points -= nDel;
             end -= nDel;
             outlist = update_neighbours(SPH_TREE, pnp1);
-            dSPH_PreStep(fluid, svar.total_points, pnp1, outlist, npd);
+            dSPH_PreStep(limits, svar.total_points, pnp1, outlist, npd);
         }
         break;
     }

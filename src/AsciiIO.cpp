@@ -27,6 +27,15 @@ namespace ASCII
         fprintf(fp, "DATASETAUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), var.c_str());
     }
 
+    void add_file_aux_data(FILE* fp, std::string const& name, bool const& var)
+    {
+        std::ostringstream stream;
+        stream << var;
+        fprintf(
+            fp, "DATASETAUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), stream.str().c_str()
+        );
+    }
+
     void add_file_aux_data(FILE* fp, std::string const& name, size_t const& var)
     {
         std::ostringstream stream;
@@ -104,6 +113,13 @@ namespace ASCII
     void add_zone_aux_data(FILE* fp, string const& name, string const& var)
     {
         fprintf(fp, "AUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), var.c_str());
+    }
+
+    void add_zone_aux_data(FILE* fp, std::string const& name, bool const& var)
+    {
+        std::ostringstream stream;
+        stream << var;
+        fprintf(fp, "AUXDATA %s = \"%s\"\n", space2underscore(name).c_str(), stream.str().c_str());
     }
 
     void add_zone_aux_data(FILE* fp, std::string const& name, size_t const& var)
@@ -192,6 +208,24 @@ namespace ASCII
         for (size_t ii = 0; ii < end; ++ii)
         {
             fprintf(fp, "%u", vec[ii]);
+            if (newl > 6)
+            {
+                fprintf(fp, "\n");
+                newl = 0;
+            }
+            else
+                newl++;
+        }
+        fprintf(fp, "\n");
+    }
+
+    void Write_Vector(FILE* fp, vector<uint8_t> const& vec)
+    {
+        size_t newl = 0;
+        size_t const end = vec.size();
+        for (size_t ii = 0; ii < end; ++ii)
+        {
+            fprintf(fp, "%u", static_cast<unsigned>(vec[ii]));
             if (newl > 6)
             {
                 fprintf(fp, "\n");

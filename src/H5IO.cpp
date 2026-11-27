@@ -14,7 +14,7 @@
 
 namespace HDF5
 {
-    hid_t Open_File(std::string const& filename, ReadOrWrite const& read_write = writing)
+    hid_t Open_File(std::string const& filename, ReadOrWrite const& read_write)
     {
         hid_t file_handle;
         if (std::filesystem::exists(filename))
@@ -111,6 +111,11 @@ namespace HDF5
         retval = H5Aclose(attr);
     }
 
+    void Write_Attribute(hid_t const& fout, std::string const& attr_name, bool const& attr_data)
+    {
+        _Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_HBOOL, H5T_NATIVE_HBOOL);
+    }
+
     void Write_Attribute(hid_t const& fout, std::string const& attr_name, size_t const& attr_data)
     {
         _Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_ULONG, H5T_NATIVE_ULONG);
@@ -124,6 +129,11 @@ namespace HDF5
     void Write_Attribute(hid_t const& fout, std::string const& attr_name, int const& attr_data)
     {
         _Write_Attribute(fout, attr_name, attr_data, H5T_NATIVE_UINT, H5T_NATIVE_UINT);
+    }
+
+    void Write_Attribute(hid_t const& fout, std::string const& attr_name, float_t const& attr_data)
+    {
+        _Write_Attribute(fout, attr_name, attr_data, H5T_IEEE_F32LE, H5T_NATIVE_FLOAT);
     }
 
     void Write_Attribute(hid_t const& fout, std::string const& attr_name, double const& attr_data)
@@ -228,6 +238,26 @@ namespace HDF5
         Write_Var_Array(fout, var_name, dims, var_data, H5T_NATIVE_DOUBLE, H5T_NATIVE_DOUBLE);
     }
 
+    template <typename T>
+    void __Write_Variable(
+        hid_t const& fout, std::string const& var_name, hsize_t const* dims,
+        std::vector<T> const& var_data, hid_t const& var_type
+    )
+    {
+        herr_t retval;
+        hid_t dataspace = H5Screate_simple(1, dims, NULL);
+        hid_t dataset = H5Dcreate(
+            fout, var_name.c_str(), var_type, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
+        );
+        if ((retval = H5Dwrite(dataset, var_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
+        {
+            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
+            exit(-1);
+        }
+        retval = H5Sclose(dataspace);
+        retval = H5Dclose(dataset);
+    }
+
     // #if UINTPTR_MAX == 0xffffffffffffffff
     /* 64-bit pointers */
     void Write_Variable(
@@ -235,18 +265,7 @@ namespace HDF5
         std::vector<size_t> const& var_data
     )
     {
-        herr_t retval;
-        hid_t dataspace = H5Screate_simple(1, dims, NULL);
-        hid_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_ULONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
-        );
-        if ((retval = H5Dwrite(dataset, H5T_NATIVE_ULONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(dataspace);
-        retval = H5Dclose(dataset);
+        __Write_Variable(fout, var_name, dims, var_data, H5T_NATIVE_ULONG);
     }
     // #elif UINTPTR_MAX == 0xffffffff
     /* 32-bit pointers */
@@ -268,24 +287,20 @@ namespace HDF5
     // }
 
     // #endif
+    void Write_Variable(
+        hid_t const& fout, std::string const& var_name, hsize_t const* dims,
+        std::vector<uint8_t> const& var_data
+    )
+    {
+        __Write_Variable(fout, var_name, dims, var_data, H5T_NATIVE_UINT8);
+    }
 
     void Write_Variable(
         hid_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<uint> const& var_data
     )
     {
-        herr_t retval;
-        hid_t dataspace = H5Screate_simple(1, dims, NULL);
-        hid_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_UINT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
-        );
-        if ((retval = H5Dwrite(dataset, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(dataspace);
-        retval = H5Dclose(dataset);
+        __Write_Variable(fout, var_name, dims, var_data, H5T_NATIVE_UINT);
     }
 
     void Write_Variable(
@@ -293,18 +308,7 @@ namespace HDF5
         std::vector<int> const& var_data
     )
     {
-        herr_t retval;
-        hid_t dataspace = H5Screate_simple(1, dims, NULL);
-        hid_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_INT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
-        );
-        if ((retval = H5Dwrite(dataset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(dataspace);
-        retval = H5Dclose(dataset);
+        __Write_Variable(fout, var_name, dims, var_data, H5T_NATIVE_INT);
     }
 
     void Write_Variable(
@@ -312,18 +316,7 @@ namespace HDF5
         std::vector<long> const& var_data
     )
     {
-        herr_t retval;
-        hid_t dataspace = H5Screate_simple(1, dims, NULL);
-        hid_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_LONG, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
-        );
-        if ((retval = H5Dwrite(dataset, H5T_NATIVE_LONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(dataspace);
-        retval = H5Dclose(dataset);
+        __Write_Variable(fout, var_name, dims, var_data, H5T_NATIVE_LONG);
     }
 
     void Write_Variable(
@@ -331,18 +324,7 @@ namespace HDF5
         std::vector<float> const& var_data
     )
     {
-        herr_t retval;
-        hid_t dataspace = H5Screate_simple(1, dims, NULL);
-        hid_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_FLOAT, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
-        );
-        if ((retval = H5Dwrite(dataset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(dataspace);
-        retval = H5Dclose(dataset);
+        __Write_Variable(fout, var_name, dims, var_data, H5T_NATIVE_FLOAT);
     }
 
     void Write_Variable(
@@ -350,18 +332,7 @@ namespace HDF5
         std::vector<double> const& var_data
     )
     {
-        herr_t retval;
-        hid_t dataspace = H5Screate_simple(1, dims, NULL);
-        hid_t dataset = H5Dcreate(
-            fout, var_name.c_str(), H5T_NATIVE_DOUBLE, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT
-        );
-        if ((retval = H5Dwrite(dataset, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, &var_data[0])))
-        {
-            fprintf(stderr, "\n\tError: Failed to write \"%s\" data\n", var_name.c_str());
-            exit(-1);
-        }
-        retval = H5Sclose(dataspace);
-        retval = H5Dclose(dataset);
+        __Write_Variable(fout, var_name, dims, var_data, H5T_NATIVE_DOUBLE);
     }
 
     void Write_Variable(
@@ -481,6 +452,11 @@ namespace HDF5
         }
         retval = H5Aclose(attr);
         attr_data = data;
+    }
+
+    void Read_Attribute(hid_t const& fin, std::string const& attr_name, bool& attr_data)
+    {
+        _Read_Attribute(fin, attr_name, attr_data, H5T_NATIVE_HBOOL);
     }
 
     void Read_Attribute(hid_t const& fin, std::string const& attr_name, size_t& attr_data)

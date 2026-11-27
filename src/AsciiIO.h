@@ -9,6 +9,7 @@
 namespace ASCII
 {
     void add_file_aux_data(FILE* fp, string const& name, string const& var);
+    void add_file_aux_data(FILE* fp, string const& name, bool const& var);
     void add_file_aux_data(FILE* fp, string const& name, size_t const& var);
     void add_file_aux_data(FILE* fp, string const& name, int const& var);
     void add_file_aux_data(FILE* fp, string const& name, uint const& var);
@@ -17,6 +18,7 @@ namespace ASCII
     void add_file_aux_data(FILE* fp, string const& name, StateVecD const& var);
 
     void add_zone_aux_data(FILE* fp, string const& name, string const& var);
+    void add_zone_aux_data(FILE* fp, string const& name, bool const& var);
     void add_zone_aux_data(FILE* fp, string const& name, size_t const& var);
     void add_zone_aux_data(FILE* fp, string const& name, int const& var);
     void add_zone_aux_data(FILE* fp, string const& name, uint const& var);
@@ -26,6 +28,7 @@ namespace ASCII
 
     void Write_Vector(FILE* fp, vector<real> const& vec);
     void Write_Vector(FILE* fp, vector<uint> const& vec);
+    void Write_Vector(FILE* fp, vector<uint8_t> const& vec);
     void Write_Vector(FILE* fp, vector<long> const& vec);
     void Write_Vector(FILE* fp, vector<size_t> const& vec);
     void Write_Vector(FILE* fp, vector<int> const& vec);

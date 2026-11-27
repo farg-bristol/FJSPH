@@ -43,6 +43,10 @@ namespace HDF5
     );
     void Write_Variable(
         hid_t const& fout, std::string const& var_name, hsize_t const* dims,
+        std::vector<uint8_t> const& var_data
+    );
+    void Write_Variable(
+        hid_t const& fout, std::string const& var_name, hsize_t const* dims,
         std::vector<uint> const& var_data
     );
     void Write_Variable(
@@ -75,6 +79,7 @@ namespace HDF5
 
     // Reading
     void Read_Attribute(hid_t const& fin, std::string const& attr_name, std::string& attr_data);
+    void Read_Attribute(hid_t const& fin, std::string const& attr_name, bool& attr_data);
     void Read_Attribute(hid_t const& fin, std::string const& attr_name, size_t& attr_data);
     void Read_Attribute(hid_t const& fin, std::string const& attr_name, uint& attr_data);
     void Read_Attribute(hid_t const& fin, std::string const& attr_name, int& attr_data);
