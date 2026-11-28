@@ -15,14 +15,14 @@ namespace Newmark_Beta
     );
 
     void Do_NB_Iter(
-        Vec_Tree const& CELL_TREE, SIM& svar, size_t const& start, size_t& end, real const& npd,
-        MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState const& pn, SPHState& pnp1
+        SIM& svar, real const& npd, LIMITS const& limits, OUTL& outlist, SPHState const& pn,
+        SPHState& pnp1
     );
 
-    real Newmark_Beta(
-        Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, size_t const& start, size_t& end,
-        real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist, real& logbase,
-        uint& iteration, vector<StateVecD>& xih, SPHState const& pn, SPHState& pnp1
+    real integrate(
+        Sim_Tree& SPH_TREE, SIM& svar, size_t const& start, size_t& end, real const& npd,
+        LIMITS const& limits, OUTL& outlist, real& logbase, uint& iteration, vector<StateVecD>& xih,
+        SPHState const& pn, SPHState& pnp1
     );
 } // namespace Newmark_Beta
 

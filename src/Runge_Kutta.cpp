@@ -8,7 +8,7 @@
 #include "Shifting.h"
 
 real Check_RK_Error(
-    SIM const& svar, size_t const& start, size_t const& end, real const& logbase, SPHState const& part_n,
+    size_t const& start, size_t const& end, real const& logbase, SPHState const& part_n,
     SPHState const& part_np1
 )
 {
@@ -26,29 +26,30 @@ real Check_RK_Error(
 }
 
 SPHState do_runge_kutta_intermediate_step(
-    SIM& svar, size_t const& start, size_t const& end, real const& npd, MESH const& cells,
-    LIMITS const& limits, OUTL const& outlist, SPHState const& part_n, SPHState const& part_prev,
-    real const& dt_inter
+    SIM& svar, real const& npd, LIMITS const& limits, OUTL const& outlist, SPHState const& part_n,
+    SPHState const& part_prev, real const& dt_inter
 )
 {
     SPHState part_inter = part_prev;
 
     for (size_t block = 0; block < svar.n_bound_blocks; block++)
     {
+        bound_block const& limit = limits[block];
+        FLUID const& fluid = limit.fluid;
 
-        if (limits[block].nTimes != 0)
+        if (limit.nTimes != 0)
         {
             // Get the current boundary velocity
             StateVecD vel = StateVecD::Zero();
-            for (size_t time = 0; time < limits[block].nTimes; time++)
+            for (size_t time = 0; time < limit.nTimes; time++)
             {
-                if (limits[block].times[time] > svar.integrator.current_time)
+                if (limit.times[time] > svar.integrator.current_time)
                 {
-                    vel = limits[block].vels[time];
+                    vel = limit.vels[time];
                 }
             }
 
-            for (size_t jj = limits[block].index.first; jj < limits[block].index.second; jj++)
+            for (size_t jj = limit.index.first; jj < limit.index.second; jj++)
             {
                 part_inter[jj].v = vel;
             }
@@ -56,74 +57,64 @@ SPHState do_runge_kutta_intermediate_step(
         else
         {
 #pragma omp parallel for
-            for (size_t jj = limits[block].index.first; jj < limits[block].index.second; jj++)
+            for (size_t jj = limit.index.first; jj < limit.index.second; jj++)
             {
-                part_inter[jj].v = limits[block].vels[0];
+                part_inter[jj].v = limit.vels[0];
             }
         }
 
-        if (limits[block].no_slip)
-            Set_No_Slip(
-                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
-                svar.fluid.W_correc, part_inter
-            );
+        if (limit.no_slip)
+            Set_No_Slip(limit.index.first, limit.index.second, outlist, part_inter);
 
-        switch (limits[block].bound_solver)
+        switch (limit.bound_solver)
         {
         case DBC:
         {
-            Boundary_DBC(
-                svar.fluid, limits[block].index.first, limits[block].index.second, outlist, part_inter
-            );
+            Boundary_DBC(fluid, limit.index.first, limit.index.second, outlist, part_inter);
 
 #pragma omp for schedule(static) nowait
-            for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
+            for (size_t ii = limit.index.first; ii < limit.index.second; ++ii)
             { /****** BOUNDARY PARTICLES ***********/
                 real const rho = std::max(
-                    svar.fluid.rho_min,
-                    std::min(svar.fluid.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
+                    svar.rho_min, std::min(svar.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
                 );
                 part_inter[ii].rho = rho;
-                part_inter[ii].p = svar.fluid.get_pressure(rho);
+                part_inter[ii].p = fluid.get_pressure(rho);
             }
             break;
         }
         case pressure_G:
         {
             Get_Boundary_Pressure(
-                svar.fluid, svar.grav, limits[block].index.first, limits[block].index.second, outlist,
-                part_inter
+                fluid, svar.grav, limit.index.first, limit.index.second, outlist, part_inter
             );
             break;
         }
         case ghost:
         {
-            vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
-            Boundary_Ghost(
-                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
-                svar.fluid.W_correc, part_inter, near_inlet
-            );
+            vector<int> near_inlet(limit.index.second - limit.index.first, 0);
+            Boundary_Ghost(limit.index.first, limit.index.second, outlist, part_inter, near_inlet);
 
 #pragma omp for schedule(static) nowait
-            for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
+            for (size_t ii = limit.index.first; ii < limit.index.second; ++ii)
             { /****** BOUNDARY PARTICLES ***********/
-                if (!near_inlet[ii - limits[block].index.first])
+                if (!near_inlet[ii - limit.index.first])
                 {
                     real const rho = std::max(
-                        svar.fluid.rho_min,
-                        std::min(svar.fluid.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
+                        svar.rho_min,
+                        std::min(svar.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
                     );
                     part_inter[ii].rho = rho;
-                    part_inter[ii].p = svar.fluid.get_pressure(rho);
+                    part_inter[ii].p = fluid.get_pressure(rho);
                 }
                 else
                 { // Don't allow negative pressures
                     real const rho = std::max(
-                        svar.fluid.rho_rest,
-                        std::min(svar.fluid.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
+                        fluid.rho_rest,
+                        std::min(svar.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
                     );
                     part_inter[ii].rho = rho;
-                    part_inter[ii].p = svar.fluid.get_pressure(rho);
+                    part_inter[ii].p = fluid.get_pressure(rho);
                     part_inter[ii].Rrho = fmax(0.0, part_inter[ii].Rrho);
                 }
             }
@@ -132,7 +123,7 @@ SPHState do_runge_kutta_intermediate_step(
         }
     }
 
-    get_acc_and_Rrho(svar, cells, outlist, npd, part_inter);
+    get_acc_and_Rrho(svar, limits, outlist, npd, part_inter);
 
 #pragma omp parallel default(shared) // shared(svar,part_n,st_2) /*reduction(+:Force,dropVel)*/
     {
@@ -142,8 +133,11 @@ SPHState do_runge_kutta_intermediate_step(
         for (size_t block = svar.n_bound_blocks; block < svar.n_fluid_blocks + svar.n_bound_blocks;
              block++)
         {
+            bound_block const& limit = limits[block];
+            FLUID const& fluid = limit.fluid;
+
 #pragma omp for nowait
-            for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
+            for (size_t ii = limit.index.first; ii < limit.index.second; ++ii)
             { /****** FLUID PARTICLES **************/
 
                 /* BUFFER = pipe particle receiving prescribed motion            */
@@ -163,33 +157,33 @@ SPHState do_runge_kutta_intermediate_step(
 
                     part_inter[ii].v = part_n[ii].v + dt_inter * part_inter[ii].acc;
                     real const rho = std::max(
-                        svar.fluid.rho_min,
-                        std::min(svar.fluid.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
+                        svar.rho_min,
+                        std::min(svar.rho_max, part_n[ii].rho + dt_inter * part_inter[ii].Rrho)
                     );
                     part_inter[ii].rho = rho;
-                    part_inter[ii].p = svar.fluid.get_pressure(rho);
+                    part_inter[ii].p = fluid.get_pressure(rho);
                 }
             }
 
             /* Do the buffer particles */
-            if (limits[block].block_type == inletZone)
+            if (limit.block_type == inletZone)
             {
-                switch (limits[block].fixed_vel_or_dynamic)
+                switch (limit.fixed_vel_or_dynamic)
                 {
                 case 1:
                 {
-                    StateVecD unorm = limits[block].insert_norm.normalized();
+                    StateVecD unorm = limit.insert_norm.normalized();
 #pragma omp for schedule(static) nowait
-                    for (size_t ii = 0; ii < limits[block].back.size(); ++ii)
+                    for (size_t ii = 0; ii < limit.back.size(); ++ii)
                     {
-                        size_t const& backID = limits[block].back[ii];
+                        size_t const& backID = limit.back[ii];
                         StateVecD const& xi = part_inter[backID].xi;
 
-                        for (size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
+                        for (size_t jj = 0; jj < limit.buffer[ii].size(); ++jj)
                         { /* Define buffer off the back particle */
-                            size_t const& buffID = limits[block].buffer[ii][jj];
+                            size_t const& buffID = limit.buffer[ii][jj];
                             // Set position as related to the previous particle.
-                            part_inter[buffID].xi = xi - svar.dx * (jj + 1.0) * unorm;
+                            part_inter[buffID].xi = xi - part_inter[backID].dx * (jj + 1.0) * unorm;
 
                             // How to set density and pressure though?
                             part_inter[buffID].v = part_inter[backID].v;
@@ -202,23 +196,22 @@ SPHState do_runge_kutta_intermediate_step(
                 case 0:
                 {
 #pragma omp for schedule(static) nowait
-                    for (size_t ii = 0; ii < limits[block].back.size(); ++ii)
+                    for (size_t ii = 0; ii < limit.back.size(); ++ii)
                     {
                         // size_t const& backID = svar.back[ii];
-                        for (size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
+                        for (size_t jj = 0; jj < limit.buffer[ii].size(); ++jj)
                         { /* Define buffer off the back particle */
 
                             size_t const& buffID = limits[jj].buffer[ii][jj];
 
                             real const rho = std::max(
-                                svar.fluid.rho_min,
+                                svar.rho_min,
                                 std::min(
-                                    svar.fluid.rho_max,
-                                    part_n[buffID].rho + dt_inter * part_inter[buffID].Rrho
+                                    svar.rho_max, part_n[buffID].rho + dt_inter * part_inter[buffID].Rrho
                                 )
                             );
                             part_inter[buffID].rho = rho;
-                            part_inter[buffID].p = svar.fluid.get_pressure(rho);
+                            part_inter[buffID].p = fluid.get_pressure(rho);
                             part_inter[buffID].xi = part_n[buffID].xi + dt_inter * part_n[buffID].v;
                         }
                     }
@@ -232,28 +225,30 @@ SPHState do_runge_kutta_intermediate_step(
 }
 
 SPHState do_runge_kutta_final_step(
-    SIM& svar, size_t const& start, size_t& end, real const& npd, MESH const& cells,
-    LIMITS const& limits, OUTL const& outlist, real const& dt, SPHState const& part_n,
-    SPHState const& st_1, SPHState const& st_2, SPHState const& st_3
+    SIM& svar, real const& npd, LIMITS const& limits, OUTL const& outlist, real const& dt,
+    SPHState const& part_n, SPHState const& st_1, SPHState const& st_2, SPHState const& st_3
 )
 {
     SPHState part_np1 = st_3;
 
     for (size_t block = 0; block < svar.n_bound_blocks; block++)
     {
-        if (limits[block].nTimes != 0)
+        bound_block const& limit = limits[block];
+        FLUID const& fluid = limit.fluid;
+
+        if (limit.nTimes != 0)
         {
             // Get the current boundary velocity
             StateVecD vel = StateVecD::Zero();
-            for (size_t time = 0; time < limits[block].nTimes; time++)
+            for (size_t time = 0; time < limit.nTimes; time++)
             {
-                if (limits[block].times[time] > svar.integrator.current_time)
+                if (limit.times[time] > svar.integrator.current_time)
                 {
-                    vel = limits[block].vels[time];
+                    vel = limit.vels[time];
                 }
             }
 
-            for (size_t jj = limits[block].index.first; jj < limits[block].index.second; jj++)
+            for (size_t jj = limit.index.first; jj < limit.index.second; jj++)
             {
                 part_np1[jj].v = vel;
             }
@@ -261,39 +256,34 @@ SPHState do_runge_kutta_final_step(
         else
         {
 #pragma omp parallel for
-            for (size_t jj = limits[block].index.first; jj < limits[block].index.second; jj++)
+            for (size_t jj = limit.index.first; jj < limit.index.second; jj++)
             {
-                part_np1[jj].v = limits[block].vels[0];
+                part_np1[jj].v = limit.vels[0];
             }
         }
 
-        if (limits[block].no_slip)
-            Set_No_Slip(
-                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
-                svar.fluid.W_correc, part_np1
-            );
+        if (limit.no_slip)
+            Set_No_Slip(limit.index.first, limit.index.second, outlist, part_np1);
 
-        switch (limits[block].bound_solver)
+        switch (limit.bound_solver)
         {
         case DBC:
         {
-            Boundary_DBC(
-                svar.fluid, limits[block].index.first, limits[block].index.second, outlist, part_np1
-            );
+            Boundary_DBC(fluid, limit.index.first, limit.index.second, outlist, part_np1);
 
 #pragma omp for schedule(static) nowait
-            for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
+            for (size_t ii = limit.index.first; ii < limit.index.second; ++ii)
             { /****** BOUNDARY PARTICLES ***********/
                 real const rho = std::max(
-                    svar.fluid.rho_min,
+                    svar.rho_min,
                     std::min(
-                        svar.fluid.rho_max,
+                        svar.rho_max,
                         part_n[ii].rho + (dt / 6.0) * (part_n[ii].Rrho + 2.0 * st_1[ii].Rrho +
                                                        2.0 * st_2[ii].Rrho + st_3[ii].Rrho)
                     )
                 );
                 part_np1[ii].rho = rho;
-                part_np1[ii].p = svar.fluid.get_pressure(rho);
+                part_np1[ii].p = fluid.get_pressure(rho);
                 part_np1[ii].Rrho = st_3[ii].Rrho;
             }
             break;
@@ -301,47 +291,43 @@ SPHState do_runge_kutta_final_step(
         case pressure_G:
         {
             Get_Boundary_Pressure(
-                svar.fluid, svar.grav, limits[block].index.first, limits[block].index.second, outlist,
-                part_np1
+                fluid, svar.grav, limit.index.first, limit.index.second, outlist, part_np1
             );
             break;
         }
         case ghost:
         {
-            vector<int> near_inlet(limits[block].index.second - limits[block].index.first, 0);
-            Boundary_Ghost(
-                limits[block].index.first, limits[block].index.second, outlist, svar.fluid.H,
-                svar.fluid.W_correc, part_np1, near_inlet
-            );
+            vector<int> near_inlet(limit.index.second - limit.index.first, 0);
+            Boundary_Ghost(limit.index.first, limit.index.second, outlist, part_np1, near_inlet);
 
 #pragma omp for schedule(static) nowait
-            for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
+            for (size_t ii = limit.index.first; ii < limit.index.second; ++ii)
             { /****** BOUNDARY PARTICLES ***********/
-                if (!near_inlet[ii - limits[block].index.first])
+                if (!near_inlet[ii - limit.index.first])
                 {
                     real const rho = std::max(
-                        svar.fluid.rho_min,
+                        svar.rho_min,
                         std::min(
-                            svar.fluid.rho_max,
+                            svar.rho_max,
                             part_n[ii].rho + (dt / 6.0) * (part_n[ii].Rrho + 2.0 * st_1[ii].Rrho +
                                                            2.0 * st_2[ii].Rrho + st_3[ii].Rrho)
                         )
                     );
                     part_np1[ii].rho = rho;
-                    part_np1[ii].p = svar.fluid.get_pressure(rho);
+                    part_np1[ii].p = fluid.get_pressure(rho);
                 }
                 else
                 { // Don't allow negative pressures
                     real const rho = std::max(
-                        svar.fluid.rho_rest,
+                        fluid.rho_rest,
                         std::min(
-                            svar.fluid.rho_max,
+                            svar.rho_max,
                             part_n[ii].rho + (dt / 6.0) * (part_n[ii].Rrho + 2.0 * st_1[ii].Rrho +
                                                            2.0 * st_2[ii].Rrho + st_3[ii].Rrho)
                         )
                     );
                     part_np1[ii].rho = rho;
-                    part_np1[ii].p = svar.fluid.get_pressure(rho);
+                    part_np1[ii].p = fluid.get_pressure(rho);
                     part_np1[ii].Rrho = fmax(0.0, part_np1[ii].Rrho);
                 }
             }
@@ -350,15 +336,18 @@ SPHState do_runge_kutta_final_step(
         }
     }
 
-    get_acc_and_Rrho(svar, cells, outlist, npd, part_np1);
+    get_acc_and_Rrho(svar, limits, outlist, npd, part_np1);
 
 #pragma omp parallel default(shared)
     {
         for (size_t block = svar.n_bound_blocks; block < svar.n_fluid_blocks + svar.n_bound_blocks;
              block++)
         {
+            bound_block const& limit = limits[block];
+            FLUID const& fluid = limit.fluid;
+
 #pragma omp for nowait
-            for (size_t ii = limits[block].index.first; ii < limits[block].index.second; ++ii)
+            for (size_t ii = limit.index.first; ii < limit.index.second; ++ii)
             { /****** FLUID PARTICLES **************/
                 if (part_np1[ii].b > BUFFER && part_np1[ii].b != OUTLET)
                 {
@@ -376,16 +365,16 @@ SPHState do_runge_kutta_final_step(
                                                                   2.0 * st_2[ii].acc + st_3[ii].acc);
 
                     real const rho = std::max(
-                        svar.fluid.rho_min,
+                        svar.rho_min,
                         std::min(
-                            svar.fluid.rho_max,
+                            svar.rho_max,
                             part_n[ii].rho + (dt / 6.0) * (part_n[ii].Rrho + 2.0 * st_1[ii].Rrho +
                                                            2.0 * st_2[ii].Rrho + st_3[ii].Rrho)
                         )
                     );
                     part_np1[ii].rho = rho;
 
-                    part_np1[ii].p = svar.fluid.get_pressure(rho);
+                    part_np1[ii].p = fluid.get_pressure(rho);
                 }
                 else if (part_np1[ii].b == OUTLET)
                 { /* For the outlet zone, just perform euler integration of last info */
@@ -394,24 +383,24 @@ SPHState do_runge_kutta_final_step(
             }
 
             /* Do the buffer particles */
-            if (limits[block].block_type == inletZone)
+            if (limit.block_type == inletZone)
             {
-                switch (limits[block].fixed_vel_or_dynamic)
+                switch (limit.fixed_vel_or_dynamic)
                 {
                 case 1:
                 {
-                    StateVecD unorm = limits[block].insert_norm.normalized();
+                    StateVecD unorm = limit.insert_norm.normalized();
 #pragma omp for schedule(static) nowait
-                    for (size_t ii = 0; ii < limits[block].back.size(); ++ii)
+                    for (size_t ii = 0; ii < limit.back.size(); ++ii)
                     {
-                        size_t const& backID = limits[block].back[ii];
+                        size_t const& backID = limit.back[ii];
                         StateVecD const& xi = part_np1[backID].xi;
 
-                        for (size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
+                        for (size_t jj = 0; jj < limit.buffer[ii].size(); ++jj)
                         { /* Define buffer off the back particle */
-                            size_t const& buffID = limits[block].buffer[ii][jj];
+                            size_t const& buffID = limit.buffer[ii][jj];
                             // Set position as related to the previous particle.
-                            part_np1[buffID].xi = xi - svar.dx * (jj + 1.0) * unorm;
+                            part_np1[buffID].xi = xi - part_np1[backID].dx * (jj + 1.0) * unorm;
 
                             // How to set density and pressure though?
                             part_np1[buffID].v = part_np1[backID].v;
@@ -424,25 +413,25 @@ SPHState do_runge_kutta_final_step(
                 case 0:
                 {
 #pragma omp for schedule(static) nowait
-                    for (size_t ii = 0; ii < limits[block].back.size(); ++ii)
+                    for (size_t ii = 0; ii < limit.back.size(); ++ii)
                     {
                         // size_t const& backID = svar.back[ii];
-                        for (size_t jj = 0; jj < limits[block].buffer[ii].size(); ++jj)
+                        for (size_t jj = 0; jj < limit.buffer[ii].size(); ++jj)
                         { /* Define buffer off the back particle */
 
                             size_t const& buffID = limits[jj].buffer[ii][jj];
 
                             real const rho = std::max(
-                                svar.fluid.rho_min,
+                                svar.rho_min,
                                 std::min(
-                                    svar.fluid.rho_max,
+                                    svar.rho_max,
                                     part_n[buffID].rho +
                                         (dt / 6.0) * (part_n[ii].Rrho + 2.0 * st_1[ii].Rrho +
                                                       2.0 * st_2[ii].Rrho + st_3[ii].Rrho)
                                 )
                             );
                             part_np1[buffID].rho = rho;
-                            part_np1[buffID].p = svar.fluid.get_pressure(rho);
+                            part_np1[buffID].p = fluid.get_pressure(rho);
                             part_np1[buffID].xi = part_n[buffID].xi + dt * part_n[buffID].v;
                         }
                     }
@@ -460,27 +449,24 @@ SPHState do_runge_kutta_final_step(
 to get the first guess of time n+1 (regarded here as time n+1/4)
 to perform neighbour search and dissipation terms before freezing </summary */
 real Get_First_RK(
-    SIM& svar, size_t const& start, size_t const& end, real const& npd, MESH const& cells,
-    LIMITS const& limits, OUTL const& outlist, SPHState& part_n, SPHState& st_1
+    SIM& svar, size_t const& start, size_t const& end, real const& npd, LIMITS const& limits,
+    OUTL const& outlist, SPHState& part_n, SPHState& st_1
 )
 {
     const real dt = 0.5 * svar.integrator.delta_t;
 
-    st_1 = do_runge_kutta_intermediate_step(
-        svar, start, end, npd, cells, limits, outlist, part_n, part_n, dt
-    );
+    st_1 = do_runge_kutta_intermediate_step(svar, npd, limits, outlist, part_n, part_n, dt);
 
     // First iteration so error log base is zero.
     real logbase = 0.0;
-    return Check_RK_Error(svar, start, end, logbase, part_n, st_1);
+    return Check_RK_Error(start, end, logbase, part_n, st_1);
 }
 
 /* <summary> Perform the rest of the Runge-Kutta integration, assuming frozen
         dissipation terms. This will do step 2 to 4 (n+1/4 to n+1) </summary> */
 real Runge_Kutta4(
-    SIM& svar, size_t const& start, size_t& end, real const& npd, MESH const& cells,
-    LIMITS const& limits, OUTL const& outlist, real const& logbase, SPHState& part_n, SPHState& st_1,
-    SPHState& part_np1
+    SIM& svar, size_t const& start, size_t& end, real const& npd, LIMITS const& limits,
+    OUTL const& outlist, real const& logbase, SPHState& part_n, SPHState& st_1, SPHState& part_np1
 )
 {
     /*Create the vectors*/
@@ -490,26 +476,14 @@ real Runge_Kutta4(
     real const dt_inter = 0.5 * svar.integrator.delta_t;
     real const dt_final = svar.integrator.delta_t;
 
-    /********************************************************************/
     /*************************  STEP 2  *********************************/
-    /********************************************************************/
-    st_2 = do_runge_kutta_intermediate_step(
-        svar, start, end, npd, cells, limits, outlist, part_n, st_1, dt_inter
-    );
+    st_2 = do_runge_kutta_intermediate_step(svar, npd, limits, outlist, part_n, st_1, dt_inter);
 
-    /********************************************************************/
     /*************************  STEP 3  *********************************/
-    /********************************************************************/
-    st_3 = do_runge_kutta_intermediate_step(
-        svar, start, end, npd, cells, limits, outlist, part_n, st_2, dt_final
-    );
+    st_3 = do_runge_kutta_intermediate_step(svar, npd, limits, outlist, part_n, st_2, dt_final);
 
-    /********************************************************************/
     /*************************  STEP 4  *********************************/
-    /********************************************************************/
-    part_np1 = do_runge_kutta_final_step(
-        svar, start, end, npd, cells, limits, outlist, dt_final, part_n, st_1, st_2, st_3
-    );
+    part_np1 = do_runge_kutta_final_step(svar, npd, limits, outlist, dt_final, part_n, st_1, st_2, st_3);
 
-    return Check_RK_Error(svar, start, end, logbase, st_3, part_np1);
+    return Check_RK_Error(start, end, logbase, st_3, part_np1);
 }

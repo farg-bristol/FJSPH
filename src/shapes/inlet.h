@@ -11,9 +11,9 @@ class InletShape : public ShapeBlock
   public:
     InletShape() { bound_type = inletZone; };
 
-    void check_input(SIM const& svar, real& globalspacing, int& fault) override;
+    void check_input(SIM const& svar, int& fault) override;
 
-    void generate_points(real const& globalspacing) override;
+    void generate_points() override;
 };
 
 uint update_buffer_region(SIM& svar, LIMITS& limits, SPHState& pnp1, size_t& end);

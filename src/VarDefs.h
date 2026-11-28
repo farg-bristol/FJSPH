@@ -192,6 +192,20 @@ enum output_encoding
     binary
 };
 
+enum file_extension
+{
+    dat = 0,
+    h5,
+    szplt,
+    h5part
+};
+
+enum ReadOrWrite
+{
+    writing = 0,
+    reading
+};
+
 real const static default_val = 9999999.0;
 int const static c_no_face = -1;
 int const static c_no_cell = -3;

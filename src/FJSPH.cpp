@@ -3,12 +3,11 @@
 
 #include <chrono>
 
-#include "BinaryIO.h"
 #include "CDFIO.h"
 #include "Containment.h"
 #include "FOAMIO.h"
+#include "FileIO.h"
 #include "Geometry.h"
-#include "H5IO.h"
 #include "IO.h"
 #include "IOFunctions.h"
 #include "IPT.h"
@@ -62,6 +61,9 @@ int main(int argc, char* argv[])
     GetInput(argc, argv, svar);
 
     omp_set_num_threads(svar.numThreads);
+
+    // Initialise restart file read/writer.
+    RestartFile h5writer(svar);
 
     // if(MakeOutputDir(argc,argv,svar))
     // {
@@ -133,7 +135,7 @@ int main(int argc, char* argv[])
     {
         Init_Particles_Restart(svar, limits);
         /* Read the files */
-        Read_HDF5(svar, pn, pnp1, limits);
+        h5writer.read_restart_file(svar, pn, pnp1, limits);
     }
 
     // Check if cells have been initialsed before making a tree off it
@@ -145,7 +147,7 @@ int main(int argc, char* argv[])
 
     ///********* Tree algorithm stuff ************/
     Sim_Tree SPH_TREE(SIMDIM, pnp1, 20);
-    outlist = update_neighbours(svar.fluid, SPH_TREE, pnp1);
+    outlist = update_neighbours(SPH_TREE, pnp1);
 
     Vec_Tree CELL_TREE(SIMDIM, cells.cCentre, 10);
     CELL_TREE.index->buildIndex();
@@ -154,34 +156,19 @@ int main(int argc, char* argv[])
     Integrator integrator(svar.integrator.solver_type);
 
     ///*************** Open simulation files ***************/
-    FILE* ff = NULL;
     FILE* f2 = NULL;
-    FILE* f3 = NULL;
-    FILE* fb = NULL;
-    FILE* fg = NULL;
-    string framef = svar.io.output_prefix;
-    framef.append("_frame.info");
+    string framef = svar.io.output_prefix + "_frame.info";
     if (svar.io.restart == 1)
         f2 = fopen(framef.c_str(), "a");
     else
         f2 = fopen(framef.c_str(), "w");
 
-    if (svar.io.single_file)
-    {
-        if (svar.io.write_tecio)
-            Write_Tec_Headers(ff, fb, fg, svar, svar.io.output_prefix);
-        if (svar.io.write_h5part)
-            open_h5part_files(svar, svar.io.output_prefix);
-    }
+    init_writers(svar);
 
     if (!svar.io.restart)
     {
-        Write_Timestep(ff, fb, fg, svar, limits, pnp1);
-    }
-
-    ///*** Perform an iteration to populate the vectors *****/
-    if (!svar.io.restart)
-    {
+        Write_Timestep(svar, limits, pnp1);
+        ///*** Perform an iteration to populate the vectors *****/
         integrator.integrate_no_update(SPH_TREE, CELL_TREE, svar, cells, limits, outlist, pn, pnp1);
     }
     else
@@ -189,7 +176,7 @@ int main(int argc, char* argv[])
         size_t const start = svar.bound_points;
         size_t end = svar.total_points;
         real npd = 1.0;
-        dSPH_PreStep(svar.fluid, end, pnp1, outlist, npd);
+        dSPH_PreStep(limits, end, pnp1, outlist, npd);
 
         if (svar.Asource == meshInfl)
         {
@@ -316,8 +303,9 @@ int main(int argc, char* argv[])
             break;
         }
 
-        Write_Timestep(ff, fb, fg, svar, limits, pnp1);
-        Write_HDF5(svar, pnp1, limits);
+        Write_Timestep(svar, limits, pnp1);
+
+        h5writer.write_restart_file(svar, pnp1, limits);
         if (svar.ipt.using_ipt)
             IPT::Write_Data(svar, cells, iptdata);
 
@@ -328,26 +316,13 @@ int main(int argc, char* argv[])
     /*Wrap up simulation files and close them*/
     if (f2 != NULL)
         fclose(f2);
-    if (f3 != NULL)
-        fclose(f3);
-    if (ff != NULL)
-        fclose(ff);
-    if (fb != NULL)
-        fclose(fb);
-    if (fg != NULL)
-        fclose(fg);
+
+    close_writers();
 
     if (svar.io.out_encoding == binary)
     {
         /*Combine the szplt files*/
-
-        string outfile = svar.io.output_prefix + "_fluid.szplt";
-        Combine_SZPLT(outfile);
-
-        outfile = svar.io.output_prefix + "_boundary.szplt";
-        Combine_SZPLT(outfile);
-
-        close_h5part_files(svar);
+        combine_szl_files();
     }
 
     cout << "Simulation complete!" << endl;

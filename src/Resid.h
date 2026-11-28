@@ -26,18 +26,14 @@ void Boundary_DBC(
 );
 
 void Boundary_Ghost(
-    size_t const& start, size_t const& end, OUTL const& outlist, real const& H, real const& W_correc,
-    SPHState& pnp1, vector<int>& near_inlet
+    size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1, vector<int>& near_inlet
 );
 
-void Set_No_Slip(
-    size_t const& start, size_t const& end, OUTL const& outlist, real const& H, real const& W_correc,
-    SPHState& pnp1
-);
+void Set_No_Slip(size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1);
 
 ///**************** RESID calculation **************
 void get_acc_and_Rrho(
-    SIM const& svar, MESH const& cells, OUTL const& outlist, real const& npd, SPHState& pnp1
+    SIM const& svar, LIMITS const& limits, OUTL const& outlist, real const& npd, SPHState& pnp1
 );
 
 void get_aero_velocity(

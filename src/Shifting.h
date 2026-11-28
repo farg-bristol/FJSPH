@@ -7,11 +7,13 @@
 #include "Var.h"
 
 /*L matrix for delta-SPH calculation*/
-void dSPH_PreStep(FLUID const& fvar, size_t const& end, SPHState& pnp1, OUTL const& outlist, real& npd);
+void dSPH_PreStep(
+    LIMITS const& limits, size_t const& end, SPHState& pnp1, OUTL const& outlist, real& npd
+);
 
 /* Calculate dissipation terms before freezing. */
 void dissipation_terms(
-    FLUID const& fvar, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
+    LIMITS const& limits, size_t const& start, size_t const& end, OUTL const& outlist, SPHState& pnp1
 );
 
 #ifdef ALE

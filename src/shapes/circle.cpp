@@ -3,10 +3,10 @@
 
 #include "circle.h"
 
-void CircleShape::check_input(SIM const& svar, real& globalspacing, int& fault)
+void CircleShape::check_input(SIM const& svar, int& fault)
 {
     // Do common input checks.
-    ShapeBlock::check_input(svar, globalspacing, fault);
+    ShapeBlock::check_input(svar, fault);
 
     if (!check_vector(centre))
     {
@@ -25,17 +25,17 @@ void CircleShape::check_input(SIM const& svar, real& globalspacing, int& fault)
     end = centre;
     end += StateVecD::Constant(radius);
 
+    // TODO - Need to revisit as this is almost certainly not adequate for all configs.
     if (dx < 0)
     {
         if (ni < 0)
         {
-            std::cout << "WARNING: Block globalspacing has not been defined. Using global globalspacing."
-                      << std::endl;
-            dx = globalspacing;
+            std::cout << "Error: Block \"" << name << "\" spacing has not been defined." << std::endl;
+            fault = 1;
         }
         else
         {
-            /* Use ni as a number along the diameter, so define globalspacing off that */
+            /* Use ni as a number along the diameter, so define dx off that */
             real di = (2.0 * radius) / real(ni);
             dx = di;
         }
@@ -50,20 +50,20 @@ void CircleShape::check_input(SIM const& svar, real& globalspacing, int& fault)
     if (particle_order == 1)
     {
 #if SIMDIM == 2
-        ni = static_cast<int>(ceil((end[0] - start[0]) / globalspacing));
-        nj = static_cast<int>(ceil((end[1] - start[1]) / globalspacing / sqrt(3.0) * 2.0));
+        ni = static_cast<int>(ceil((end[0] - start[0]) / dx));
+        nj = static_cast<int>(ceil((end[1] - start[1]) / dx / sqrt(3.0) * 2.0));
 #else
-        ni = static_cast<int>(ceil((end[0] - start[0]) / globalspacing));
-        nj = static_cast<int>(ceil((end[1] - start[1]) / globalspacing / sqrt(3.0) * 2.0));
-        nk = static_cast<int>(ceil((end[2] - start[2]) / globalspacing / sqrt(6.0) * 3.0));
+        ni = static_cast<int>(ceil((end[0] - start[0]) / dx));
+        nj = static_cast<int>(ceil((end[1] - start[1]) / dx / sqrt(3.0) * 2.0));
+        nk = static_cast<int>(ceil((end[2] - start[2]) / dx / sqrt(6.0) * 3.0));
 #endif
     }
     else
     {
-        ni = static_cast<int>(ceil((end[0] - start[0]) / globalspacing));
-        nj = static_cast<int>(ceil((end[1] - start[1]) / globalspacing));
+        ni = static_cast<int>(ceil((end[0] - start[0]) / dx));
+        nj = static_cast<int>(ceil((end[1] - start[1]) / dx));
 #if SIMDIM == 3
-        nk = static_cast<int>(ceil((end[2] - start[2]) / globalspacing));
+        nk = static_cast<int>(ceil((end[2] - start[2]) / dx));
 #endif
     }
     ni = ni > 1 ? ni : 1;
@@ -86,21 +86,21 @@ void CircleShape::check_input(SIM const& svar, real& globalspacing, int& fault)
     npts = ceil(real(npts) * M_PI / 6.0);
 #endif
 
-    ShapeBlock::check_input_post(globalspacing);
+    ShapeBlock::check_input_post();
 }
 
 #if SIMDIM == 2
-void CircleShape::generate_points(real const& globalspacing)
+void CircleShape::generate_points()
 {
     std::vector<StateVecD> points;
 
-    std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
+    std::uniform_real_distribution<real> unif(0.0, MEPSILON * dx);
     std::default_random_engine re;
 
-    for (real rad = radius; rad > 0.99 * globalspacing; rad -= globalspacing)
+    for (real rad = radius; rad > 0.99 * dx; rad -= dx)
     {
         // % Find spacing to have a well defined surface.
-        real dtheta = atan(globalspacing / rad);
+        real dtheta = atan(dx / rad);
         int ncirc = floor(abs(2.0 * M_PI / dtheta));
         dtheta = 2.0 * M_PI / real(ncirc);
 
@@ -129,13 +129,13 @@ void CircleShape::generate_points(real const& globalspacing)
 #endif
 
 #if SIMDIM == 3
-void CircleShape::generate_points(real const& globalspacing)
+void CircleShape::generate_points()
 {
     std::vector<StateVecD> points;
 
-    std::uniform_real_distribution<real> unif(0.0, MEPSILON * globalspacing);
+    std::uniform_real_distribution<real> unif(0.0, MEPSILON * dx);
     std::default_random_engine re;
-    // real searchDist = pow2(0.5 * globalspacing - 2.0 * tol * globalspacing);
+    // real searchDist = pow2(0.5 * dx - 2.0 * tol * dx);
 
     real const& radius_sq = radius * radius;
 
@@ -147,15 +147,15 @@ void CircleShape::generate_points(real const& globalspacing)
     int nk;
     if (particle_order == 1)
     {
-        ni = static_cast<int>(ceil((end[0] - start[0]) / globalspacing));
-        nj = static_cast<int>(ceil((end[1] - start[1]) / globalspacing / sqrt(3.0) * 2.0));
-        nk = static_cast<int>(ceil((end[2] - start[2]) / globalspacing / sqrt(6.0) * 3.0));
+        ni = static_cast<int>(ceil((end[0] - start[0]) / dx));
+        nj = static_cast<int>(ceil((end[1] - start[1]) / dx / sqrt(3.0) * 2.0));
+        nk = static_cast<int>(ceil((end[2] - start[2]) / dx / sqrt(6.0) * 3.0));
     }
     else
     {
-        ni = static_cast<int>(ceil((end[0] - start[0]) / globalspacing));
-        nj = static_cast<int>(ceil((end[1] - start[1]) / globalspacing));
-        nk = static_cast<int>(ceil((end[2] - start[2]) / globalspacing));
+        ni = static_cast<int>(ceil((end[0] - start[0]) / dx));
+        nj = static_cast<int>(ceil((end[1] - start[1]) / dx));
+        nk = static_cast<int>(ceil((end[2] - start[2]) / dx));
     }
     ni = ni > 1 ? ni : 1;
     nj = nj > 1 ? nj : 1;
@@ -176,7 +176,7 @@ void CircleShape::generate_points(real const& globalspacing)
                 else
                     newPoint = StateVecD(real(i), real(j), real(k));
 
-                newPoint *= globalspacing;
+                newPoint *= dx;
                 newPoint = rotmat * newPoint;
                 newPoint += StateVecD(unif(re), unif(re), unif(re));
                 newPoint += start;
