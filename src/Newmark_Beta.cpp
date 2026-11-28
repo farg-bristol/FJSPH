@@ -52,8 +52,7 @@ int Newmark_Beta::Check_Error(
 }
 
 void Newmark_Beta::Do_NB_Iter(
-    Vec_Tree const& CELL_TREE, SIM& svar, size_t const& start, size_t& end, real const& npd,
-    MESH const& cells, LIMITS const& limits, OUTL& outlist, SPHState const& pn, SPHState& pnp1
+    SIM& svar, real const& npd, LIMITS const& limits, OUTL& outlist, SPHState const& pn, SPHState& pnp1
 )
 {
     /*Update the state at time n+1*/
@@ -292,10 +291,10 @@ void Newmark_Beta::Do_NB_Iter(
     } /*End pragma omp parallel*/
 }
 
-real Newmark_Beta::Newmark_Beta(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, size_t const& start, size_t& end,
-    real const& npd, MESH const& cells, LIMITS const& limits, OUTL& outlist, real& logbase,
-    uint& iteration, vector<StateVecD>& xih, SPHState const& pn, SPHState& pnp1
+real Newmark_Beta::integrate(
+    Sim_Tree& SPH_TREE, SIM& svar, size_t const& start, size_t& end, real const& npd,
+    LIMITS const& limits, OUTL& outlist, real& logbase, uint& iteration, vector<StateVecD>& xih,
+    SPHState const& pn, SPHState& pnp1
 )
 {
     real rms_error = 0.0;
@@ -306,7 +305,7 @@ real Newmark_Beta::Newmark_Beta(
         for (size_t ii = start; ii < end; ++ii)
             xih[ii - start] = pnp1[ii].xi;
 
-        Do_NB_Iter(CELL_TREE, svar, start, end, npd, cells, limits, outlist, pn, pnp1);
+        Do_NB_Iter(svar, npd, limits, outlist, pn, pnp1);
 
         int errstate = Check_Error(
             SPH_TREE, svar, start, end, rms_error, logbase, outlist, xih, pn, pnp1, iteration

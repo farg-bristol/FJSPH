@@ -8,7 +8,7 @@
 #include "Shifting.h"
 
 real Check_RK_Error(
-    SIM const& svar, size_t const& start, size_t const& end, real const& logbase, SPHState const& part_n,
+    size_t const& start, size_t const& end, real const& logbase, SPHState const& part_n,
     SPHState const& part_np1
 )
 {
@@ -26,9 +26,8 @@ real Check_RK_Error(
 }
 
 SPHState do_runge_kutta_intermediate_step(
-    SIM& svar, size_t const& start, size_t const& end, real const& npd, MESH const& cells,
-    LIMITS const& limits, OUTL const& outlist, SPHState const& part_n, SPHState const& part_prev,
-    real const& dt_inter
+    SIM& svar, real const& npd, LIMITS const& limits, OUTL const& outlist, SPHState const& part_n,
+    SPHState const& part_prev, real const& dt_inter
 )
 {
     SPHState part_inter = part_prev;
@@ -226,9 +225,8 @@ SPHState do_runge_kutta_intermediate_step(
 }
 
 SPHState do_runge_kutta_final_step(
-    SIM& svar, size_t const& start, size_t& end, real const& npd, MESH const& cells,
-    LIMITS const& limits, OUTL const& outlist, real const& dt, SPHState const& part_n,
-    SPHState const& st_1, SPHState const& st_2, SPHState const& st_3
+    SIM& svar, real const& npd, LIMITS const& limits, OUTL const& outlist, real const& dt,
+    SPHState const& part_n, SPHState const& st_1, SPHState const& st_2, SPHState const& st_3
 )
 {
     SPHState part_np1 = st_3;
@@ -451,27 +449,24 @@ SPHState do_runge_kutta_final_step(
 to get the first guess of time n+1 (regarded here as time n+1/4)
 to perform neighbour search and dissipation terms before freezing </summary */
 real Get_First_RK(
-    SIM& svar, size_t const& start, size_t const& end, real const& npd, MESH const& cells,
-    LIMITS const& limits, OUTL const& outlist, SPHState& part_n, SPHState& st_1
+    SIM& svar, size_t const& start, size_t const& end, real const& npd, LIMITS const& limits,
+    OUTL const& outlist, SPHState& part_n, SPHState& st_1
 )
 {
     const real dt = 0.5 * svar.integrator.delta_t;
 
-    st_1 = do_runge_kutta_intermediate_step(
-        svar, start, end, npd, cells, limits, outlist, part_n, part_n, dt
-    );
+    st_1 = do_runge_kutta_intermediate_step(svar, npd, limits, outlist, part_n, part_n, dt);
 
     // First iteration so error log base is zero.
     real logbase = 0.0;
-    return Check_RK_Error(svar, start, end, logbase, part_n, st_1);
+    return Check_RK_Error(start, end, logbase, part_n, st_1);
 }
 
 /* <summary> Perform the rest of the Runge-Kutta integration, assuming frozen
         dissipation terms. This will do step 2 to 4 (n+1/4 to n+1) </summary> */
 real Runge_Kutta4(
-    SIM& svar, size_t const& start, size_t& end, real const& npd, MESH const& cells,
-    LIMITS const& limits, OUTL const& outlist, real const& logbase, SPHState& part_n, SPHState& st_1,
-    SPHState& part_np1
+    SIM& svar, size_t const& start, size_t& end, real const& npd, LIMITS const& limits,
+    OUTL const& outlist, real const& logbase, SPHState& part_n, SPHState& st_1, SPHState& part_np1
 )
 {
     /*Create the vectors*/
@@ -481,26 +476,14 @@ real Runge_Kutta4(
     real const dt_inter = 0.5 * svar.integrator.delta_t;
     real const dt_final = svar.integrator.delta_t;
 
-    /********************************************************************/
     /*************************  STEP 2  *********************************/
-    /********************************************************************/
-    st_2 = do_runge_kutta_intermediate_step(
-        svar, start, end, npd, cells, limits, outlist, part_n, st_1, dt_inter
-    );
+    st_2 = do_runge_kutta_intermediate_step(svar, npd, limits, outlist, part_n, st_1, dt_inter);
 
-    /********************************************************************/
     /*************************  STEP 3  *********************************/
-    /********************************************************************/
-    st_3 = do_runge_kutta_intermediate_step(
-        svar, start, end, npd, cells, limits, outlist, part_n, st_2, dt_final
-    );
+    st_3 = do_runge_kutta_intermediate_step(svar, npd, limits, outlist, part_n, st_2, dt_final);
 
-    /********************************************************************/
     /*************************  STEP 4  *********************************/
-    /********************************************************************/
-    part_np1 = do_runge_kutta_final_step(
-        svar, start, end, npd, cells, limits, outlist, dt_final, part_n, st_1, st_2, st_3
-    );
+    part_np1 = do_runge_kutta_final_step(svar, npd, limits, outlist, dt_final, part_n, st_1, st_2, st_3);
 
-    return Check_RK_Error(svar, start, end, logbase, st_3, part_np1);
+    return Check_RK_Error(start, end, logbase, st_3, part_np1);
 }

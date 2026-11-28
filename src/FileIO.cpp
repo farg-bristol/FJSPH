@@ -48,17 +48,20 @@ FileReadWriter::~FileReadWriter()
     }
 }
 
-void FileReadWriter::open_file(std::string const& filename, std::string const& zone_name)
+void FileReadWriter::open_file(
+    std::string const& filename, std::string const& zone_name, bool const remove_old
+)
 {
     /*
      * Create a new file. If file exists its contents will be overwritten.
      */
     std::filesystem::path _filename{filename};
     _filename.replace_extension(ext_str);
-    // if (std::filesystem::exists(_filename))
-    // { // Remove the file
-    //     std::filesystem::remove(_filename);
-    // }
+
+    if (std::filesystem::exists(_filename) && remove_old)
+    { // Remove the file
+        std::filesystem::remove(_filename);
+    }
 
     switch (file_ext)
     {
@@ -637,7 +640,7 @@ void RestartFile::write_restart_file(SIM& svar, SPHState& pnp1, LIMITS& limits)
     assert(file_ext == h5);
 
     std::string filename = svar.io.output_prefix + "_particles.h5";
-    open_file(filename);
+    open_file(filename, "", true);
 
     rw_file_attributes(svar);
 

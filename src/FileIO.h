@@ -20,7 +20,9 @@ class FileReadWriter
 
     ~FileReadWriter();
 
-    void open_file(std::string const& filename, std::string const& zone_name = "");
+    void open_file(
+        std::string const& filename, std::string const& zone_name = "", bool const remove_old = false
+    );
     virtual void rw_file_attributes(SIM& svar);
     virtual void rw_zone_attributes(bound_block& limits);
 

@@ -68,9 +68,7 @@ real Integrator::integrate_no_update(
     }
 
     /*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
-    logbase = solve_prestep(
-        SPH_TREE, CELL_TREE, svar, cells, limits, outlist, pn, pnp1, xih, start_index, end_index, npd
-    );
+    logbase = solve_prestep(SPH_TREE, svar, limits, outlist, pn, pnp1, xih, start_index, end_index, npd);
 
     // cout << "Error: " << error1 << endl;
 
@@ -98,10 +96,8 @@ real Integrator::integrate_no_update(
     Check_Pipe_Outlet(CELL_TREE, svar, cells, limits, pn, pnp1, end_index);
 
     /*Do time integration*/
-    rms_error = solve_step(
-        SPH_TREE, CELL_TREE, svar, cells, limits, outlist, pn, pnp1, xih, start_index, end_index,
-        logbase, npd
-    );
+    rms_error =
+        solve_step(SPH_TREE, svar, limits, outlist, pn, pnp1, xih, start_index, end_index, logbase, npd);
 
     return rms_error;
 }
@@ -309,9 +305,8 @@ real Integrator::integrate(
 
 /* Internal pre-step for the integration methods to find base error for the timestep. */
 real Integrator::solve_prestep(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, MESH const& cells, LIMITS const& limits,
-    OUTL& outlist, SPHState& pn, SPHState& pnp1, vector<StateVecD>& xih, size_t const& start_index,
-    size_t& end_index, real& npd
+    Sim_Tree& SPH_TREE, SIM& svar, LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1,
+    vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& npd
 )
 {
     /*Get preliminary new state to find neighbours and d-SPH values, then freeze*/
@@ -321,14 +316,12 @@ real Integrator::solve_prestep(
     {
     case runge_kutta:
     {
-        logbase = Get_First_RK(svar, start_index, end_index, npd, cells, limits, outlist, pn, pnp1);
+        logbase = Get_First_RK(svar, start_index, end_index, npd, limits, outlist, pn, pnp1);
         break;
     }
     case newmark_beta:
     {
-        Newmark_Beta::Do_NB_Iter(
-            CELL_TREE, svar, start_index, end_index, npd, cells, limits, outlist, pn, pnp1
-        );
+        Newmark_Beta::Do_NB_Iter(svar, npd, limits, outlist, pn, pnp1);
 
         void(Newmark_Beta::Check_Error(
             SPH_TREE, svar, start_index, end_index, rms_error, logbase, outlist, xih, pn, pnp1, iteration
@@ -342,9 +335,8 @@ real Integrator::solve_prestep(
 
 /* Internal funtion to solve the timestep given a base error from the pre-step. */
 real Integrator::solve_step(
-    Sim_Tree& SPH_TREE, Vec_Tree const& CELL_TREE, SIM& svar, MESH const& cells, LIMITS const& limits,
-    OUTL& outlist, SPHState& pn, SPHState& pnp1, vector<StateVecD>& xih, size_t const& start_index,
-    size_t& end_index, real& logbase, real& npd
+    Sim_Tree& SPH_TREE, SIM& svar, LIMITS const& limits, OUTL& outlist, SPHState& pn, SPHState& pnp1,
+    vector<StateVecD>& xih, size_t const& start_index, size_t& end_index, real& logbase, real& npd
 )
 {
     /*Do time integration*/
@@ -355,16 +347,15 @@ real Integrator::solve_step(
     {
         SPHState st_1 = pnp1;
 
-        rms_error = Runge_Kutta4(
-            svar, start_index, end_index, npd, cells, limits, outlist, logbase, pn, st_1, pnp1
-        );
+        rms_error =
+            Runge_Kutta4(svar, start_index, end_index, npd, limits, outlist, logbase, pn, st_1, pnp1);
         break;
     }
     case newmark_beta:
     {
-        rms_error = Newmark_Beta::Newmark_Beta(
-            SPH_TREE, CELL_TREE, svar, start_index, end_index, npd, cells, limits, outlist, logbase,
-            iteration, xih, pn, pnp1
+        rms_error = Newmark_Beta::integrate(
+            SPH_TREE, svar, start_index, end_index, npd, limits, outlist, logbase, iteration, xih, pn,
+            pnp1
         );
         break;
     }
