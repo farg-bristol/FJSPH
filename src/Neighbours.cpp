@@ -4,7 +4,7 @@
 #include "Neighbours.h"
 
 /* Update tree index and return a new neighbour list */
-OUTL update_neighbours(FLUID const& fvar, Sim_Tree const& tree, SPHState const& pnp1)
+OUTL update_neighbours(Sim_Tree const& tree, SPHState const& pnp1)
 {
     // Combine to make it impossible to forgot to update the tree index before finding neighbours.
     tree.index->buildIndex();

@@ -128,7 +128,7 @@ void Newmark_Beta::Do_NB_Iter(
     }
 
     /*Guess force at time n+1*/
-    get_acc_and_Rrho(svar, cells, outlist, npd, pnp1);
+    get_acc_and_Rrho(svar, limits, outlist, npd, pnp1);
 
 #pragma omp parallel default(shared)
     {

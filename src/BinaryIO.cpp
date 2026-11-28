@@ -21,8 +21,9 @@ inline std::string space2underscore(std::string text)
 /*************************************************************************/
 namespace SZLIO
 {
-    bool
-    open_file(string const& file_name, string const& zone_name, string var_names, void*& file_handle)
+    bool open_file(
+        string const& file_name, string const& zone_name, string const& var_names, void*& file_handle
+    )
     {
         int32_t FileType = 0;   /*0 = Full, 1 = Grid, 2 = Solution*/
         int32_t fileFormat = 1; // 0 == PLT, 1 == SZPLT

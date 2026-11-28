@@ -33,7 +33,7 @@ void Set_No_Slip(size_t const& start, size_t const& end, OUTL const& outlist, SP
 
 ///**************** RESID calculation **************
 void get_acc_and_Rrho(
-    SIM const& svar, MESH const& cells, OUTL const& outlist, real const& npd, SPHState& pnp1
+    SIM const& svar, LIMITS const& limits, OUTL const& outlist, real const& npd, SPHState& pnp1
 );
 
 void get_aero_velocity(

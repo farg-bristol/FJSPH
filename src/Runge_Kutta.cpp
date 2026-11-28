@@ -124,7 +124,7 @@ SPHState do_runge_kutta_intermediate_step(
         }
     }
 
-    get_acc_and_Rrho(svar, cells, outlist, npd, part_inter);
+    get_acc_and_Rrho(svar, limits, outlist, npd, part_inter);
 
 #pragma omp parallel default(shared) // shared(svar,part_n,st_2) /*reduction(+:Force,dropVel)*/
     {
@@ -338,7 +338,7 @@ SPHState do_runge_kutta_final_step(
         }
     }
 
-    get_acc_and_Rrho(svar, cells, outlist, npd, part_np1);
+    get_acc_and_Rrho(svar, limits, outlist, npd, part_np1);
 
 #pragma omp parallel default(shared)
     {
